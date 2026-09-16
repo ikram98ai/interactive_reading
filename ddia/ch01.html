@@ -1,0 +1,1193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 1 · Trade-Offs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .cell { fill: var(--surface-2); stroke: var(--line); stroke-width: 1; transition: fill .6s; }
+  .cell.hit { fill: var(--blue); transition: none; }
+  .cell.scan { fill: var(--lilac); transition: fill .15s; }
+  .cell.sync { fill: var(--sun); transition: none; }
+  .clickable { cursor: pointer; }
+  #s5-svg { max-width: 860px; margin: 0 auto; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box { stroke: var(--blue); }
+  .fade { transition: opacity .35s; }
+  .proscons { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .proscons ul { margin: 4px 0 0; padding-left: 18px; }
+  .proscons h4 { font-family: var(--f-body); font-size: 14px; letter-spacing: .04em; text-transform: uppercase; }
+  .proscons .plus h4 { color: var(--mint); } .proscons .minus h4 { color: var(--coral); }
+  @media (max-width: 620px) { .proscons { grid-template-columns: 1fr; } }
+  .reasons { display: flex; flex-wrap: wrap; gap: 6px; }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">1</span> Chapter one</span>
+      <h1>Trade-Offs in Data Systems Architecture</h1>
+      <p class="lede">Every app is a little town where data gets made, stored, and looked at. Building that town means picking between good options that each cost something.</p>
+      <p class="quote">“There are no solutions; there are only trade-offs.” — Thomas Sowell, quoted at the start of the chapter</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#frontend">Frontend &amp; backend</a>
+        <a href="#oltp">Cashier vs detective</a>
+        <a href="#etl">Warehouse &amp; lake</a>
+        <a href="#truth">Source of truth</a>
+        <a href="#cloud">Cloud or DIY?</a>
+        <a href="#split">Storage vs compute</a>
+        <a href="#distributed">One computer or many?</a>
+        <a href="#services">Microservices</a>
+        <a href="#law">Data &amp; the law</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · Data Town</span><span class="pill info"><i></i>tap a device to send a request</span></div>
+      <svg id="hero-svg" viewBox="0 0 520 390" role="img" aria-label="Devices send requests to a backend, which reads and writes a database"></svg>
+    </div>
+  </section>
+
+  <!-- ============ 1. FRONTEND / BACKEND ============ -->
+  <section class="scene" id="frontend">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Warm-up · where data lives</span>
+        <h2>The waiter who forgets everything</h2>
+        <p class="story">The app on your phone is the <b>frontend</b>. It sends requests over the internet to the <b>backend</b>: code running on a server, a bit like a waiter taking orders to the kitchen.</p>
+        <p class="story">Here's the funny part: that waiter is <b>stateless</b>. As soon as it finishes a request, it forgets all about it. Anything that has to be remembered must be written into a <b>database</b>.</p>
+        <p class="imagine"><b>Try it:</b> order something, then ask “What did I order?” Next, switch saving <b>Off</b> and try again.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Client-side code is the <b>frontend</b>. Server-side code that handles requests is the <b>backend</b>, usually reached over HTTP.</p>
+            <p>Application code is often <b>stateless</b>: information that must last from one request to the next lives on the client or in the server's <b>data infrastructure</b> (databases, caches, message queues).</p>
+            <p>A frontend handles one user's data. The backend handles data for <i>all</i> users, which is where most of the hard problems are.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Order book in the database</span><div class="stats" id="s1-orders"><span class="pill">empty</span></div></div>
+        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 640 270" role="img" aria-label="Phone, app server and database"></svg></div>
+        <div class="controls" id="s1-controls"></div>
+        <div class="caption" id="s1-cap" aria-live="polite">Tap a button to send your first request.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. OLTP vs OLAP ============ -->
+  <section class="scene" id="oltp">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 1 · operational vs analytical</span>
+        <h2>The cashier and the detective</h2>
+        <p class="story">A <b>cashier</b> works on one customer at a time: find this item, change that one number, next! Those are tiny, quick jobs, and there are lots of them. That's <b>OLTP</b>.</p>
+        <p class="story">A <b>detective</b> (a business analyst) asks big questions like “How many bananas did we sell in January?” Answering means reading <i>every</i> record and adding them up. That's <b>analytics</b>, or <b>OLAP</b>.</p>
+        <p class="imagine"><b>Watch what happens</b> when both work in the same database at the same time. The waiting line grows. So companies give the detective a separate copy: a <b>data warehouse</b>.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <ul>
+              <li><b>Operational systems (OLTP):</b> point queries that fetch records by key; create, update, and delete individual records; fixed queries built into the app; data shows the <i>latest state</i>; gigabytes to terabytes.</li>
+              <li><b>Analytical systems (OLAP):</b> aggregate over huge numbers of records; bulk import (ETL) or event streams; ad-hoc queries by analysts; data is a <i>history of events</i>; terabytes to petabytes.</li>
+            </ul>
+            <p>Analysts avoid querying OLTP systems directly: data is spread across <b>silos</b>, OLTP schemas don't suit analytics, big queries hurt performance for other users, and the systems may sit behind security boundaries.</p>
+            <p><b>HTAP</b> systems try to do both in one system. <b>Product analytics</b> (Pinot, Druid, ClickHouse) put analytics inside user-facing features.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">One shop, two kinds of questions</span><span id="s2-seg"></span></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 660 350" role="img" aria-label="A shop database grid and a data warehouse grid"></svg></div>
+        <div class="controls"><div class="stats" id="s2-stats"></div></div>
+        <div class="caption" id="s2-cap" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. ETL / lake ============ -->
+  <section class="scene" id="etl">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 2 · moving data for analysis</span>
+        <h2>Tidy warehouse or big messy lake?</h2>
+        <p class="story">A company has lots of little systems: checkout, website, inventory. Each one stores data in its own shape. To study everything together, you copy it all to one place.</p>
+        <p class="story"><b>ETL</b> means <b>E</b>xtract (copy it out), <b>T</b>ransform (clean it into neat blocks), and <b>L</b>oad (put it on the warehouse shelves). <b>ELT</b> loads first and cleans later.</p>
+        <p class="story">A <b>data lake</b> skips the tidying. Every file goes in raw, in any shape, because data scientists like to clean it their own way. People call that the “sushi principle”: raw data is better.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A <b>data warehouse</b> is a separate database holding a read-only copy of data from many OLTP systems. Analysts can query it as much as they like without slowing operations. It usually uses a relational model and SQL.</p>
+            <p>A <b>data lake</b> is a central store of files with no fixed format or schema: Avro or Parquet records, text, images, sensor readings, feature vectors. It's often cheaper because it can sit on object storage.</p>
+            <p>ETL has grown into general <b>data pipelines</b>. When analytics results flow back into operational systems (for example, an ML recommendation model), that's called <b>reverse ETL</b>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Data pipeline</span><span id="s3-seg"></span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 680 330" role="img" aria-label="Sources send shaped items through extract and transform into a warehouse or a lake"></svg></div>
+        <div class="controls"><div class="stats" id="s3-stats"></div></div>
+        <div class="caption" id="s3-cap" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. System of record ============ -->
+  <section class="scene" id="truth">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 3 · where the truth lives</span>
+        <h2>The scorebook and its copies</h2>
+        <p class="story">Picture a class game. The teacher's <b>scorebook</b> is the one true record: the <b>system of record</b>. Whenever it and anything else disagree, the scorebook wins.</p>
+        <p class="story">The leaderboard on the wall, the total on the whiteboard, and the sticky note with Ben's score are <b>derived data</b>. They're copies made from the scorebook so people can read things faster.</p>
+        <p class="imagine"><b>Try it:</b> spill juice on the leaderboard, then rebuild it. Next, spill juice on the scorebook. Can you rebuild <i>that</i>?</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><b>System of record</b> (also called the source of truth): holds the authoritative version. New data is written here first, each fact once, usually normalized.</p>
+            <p><b>Derived data systems</b>: caches, indexes, materialized views, denormalized values, trained models. It's technically redundant, but it's often essential for fast reads. If you lose it, you can re-create it from the source.</p>
+            <p>A database isn't one kind or the other by nature. It depends on how <i>you use it</i>. Being clear about what is derived from what makes a messy architecture easier to follow.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Source → derived</span><span class="pill warn" id="s4-status"><i></i>everything in sync</span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 660 320" role="img" aria-label="A scorebook feeding a leaderboard, a total and a cache"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <div class="caption" id="s4-cap" aria-live="polite">Give someone a point and watch the copies update.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. Cloud vs self-hosting ============ -->
+  <section class="scene" id="cloud">
+    <div class="wrap scene-grid full">
+      <div class="copy" style="max-width: 760px">
+        <span class="eyebrow">Big idea 4 · build or buy?</span>
+        <h2>Cook at home, or order takeout?</h2>
+        <p class="story">You can run your own database on your own computers, like cooking at home: total control, but you do all the dishes. Or you can pay a <b>cloud service</b> to run it for you, like takeout: easy, but you eat whatever's on the menu.</p>
+      </div>
+      <div class="stack">
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">Who does the work?</span><span id="s5-seg"></span></div>
+          <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 700 260" role="img" aria-label="Matrix of who does each job, you or the vendor, across four options"></svg></div>
+          <div class="caption" id="s5-cap" aria-live="polite"></div>
+        </div>
+        <div class="scene-grid" style="padding:0">
+          <div class="copy">
+            <h3 style="font-size:24px">Which is cheaper? It depends on your traffic</h3>
+            <p class="story">If you own the machines, you have to buy enough for your <b>busiest</b> moment, and they sit idle the rest of the day. In the cloud you can rent more when you're busy and give them back later. But each machine-hour costs more.</p>
+            <p class="imagine"><b>Slide the spikiness.</b> Steady traffic favors your own machines. Spiky traffic favors the cloud. If you'd have to hire experts first, owning your machines gets much more expensive.</p>
+            <details class="book">
+              <summary>What the book says</summary>
+              <div class="inner">
+                <p>Self-hosting is often cheaper if you already know how to run the system and your load is predictable. The cloud shines when load varies a lot, as it does for analytical queries.</p>
+                <p>The downsides of the cloud come from lack of control: you can't add missing features, you wait out outages, you can't see internals when debugging, you risk <b>vendor lock-in</b> and price changes, sanctions can cut you off, and you have to trust the provider with your data.</p>
+                <p>Operations doesn't go away. It shifts: capacity planning becomes <i>financial</i> planning, and performance tuning becomes <i>cost</i> tuning.</p>
+              </div>
+            </details>
+          </div>
+          <div class="stage">
+            <div class="stage-head"><span class="stage-title">A day of traffic · toy numbers</span><span class="pill" id="s6-verdict"><i></i>…</span></div>
+            <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 660 300" role="img" aria-label="Bar chart of machines needed per hour with a line at peak capacity"></svg></div>
+            <div class="controls" id="s6-controls"></div>
+            <div class="controls"><div class="stats" id="s6-stats"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. storage / compute ============ -->
+  <section class="scene" id="split">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 5 · cloud native</span>
+        <h2>Keep the toys in the toy box, not in your pockets</h2>
+        <p class="story">In an old-style setup, one computer does the thinking (<b>compute</b>) <i>and</i> keeps the data on its own disk (<b>storage</b>). If that computer breaks, the data is stuck inside it.</p>
+        <p class="story"><b>Cloud-native</b> systems split the two. The data sits in a shared, super-safe “toy box” called <b>object storage</b>. Computers that come and go borrow data from it.</p>
+        <p class="imagine"><b>Try it:</b> crash a machine on each side, then add more compute for a busy day.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Traditionally, disks were treated as durable, with RAID keeping copies within one machine. In the cloud, a VM's local disk is an <b>ephemeral cache</b>: it disappears if the instance fails or gets replaced.</p>
+            <p>Virtual block devices (like EBS) imitate disks over the network, but that adds overhead and every I/O becomes a network call. Cloud-native databases use dedicated services instead: <b>object stores</b> such as S3 for big blocks, and separate services for small values.</p>
+            <p>This is <b>disaggregation</b>, or the separation of storage and compute. Cloud systems are also often <b>multitenant</b>: many customers share hardware, which takes care to isolate.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Crash test</span><div class="stats" id="s7-stats"></div></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 680 330" role="img" aria-label="A traditional computer compared to compute machines sharing object storage"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="caption" id="s7-cap" aria-live="polite">Two ways to build the same database.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7. distributed ============ -->
+  <section class="scene" id="distributed">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 6 · distributed vs single-node</span>
+        <h2>One kitchen, or many kitchens that have to phone each other?</h2>
+        <p class="story">A <b>distributed system</b> is a group of computers (called <b>nodes</b>) working together over a network. There are good reasons to use one:</p>
+        <div class="reasons">
+          <span class="pill info">users on many devices</span><span class="pill info">keep working if one breaks</span><span class="pill info">too much data for one machine</span><span class="pill info">be close to users worldwide</span><span class="pill info">grow &amp; shrink with demand</span><span class="pill info">special hardware (GPUs)</span><span class="pill info">laws on where data lives</span><span class="pill info">run where power is green</span>
+        </div>
+        <p class="story">But every computer you add has to <i>talk</i> to the others, and messages can go missing. Sometimes one simple computer beats a whole crowd of them.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Calls over the network are far slower than function calls, and any request might <b>time out</b>. When that happens, you don't know whether it was processed, so retrying may not be safe (Chapter 9).</p>
+            <p>A simple single-threaded program can outperform a cluster with more than 100 CPU cores. Tools like DuckDB and SQLite let many workloads run on one node.</p>
+            <p>Debugging a distributed system needs <b>observability</b>: tracing tools such as OpenTelemetry, Zipkin, and Jaeger. Keeping data consistent <i>across</i> services becomes the application's problem.</p>
+            <p><b>Supercomputers (HPC)</b> are different: when a node fails they often stop the whole job and restart from a checkpoint, while cloud services have to keep serving users.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stack">
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">More computers = faster?</span><span class="pill">toy model: Universal Scalability Law</span></div>
+          <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 660 290" role="img" aria-label="Speed-up curve rising then falling as computers are added"></svg></div>
+          <div class="controls" id="s8-controls"></div>
+          <div class="caption" id="s8-cap" aria-live="polite"></div>
+        </div>
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">Did my message arrive?</span><span id="s9-seg"></span></div>
+          <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 660 250" role="img" aria-label="A request travelling over an unreliable network"></svg></div>
+          <div class="controls" id="s9-controls"></div>
+          <div class="caption" id="s9-cap" aria-live="polite">Send a request to the payment service.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8. microservices / serverless ============ -->
+  <section class="scene" id="services">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 7 · splitting up the app</span>
+        <h2>One giant robot, or a team of small robots?</h2>
+        <p class="story">You can build the whole app as <b>one big program</b>. Or you can build <b>microservices</b>: small programs that each do one job, each owned by one team, each with its own database, and all talking through <b>APIs</b>.</p>
+        <p class="story">Microservices let teams work without waiting for one another. But now there are many more things to deploy, monitor, and keep working together.</p>
+        <p class="story"><b>Serverless</b> goes further: you hand the cloud a function, and it runs only when a request arrives. You pay only while it runs, though a “cold” function can be slow to wake up.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Microservices are “primarily a technical solution to a <b>people problem</b>”: they let teams make progress independently. That helps in a big company but is often unnecessary overhead in a small one.</p>
+            <p>Services shouldn't share a database. Otherwise the whole database schema becomes part of the API and gets hard to change. Changing an API can break its clients, and standards like OpenAPI and gRPC help with that.</p>
+            <p><b>Serverless / FaaS</b> brings metered billing to running code, with limits on execution time and possible slow <b>cold starts</b>. It still runs on servers, just not ones you manage.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Architecture explorer</span><span id="s10-seg"></span></div>
+        <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 660 320" role="img" aria-label="Monolith, microservices or serverless billing timeline"></svg></div>
+        <div class="controls" id="s10-controls"><div class="stats" id="s10-stats"></div></div>
+        <div class="caption" id="s10-cap" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9. law ============ -->
+  <section class="scene" id="law">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 8 · data, law &amp; society</span>
+        <h2>“Please forget me”</h2>
+        <p class="story">Data is often <i>about people</i>. In Europe, a law called the <b>GDPR</b> gives people the <b>right to be forgotten</b>: a company must delete their data when they ask.</p>
+        <p class="story">That sounds easy until you notice copies hiding everywhere: caches, search indexes, warehouses, append-only logs that are never supposed to change, even AI models that <i>learned</i> from the data.</p>
+        <p class="imagine"><b>Try both:</b> ask to delete Mia's data after collecting everything, then again after collecting only what's needed. The second way, called <b>data minimization</b>, leaves fewer places to clean and less to leak.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Regulations like the GDPR, the CCPA, and the EU AI Act shape how personal data can be used. Many systems rely on <b>immutable, append-only logs</b>, which makes deleting data from the middle of one hard. So does removing data from derived datasets and ML training data.</p>
+            <p>The cost of storing data isn't just the storage bill. It also includes the risk of leaks, fines, government demands, and real danger to users when data could reveal criminalized behavior.</p>
+            <p><b>Data minimization</b> (German: <i>Datensparsamkeit</i>) means collecting only for a specific purpose and not keeping data longer than needed. That runs against the “store everything” big-data habit.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Where does Mia's data live?</span><span id="s11-seg"></span></div>
+        <div class="stage-scroll"><svg id="s11-svg" viewBox="0 0 660 350" role="img" aria-label="A person connected to eight systems that may hold her data"></svg></div>
+        <div class="controls" id="s11-controls"><div class="stats" id="s11-stats"></div></div>
+        <div class="caption" id="s11-cap" aria-live="polite">Every yellow box has a copy of something about Mia.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SUMMARY ============ -->
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The seesaws from this chapter</h2><p>Neither side is “right.” Each one wins in a different situation.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>Operational (OLTP)</h4><p>Many tiny reads and writes for users, right now</p></div><span class="vs">vs</span><div class="side"><h4>Analytical (OLAP)</h4><p>Few huge scans that summarize history</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Warehouse</h4><p>Cleaned, organized, ready for SQL</p></div><span class="vs">vs</span><div class="side"><h4>Data lake</h4><p>Raw files of any shape, flexible and cheap</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Self-hosting</h4><p>Control and tuning; cheap for steady load if you have the skills</p></div><span class="vs">vs</span><div class="side"><h4>Cloud services</h4><p>Scales up and down, less work, but less control and lock-in</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Single node</h4><p>Simple, fast, easy to debug</p></div><span class="vs">vs</span><div class="side"><h4>Distributed</h4><p>Survives failures and grows big, but the network is unreliable</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>One app</h4><p>Few moving parts, best for small teams</p></div><span class="vs">vs</span><div class="side"><h4>Microservices</h4><p>Teams work independently, with more to operate</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Store everything</h4><p>Might be useful someday</p></div><span class="vs">vs</span><div class="side"><h4>Data minimization</h4><p>Less risk, easier to follow privacy laws</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>Grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>data-intensive</dt><dd>An app whose hardest problem is the data itself: how much there is, how it changes, and keeping it safe.</dd></div>
+        <div class="word"><dt>frontend / backend</dt><dd>The app you touch, and the server code it talks to.</dd></div>
+        <div class="word"><dt>stateless</dt><dd>Forgets everything after each request, so memory has to go in a database.</dd></div>
+        <div class="word"><dt>OLTP</dt><dd>Lots of small, fast lookups and changes, like a cashier.</dd></div>
+        <div class="word"><dt>OLAP / analytics</dt><dd>Big questions that scan lots of data, like a detective.</dd></div>
+        <div class="word"><dt>point query</dt><dd>Fetch one record by its key (its ID).</dd></div>
+        <div class="word"><dt>data warehouse</dt><dd>A separate, read-only copy of company data, organized for analysis.</dd></div>
+        <div class="word"><dt>ETL / ELT</dt><dd>Extract, transform, load: copy data out, clean it, and put it in the warehouse. ELT does the last two in the other order.</dd></div>
+        <div class="word"><dt>data lake</dt><dd>A big pile of raw files of any kind.</dd></div>
+        <div class="word"><dt>system of record</dt><dd>The one official version of the truth.</dd></div>
+        <div class="word"><dt>derived data</dt><dd>Copies built from the truth (caches, indexes) that can be rebuilt.</dd></div>
+        <div class="word"><dt>cache</dt><dd>A quick-to-reach copy of something that's slow to get.</dd></div>
+        <div class="word"><dt>cloud native</dt><dd>Built from the start to use cloud services like object storage.</dd></div>
+        <div class="word"><dt>object storage</dt><dd>A huge, safe “toy box” for files (like Amazon S3).</dd></div>
+        <div class="word"><dt>multitenant</dt><dd>Many customers sharing the same machines, kept apart safely.</dd></div>
+        <div class="word"><dt>vendor lock-in</dt><dd>When switching to another provider is so hard you're stuck.</dd></div>
+        <div class="word"><dt>node</dt><dd>One computer (process) in a distributed system.</dd></div>
+        <div class="word"><dt>microservices</dt><dd>An app split into small services, each doing one job.</dd></div>
+        <div class="word"><dt>serverless</dt><dd>Code the cloud runs only when needed. You pay per run.</dd></div>
+        <div class="word"><dt>data minimization</dt><dd>Collect only what you truly need, and delete it when you're done.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width: 820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Six quick questions. Finish all six to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible, ease, lerp } = K;
+K.page(1);
+const rand = (n) => Math.floor(Math.random() * n);
+const setCap = (id, html) => { K.$(id).innerHTML = html; };
+
+/* ================= HERO ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const ys = [95, 195, 295];
+  [["FRONTENDS", 70], ["BACKEND", 270], ["DATABASE", 440]].forEach(([t, x]) => svg.appendChild(draw.label(x, 30, t)));
+  ys.forEach((y) => svg.appendChild(s("path", { d: `M92,${y} C160,${y} 160,195 218,195`, class: "sv-wire" })));
+  svg.appendChild(s("line", { x1: 322, y1: 195, x2: 396, y2: 195, class: "sv-wire" }));
+  const names = ["phone", "laptop", "tablet"];
+  ys.forEach((y, i) => {
+    const g = draw.phone(70, y, names[i]);
+    g.setAttribute("class", "clickable"); g.setAttribute("tabindex", "0"); g.setAttribute("role", "button");
+    g.setAttribute("aria-label", `Send a request from the ${names[i]}`);
+    g.addEventListener("click", () => trip(i));
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); trip(i); } });
+    svg.appendChild(g);
+  });
+  const server = draw.server(270, 195, 100, 110, "app code"); svg.appendChild(server);
+  svg.appendChild(draw.db(440, 195, 84, 100, "stored data"));
+  const counter = s("text", { x: 260, y: 378, class: "sv-label", "text-anchor": "middle" }, "0 requests handled");
+  svg.appendChild(counter);
+  const layer = s("g"); svg.appendChild(layer);
+  let n = 0, visible = false;
+  async function trip(i) {
+    const y = ys[i], p = draw.parcel("sv-data", 16); layer.appendChild(p);
+    await fly(p, [94, y], [222, 195], 650);
+    server.light.setAttribute("class", "sv-fill-sun");
+    await fly(p, [222, 195], [398, 195], 520);
+    p.firstChild.setAttribute("class", "sv-fill-mint");
+    await sleep(120);
+    await fly(p, [398, 195], [222, 195], 520);
+    server.light.setAttribute("class", "sv-fill-mint");
+    await fly(p, [222, 195], [94, y], 650);
+    p.remove(); n++; counter.textContent = `${n} request${n === 1 ? "" : "s"} handled`;
+  }
+  whenVisible(svg, () => (visible = true), () => (visible = false));
+  (async function auto() { await sleep(600); for (;;) { if (visible && !K.reduced && !document.hidden) trip(rand(3)); await sleep(1300); } })();
+})();
+
+/* ================= 1. STATELESS WAITER ================= */
+(function stateless() {
+  const svg = K.$("#s1-svg");
+  svg.append(s("line", { x1: 104, y1: 150, x2: 268, y2: 150, class: "sv-wire" }), s("line", { x1: 372, y1: 150, x2: 505, y2: 150, class: "sv-wire" }));
+  svg.appendChild(draw.phone(80, 150, "your phone (frontend)"));
+  svg.appendChild(draw.server(320, 150, 100, 100, "app code (backend)"));
+  svg.appendChild(draw.db(550, 150, 86, 100, "database"));
+  const memory = s("text", { x: 320, y: 240, class: "sv-label fade", "text-anchor": "middle" }, "waiter's memory: (empty)");
+  svg.appendChild(memory);
+  const layer = s("g"); svg.appendChild(layer);
+  const phoneB = draw.bubble(80, 112, 60, [4, 636]), serverB = draw.bubble(320, 94, 60, [4, 636]), dbB = draw.bubble(550, 94, 60, [4, 636]);
+  svg.append(phoneB, serverB, dbB);
+
+  let save = true, busy = false; const orders = [];
+  const btns = [];
+  const ctr = K.$("#s1-controls");
+  const addBtn = (label, cls, fn) => { const b = h("button", { class: "btn " + cls, type: "button" }, label); b.addEventListener("click", fn); btns.push(b); ctr.appendChild(b); };
+  addBtn("Order pizza", "primary", () => order("pizza"));
+  addBtn("Order juice", "primary", () => order("juice"));
+  addBtn("What did I order?", "", ask);
+  ctr.appendChild(h("span", { class: "grow" }));
+  ctr.appendChild(h("span", { class: "slider" }, h("label", {}, "Save to database")));
+  ctr.appendChild(seg(["On", "Off"], 0, (i) => { save = i === 0; }, "s1-save"));
+  const lock = (v) => { busy = v; btns.forEach((b) => (b.disabled = v)); };
+  const renderOrders = () => {
+    const box = K.clear(K.$("#s1-orders"));
+    if (!orders.length) box.appendChild(h("span", { class: "pill" }, "empty"));
+    orders.slice(-4).forEach((o) => box.appendChild(h("span", { class: "pill warn" }, h("i"), o)));
+  };
+  async function forget() {
+    memory.style.opacity = 0; await sleep(400);
+    memory.textContent = "waiter's memory: (empty)"; memory.style.opacity = 1;
+  }
+  async function order(item) {
+    if (busy) return; lock(true);
+    setCap("#s1-cap", `Your phone (the <b>frontend</b>) sends <b>“order ${item}”</b> to the <b>backend</b>.`);
+    const t = draw.tag(item); layer.appendChild(t);
+    await fly(t, [104, 150], [270, 150], 700);
+    memory.textContent = `waiter's memory: ${item}`;
+    serverB.say(`Got it: ${item}!`); await sleep(800);
+    if (save) {
+      serverB.say("I'll write it in the database.");
+      await fly(t, [270, 150], [505, 150], 650);
+      t.remove(); orders.push(item); renderOrders();
+      dbB.say("Saved"); await sleep(700); dbB.say("");
+    } else {
+      serverB.say("I'll just keep it in my head…"); t.remove(); await sleep(900);
+    }
+    serverB.say("Request finished. Wiping my memory!"); await forget(); await sleep(400);
+    const ok = draw.tag("OK", "sv-good"); layer.appendChild(ok);
+    serverB.say("");
+    await fly(ok, [270, 150], [104, 150], 600); ok.remove();
+    phoneB.say("Order placed!");
+    setCap("#s1-cap", save
+      ? `The waiter forgot your ${item} right away, but that's fine: it's <b>written in the database</b>. Now ask “What did I order?”`
+      : `The waiter forgot your ${item}, and <b>nothing was saved</b>. Ask “What did I order?” to see what happens.`);
+    await sleep(1000); phoneB.say(""); lock(false);
+  }
+  async function ask() {
+    if (busy) return; lock(true);
+    const t = draw.tag("what did I order?"); layer.appendChild(t);
+    await fly(t, [104, 150], [270, 150], 700); t.remove();
+    serverB.say("Hmm… I don't remember anything."); await sleep(1100);
+    if (orders.length) {
+      serverB.say("Let me look it up in the database.");
+      const q = draw.tag("lookup"); layer.appendChild(q);
+      await fly(q, [270, 150], [505, 150], 600); q.remove();
+      const answer = orders.slice(-3).join(" + ");
+      dbB.say(answer); await sleep(700); dbB.say("");
+      const r = draw.tag(answer, "sv-good"); layer.appendChild(r);
+      serverB.say("");
+      await fly(r, [505, 150], [104, 150], 1000); r.remove();
+      phoneB.say("Yes, that's it!");
+      setCap("#s1-cap", `The backend didn't remember, so it <b>asked the database</b>. That's why apps can forget between requests and still work.`);
+    } else {
+      serverB.say(save ? "The database has no orders yet." : "Nobody wrote anything down!");
+      await sleep(900);
+      const r = draw.tag("???", "sv-bad"); layer.appendChild(r);
+      serverB.say("");
+      await fly(r, [270, 150], [104, 150], 600); r.remove();
+      phoneB.say("It forgot my order!");
+      setCap("#s1-cap", `A <b>stateless</b> backend can't remember between requests. Without a database, your order is <b>gone</b>.`);
+    }
+    await sleep(1200); phoneB.say(""); lock(false);
+  }
+  renderOrders();
+})();
+
+/* ================= 2. CASHIER vs DETECTIVE ================= */
+(function oltp() {
+  const svg = K.$("#s2-svg");
+  const COLS = 10, ROWS = 8, C = 22, G = 4, N = COLS * ROWS;
+  function grid(x0, y0) {
+    const g = s("g"), cells = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const rect = s("rect", { x: x0 + c * (C + G), y: y0 + r * (C + G), width: C, height: C, rx: 5, class: "cell" });
+      g.appendChild(rect); cells.push(rect);
+    }
+    return { g, cells };
+  }
+  const L = grid(30, 60), R = grid(380, 60);
+  svg.append(draw.label(30, 44, "SHOP DATABASE · 80 SALES RECORDS", "sv-label", "start"), L.g);
+  const right = s("g", { class: "fade" }, draw.label(380, 44, "DATA WAREHOUSE · A COPY", "sv-label", "start"), R.g);
+  const etl = s("g", { class: "fade" }, draw.arrow(294, 162, 370, 162, "sv-wire-live"), draw.label(332, 150, "ETL"));
+  svg.append(right, etl);
+  svg.appendChild(draw.person(44, 312, "sv-fill-blue", 0.85));
+  svg.appendChild(draw.label(44, 342, "cashier"));
+  const queueG = s("g"); svg.appendChild(queueG);
+  const detective = s("g", { class: "fade" }, draw.person(400, 312, "sv-fill-lilac", 0.85), draw.label(400, 342, "detective"));
+  const answer = s("text", { x: 425, y: 316, class: "sv-text", style: { fontWeight: 700 } }, "");
+  detective.appendChild(answer);
+  svg.appendChild(detective);
+  const cashierB = draw.bubble(44, 284, 60, [4, 656]); svg.appendChild(cashierB);
+  const layer = s("g"); svg.appendChild(layer);
+
+  let vals = Array.from({ length: N }, () => 5 + rand(90)), wh = vals.slice();
+  let mode = 0, queue = 2, arr = 0, svc = 0, scanI = 0, scanAcc = 0, sum = 0, pause = 0, syncAcc = 0, last = "…", drawnQ = -1;
+
+  const st = { wait: stat("Waiting in line", 0), time: stat("Each checkout", "0.2 s"), rows: stat("Rows detective read", "0 / 80"), ans: stat("Detective's answer", "—") };
+  Object.values(st).forEach((x) => K.$("#s2-stats").appendChild(x));
+  const caps = [
+    "The cashier runs <b>point queries</b>: find one record by its key, change it, done. Lots of tiny, fast jobs. That's <b>OLTP</b>.",
+    "The detective asks <b>“What were total sales?”</b> That means reading <i>every</i> record and adding them up: an <b>analytical query</b> (OLAP).",
+    "Both on one database: the detective's giant scan hogs it, every checkout slows down, and <b>the line keeps growing</b>.",
+    "Fix: copy the data into a separate <b>data warehouse</b> with <b>ETL</b>. The detective scans the copy, and the cashier is fast again.",
+  ];
+  function setMode(m) {
+    mode = m; scanI = 0; sum = 0; pause = 0; scanAcc = 0;
+    L.cells.concat(R.cells).forEach((c) => c.classList.remove("scan"));
+    if (m === 1) queue = 0;
+    right.style.opacity = m === 3 ? 1 : 0.25;
+    etl.style.opacity = m === 3 ? 1 : 0;
+    detective.style.opacity = m >= 1 ? 1 : 0;
+    detective.setAttribute("transform", m === 3 ? "translate(0,0)" : "translate(-80,0)");
+    setCap("#s2-cap", caps[m]);
+  }
+  K.$("#s2-seg").appendChild(seg(["Cashier", "Detective", "Both, one DB", "Add warehouse"], 0, setMode, "s2-mode"));
+  function flash(cell, cls = "hit") { cell.classList.add(cls); setTimeout(() => cell.classList.remove(cls), 90); }
+  function drawQueue() {
+    if (queue === drawnQ) return; drawnQ = queue; K.clear(queueG);
+    const shown = Math.min(queue, 9);
+    for (let i = 0; i < shown; i++) queueG.appendChild(s("circle", { cx: 80 + i * 22, cy: 312, r: 8, class: "sv-fill-sun" }));
+    if (queue > 9) queueG.appendChild(s("text", { x: 80 + 9 * 22, y: 316, class: "sv-label" }, `+${queue - 9}`));
+  }
+  async function sync() {
+    const p = draw.parcel("sv-data", 14); layer.appendChild(p);
+    await fly(p, [292, 162], [372, 162], 500); p.remove();
+    wh = vals.slice();
+    for (let i = 0; i < 8; i++) flash(R.cells[rand(N)], "sync");
+  }
+  const L0 = loop((dt) => {
+    const slow = mode === 2 && pause <= 0;
+    if (mode !== 1) {
+      arr += dt; if (arr > 560) { arr -= 560; queue = Math.min(60, queue + 1); }
+      const need = slow ? 1600 : 220;
+      if (queue > 0) { svc += dt; if (svc > need) { svc = 0; queue--; const i = rand(N); vals[i] = Math.max(1, vals[i] + rand(9) - 4); flash(L.cells[i]); } }
+      st.time.set(`${(need / 1000).toFixed(1)} s`, slow ? "bad" : "good");
+    } else st.time.set("—");
+    if (mode >= 1) {
+      const T = mode === 3 ? R : L, src = mode === 3 ? wh : vals;
+      if (pause > 0) { pause -= dt; if (pause <= 0) { T.cells.forEach((c) => c.classList.remove("scan")); scanI = 0; sum = 0; } }
+      else {
+        scanAcc += dt; const per = mode === 2 ? 70 : 45;
+        while (scanAcc > per && scanI < N) { scanAcc -= per; sum += src[scanI]; T.cells[scanI].classList.add("scan"); scanI++; }
+        if (scanI >= N) { last = sum.toLocaleString(); pause = 1500; }
+      }
+      answer.textContent = scanI >= N || pause > 0 ? `total sales = ${last}` : "adding up every row…";
+      st.rows.set(`${scanI} / ${N}`); st.ans.set(last === "…" ? "—" : last, last === "…" ? "" : "good");
+    } else { st.rows.set("0 / 80"); }
+    if (mode === 3) { syncAcc += dt; if (syncAcc > 2800) { syncAcc = 0; sync(); } }
+    st.wait.set(queue, queue < 4 ? "good" : queue < 10 ? "warn" : "bad");
+    cashierB.say(queue >= 10 ? "The database is sooo slow!" : "");
+    drawQueue();
+  });
+  setMode(0);
+  whenVisible(svg, () => L0.start(), () => L0.stop());
+})();
+
+/* ================= 3. ETL / ELT / LAKE ================= */
+(function pipeline() {
+  const svg = K.$("#s3-svg");
+  const srcY = [70, 165, 260], srcNames = ["checkout", "website", "inventory"];
+  srcY.forEach((y, i) => svg.appendChild(draw.server(70, y, 64, 58, srcNames[i])));
+  svg.append(
+    s("line", { x1: 190, y1: 44, x2: 190, y2: 292, class: "sv-wire" }), draw.label(190, 32, "EXTRACT"));
+  const tform = s("g", { class: "fade" },
+    s("rect", { x: 295, y: 120, width: 100, height: 90, rx: 14, class: "sv-box" }),
+    draw.label(345, 108, "TRANSFORM"),
+    s("text", { x: 345, y: 160, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700 } }, "clean &"),
+    s("text", { x: 345, y: 178, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700 } }, "reshape"));
+  svg.appendChild(tform);
+  const SLOT = (i) => [520 + (i % 4) * 36, 90 + Math.floor(i / 4) * 40];
+  const house = s("g", { class: "fade" },
+    s("rect", { x: 492, y: 58, width: 172, height: 232, rx: 16, class: "sv-panel" }),
+    draw.label(578, 44, "DATA WAREHOUSE"),
+    ...Array.from({ length: 20 }, (_, i) => { const [x, y] = SLOT(i); return s("rect", { x: x - 12, y: y - 12, width: 24, height: 24, rx: 5, class: "sv-wire", style: { strokeWidth: 1 } }); }));
+  const lake = s("g", { class: "fade" },
+    s("ellipse", { cx: 578, cy: 175, rx: 86, ry: 112, style: { fill: "var(--blue-soft)", stroke: "var(--blue)", strokeWidth: 2 } }),
+    s("path", { d: "M515,150 q15,-8 30,0 t30,0 t30,0", class: "sv-wire-solid", style: { stroke: "var(--blue)", opacity: 0.4 } }),
+    s("path", { d: "M515,210 q15,-8 30,0 t30,0 t30,0", class: "sv-wire-solid", style: { stroke: "var(--blue)", opacity: 0.4 } }),
+    draw.label(578, 44, "DATA LAKE"));
+  svg.append(house, lake);
+  const layer = s("g"); svg.appendChild(layer);
+
+  const shapes = [
+    () => s("circle", { r: 9, class: "sv-fill-sun" }),
+    () => s("path", { d: "M0,-10 L10,8 L-10,8 Z", class: "sv-fill-coral" }),
+    () => s("path", { d: "M0,-11 L11,0 L0,11 L-11,0 Z", class: "sv-fill-mint" }),
+  ];
+  const tidy = (g) => { K.clear(g); g.appendChild(s("rect", { x: -10, y: -10, width: 20, height: 20, rx: 4, class: "sv-fill-lilac sv-pop" })); };
+
+  let mode = 0, epoch = 0, count = 0, inflight = 0, total = 0, visible = false, delivered = [];
+  const st = { total: stat("Items delivered", 0), clean: stat("When is it cleaned?", "before loading") };
+  Object.values(st).forEach((x) => K.$("#s3-stats").appendChild(x));
+  const caps = [
+    "<b>ETL</b>: each messy shape gets <b>cleaned into a neat block</b> <i>before</i> it goes on a warehouse shelf. Analysts get tidy tables they can query with SQL.",
+    "<b>ELT</b>: load the raw shapes <b>first</b>, then transform them <b>inside</b> the warehouse, where it has lots of computing power.",
+    "<b>Data lake</b>: dump everything in <b>raw</b>, any shape, any format. Each data scientist cleans it their own way later. Flexible and cheap.",
+  ];
+  function setMode(m) {
+    mode = m; epoch++; count = 0; delivered.forEach((d) => d.remove()); delivered = [];
+    house.style.opacity = m === 2 ? 0.08 : 1; lake.style.opacity = m === 2 ? 1 : 0.08;
+    tform.style.opacity = m === 0 ? 1 : 0.25;
+    st.clean.set(["before loading", "after loading", "later, by each user"][m]);
+    setCap("#s3-cap", caps[m]);
+  }
+  K.$("#s3-seg").appendChild(seg(["ETL", "ELT", "Data lake"], 0, setMode, "s3-mode"));
+  async function spawn() {
+    const CAP = mode === 2 ? 18 : 20;
+    if (count >= CAP) { if (inflight === 0) { delivered.forEach((d) => d.remove()); delivered = []; count = 0; } return; }
+    const my = epoch, i = rand(3), slot = count++;
+    const g = s("g"); g.appendChild(shapes[i]()); layer.appendChild(g); inflight++;
+    const y = srcY[i];
+    await fly(g, [104, y], [190, y], 500);
+    if (mode === 0) {
+      await fly(g, [190, y], [345, 165], 600); await sleep(250); tidy(g);
+      await fly(g, [345, 165], SLOT(slot), 700);
+    } else if (mode === 1) {
+      await fly(g, [190, y], SLOT(slot), 1000); await sleep(500); if (my === epoch) tidy(g);
+    } else {
+      const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random());
+      await fly(g, [190, y], [578 + Math.cos(a) * r * 62, 175 + Math.sin(a) * r * 88], 1000);
+    }
+    inflight--;
+    if (my !== epoch) { g.remove(); return; }
+    delivered.push(g); total++; st.total.set(total);
+  }
+  setMode(0);
+  whenVisible(svg, () => (visible = true), () => (visible = false));
+  (async function run() { for (;;) { if (visible && !document.hidden) spawn(); await sleep(K.reduced ? 1600 : 800); } })();
+})();
+
+/* ================= 4. SYSTEM OF RECORD ================= */
+(function truth() {
+  const svg = K.$("#s4-svg");
+  const book = s("rect", { x: 30, y: 60, width: 210, height: 210, rx: 16, class: "sv-data-soft" });
+  svg.append(book,
+    s("text", { x: 135, y: 96, class: "sv-title", "text-anchor": "middle" }, "Scorebook"),
+    draw.label(135, 116, "system of record"));
+  const scores = { Ava: 12, Ben: 7, Kai: 9 };
+  const names = Object.keys(scores);
+  const valEls = {};
+  names.forEach((n, i) => {
+    const y = 158 + i * 40;
+    svg.appendChild(s("text", { x: 60, y, class: "sv-text", style: { fontSize: "17px" } }, n));
+    valEls[n] = s("text", { x: 212, y, class: "sv-title", "text-anchor": "end" }, String(scores[n]));
+    svg.appendChild(valEls[n]);
+  });
+  const boxes = [
+    { key: "lb", title: "LEADERBOARD · index", y: 26 },
+    { key: "total", title: "TOTAL · view", y: 124 },
+    { key: "cache", title: "STICKY NOTE · cache", y: 222 },
+  ];
+  boxes.forEach((b) => {
+    const my = b.y + 38;
+    b.wire = s("path", { d: `M240,165 C320,165 320,${my} 398,${my}`, class: "sv-wire" });
+    b.rect = s("rect", { x: 400, y: b.y, width: 240, height: 76, rx: 14, class: "sv-panel" });
+    b.text = s("text", { x: 416, y: b.y + 56, class: "sv-title" }, "");
+    b.status = s("text", { x: 626, y: b.y + 22, class: "sv-label", "text-anchor": "end" }, "");
+    svg.append(b.wire, b.rect, draw.label(416, b.y + 22, b.title, "sv-label", "start"), b.text, b.status);
+  });
+  const layer = s("g"); svg.appendChild(layer);
+  const B = Object.fromEntries(boxes.map((b) => [b.key, b]));
+  let lost = { lb: false, source: false };
+  const compute = {
+    lb: () => Object.entries(scores).sort((a, b) => b[1] - a[1]).map(([n, v]) => `${n} ${v}`).join(" · "),
+    total: () => `${Object.values(scores).reduce((a, b) => a + b, 0)} points`,
+    cache: () => `Ben → ${scores.Ben}`,
+  };
+  const setStatus = (b, text, tone) => { b.status.textContent = text; b.status.style.fill = tone ? `var(--${tone})` : ""; };
+  function paint(key) { const b = B[key]; b.text.textContent = compute[key](); b.rect.setAttribute("class", "sv-panel"); setStatus(b, "up to date", "mint"); }
+  const statusPill = (text, tone) => { const p = K.$("#s4-status"); p.className = "pill " + tone; p.lastChild.textContent = text; };
+  const bez = (t, y1) => { const u = 1 - t; const x = u * u * u * 240 + 3 * u * u * t * 320 + 3 * u * t * t * 320 + t * t * t * 398; const y = u * u * u * 165 + 3 * u * u * t * 165 + 3 * u * t * t * y1 + t * t * t * y1; return [x, y]; };
+  async function send(key, delay) {
+    await sleep(delay);
+    const b = B[key], p = draw.parcel("sv-data", 14); layer.appendChild(p);
+    b.wire.setAttribute("class", "sv-wire-live");
+    await tween(900, (t) => { const [x, y] = bez(t, b.y + 38); p.setAttribute("transform", `translate(${x},${y})`); });
+    p.remove(); b.wire.setAttribute("class", "sv-wire");
+    if (key === "lb") lost.lb = false;
+    paint(key);
+  }
+  const ctr = K.$("#s4-controls"), btns = [];
+  const addBtn = (label, cls, fn) => { const b = h("button", { class: "btn " + cls, type: "button" }, label); b.addEventListener("click", fn); btns.push(b); ctr.appendChild(b); };
+  let busy = false;
+  const run = async (fn) => { if (busy) return; busy = true; btns.forEach((b) => (b.disabled = true)); await fn(); busy = false; btns.forEach((b) => (b.disabled = false)); };
+  addBtn("+1 point to Ben", "primary", () => run(async () => {
+    if (lost.source) { K.toast("The scorebook is ruined. Press Reset first."); return; }
+    scores.Ben++; valEls.Ben.textContent = scores.Ben; valEls.Ben.classList.add("sv-pop");
+    setTimeout(() => valEls.Ben.classList.remove("sv-pop"), 500);
+    boxes.forEach((b) => { if (!(b.key === "lb" && lost.lb)) setStatus(b, "stale…", "sun"); });
+    statusPill("copies catching up", "warn");
+    setCap("#s4-cap", "The change goes into the <b>scorebook first</b>. For a moment the copies are <b>stale</b> (out of date) while the update travels to each one.");
+    await Promise.all(boxes.filter((b) => !(b.key === "lb" && lost.lb)).map((b, i) => send(b.key, i * 180)));
+    statusPill(lost.lb ? "leaderboard missing" : "everything in sync", lost.lb ? "bad" : "good");
+    if (lost.lb) setCap("#s4-cap", "The other copies updated, but the leaderboard is still ruined. Press <b>Rebuild copies</b>.");
+  }));
+  addBtn("Spill juice on leaderboard", "danger", () => run(async () => {
+    if (lost.source) return;
+    lost.lb = true; B.lb.rect.setAttribute("class", "sv-bad sv-shake"); B.lb.text.textContent = "??? sticky juice";
+    setStatus(B.lb, "lost!", "coral"); statusPill("leaderboard missing", "bad");
+    setCap("#s4-cap", "Oops, the leaderboard is ruined! It's only <b>derived data</b>, though. Press <b>Rebuild copies</b>.");
+    await sleep(450);
+  }));
+  addBtn("Rebuild copies", "good", () => run(async () => {
+    if (lost.source) {
+      book.setAttribute("class", "sv-bad sv-shake"); await sleep(420); book.setAttribute("class", "sv-bad");
+      setCap("#s4-cap", "<b>Nothing to rebuild from.</b> The copies might be wrong, and nobody can check, because the <b>source of truth</b> is gone. Protect it most of all.");
+      return;
+    }
+    setCap("#s4-cap", "Rebuilding: every copy is <b>re-calculated from the scorebook</b>. Derived data can always be re-created from the source.");
+    await Promise.all(boxes.map((b, i) => send(b.key, i * 180)));
+    statusPill("everything in sync", "good");
+  }));
+  addBtn("Spill juice on scorebook", "danger", () => run(async () => {
+    lost.source = true; book.setAttribute("class", "sv-bad sv-shake");
+    names.forEach((n) => (valEls[n].textContent = "??"));
+    boxes.forEach((b) => setStatus(b, "can't check!", "coral"));
+    statusPill("source of truth lost", "bad");
+    setCap("#s4-cap", "The <b>system of record</b> is ruined! The copies still show numbers, but are they right? Try <b>Rebuild copies</b>.");
+    await sleep(450); book.setAttribute("class", "sv-bad");
+  }));
+  addBtn("Reset", "", () => run(async () => {
+    Object.assign(scores, { Ava: 12, Ben: 7, Kai: 9 }); lost = { lb: false, source: false };
+    book.setAttribute("class", "sv-data-soft"); names.forEach((n) => (valEls[n].textContent = scores[n]));
+    boxes.forEach((b) => paint(b.key)); statusPill("everything in sync", "good");
+    setCap("#s4-cap", "Back to normal. Give someone a point and watch the copies update.");
+  }));
+  boxes.forEach((b) => paint(b.key)); statusPill("everything in sync", "good");
+})();
+
+/* ================= 5. WHO DOES THE WORK ================= */
+(function spectrum() {
+  const svg = K.$("#s5-svg");
+  const rows = ["Writing the software", "Installing, upgrades, backups", "Running the machines", "Owning the hardware"];
+  const cols = ["Build it yourself", "Self-host", "Cloud VMs", "Cloud service"];
+  const X = [280, 400, 520, 640], Y = [104, 140, 176, 212];
+  const WHO = [[1, 1, 1, 1], [0, 1, 1, 1], [0, 1, 0, 0], [0, 0, 0, 0]]; // [col][row] 1 = you
+  svg.appendChild(s("line", { x1: 280, y1: 34, x2: 640, y2: 34, class: "sv-wire-solid" }));
+  svg.append(draw.label(270, 16, "← you do more", "sv-label", "start"), draw.label(650, 16, "vendor does more →", "sv-label", "end"));
+  rows.forEach((r, i) => svg.appendChild(draw.label(16, Y[i] + 4, r, "sv-label", "start")));
+  const colGroups = cols.map((c, ci) => {
+    const g = s("g", { class: "clickable fade", tabindex: "0", role: "button", "aria-label": c });
+    g.append(s("circle", { cx: X[ci], cy: 34, r: 10, class: "sv-box" }), draw.label(X[ci], 70, c));
+    rows.forEach((_, ri) => {
+      const you = WHO[ci][ri];
+      g.append(s("rect", { x: X[ci] - 54, y: Y[ri] - 14, width: 108, height: 28, rx: 7, style: { fill: you ? "var(--blue)" : "var(--lilac)" } }),
+        s("text", { x: X[ci], y: Y[ri] + 4, "text-anchor": "middle", class: "sv-label", style: { fill: "var(--on-accent)", fontWeight: 700 } }, you ? "you" : "vendor"));
+    });
+    g.addEventListener("click", () => pick(ci));
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(ci); } });
+    svg.appendChild(g); return g;
+  });
+  svg.append(
+    s("rect", { x: 280, y: 238, width: 12, height: 12, rx: 3, style: { fill: "var(--blue)" } }), draw.label(298, 248, "you do it", "sv-label", "start"),
+    s("rect", { x: 380, y: 238, width: 12, height: 12, rx: 3, style: { fill: "var(--lilac)" } }), draw.label(398, 248, "a vendor does it", "sv-label", "start"));
+  const info = [
+    { plus: ["Exactly what you need, your secret sauce", "Worth it for your core competitive advantage"], minus: ["You write it, run it, fix it, all of it", "Slow and expensive for ordinary jobs"] },
+    { plus: ["Tune it for your exact workload", "Full access to logs and metrics for debugging", "Often cheapest for steady, predictable load"], minus: ["You buy machines for the busiest moment", "You plan capacity, patch, and replace disks"] },
+    { plus: ["New machines in minutes, in many sizes", "No hardware to buy"], minus: ["Still your job to install and run the software", "Local disks can vanish with the machine"] },
+    { plus: ["No servers to manage; experts run it", "Scales up and down; pay for what you use"], minus: ["Missing feature? You can only ask politely", "Outage? You wait", "Can't see inside to debug", "Vendor lock-in and price changes"] },
+  ];
+  const segEl = seg(["Bespoke", "Self-host", "Cloud VMs", "SaaS"], 1, (i) => pick(i, true), "s5-mode");
+  K.$("#s5-seg").appendChild(segEl);
+  function pick(ci, fromSeg) {
+    colGroups.forEach((g, i) => { g.style.opacity = i === ci ? 1 : 0.32; g.firstChild.setAttribute("class", i === ci ? "sv-fill-ink" : "sv-box"); });
+    if (!fromSeg) K.$$("button", segEl).forEach((b, i) => b.setAttribute("aria-pressed", String(i === ci)));
+    const d = info[ci];
+    K.$("#s5-cap").innerHTML = "";
+    K.$("#s5-cap").appendChild(h("div", { class: "proscons" },
+      h("div", { class: "plus" }, h("h4", {}, `Good things · ${cols[ci]}`), h("ul", {}, ...d.plus.map((p) => h("li", {}, p)))),
+      h("div", { class: "minus" }, h("h4", {}, "Costs"), h("ul", {}, ...d.minus.map((p) => h("li", {}, p))))));
+  }
+  pick(1);
+})();
+
+/* ================= 5b. COST CHART ================= */
+(function cost() {
+  const svg = K.$("#s6-svg");
+  const x0 = 56, x1 = 640, yb = 250, yt = 40, YMAX = 32;
+  const Y = (v) => yb - (v / YMAX) * (yb - yt);
+  const bw = (x1 - x0) / 24;
+  [0, 10, 20, 30].forEach((v) => svg.append(s("line", { x1: x0, x2: x1, y1: Y(v), y2: Y(v), class: "sv-wire-solid", style: { strokeWidth: 1, opacity: 0.5 } }), draw.label(x0 - 8, Y(v) + 4, String(v), "sv-label", "end")));
+  [0, 6, 12, 18, 23].forEach((hr) => svg.appendChild(draw.label(x0 + bw * hr + bw / 2, 270, `${String(hr).padStart(2, "0")}:00`)));
+  svg.appendChild(draw.label(x0, 26, "machines needed", "sv-label", "start"));
+  const bars = Array.from({ length: 24 }, (_, i) => { const r = s("rect", { x: x0 + i * bw + 3, width: bw - 6, rx: 3, style: { fill: "var(--blue)", opacity: 0.85 } }); svg.appendChild(r); return r; });
+  const peakLine = s("line", { x1: x0, x2: x1, class: "sv-wire-solid", style: { stroke: "var(--coral)", strokeDasharray: "7 5", strokeWidth: 2.5 } });
+  const peakLabel = s("text", { x: x1, class: "sv-label", "text-anchor": "end", style: { fill: "var(--coral)", fontWeight: 700 } }, "self-host: you buy this many machines");
+  svg.append(peakLine, peakLabel);
+  let spiky = 0.7, hire = false;
+  const st = { self: stat("Self-hosted cost", 0), cloud: stat("Cloud cost", 0) };
+  Object.values(st).forEach((x) => K.$("#s6-stats").appendChild(x));
+  K.$("#s6-stats").appendChild(h("span", { class: "pill" }, "1 coin = 1 owned machine-hour · cloud machine-hour = 1.7 coins"));
+  const bump = (hr) => Math.exp(-((hr - 19) ** 2) / (2 * 2.2 * 2.2));
+  function update() {
+    const load = Array.from({ length: 24 }, (_, i) => lerp(10, 2 + 28 * bump(i), spiky));
+    const peak = Math.max(...load), sum = load.reduce((a, b) => a + b, 0);
+    load.forEach((v, i) => { bars[i].setAttribute("y", Y(v)); bars[i].setAttribute("height", yb - Y(v)); });
+    peakLine.setAttribute("y1", Y(Math.ceil(peak))); peakLine.setAttribute("y2", Y(Math.ceil(peak)));
+    peakLabel.setAttribute("y", Y(Math.ceil(peak)) - 8);
+    const self = Math.round(Math.ceil(peak) * 24 + (hire ? 300 : 0)), cloud = Math.round(sum * 1.7);
+    const cloudWins = cloud < self;
+    st.self.set(`${self} coins`, cloudWins ? "bad" : "good");
+    st.cloud.set(`${cloud} coins`, cloudWins ? "good" : "bad");
+    const v = K.$("#s6-verdict"); v.className = "pill " + (cloudWins ? "info" : "good");
+    v.lastChild.textContent = cloudWins ? "cloud is cheaper here" : "self-hosting is cheaper here";
+  }
+  const ctr = K.$("#s6-controls");
+  ctr.appendChild(slider({ id: "s6-spiky", label: "Traffic spikiness", min: 0, max: 100, value: 70, format: (v) => `${v}%`, onInput: (v) => { spiky = v / 100; update(); } }));
+  ctr.appendChild(seg(["Team knows it", "Must hire experts"], 0, (i) => { hire = i === 1; update(); }, "s6-hire"));
+  update();
+})();
+
+/* ================= 6. STORAGE vs COMPUTE ================= */
+(function split() {
+  const svg = K.$("#s7-svg");
+  svg.append(draw.label(170, 34, "TRADITIONAL · ONE COMPUTER"), draw.label(520, 34, "CLOUD NATIVE · SPLIT APART"),
+    s("line", { x1: 340, y1: 24, x2: 340, y2: 312, class: "sv-wire", style: { strokeWidth: 1 } }));
+  const box = s("rect", { x: 30, y: 56, width: 280, height: 196, rx: 18, class: "sv-panel" });
+  const cpu = draw.server(105, 140, 80, 80, "CPU + memory");
+  const disk = s("g", { class: "fade" }, draw.db(232, 140, 70, 84, "local disk"));
+  const leftStatus = s("text", { x: 170, y: 290, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700 } }, "Data lives inside this computer");
+  svg.append(box, cpu, disk, leftStatus);
+  svg.appendChild(draw.db(520, 238, 250, 62, "object storage (e.g. S3)"));
+  const rightStatus = s("text", { x: 520, y: 318, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700 } }, "Data lives in object storage");
+  svg.appendChild(rightStatus);
+  const vmLayer = s("g"); svg.appendChild(vmLayer);
+  const SLOTS = [400, 480, 560, 640];
+  let vms = [];
+  function addVM(i) {
+    const x = SLOTS[i];
+    const g = s("g", { class: "sv-pop" }, s("line", { x1: x, y1: 156, x2: x, y2: 214, class: "sv-wire-live" }), draw.server(x, 98, 58, 64, "VM"));
+    vmLayer.appendChild(g); vms[i] = g;
+  }
+  const st = { a: stat("Traditional data", "reachable", "good"), b: stat("Cloud data", "reachable", "good"), c: stat("Compute machines", 2) };
+  Object.values(st).forEach((x) => K.$("#s7-stats").appendChild(x));
+  const ctr = K.$("#s7-controls"), btns = [];
+  const addBtn = (label, cls, fn) => { const b = h("button", { class: "btn " + cls, type: "button" }, label); b.addEventListener("click", fn); btns.push(b); ctr.appendChild(b); };
+  let busy = false;
+  const run = async (fn) => { if (busy) return; busy = true; btns.forEach((b) => (b.disabled = true)); await fn(); busy = false; btns.forEach((b) => (b.disabled = false)); };
+  const count = () => vms.filter(Boolean).length;
+  addBtn("Crash a machine", "danger", () => run(async () => {
+    box.setAttribute("class", "sv-bad sv-shake"); disk.style.opacity = 0.35; cpu.light.setAttribute("class", "sv-fill-coral");
+    leftStatus.textContent = "Computer down, so the data is stuck inside"; leftStatus.style.fill = "var(--coral)";
+    st.a.set("stuck", "bad");
+    const i = vms.findIndex(Boolean);
+    if (i >= 0) {
+      const g = vms[i]; g.querySelector("rect").setAttribute("class", "sv-bad"); g.setAttribute("class", "sv-shake");
+      rightStatus.textContent = "A VM crashed…"; await sleep(800);
+      g.remove(); vms[i] = null; st.c.set(count()); await sleep(500);
+      addVM(i); st.c.set(count());
+      rightStatus.textContent = "Replaced! The data was never on the VM"; rightStatus.style.fill = "var(--mint)";
+    }
+    setCap("#s7-cap", "Left: the disk went down with its computer. Right: a fresh VM <b>simply reconnected</b> to object storage, so no data was lost and hardly any time was wasted.");
+  }));
+  addBtn("Busy day: add compute", "primary", () => run(async () => {
+    const i = vms.findIndex((v) => !v);
+    if (i < 0) { K.toast("All 4 slots are full"); return; }
+    addVM(i); st.c.set(count());
+    box.setAttribute("class", "sv-panel sv-shake"); await sleep(420); box.setAttribute("class", st.a.textContent.includes("stuck") ? "sv-bad" : "sv-panel");
+    rightStatus.textContent = `${count()} VMs sharing the same data`; rightStatus.style.fill = "";
+    setCap("#s7-cap", "Cloud native: <b>add computers in seconds</b>, and they all read the same object storage. The single computer can't grow on the fly. You'd have to buy a bigger one.");
+  }));
+  addBtn("Quiet day: remove compute", "", () => run(async () => {
+    if (count() <= 1) { K.toast("Keep at least one VM running"); return; }
+    let i = vms.length - 1; while (!vms[i]) i--;
+    vms[i].remove(); vms[i] = null; st.c.set(count());
+    rightStatus.textContent = "Fewer VMs = smaller bill, data untouched"; rightStatus.style.fill = "";
+    setCap("#s7-cap", "When things are quiet, <b>hand machines back</b> and stop paying for them. The data doesn't care, because it lives in storage.");
+  }));
+  addBtn("Reset", "", () => run(async () => {
+    box.setAttribute("class", "sv-panel"); disk.style.opacity = 1; cpu.light.setAttribute("class", "sv-fill-mint");
+    leftStatus.textContent = "Data lives inside this computer"; leftStatus.style.fill = "";
+    rightStatus.textContent = "Data lives in object storage"; rightStatus.style.fill = "";
+    vms.forEach((v) => v && v.remove()); vms = []; addVM(0); addVM(1);
+    st.a.set("reachable", "good"); st.c.set(2);
+    setCap("#s7-cap", "Two ways to build the same database.");
+  }));
+  addVM(0); addVM(1);
+})();
+
+/* ================= 7a. SCALABILITY CURVE ================= */
+(function usl() {
+  const svg = K.$("#s8-svg");
+  const x0 = 56, x1 = 640, yb = 246, yt = 36, NMAX = 32, YMAX = 10, a = 0.03, b = 0.0038;
+  const X = (n) => x0 + ((n - 1) / (NMAX - 1)) * (x1 - x0), Y = (v) => yb - (v / YMAX) * (yb - yt);
+  const thr = (n) => n / (1 + a * (n - 1) + b * n * (n - 1));
+  [0, 2, 4, 6, 8, 10].forEach((v) => svg.append(s("line", { x1: x0, x2: x1, y1: Y(v), y2: Y(v), class: "sv-wire-solid", style: { strokeWidth: 1, opacity: 0.45 } }), draw.label(x0 - 8, Y(v) + 4, `×${v}`, "sv-label", "end")));
+  [1, 8, 16, 24, 32].forEach((n) => svg.appendChild(draw.label(X(n), 266, String(n))));
+  svg.append(draw.label(348, 284, "number of computers"), draw.label(x0, 22, "work done compared to 1 computer", "sv-label", "start"));
+  svg.appendChild(s("line", { x1: X(1), y1: Y(1), x2: X(10), y2: Y(10), class: "sv-wire", style: { strokeWidth: 2 } }));
+  svg.appendChild(draw.label(X(10) + 6, Y(10) + 14, "dream: computers never need to talk", "sv-label", "start"));
+  let d = ""; for (let n = 1; n <= NMAX; n += 0.25) d += `${n === 1 ? "M" : "L"}${X(n).toFixed(1)},${Y(thr(n)).toFixed(1)}`;
+  svg.appendChild(s("path", { d: d + `L${X(NMAX)},${yb} L${X(1)},${yb} Z`, style: { fill: "var(--blue)", opacity: 0.08 } }));
+  svg.appendChild(s("path", { d, style: { fill: "none", stroke: "var(--blue)", strokeWidth: 3 } }));
+  const guide = s("line", { y1: yt, y2: yb, class: "sv-wire", style: { strokeWidth: 1.5 } });
+  const dot = s("circle", { r: 8, style: { fill: "var(--sun)", stroke: "var(--surface)", strokeWidth: 3 } });
+  svg.append(guide, dot);
+  const st = { n: stat("Computers", 1), sp: stat("Speed-up", "×1.0"), talk: stat("Time spent talking", "0%") };
+  const ctr = K.$("#s8-controls");
+  ctr.appendChild(slider({ id: "s8-n", label: "Computers", min: 1, max: 32, value: 4, onInput: update }));
+  ctr.appendChild(h("span", { class: "grow" }));
+  Object.values(st).forEach((x) => ctr.appendChild(x));
+  function update(n) {
+    const t = thr(n), peak = Math.sqrt((1 - a) / b);
+    guide.setAttribute("x1", X(n)); guide.setAttribute("x2", X(n));
+    dot.setAttribute("cx", X(n)); dot.setAttribute("cy", Y(t));
+    st.n.set(n); st.sp.set(`×${t.toFixed(1)}`, n > peak + 2 ? "bad" : "good");
+    st.talk.set(`${Math.round((1 - t / n) * 100)}%`, 1 - t / n > 0.5 ? "bad" : 1 - t / n > 0.25 ? "warn" : "good");
+    setCap("#s8-cap", n === 1 ? "<b>One computer</b>: no network, no waiting on anyone. Simple and often surprisingly fast."
+      : n < 9 ? "Adding computers <b>helps</b>, but less than you'd hope: they spend time coordinating with each other."
+      : n <= peak + 2 ? "Near the <b>sweet spot</b>. Each extra computer adds only a little."
+      : "<b>Too many cooks!</b> The computers spend more time talking than working, and adding more makes things <b>slower</b>.");
+  }
+  update(4);
+})();
+
+/* ================= 7b. UNRELIABLE NETWORK ================= */
+(function network() {
+  const svg = K.$("#s9-svg");
+  svg.appendChild(s("line", { x1: 142, y1: 120, x2: 518, y2: 120, class: "sv-wire" }));
+  svg.append(
+    s("circle", { cx: 300, cy: 120, r: 34, class: "sv-panel" }), s("circle", { cx: 340, cy: 106, r: 40, class: "sv-panel" }), s("circle", { cx: 372, cy: 126, r: 30, class: "sv-panel" }),
+    draw.label(336, 124, "the network"));
+  const client = draw.server(100, 120, 80, 80, "your service"), server = draw.server(560, 120, 80, 80, "payment service");
+  svg.append(client, server);
+  const timer = s("text", { x: 100, y: 214, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700 } }, "");
+  svg.appendChild(timer);
+  const layer = s("g"); svg.appendChild(layer);
+  const cB = draw.bubble(100, 78, 60, [4, 656]), sB = draw.bubble(560, 78, 60, [4, 656]);
+  svg.append(cB, sB);
+  let mode = 0, busy = false, sent = 0, timeouts = 0, did = 0;
+  K.$("#s9-seg").appendChild(seg(["Random", "Lose request", "Lose reply", "All good"], 0, (i) => (mode = i), "s9-mode"));
+  const ctr = K.$("#s9-controls");
+  const btn = h("button", { class: "btn primary", type: "button" }, "Send “charge $5”");
+  ctr.append(btn, h("span", { class: "grow" }));
+  const st = { sent: stat("Sent", 0), to: stat("Timeouts", 0), did: stat("Server really did it", 0) };
+  Object.values(st).forEach((x) => ctr.appendChild(x));
+  async function drop(p) {
+    p.firstChild.setAttribute("class", "sv-fill-coral");
+    const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(p.getAttribute("transform"));
+    const x = +m[1], y = +m[2];
+    await tween(600, (t) => { p.setAttribute("transform", `translate(${x},${y + t * 110})`); p.style.opacity = 1 - t; }, ease.linear);
+    p.remove();
+  }
+  async function countdown() {
+    for (const n of ["waiting… 3", "waiting… 2", "waiting… 1"]) { timer.textContent = n; await sleep(550); }
+    timer.textContent = "timeout!"; timer.style.fill = "var(--coral)"; timeouts++; st.to.set(timeouts, "bad");
+    cB.say("No answer… did it work?");
+  }
+  btn.addEventListener("click", async () => {
+    if (busy) return; busy = true; btn.disabled = true;
+    cB.say(""); sB.say(""); timer.textContent = ""; timer.style.fill = "";
+    const outcome = mode === 0 ? ["ok", "ok", "req", "rep"][rand(4)] : ["", "req", "rep", "ok"][mode];
+    sent++; st.sent.set(sent);
+    const p = draw.parcel("sv-data", 18); layer.appendChild(p);
+    await fly(p, [142, 120], [330, 120], 650);
+    if (outcome === "req") {
+      drop(p); await countdown();
+      setCap("#s9-cap", "The <b>request got lost</b>, so the server never charged anyone. From your side, all you saw was a <b>timeout</b>.");
+    } else {
+      await fly(p, [330, 120], [518, 120], 650); p.remove();
+      did++; st.did.set(did); sB.say("Charged $5"); server.light.setAttribute("class", "sv-fill-sun");
+      await sleep(600);
+      const r = draw.parcel("sv-fill-mint", 18); layer.appendChild(r);
+      await fly(r, [518, 120], [330, 120], 650);
+      server.light.setAttribute("class", "sv-fill-mint");
+      if (outcome === "rep") {
+        drop(r); await countdown();
+        setCap("#s9-cap", "The server <b>did</b> charge $5, but the <b>reply got lost</b>. You see exactly the same timeout as before. If you retry, you might charge <b>twice</b>!");
+      } else {
+        await fly(r, [330, 120], [142, 120], 650); r.remove();
+        cB.say("Got it, thanks!"); timer.textContent = "reply received"; timer.style.fill = "var(--mint)";
+        setCap("#s9-cap", "This time everything arrived. But with a network, you can <b>never be sure</b> in advance.");
+      }
+    }
+    busy = false; btn.disabled = false;
+  });
+})();
+
+/* ================= 8. MONOLITH / MICROSERVICES / SERVERLESS ================= */
+(function services() {
+  const svg = K.$("#s10-svg");
+  const stage = s("g"); svg.appendChild(stage);
+  const teamCls = ["sv-fill-blue", "sv-fill-sun", "sv-fill-mint", "sv-fill-coral"];
+  const mods = ["Cart", "Search", "Payments", "Accounts"];
+  const statsBox = K.$("#s10-stats");
+  let mode = 0, raf = null;
+  const L = loop((dt, t) => { if (raf) raf(t); });
+  whenVisible(svg, () => mode === 2 && L.start(), () => L.stop());
+  function stats(list) { K.clear(statsBox); list.forEach(([k, v, tone]) => statsBox.appendChild(stat(k, v, tone))); }
+  const ctr = K.$("#s10-controls");
+  const again = h("button", { class: "btn", type: "button", hidden: true }, "New traffic");
+  ctr.insertBefore(again, statsBox); again.addEventListener("click", () => render(2));
+
+  function monolith() {
+    stage.append(s("rect", { x: 180, y: 60, width: 300, height: 170, rx: 18, class: "sv-server" }),
+      s("text", { x: 330, y: 88, class: "sv-title", "text-anchor": "middle" }, "One big app"));
+    mods.forEach((m, i) => {
+      const x = 200 + (i % 2) * 140, y = 104 + Math.floor(i / 2) * 60;
+      stage.append(s("rect", { x, y, width: 120, height: 46, rx: 10, class: "sv-box" }), s("text", { x: x + 60, y: y + 28, class: "sv-text", "text-anchor": "middle" }, m));
+    });
+    stage.append(s("line", { x1: 330, y1: 230, x2: 330, y2: 256, class: "sv-wire-solid" }), draw.db(330, 280, 90, 50));
+    [[70, 110], [70, 210], [590, 110], [590, 210]].forEach(([x, y], i) => {
+      stage.append(s("line", { x1: x < 330 ? 94 : 566, y1: y, x2: x < 330 ? 180 : 480, y2: y, class: "sv-wire-live" }), draw.person(x, y, teamCls[i], 0.9));
+    });
+    const b = draw.bubble(330, 58, 60, [4, 656]); stage.appendChild(b); b.say("4 teams must agree before anyone ships");
+    stats([["Things to deploy", "1", "good"], ["Teams that must coordinate", "4", "bad"], ["Databases", "1"]]);
+    setCap("#s10-cap", "<b>One app, one database.</b> Simple to run and great for a small team. In a big company, though, every change needs everyone to agree.");
+  }
+  function micro() {
+    const xs = [105, 255, 405, 555];
+    xs.forEach((x, i) => {
+      if (i < 3) stage.append(s("line", { x1: x + 46, y1: 150, x2: xs[i + 1] - 46, y2: 150, class: "sv-wire-live" }), draw.label((x + xs[i + 1]) / 2, 140, "API"));
+      stage.append(draw.person(x, 58, teamCls[i], 0.75),
+        s("rect", { x: x - 46, y: 110, width: 92, height: 80, rx: 14, class: "sv-server" }),
+        s("text", { x, y: 156, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700 } }, mods[i]),
+        s("line", { x1: x, y1: 190, x2: x, y2: 232, class: "sv-wire-solid" }), draw.db(x, 258, 56, 46));
+    });
+    stage.appendChild(draw.label(330, 308, "each team owns one service and its own database"));
+    stats([["Teams that can ship alone", "4", "good"], ["Things to deploy & monitor", "8", "warn"], ["APIs that must not break", "3", "warn"]]);
+    setCap("#s10-cap", "<b>Microservices:</b> each team moves on its own schedule, which helps big organizations. The price is more to deploy and monitor, and APIs that clients rely on.");
+  }
+  function serverless() {
+    const xa = 190, xb = 640, T = 60, X = (t) => xa + (t / T) * (xb - xa);
+    const reqs = []; let t = 1 + Math.random() * 3;
+    while (t < T - 2) { const burst = 1 + rand(4); for (let i = 0; i < burst && t < T - 2; i++) { reqs.push(t); t += 0.8 + Math.random() * 1.5; } t += 6 + Math.random() * 16; }
+    stage.append(draw.label(20, 64, "requests arrive", "sv-label", "start"), draw.label(20, 134, "always-on server", "sv-label", "start"), draw.label(20, 214, "serverless function", "sv-label", "start"));
+    reqs.forEach((r) => stage.appendChild(s("line", { x1: X(r), x2: X(r), y1: 48, y2: 76, style: { stroke: "var(--sun)", strokeWidth: 3, strokeLinecap: "round" } })));
+    stage.append(s("rect", { x: xa, y: 114, width: xb - xa, height: 34, rx: 8, class: "sv-data-soft" }),
+      s("text", { x: (xa + xb) / 2, y: 136, class: "sv-label", "text-anchor": "middle", style: { fill: "var(--ink)", fontWeight: 700 } }, "paying the whole time, even when idle"));
+    stage.appendChild(s("rect", { x: xa, y: 194, width: xb - xa, height: 34, rx: 8, class: "sv-panel" }));
+    let billed = 0, cold = 0, warmUntil = -99;
+    reqs.forEach((r) => {
+      let start = r;
+      if (r > warmUntil) { stage.appendChild(s("rect", { x: X(r), y: 196, width: X(1.2) - xa, height: 30, rx: 4, style: { fill: "var(--coral)" } })); cold++; billed += 1.2; start = r + 1.2; }
+      const w = 1.0; stage.appendChild(s("rect", { x: X(start), y: 196, width: X(w) - xa, height: 30, rx: 4, style: { fill: "var(--blue)" } }));
+      billed += w; warmUntil = start + w + 5;
+    });
+    [0, 15, 30, 45, 60].forEach((sec) => stage.appendChild(draw.label(X(sec), 256, `${sec}s`)));
+    stage.append(s("rect", { x: 190, y: 280, width: 12, height: 12, rx: 3, style: { fill: "var(--blue)" } }), draw.label(208, 290, "running your code", "sv-label", "start"),
+      s("rect", { x: 350, y: 280, width: 12, height: 12, rx: 3, style: { fill: "var(--coral)" } }), draw.label(368, 290, "cold start (waking up)", "sv-label", "start"));
+    const head = s("line", { y1: 40, y2: 236, style: { stroke: "var(--ink)", strokeWidth: 2 } }); stage.appendChild(head);
+    raf = (tt) => { const x = X(((tt / 1000) * 8) % T); head.setAttribute("x1", x); head.setAttribute("x2", x); };
+    stats([["Always-on billed", "60 s", "bad"], ["Serverless billed", `${billed.toFixed(1)} s`, "good"], ["Cold starts", String(cold), cold > 2 ? "warn" : ""]]);
+    setCap("#s10-cap", "<b>Serverless:</b> the cloud runs your function only when a request arrives, so you pay for seconds of work, not an idle server. After a quiet spell, the first request waits for a <b>cold start</b>.");
+  }
+  function render(m) {
+    mode = m; K.clear(stage); raf = null; L.stop(); again.hidden = m !== 2;
+    [monolith, micro, serverless][m]();
+    if (m === 2 && !K.reduced) L.start();
+  }
+  K.$("#s10-seg").appendChild(seg(["One big app", "Microservices", "Serverless"], 0, render, "s10-mode"));
+  render(0);
+})();
+
+/* ================= 9. RIGHT TO BE FORGOTTEN ================= */
+(function law() {
+  const svg = K.$("#s11-svg");
+  const cx = 330, cy = 176, rx = 245, ry = 130;
+  const items = [
+    { name: "Main database", kind: "easy" },
+    { name: "Cache", kind: "easy" },
+    { name: "Location history", kind: "extra" },
+    { name: "ML model", kind: "model" },
+    { name: "Append-only log", kind: "log" },
+    { name: "IP address log", kind: "extra" },
+    { name: "Analytics warehouse", kind: "easy" },
+    { name: "Search index", kind: "easy" },
+  ];
+  const wires = s("g"); svg.appendChild(wires);
+  items.forEach((it, i) => {
+    const ang = -Math.PI / 2 + (i * Math.PI * 2) / items.length;
+    it.x = cx + Math.cos(ang) * rx; it.y = cy + Math.sin(ang) * ry;
+    it.wire = s("line", { x1: cx, y1: cy, x2: it.x, y2: it.y, class: "sv-wire" }); wires.appendChild(it.wire);
+    it.rect = s("rect", { x: it.x - 70, y: it.y - 23, width: 140, height: 46, rx: 12, class: "sv-data-soft" });
+    it.label = s("text", { x: it.x, y: it.y - 3, class: "sv-text", "text-anchor": "middle", style: { fontSize: "13px", fontWeight: 700 } }, it.name);
+    it.status = s("text", { x: it.x, y: it.y + 14, class: "sv-label", "text-anchor": "middle" }, "");
+    it.g = s("g", { class: "fade" }, it.rect, it.label, it.status); svg.appendChild(it.g);
+  });
+  svg.append(s("circle", { cx, cy: cy - 2, r: 40, class: "sv-server" }), draw.person(cx, cy + 4, "sv-fill-blue", 1.05),
+    s("text", { x: cx, y: cy + 58, class: "sv-title", "text-anchor": "middle" }, "Mia"));
+  const layer = s("g"); svg.appendChild(layer);
+  let minimal = false, busy = false;
+  const st = { hold: stat("Places with Mia's data", 0), gone: stat("Erased", 0), hard: stat("Hard to erase", 0) };
+  const statBox = K.$("#s11-stats");
+  Object.values(st).forEach((x) => statBox.appendChild(x));
+  function reset() {
+    items.forEach((it) => {
+      const none = minimal && it.kind === "extra";
+      it.state = none ? "none" : "holds";
+      it.rect.setAttribute("class", none ? "sv-panel" : "sv-data-soft");
+      it.rect.style.strokeDasharray = none ? "5 5" : ""; it.rect.style.stroke = none ? "var(--line-strong)" : "";
+      it.g.style.opacity = none ? 0.55 : 1; it.wire.style.opacity = none ? 0.2 : 1;
+      it.status.textContent = none ? "never collected" : "has Mia's data";
+      it.status.style.fill = "";
+    });
+    tally();
+  }
+  function tally() {
+    const c = (k) => items.filter((i) => i.state === k).length;
+    const hold = c("holds") + c("stuck");
+    st.hold.set(hold, hold > 5 ? "bad" : hold > 2 ? "warn" : "good"); st.gone.set(c("erased"), c("erased") ? "good" : ""); st.hard.set(c("stuck"), c("stuck") ? "bad" : "");
+  }
+  const ctr = K.$("#s11-controls");
+  const del = h("button", { class: "btn primary", type: "button" }, "Mia: “Delete my data”");
+  const rst = h("button", { class: "btn", type: "button" }, "Reset");
+  ctr.insertBefore(rst, statBox); ctr.insertBefore(del, rst); ctr.insertBefore(h("span", { class: "grow" }), statBox);
+  K.$("#s11-seg").appendChild(seg(["Collect everything", "Collect only what's needed"], 0, (i) => { if (busy) return; minimal = i === 1; reset();
+    setCap("#s11-cap", minimal ? "<b>Data minimization:</b> location history and IP logs were never collected, so there's less to protect, less to leak, and less to delete." : "Every yellow box has a copy of something about Mia."); }, "s11-mode"));
+  del.addEventListener("click", async () => {
+    if (busy) return; busy = true; del.disabled = rst.disabled = true;
+    setCap("#s11-cap", "Sending an <b>erase</b> request to every place that holds Mia's data…");
+    for (const it of items) {
+      if (it.state !== "holds") continue;
+      const p = draw.tag("erase", "sv-bad"); layer.appendChild(p);
+      it.wire.setAttribute("class", "sv-wire-live");
+      await fly(p, [cx, cy], [it.x, it.y], 520); p.remove();
+      it.wire.setAttribute("class", "sv-wire");
+      if (it.kind === "log" || it.kind === "model") {
+        it.state = "stuck"; it.rect.setAttribute("class", "sv-bad sv-shake");
+        it.status.textContent = it.kind === "log" ? "immutable: can't edit the middle" : "it learned: must retrain";
+        it.status.style.fill = "var(--coral)";
+      } else {
+        it.state = "erased"; it.rect.setAttribute("class", "sv-good"); it.status.textContent = "erased ✓"; it.status.style.fill = "var(--mint)";
+      }
+      tally();
+    }
+    setCap("#s11-cap", "Most copies were easy to erase. But an <b>append-only log</b> is designed never to change, and an <b>ML model</b> has already <i>learned</i> from Mia. Those need new engineering tricks, which is why legal rules shape system design.");
+    busy = false; del.disabled = rst.disabled = false;
+  });
+  rst.addEventListener("click", () => { reset(); setCap("#s11-cap", "Every yellow box has a copy of something about Mia."); });
+  reset();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "A shopping app looks up one order by its order ID. What kind of query is that?", options: ["A big analytical scan", "A point query (OLTP)", "A data lake", "A batch job"], answer: 1, why: "It fetches one record by its key. That's the typical operational (OLTP) pattern." },
+  { q: "Why do companies copy data into a separate data warehouse?", options: ["Warehouses are always cheaper", "The shop database can't store numbers", "So analysts' giant scans don't slow down the live app", "The law requires it"], answer: 2, why: "Analytics queries are expensive. Running them on the OLTP database would hurt everyone else, and data is often spread across silos." },
+  { q: "Your cache (derived data) gets wiped out. What now?", options: ["The data is gone forever", "Rebuild it from the system of record", "Ask every user to re-enter it", "Move to the cloud"], answer: 1, why: "Derived data can always be re-created from the source of truth. That's what makes it derived." },
+  { q: "When is running your own servers often cheaper than the cloud?", options: ["When load is steady and your team already knows the system", "When traffic spikes wildly", "Never", "Only for tiny apps"], answer: 0, why: "Owned machines must be sized for the peak. That's wasteful for spiky load but efficient when load is predictable." },
+  { q: "Your request to another service times out. What do you know for sure?", options: ["It definitely failed", "It definitely worked", "Nothing: it may or may not have been processed", "The network is healthy"], answer: 2, why: "The request or the reply might have been lost. Both look like the same timeout, so blindly retrying can be unsafe." },
+  { q: "Why can the “right to be forgotten” be tricky to implement?", options: ["Deleting rows is impossible", "Append-only logs and trained models are hard to erase data from", "The GDPR bans deletion", "Caches never store personal data"], answer: 1, why: "Immutable logs and derived data like ML training sets make deletion a real engineering challenge." },
+], 1);
+</script>
+</body>
+</html>

@@ -1,0 +1,1366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 2 · Nonfunctional Requirements</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box { stroke: var(--blue); }
+  .fade { transition: opacity .35s; }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .mach { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.5; transition: fill .25s, stroke .25s; }
+  .mach.down { fill: var(--coral-soft); stroke: var(--coral); }
+  .mach.new { fill: var(--sun-soft); stroke: var(--sun); }
+  .node-box { fill: var(--blue-soft); stroke: var(--blue); stroke-width: 2; transition: fill .25s, stroke .25s; }
+  .node-box.down { fill: var(--coral-soft); stroke: var(--coral); }
+  .mailbox { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; transition: fill .3s, stroke .3s; }
+  .mailbox.hit { fill: var(--mint-soft); stroke: var(--mint); }
+  .edge { stroke: var(--line-strong); stroke-width: 1.4; fill: none; transition: stroke .25s, stroke-width .25s; }
+  .edge.risk { stroke: var(--coral); stroke-width: 2.6; }
+  .seg-bar { transition: opacity .3s; }
+  .numbig { font-family: var(--f-display); font-weight: 800; }
+  @media (max-width: 620px) { .stage-head .stats { width: 100%; } }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">2</span> Chapter two</span>
+      <h1>Defining Nonfunctional Requirements</h1>
+      <p class="lede">An app doesn't just need buttons that work. It needs to be <b>fast</b>, <b>dependable</b>, <b>able to grow</b>, and <b>easy to fix</b> — because an app that is unbearably slow or unreliable might as well not exist.</p>
+      <p class="quote">“The Internet was done so well that most people think of it as a natural resource like the Pacific Ocean, rather than something that was man-made. When was the last time a technology with a scale like that was so error-free?” — Alan Kay, Dr. Dobb's Journal (2012)</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#timelines">The mailroom</a>
+        <a href="#queueing">One checkout lane</a>
+        <a href="#retries">Retry storm</a>
+        <a href="#anatomy">Where time goes</a>
+        <a href="#percentiles">p50, p95, p99</a>
+        <a href="#tails">One slow friend</a>
+        <a href="#faults">Faults vs failures</a>
+        <a href="#kinds">Same bug everywhere</a>
+        <a href="#scale">Growing bigger</a>
+        <a href="#maintain">Easy to look after</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · fan-out</span><span class="pill info"><i></i>tap a person to post</span></div>
+      <svg id="hero-svg" viewBox="0 0 520 390" role="img" aria-label="A post is copied into the mailbox of every follower"></svg>
+    </div>
+  </section>
+
+  <!-- ============ 1. CASE STUDY: TIMELINES ============ -->
+  <section class="scene" id="timelines">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Case study · social network timelines</span>
+        <h2>Shout it out, or drop it in everyone's mailbox?</h2>
+        <p class="story">Ana posts a message. Her 200 followers should see it within about five seconds. There are two ways to make that happen.</p>
+        <p class="story"><b>Way one:</b> every follower's phone asks the server every five seconds, “anything new?” The server then looks up the recent posts of all 200 people they follow and merges them. That's a huge amount of work, over and over, mostly to answer “nope, nothing new.”</p>
+        <p class="story"><b>Way two:</b> the moment Ana posts, the server drops a copy into the <b>mailbox</b> of each follower — a ready-made timeline. Reading is then instant. The cost moved from reading to writing. That splitting of one action into many is called <b>fan-out</b>.</p>
+        <p class="imagine"><b>Try it:</b> post in each mode and watch the two counters. Then switch Ana to <b>celebrity</b> and see why 100 million mailboxes is a problem.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Toy assumptions from the book: 500 million posts per day (5,800 per second on average, spiking to <b>150,000 per second</b>); the average user follows 200 people and has 200 followers; some celebrities have over 100 million followers.</p>
+            <p>Polling: if 10 million users are online and each re-runs the timeline query every 5 seconds, that's <b>2 million queries per second</b>; times 200 followed accounts, about <b>400 million lookups per second</b>.</p>
+            <p>The fix is <b>materialization</b>: precompute each user's home timeline and keep it in a cache — a <b>materialized view</b>. At a fan-out factor of 200, that's just over <b>1 million timeline writes per second</b>: far less work. During load spikes, deliveries can be <b>enqueued</b> and arrive a bit later, while timelines still load fast.</p>
+            <p>Extreme cases: for someone following a huge number of very active accounts, it's OK to <b>drop some timeline writes</b> and show a sample. For celebrities it isn't — their posts are stored separately and <b>merged at read time</b>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">One post, 200 followers</span><span id="s1-seg"></span></div>
+        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 660 400" role="img" aria-label="Ana posting to a timeline service, a database, and follower mailboxes"></svg></div>
+        <div class="controls" id="s1-controls"></div>
+        <div class="controls"><div class="stats" id="s1-stats"></div></div>
+        <div class="caption" id="s1-cap" aria-live="polite">Pick a mode, then press “Ana posts”.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. THROUGHPUT VS RESPONSE TIME ============ -->
+  <section class="scene" id="queueing">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 1 · describing performance</span>
+        <h2>One checkout lane on a busy Saturday</h2>
+        <p class="story">Two numbers describe how a system performs. <b>Response time</b> is how long <i>you</i> wait, from asking to getting your answer. <b>Throughput</b> is how many requests the whole system finishes per second.</p>
+        <p class="story">They pull on each other. While shoppers arrive slowly, the one cashier is free when you walk up and you're out in a flash. As arrivals creep up towards what the cashier can handle, a line forms — and the wait doesn't grow gently, it shoots up.</p>
+        <p class="imagine"><b>Slide the arrivals</b> from 3 to 9 per second. The cashier can do 10 per second, so even at 9 they're “keeping up” — but look at the wait.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><b>Response time:</b> elapsed time from when a user makes a request until they receive the answer, measured in seconds. <b>Throughput:</b> requests per second (or data volume per second) the system is processing.</p>
+            <p>Response time stays low while throughput is low, then increases sharply as throughput approaches the hardware's capacity. The cause is <b>queueing</b>: an arriving request must wait for the CPU to finish earlier requests.</p>
+            <p>Response time is what users care about; throughput determines how many servers you need, and hence the cost. A system is <b>scalable</b> if its maximum throughput can be significantly increased by adding computing resources.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Queue + response-time curve · toy numbers</span><span class="pill" id="s2-pill"><i></i>idle</span></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 660 320" role="img" aria-label="A queue feeding one server, beside a curve of response time against throughput"></svg></div>
+        <div class="controls" id="s2-controls"></div>
+        <div class="controls"><div class="stats" id="s2-stats"></div></div>
+        <div class="caption" id="s2-cap" aria-live="polite">The cashier handles 10 requests per second. Nothing else changes — only how fast people arrive.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. RETRY STORM ============ -->
+  <section class="scene" id="retries">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 2 · when an overloaded system won't recover</span>
+        <h2>Everybody ask again! (the retry storm)</h2>
+        <p class="story">A system near its limit can fall into a nasty trap. The line gets long, so answers come back too late, so phones give up waiting and <b>ask again</b> — which makes the line longer still.</p>
+        <p class="story">The scary part: even after the rush is over, the system can stay broken, feeding on its own retries, until somebody restarts it. Engineers call that a <b>metastable failure</b>.</p>
+        <p class="imagine"><b>Send a traffic spike</b> with no protection and watch it never recover. Then try backoff, a circuit breaker, and load shedding.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>If response times grow so much that clients time out and resend, the rate of requests increases further — a <b>retry storm</b>. Even when the load falls again, the system may stay overloaded until it is rebooted: a <b>metastable failure</b>, a cause of serious production outages.</p>
+            <p>Client-side cures: increase and randomize the gap between retries (<b>exponential backoff</b>) and stop sending to a service that recently errored or timed out (a <b>circuit breaker</b> or <b>token bucket</b> algorithm).</p>
+            <p>Server-side cures: detect approaching overload and proactively reject requests (<b>load shedding</b>), or tell clients to slow down (<b>backpressure</b>). The choice of queueing and load-balancing algorithms matters too.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Live traffic · toy numbers</span><span class="pill" id="s3-pill"><i></i>healthy</span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 660 300" role="img" aria-label="A live chart of arriving requests, good responses and timeouts"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <div class="controls"><div class="stats" id="s3-stats"></div></div>
+        <div class="caption" id="s3-cap" aria-live="polite">Ten requests a second arrive; the service can finish twelve. Everything is calm.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. ANATOMY OF A RESPONSE TIME ============ -->
+  <section class="scene" id="anatomy">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 3 · latency vs response time</span>
+        <h2>Where did all my time go?</h2>
+        <p class="story">Think of posting a letter. Part of the time is the letter <b>travelling</b>, part is it <b>sitting in a tray</b> waiting for someone free, and only a small part is somebody actually <b>doing the work</b>.</p>
+        <p class="story">Add them all up and you get the <b>response time</b> — the only part the person waiting can see. That's why it must be measured at the client: the server's own stopwatch never sees the waiting.</p>
+        <p class="imagine"><b>Step through it</b>, then switch on “a slow request is already on the CPU”. Nothing about your request changed, yet your wait doubled. That's <b>head-of-line blocking</b>.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <ul>
+              <li><b>Response time</b> is what the client sees; it includes all delays incurred anywhere in the system.</li>
+              <li><b>Service time</b> is the duration for which the service is actively processing the request.</li>
+              <li><b>Queueing delay</b> can occur at several points — waiting for a CPU, or a response packet waiting to be sent.</li>
+              <li><b>Latency</b> is a catchall for time when a request is not being actively processed — it is <i>latent</i>. <b>Network latency</b> is time spent travelling.</li>
+            </ul>
+            <p>Response time varies from request to request: context switches, lost packets and TCP retransmission, garbage-collection pauses, page faults, even mechanical vibration in the rack. Queueing delays often account for much of that variability, because a server processes only a few things at a time — <b>head-of-line blocking</b>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">One request, second by second</span><span id="s4-seg"></span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 660 300" role="img" aria-label="Timeline of a request travelling, queueing, being served, and travelling back"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <div class="controls"><div class="stats" id="s4-stats"></div></div>
+        <div class="caption" id="s4-cap" aria-live="polite">Press Step to follow one request through the system.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. PERCENTILES ============ -->
+  <section class="scene" id="percentiles">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 4 · average, median and percentiles</span>
+        <h2>Don't ask “how fast is it?” — ask “how fast for whom?”</h2>
+        <p class="story">Line up 100 requests, shortest wait first. The one in the middle is the <b>median</b>, also called <b>p50</b>: half of people waited less, half waited more. That's the typical experience.</p>
+        <p class="story">The <b>average</b> (mean) is different: one monstrous 1.4-second request drags it upwards, so it describes almost nobody. The interesting people are at the far right — the <b>tail</b>. p95 means “95 out of 100 were faster than this”.</p>
+        <p class="imagine"><b>Sort the bars</b>, then drag the percentile slider from 50 to 99 and watch the line climb the tail.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The mean is useful for estimating throughput limits, but it isn't a good “typical” value because it doesn't tell you how many users experienced that delay. Percentiles are usually better: <b>p50</b> (median), <b>p95</b>, <b>p99</b>, <b>p999</b>.</p>
+            <p>High percentiles are <b>tail latencies</b>. Amazon specifies internal response times at the <b>99.9th percentile</b>, even though it affects 1 request in 1,000, because the slowest requests often belong to the customers with the most data — the most valuable ones. Optimizing the 99.99th percentile was judged too expensive for too little benefit.</p>
+            <p>Percentiles appear in <b>SLOs</b> (targets, e.g. median under 200 ms and p99 under 1 second, with 99.9% of valid requests non-error) and <b>SLAs</b> (contracts that say what happens if the target is missed, such as a refund).</p>
+            <p>To compute them cheaply on a rolling window, use libraries such as <b>HdrHistogram</b>, <b>t-digest</b>, <b>OpenHistogram</b> or <b>DDSketch</b>. Averaging percentiles is mathematically meaningless — add the histograms instead.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">100 requests · toy numbers in ms</span><span id="s5-seg"></span></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 660 300" role="img" aria-label="Bar chart of 100 response times with mean and percentile markers"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="controls"><div class="stats" id="s5-stats"></div></div>
+        <div class="caption" id="s5-cap" aria-live="polite">Each bar is one request. Most are quick; a few are much slower.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. TAIL LATENCY AMPLIFICATION ============ -->
+  <section class="scene" id="tails">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 5 · use of response time metrics</span>
+        <h2>The group photo waits for the slowest friend</h2>
+        <p class="story">One tap in an app often fans out into many little calls behind the scenes: profile, timeline, ads, images. They all run at the same time — but you can't see the screen until the <b>last</b> one arrives.</p>
+        <p class="story">So if 1 call in 100 is slow, and your screen needs 20 calls, then roughly 1 screen in 5 is slow. Rare backend slowness becomes common user slowness. That's <b>tail latency amplification</b>.</p>
+        <p class="imagine"><b>Drag the number of calls</b> up and run 50 requests. Compare the measured result with the formula on screen.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>High percentiles matter most in backend services called several times while serving a single end-user request. Even when the calls are made in parallel, the request waits for the slowest of them; it takes just one slow call to make the whole end-user request slow.</p>
+            <p>The more backend calls an end-user request needs, the higher the chance of hitting a slow one, so a larger proportion of end-user requests end up slow — <b>tail latency amplification</b>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">One screen, many backend calls</span><span class="pill info" id="s6-math"><i></i>chance of a slow screen</span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 660 330" role="img" aria-label="A fan of parallel backend calls with one slow call dominating the total"></svg></div>
+        <div class="controls" id="s6-controls"></div>
+        <div class="controls"><div class="stats" id="s6-stats"></div></div>
+        <div class="caption" id="s6-cap" aria-live="polite">Press “Load one screen” to make all the calls at once.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7. FAULTS VS FAILURES ============ -->
+  <section class="scene" id="faults">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 6 · reliability and fault tolerance</span>
+        <h2>A flat tyre is not a crashed car</h2>
+        <p class="story">A <b>fault</b> is one part going wrong: a disk dies, a machine crashes, a service you depend on goes dark. A <b>failure</b> is when the <i>whole system</i> stops giving people what they came for.</p>
+        <p class="story">A system is <b>fault-tolerant</b> when faults stay faults. If there are three app servers, losing one is a bad day for that machine and a completely normal day for everyone else. But if some part has no backup, a fault there takes everything down — that part is a <b>single point of failure</b>.</p>
+        <p class="imagine"><b>Break things on purpose</b> (that's <b>fault injection</b>). Turn on the standby database replica and break the database again. Then let the chaos monkey loose.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Reliability means “continuing to work correctly, even when things go wrong”. A <b>fault</b> is one component ceasing to work correctly; a <b>failure</b> is the system as a whole failing to provide the required service — that is, missing its SLO. They are the same thing at different levels.</p>
+            <p>A part whose fault escalates into a whole-system failure is a <b>single point of failure (SPOF)</b>. Fault tolerance is always limited to a certain number and type of faults; if all nodes crash, nothing can be done.</p>
+            <p>Counterintuitively it makes sense to <i>increase</i> the rate of faults deliberately — <b>fault injection</b>, and the discipline of <b>chaos engineering</b> — because many critical bugs are due to poor error handling, and this keeps the fault-tolerance machinery exercised.</p>
+            <p>In the timeline case study, a fan-out machine crashing mid-delivery must be taken over by another without missing or duplicating posts — <b>exactly-once semantics</b>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Break it on purpose</span><span class="pill good" id="s7-pill"><i></i>service is up</span></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 660 320" role="img" aria-label="A load balancer, three app servers and a database that can be broken"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="controls"><div class="stats" id="s7-stats"></div></div>
+        <div class="caption" id="s7-cap" aria-live="polite">Click any box to break it, or press the button. Everything is healthy right now.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8. HARDWARE / SOFTWARE / HUMAN FAULTS ============ -->
+  <section class="scene" id="kinds">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 7 · hardware, software and people</span>
+        <h2>One bad lightbulb, or every bulb at once?</h2>
+        <p class="story">Hardware breaks at random. In a rack of machines, one dies today and a different one next month — and the spares quietly take over. Annoying, not scary.</p>
+        <p class="story">Software faults are scarier because every machine runs the <b>same code</b>, so they all hit the same bug at the same instant. And the biggest cause of outages isn't machines at all — it's a well-meaning person pushing a configuration change.</p>
+        <p class="imagine"><b>Trigger each kind.</b> For the config change, compare “all at once” with a <b>gradual rollout</b> you can roll back.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Hardware, by the numbers: 2–5% of magnetic hard drives fail per year (in a 10,000-disk cluster, about one failure a day); 0.5–1% of SSDs fail per year; roughly 1 machine in 1,000 has a CPU core that occasionally computes the wrong result; more than 1% of machines hit an uncorrectable memory error in a year even with ECC. Whole datacenters can be lost to power cuts, fire, flood or earthquake.</p>
+            <p>Responses: <b>redundancy</b> (RAID, dual power supplies, generators), <b>availability zones</b>, and tolerating the loss of entire machines at the software level. Multi-node systems also allow <b>rolling upgrades</b> instead of planned downtime.</p>
+            <p>Software faults are <b>strongly correlated</b> because many nodes run the same code: the 2012 leap second that hung Java applications through a Linux kernel bug; a firmware bug making certain SSDs fail after exactly 32,768 hours; runaway processes; cascading failures.</p>
+            <p>One study of large internet services found <b>configuration changes by operators were the leading cause of outages</b>, with hardware faults in only 10–25% of cases. Blaming “human error” is counterproductive — it's a symptom of the <b>sociotechnical system</b>. Helpful measures: thorough testing, fast rollback, gradual rollouts, clear monitoring and observability, and <b>blameless postmortems</b>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">A rack of 24 machines</span><span id="s8-seg"></span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 660 300" role="img" aria-label="A rack of 24 machines that can fail one at a time or all together"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="controls"><div class="stats" id="s8-stats"></div></div>
+        <div class="caption" id="s8-cap" aria-live="polite">All 24 machines are healthy, running the same version of the code.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9. SCALABILITY ============ -->
+  <section class="scene" id="scale">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 8 · scalability</span>
+        <h2>A bigger bike, or more bikes?</h2>
+        <p class="story"><b>Scalability</b> isn't a badge a system wears — it's a question: “if the load grows <i>this</i> way, what are our options?” Answering it starts with knowing your load today: requests per second, reads versus writes, followers per user.</p>
+        <p class="story">You can buy a <b>bigger machine</b> (scaling up, a shared-memory architecture). It's simple, but a machine with twice the power costs much more than twice as much, and eventually there is no bigger machine to buy.</p>
+        <p class="story">Or you can add <b>more machines</b>, each with its own CPU, memory and disk, talking over the network (shared-nothing, scaling out). The cost can grow in a straight line — but now you must split the data up and live with all the trouble of distributed systems.</p>
+        <p class="imagine"><b>Drag the load</b> to 16× and try each architecture. Watch which one runs out of road.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><b>Vertical scaling / scaling up</b> uses one bigger machine; threads share RAM, so it's a <b>shared-memory architecture</b>. Cost grows faster than linearly and bottlenecks mean it rarely handles twice the load.</p>
+            <p><b>Shared-disk</b> architectures give machines their own CPU and RAM but a shared array of disks (NAS or SAN); contention and locking overhead limit scalability.</p>
+            <p><b>Shared-nothing / horizontal scaling / scaling out</b>: many nodes, each with its own CPUs, RAM and disks, coordinating in software over the network. It can scale linearly, pick the best price/performance hardware, and survive the loss of a datacenter — at the cost of explicit <b>sharding</b> and distributed-systems complexity.</p>
+            <p>If doubling resources handles twice the load at the same performance, that's <b>linear scalability</b>. There is no <b>magic scaling sauce</b>: an architecture for one level of load is unlikely to cope with 10× that load, and it's rarely worth planning more than one order of magnitude ahead. Good principles: break the system into parts that operate independently, and don't make things more complicated than necessary.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Cost of handling the load · toy numbers</span><span id="s9-seg"></span></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 660 320" role="img" aria-label="Three architectures beside a chart of cost against load"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="controls"><div class="stats" id="s9-stats"></div></div>
+        <div class="caption" id="s9-cap" aria-live="polite">One machine, growing. Simple — until it isn't.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 10. MAINTAINABILITY ============ -->
+  <section class="scene" id="maintain">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 9 · maintainability</span>
+        <h2>The tangled string, and the one that isn't</h2>
+        <p class="story">Most of what software costs happens <i>after</i> it is built: fixing bugs, keeping it running, adapting it, adding features. So the kindest thing you can do for future people (including future you) is keep it understandable.</p>
+        <p class="story">Watch what happens when every piece talks directly to every other piece: 4 pieces need 6 strings, 10 pieces need 45. That's a <b>big ball of mud</b>. Put a well-chosen <b>abstraction</b> in the middle and 10 pieces need 10 strings.</p>
+        <p class="story">Three words to aim for: <b>operability</b> (easy to keep running), <b>simplicity</b> (easy to understand), <b>evolvability</b> (easy to change later).</p>
+        <p class="imagine"><b>Add services</b> until it looks like spaghetti, then flip to “shared abstraction” and press “Make a change”. Fewer strings means fewer things you can accidentally snap.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Most of the cost of software is in ongoing maintenance, not initial development. Every system we build today will one day be a <b>legacy system</b>, so design it with maintenance in mind. Because systems are intertwined with human organizations, maintenance is as much a people problem as a technical one.</p>
+            <p><b>Operability:</b> good monitoring and observability, no dependence on individual machines, good documentation and a clear operational model (“if I do X, Y will happen”), good defaults that can be overridden, self-healing where appropriate, predictable behavior. More automation is not always better — automated systems that go wrong are harder to troubleshoot, and the leftover cases are the hardest ones.</p>
+            <p><b>Simplicity:</b> complexity is a <b>big ball of mud</b>. Splitting complexity into <b>essential</b> and <b>accidental</b> is a flawed but useful idea, since the boundary shifts as tooling evolves. The best tool we have is <b>abstraction</b> — high-level languages hide machine code, SQL hides on-disk structures and concurrency.</p>
+            <p><b>Evolvability:</b> loosely coupled, simple systems are easier to change. A major obstacle is <b>irreversibility</b> — if you can't switch back from a database migration, the stakes are far higher. Minimizing irreversibility improves flexibility.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">How many strings?</span><span id="s10-seg"></span></div>
+        <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 660 320" role="img" aria-label="Services connected directly to each other, or through a shared abstraction"></svg></div>
+        <div class="controls" id="s10-controls"></div>
+        <div class="controls"><div class="stats" id="s10-stats"></div></div>
+        <div class="caption" id="s10-cap" aria-live="polite">Four services, all wired directly to each other.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SUMMARY ============ -->
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The four promises</h2><p>Nobody writes these on the ticket, but every user expects them.</p></div>
+      <div class="cards">
+        <div class="card"><h3>Performance</h3><p>How long one person waits (<b>response time</b>) and how much the system gets through (<b>throughput</b>). Describe it with percentiles, not averages.</p></div>
+        <div class="card"><h3>Reliability</h3><p>Keeping on working correctly even when things go wrong — so that <b>faults</b> don't turn into <b>failures</b>.</p></div>
+        <div class="card"><h3>Scalability</h3><p>Having good options when the load grows: what can we add, and when do we hit the wall?</p></div>
+        <div class="card"><h3>Maintainability</h3><p><b>Operability</b>, <b>simplicity</b>, <b>evolvability</b> — being kind to the people who look after this next year.</p></div>
+      </div>
+      <div class="section-title" style="margin-top:34px"><h2>And the seesaws</h2><p>Each side wins in a different situation.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>Query when read</h4><p>Cheap writes, expensive reads, always current</p></div><span class="vs">vs</span><div class="side"><h4>Materialized timeline</h4><p>Instant reads, lots of work on every write</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Average</h4><p>Handy for capacity maths</p></div><span class="vs">vs</span><div class="side"><h4>Percentiles</h4><p>Tells you what real users actually experience</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Preventing faults</h4><p>Needed where there's no cure, like a security breach</p></div><span class="vs">vs</span><div class="side"><h4>Tolerating faults</h4><p>Usually better: expect breakage and keep serving</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Scaling up (one big machine)</h4><p>Simple, but costs grow faster than linearly and run out</p></div><span class="vs">vs</span><div class="side"><h4>Scaling out (many machines)</h4><p>Linear cost and fault tolerance, but sharding and network trouble</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>More automation</h4><p>Essential at thousands of machines</p></div><span class="vs">vs</span><div class="side"><h4>Manual control</h4><p>Fewer surprises, and someone can still take the wheel</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>More features</h4><p>What the business asks for today</p></div><span class="vs">vs</span><div class="side"><h4>More testing and resilience</h4><p>What stops tomorrow's outage — a priorities problem, not a people problem</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>Grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>functional requirement</dt><dd>What the app must <i>do</i>: the screens, the buttons, what each one does.</dd></div>
+        <div class="word"><dt>nonfunctional requirement</dt><dd>How well it must do it: fast, reliable, secure, easy to look after.</dd></div>
+        <div class="word"><dt>response time</dt><dd>How long you wait between asking and getting your answer.</dd></div>
+        <div class="word"><dt>throughput</dt><dd>How many requests the system finishes each second.</dd></div>
+        <div class="word"><dt>queueing delay</dt><dd>Time your request spends waiting in line before anyone works on it.</dd></div>
+        <div class="word"><dt>service time</dt><dd>The part where the computer is actually doing your work.</dd></div>
+        <div class="word"><dt>latency</dt><dd>Time when a request is just sitting or travelling, not being worked on.</dd></div>
+        <div class="word"><dt>fan-out</dt><dd>One action turning into many: one post copied into 200 mailboxes.</dd></div>
+        <div class="word"><dt>materialized view</dt><dd>An answer worked out in advance and kept ready, so reading is instant.</dd></div>
+        <div class="word"><dt>percentile (p50, p95, p99)</dt><dd>“95 out of 100 requests were faster than this.” p50 is the median.</dd></div>
+        <div class="word"><dt>tail latency</dt><dd>The slowest few requests — the ones that ruin somebody's day.</dd></div>
+        <div class="word"><dt>SLO / SLA</dt><dd>A target for speed and uptime; and the contract that says what happens if you miss it.</dd></div>
+        <div class="word"><dt>fault</dt><dd>One part of the system going wrong.</dd></div>
+        <div class="word"><dt>failure</dt><dd>The whole system stopping doing its job for users.</dd></div>
+        <div class="word"><dt>fault tolerance</dt><dd>Carrying on properly even though something inside is broken.</dd></div>
+        <div class="word"><dt>single point of failure</dt><dd>The one piece with no backup: if it breaks, everything breaks.</dd></div>
+        <div class="word"><dt>chaos engineering</dt><dd>Breaking your own system on purpose to check the safety nets really work.</dd></div>
+        <div class="word"><dt>retry storm</dt><dd>Everyone giving up and asking again at once, making the jam much worse.</dd></div>
+        <div class="word"><dt>load shedding</dt><dd>The server saying “no” quickly instead of saying “yes” far too slowly.</dd></div>
+        <div class="word"><dt>blameless postmortem</dt><dd>Talking through what went wrong without punishing anyone, so everyone learns.</dd></div>
+        <div class="word"><dt>shared-nothing</dt><dd>Many computers, each with its own CPU, memory and disk, working as a team.</dd></div>
+        <div class="word"><dt>evolvability</dt><dd>How easy it is to change the system later when the world changes.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width: 820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Six quick questions. Finish all six to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="kit.js"></script>
+<script>
+const { h, s, draw, fly, path, sleep, tween, loop, seg, slider, stat, whenVisible, ease, lerp } = K;
+K.page(2);
+const rand = (n) => Math.floor(Math.random() * n);
+const setCap = (id, html) => { K.$(id).innerHTML = html; };
+const fmt = (n) => n.toLocaleString();
+
+/* ================= HERO: FAN-OUT ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const posterY = [90, 195, 300];
+  const names = ["Ana", "Bo", "Cy"];
+  const boxY = [45, 110, 175, 240, 305];
+  svg.append(draw.label(62, 26, "PEOPLE POSTING"), draw.label(420, 26, "FOLLOWERS' MAILBOXES"));
+  posterY.forEach((y) => svg.appendChild(s("path", { d: `M92,${y} C140,${y} 140,195 176,195`, class: "sv-wire" })));
+  boxY.forEach((y) => svg.appendChild(s("path", { d: `M258,195 C300,195 300,${y} 338,${y}`, class: "sv-wire" })));
+
+  const counts = [0, 0, 0, 0, 0];
+  const boxes = boxY.map((y, i) => {
+    const rect = s("rect", { x: 338, y: y - 21, width: 162, height: 42, rx: 11, class: "mailbox" });
+    const num = s("text", { x: 488, y: y + 4, class: "sv-label", "text-anchor": "end" }, "0 posts");
+    svg.append(rect, s("text", { x: 350, y: y + 4, class: "sv-text", style: { fontSize: "13px" } }, `follower ${i + 1}`), num);
+    return { rect, num, y };
+  });
+
+  posterY.forEach((y, i) => {
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": `Post a message as ${names[i]}` },
+      s("rect", { x: 34, y: y - 30, width: 58, height: 60, rx: 12, class: "sv-box", style: { opacity: 0.001 } }),
+      draw.person(62, y - 2, "sv-fill-blue", 0.9), draw.label(62, y + 30, names[i]));
+    g.addEventListener("click", () => post(i));
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); post(i); } });
+    svg.appendChild(g);
+  });
+  const server = draw.server(217, 195, 82, 116, "fan-out service");
+  svg.appendChild(server);
+  const counter = s("text", { x: 260, y: 378, class: "sv-label", "text-anchor": "middle" }, "0 posts · 0 timeline writes");
+  svg.appendChild(counter);
+  const layer = s("g"); svg.appendChild(layer);
+
+  let posts = 0, writes = 0, visible = false, running = 0;
+  async function post(i) {
+    if (running > 2) return;
+    running++;
+    const p = draw.parcel("sv-data", 15); layer.appendChild(p);
+    await path(p, [[92, posterY[i]], [176, 195]], 520);
+    p.remove(); server.light.setAttribute("class", "sv-fill-sun");
+    posts++;
+    await Promise.all(boxes.map(async (b, bi) => {
+      const q = draw.parcel("sv-data", 12); layer.appendChild(q);
+      await fly(q, [258, 195], [346, b.y], 620);
+      q.remove(); counts[bi]++; writes++;
+      b.num.textContent = `${counts[bi]} post${counts[bi] === 1 ? "" : "s"}`;
+      b.rect.classList.add("hit"); setTimeout(() => b.rect.classList.remove("hit"), 420);
+    }));
+    server.light.setAttribute("class", "sv-fill-mint");
+    counter.textContent = `${posts} post${posts === 1 ? "" : "s"} · ${writes} timeline writes`;
+    running--;
+  }
+  whenVisible(svg, () => (visible = true), () => (visible = false));
+  (async function auto() {
+    await sleep(700);
+    for (;;) { if (visible && !K.reduced && !document.hidden) post(rand(3)); await sleep(2400); }
+  })();
+})();
+
+/* ================= 1. TIMELINES: POLL vs FAN-OUT vs CELEBRITY ================= */
+(function timelines() {
+  const svg = K.$("#s1-svg");
+  const boxY = [40, 110, 180, 250, 320];
+  svg.appendChild(s("path", { d: "M78,120 C112,120 112,175 140,175", class: "sv-wire" }));
+  svg.appendChild(s("line", { x1: 185, y1: 255, x2: 185, y2: 282, class: "sv-wire" }));
+  boxY.forEach((y) => svg.appendChild(s("path", { d: `M230,190 C320,190 330,${y} 468,${y}`, class: "sv-wire" })));
+
+  const anaLabel = draw.label(50, 152, "Ana · 200 followers");
+  svg.append(draw.person(50, 120, "sv-fill-blue", 0.95), anaLabel);
+  const server = draw.server(185, 190, 90, 130, "timeline service");
+  svg.appendChild(server);
+  svg.appendChild(draw.db(185, 330, 74, 96, "posts & follows"));
+  svg.appendChild(draw.label(560, 372, "each box stands for 40 followers"));
+
+  const counts = [0, 0, 0, 0, 0];
+  const boxes = boxY.map((y, i) => {
+    const rect = s("rect", { x: 468, y: y - 22, width: 172, height: 44, rx: 11, class: "mailbox" });
+    const num = s("text", { x: 628, y: y + 4, class: "sv-label", "text-anchor": "end" }, "0 posts");
+    svg.append(rect, s("text", { x: 480, y: y + 4, class: "sv-text", style: { fontSize: "13px" } }, `mailbox ${i + 1}`), num);
+    return { rect, num, y };
+  });
+  const layer = s("g"); svg.appendChild(layer);
+  const note = s("text", { x: 300, y: 300, class: "sv-label", "text-anchor": "middle", style: { fill: "var(--coral)" } }, "");
+  svg.appendChild(note);
+
+  const st = {
+    look: stat("DB lookups", 0),
+    write: stat("Timeline writes", 0),
+    read: stat("Timeline loads in", "—"),
+  };
+  Object.values(st).forEach((x) => K.$("#s1-stats").appendChild(x));
+  let lookups = 0, writes = 0, mode = 0, busy = false;
+  const btns = [];
+  const ctr = K.$("#s1-controls");
+  const addBtn = (label, cls, fn) => { const b = h("button", { class: "btn " + cls, type: "button" }, label); b.addEventListener("click", fn); btns.push(b); ctr.appendChild(b); return b; };
+  const lock = (v) => { busy = v; btns.forEach((b) => (b.disabled = v)); };
+  const render = () => {
+    st.look.set(fmt(lookups), lookups > 400 ? "bad" : lookups > 0 ? "warn" : "");
+    st.write.set(fmt(writes), writes > 400 ? "warn" : writes > 0 ? "good" : "");
+    boxes.forEach((b, i) => (b.num.textContent = `${counts[i]} post${counts[i] === 1 ? "" : "s"}`));
+  };
+  const flash = (b, cls) => { b.rect.classList.add(cls); setTimeout(() => b.rect.classList.remove(cls), 520); };
+
+  async function post() {
+    if (busy) return; lock(true);
+    note.textContent = "";
+    setCap("#s1-cap", "Ana writes a post. It goes to the <b>timeline service</b> first.");
+    const p = draw.parcel("sv-data", 16, "new"); layer.appendChild(p);
+    await path(p, [[78, 120], [140, 175], [185, 190]], 400);
+    await fly(p, [185, 190], [185, 300], 420); p.remove();
+    if (mode === 0) {
+      setCap("#s1-cap", "Posting is <b>cheap</b> here: one row written into the <b>posts</b> table and we're done. All the work is pushed onto whoever reads.");
+      lock(false); return;
+    }
+    if (mode === 2) {
+      note.textContent = "celebrity post: kept separate, not fanned out";
+      setCap("#s1-cap", "Ana is a <b>celebrity</b> now. Copying this post into 100 million mailboxes would be far too much work, so it stays in one place and gets <b>merged when people read</b>.");
+      lock(false); return;
+    }
+    setCap("#s1-cap", "Now the <b>fan-out</b>: the service looks up every follower and drops a copy into each of their mailboxes.");
+    await Promise.all(boxes.map(async (b, i) => {
+      const q = draw.parcel("sv-data", 12); layer.appendChild(q);
+      await fly(q, [230, 190], [462, b.y], 620 + i * 40);
+      q.remove(); counts[i]++; writes += 40; flash(b, "hit"); render();
+    }));
+    setCap("#s1-cap", "One post became <b>200 timeline writes</b>. That is the <b>fan-out factor</b>. At 5,800 posts per second the real service does just over <b>1 million timeline writes per second</b> — a lot, but far less than the alternative.");
+    lock(false);
+  }
+
+  async function read() {
+    if (busy) return; lock(true);
+    const i = rand(5), b = boxes[i];
+    if (mode === 0) {
+      setCap("#s1-cap", "The phone asks: “anything new?” The service must now find the 200 people this user follows and fetch their recent posts.");
+      const q = draw.parcel("sv-data-soft", 14); layer.appendChild(q);
+      await fly(q, [462, b.y], [230, 190], 520); q.remove();
+      const label = s("text", { x: 236, y: 268, class: "sv-label", style: { fill: "var(--coral)" } }, "× 200 lookups"); svg.appendChild(label);
+      for (let k = 0; k < 6; k++) {
+        const t = draw.parcel("sv-data-soft", 9); layer.appendChild(t);
+        fly(t, [185, 220], [185, 300], 260).then(() => fly(t, [185, 300], [185, 220], 260)).then(() => t.remove());
+        lookups += 34; render(); await sleep(150);
+      }
+      await sleep(400); label.remove();
+      const r = draw.parcel("sv-good", 14); layer.appendChild(r);
+      await fly(r, [230, 190], [462, b.y], 640); r.remove(); flash(b, "hit");
+      st.read.set("slow", "bad");
+      setCap("#s1-cap", "It worked, but it was expensive. With 10 million people online re-asking every 5 seconds, that's <b>2 million queries per second</b> × 200 followed accounts ≈ <b>400 million lookups per second</b>.");
+    } else if (mode === 1) {
+      flash(b, "hit");
+      setCap("#s1-cap", "The mailbox is <b>already computed</b>, so the phone just takes it. No database work at all. This precomputed answer is a <b>materialized view</b>, and it stays fast even during a load spike.");
+      st.read.set("instant", "good");
+      const r = draw.parcel("sv-good", 14); layer.appendChild(r);
+      await fly(r, [462, b.y], [560, b.y], 320); r.remove();
+    } else {
+      setCap("#s1-cap", "The mailbox holds ordinary posts. The celebrity's posts are fetched separately and <b>merged in</b> as the timeline is read — one extra lookup instead of 100 million writes.");
+      const q = draw.parcel("sv-data-soft", 12); layer.appendChild(q);
+      await fly(q, [462, b.y], [230, 190], 480);
+      await fly(q, [230, 190], [185, 300], 300);
+      lookups += 1; render();
+      await fly(q, [185, 300], [230, 190], 300);
+      await fly(q, [230, 190], [462, b.y], 480); q.remove(); flash(b, "hit");
+      st.read.set("fast", "good");
+    }
+    lock(false);
+  }
+
+  addBtn("Ana posts", "primary", post);
+  addBtn("A follower opens the app", "", read);
+  addBtn("Reset", "", () => {
+    if (busy) return;
+    lookups = 0; writes = 0; counts.fill(0); note.textContent = ""; st.read.set("—"); render();
+    setCap("#s1-cap", "Counters cleared. Try the same two buttons in a different mode.");
+  });
+  K.$("#s1-seg").appendChild(seg(["Ask every 5 s", "Fan out to mailboxes", "Celebrity"], 0, (m) => {
+    if (busy) return;
+    mode = m; note.textContent = "";
+    anaLabel.textContent = m === 2 ? "Ana · 100M followers" : "Ana · 200 followers";
+    setCap("#s1-cap", [
+      "<b>Polling:</b> nothing is prepared in advance. Every phone re-runs the same big query, over and over.",
+      "<b>Materializing:</b> the work happens once, at write time, so every read is a simple mailbox pickup.",
+      "<b>Celebrities break the rule:</b> their posts are stored separately and merged at read time, because millions of copies is too much work.",
+    ][m]);
+  }, "s1-mode"));
+  render();
+})();
+
+/* ================= 2. QUEUEING: THROUGHPUT vs RESPONSE TIME ================= */
+(function queueing() {
+  const svg = K.$("#s2-svg");
+  const MU = 10;               // the one server can finish 10 requests per second
+  const SVC = 1000 / MU;       // 100 ms of service time each
+  const X0 = 370, X1 = 640, Y0 = 258, Y1 = 55;
+  const LMAX = 10, RMAX = 2;   // axes: 10 req/s, 2 s
+
+  svg.append(draw.label(30, 34, "ONE SERVER, ONE LINE", "sv-label", "start"), draw.label(X0, 34, "RESPONSE TIME vs THROUGHPUT", "sv-label", "start"));
+  svg.appendChild(s("rect", { x: 22, y: 92, width: 250, height: 72, rx: 14, class: "sv-panel" }));
+  svg.appendChild(draw.label(147, 84, "waiting line"));
+  const srv = draw.server(315, 128, 70, 82, "1 CPU"); svg.appendChild(srv);
+  svg.appendChild(draw.arrow(274, 128, 278, 128, "sv-wire-solid"));
+  const doneT = s("text", { x: 176, y: 224, class: "sv-label", "text-anchor": "middle" }, "0 finished");
+  svg.appendChild(doneT);
+  const qG = s("g"); svg.appendChild(qG);
+
+  const px = (l) => X0 + (l / LMAX) * (X1 - X0);
+  const py = (r) => Y0 - Math.min(r, RMAX) / RMAX * (Y0 - Y1);
+  svg.append(s("line", { x1: X0, y1: Y0, x2: X1, y2: Y0, class: "sv-wire-solid" }), s("line", { x1: X0, y1: Y0, x2: X0, y2: Y1, class: "sv-wire-solid" }));
+  [0, 2, 4, 6, 8, 10].forEach((l) => { svg.append(s("line", { x1: px(l), y1: Y0, x2: px(l), y2: Y0 + 5, class: "sv-wire-solid" }), draw.label(px(l), Y0 + 19, String(l))); });
+  [0, 0.5, 1, 1.5, 2].forEach((r) => { svg.append(s("line", { x1: X0 - 5, y1: py(r), x2: X0, y2: py(r), class: "sv-wire-solid" }), draw.label(X0 - 9, py(r) + 4, r.toFixed(1), "sv-label", "end")); });
+  svg.append(draw.label(505, Y0 + 38, "throughput (requests finished per second)"), draw.label(X0 - 6, Y1 - 12, "response time (seconds)", "sv-label", "start"));
+  let d = "";
+  for (let l = 0; l <= 9.85; l += 0.05) { const r = SVC / 1000 / (1 - l / MU); d += (d ? " L" : "M") + px(l) + "," + py(Math.min(r, RMAX)); }
+  svg.appendChild(s("path", { d, class: "sv-wire-solid", style: { stroke: "var(--blue)", strokeWidth: 2.5 } }));
+  svg.appendChild(s("line", { x1: px(10), y1: Y0, x2: px(10), y2: Y1, class: "sv-wire", style: { stroke: "var(--coral)" } }));
+  svg.appendChild(draw.label(px(10) - 6, Y1 + 12, "capacity", "sv-label", "end"));
+  const dot = s("circle", { cx: px(3), cy: py(SVC / 1000 / 0.7), r: 6, class: "sv-fill-blue" });
+  svg.appendChild(dot);
+
+  const st = { busy: stat("Server busy", "30%"), wait: stat("Waiting in line", 0), resp: stat("Response time", "0.14 s") };
+  Object.values(st).forEach((x) => K.$("#s2-stats").appendChild(x));
+  let rate = 3, queue = [], serving = null, acc = 0, T = 0, done = 0, recent = [], drawn = -1;
+  K.$("#s2-controls").appendChild(slider({ id: "s2-rate", label: "Requests arriving per second", min: 1, max: 9.5, step: 0.5, value: 3, format: (v) => v.toFixed(1), onInput: (v) => { rate = v; mark(); } }));
+  function mark() {
+    const u = rate / MU, r = SVC / 1000 / (1 - u);
+    dot.setAttribute("cx", px(rate)); dot.setAttribute("cy", py(r));
+    st.busy.set(Math.round(u * 100) + "%", u > 0.85 ? "bad" : u > 0.6 ? "warn" : "good");
+    setCap("#s2-cap", u < 0.6
+      ? `The server is busy only <b>${Math.round(u * 100)}%</b> of the time, so a new request almost always finds it free. Waiting is nearly zero.`
+      : u < 0.85
+        ? `At <b>${Math.round(u * 100)}%</b> busy, arrivals often bump into a request already being handled. The line — and the wait — start to build.`
+        : `At <b>${Math.round(u * 100)}%</b> busy the server still “keeps up” on average, but bunched-up arrivals have nowhere to go. <b>Queueing delay</b> explodes: the curve shoots up near capacity.`);
+  }
+  function drawQueue() {
+    const n = Math.min(queue.length, 11);
+    if (n === drawn) return; drawn = n; K.clear(qG);
+    for (let i = 0; i < n; i++) qG.appendChild(s("circle", { cx: 250 - i * 21, cy: 128, r: 8, class: "sv-fill-sun" }));
+    if (queue.length > 11) qG.appendChild(s("text", { x: 30, y: 132, class: "sv-label" }, `+${queue.length - 11}`));
+  }
+  const L = loop((dt) => {
+    T += dt;
+    acc += (dt / 1000) * rate;
+    while (acc >= 1) { acc -= 1; if (queue.length < 400) queue.push(T); }
+    if (!serving && queue.length) serving = { at: queue.shift(), left: SVC };
+    if (serving) {
+      serving.left -= dt;
+      if (serving.left <= 0) {
+        done++; recent.push((T - serving.at) / 1000); if (recent.length > 25) recent.shift();
+        serving = null; doneT.textContent = `${done} finished`;
+      }
+    }
+    srv.light.setAttribute("class", serving ? "sv-fill-sun" : "sv-fill-mint");
+    drawQueue();
+    st.wait.set(queue.length, queue.length > 12 ? "bad" : queue.length > 4 ? "warn" : "good");
+    const avg = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
+    st.resp.set(avg.toFixed(2) + " s", avg > 0.8 ? "bad" : avg > 0.3 ? "warn" : "good");
+    const p = K.$("#s2-pill");
+    const u = rate / MU;
+    p.className = "pill " + (u > 0.85 ? "bad" : u > 0.6 ? "warn" : "good");
+    p.innerHTML = "<i></i>" + (u > 0.85 ? "near capacity" : u > 0.6 ? "getting busy" : "plenty of room");
+  });
+  mark();
+  whenVisible(svg, () => L.start(), () => L.stop());
+})();
+
+/* ================= 3. RETRY STORM / METASTABLE FAILURE ================= */
+(function retries() {
+  const svg = K.$("#s3-svg");
+  const X0 = 46, X1 = 636, Y0 = 244, Y1 = 42, YMAX = 44, N = 118;
+  const CAP = 12, BASE = 10;
+  svg.append(s("line", { x1: X0, y1: Y0, x2: X1, y2: Y0, class: "sv-wire-solid" }), s("line", { x1: X0, y1: Y0, x2: X0, y2: Y1, class: "sv-wire-solid" }));
+  const py = (v) => Y0 - Math.min(v, YMAX) / YMAX * (Y0 - Y1);
+  [0, 11, 22, 33, 44].forEach((v) => { svg.append(s("line", { x1: X0 - 5, y1: py(v), x2: X0, y2: py(v), class: "sv-wire-solid" }), draw.label(X0 - 9, py(v) + 4, String(v), "sv-label", "end")); });
+  svg.appendChild(draw.label(X0 - 40, Y1 - 14, "requests per second", "sv-label", "start"));
+  svg.appendChild(s("line", { x1: X0, y1: py(CAP), x2: X1, y2: py(CAP), class: "sv-wire", style: { stroke: "var(--mint)" } }));
+  svg.appendChild(draw.label(X1, py(CAP) - 8, "capacity: 12/s", "sv-label", "end"));
+  svg.append(draw.label(X0, 272, "time →", "sv-label", "start"));
+  const lArr = s("polyline", { points: "", fill: "none", style: { stroke: "var(--blue)", strokeWidth: 2.4 } });
+  const lGood = s("polyline", { points: "", fill: "none", style: { stroke: "var(--mint)", strokeWidth: 2.4 } });
+  const lBad = s("polyline", { points: "", fill: "none", style: { stroke: "var(--coral)", strokeWidth: 2.4 } });
+  svg.append(lArr, lGood, lBad);
+  svg.append(
+    s("rect", { x: 300, y: 262, width: 11, height: 11, rx: 3, class: "sv-fill-blue" }), draw.label(316, 272, "arriving", "sv-label", "start"),
+    s("rect", { x: 396, y: 262, width: 11, height: 11, rx: 3, class: "sv-fill-mint" }), draw.label(412, 272, "answered", "sv-label", "start"),
+    s("rect", { x: 508, y: 262, width: 11, height: 11, rx: 3, class: "sv-fill-coral" }), draw.label(524, 272, "timed out", "sv-label", "start"));
+
+  const st = { arr: stat("Arriving /s", 10), good: stat("Answered /s", 10, "good"), bad: stat("Timed out /s", 0) };
+  Object.values(st).forEach((x) => K.$("#s3-stats").appendChild(x));
+  let mode = 0, queue = 0, t = 0, spike = 0, retries = [], open = 0, hist = [], stormT = 0;
+  const reset = () => { queue = 0; spike = 0; retries = []; open = 0; hist = []; stormT = 0; };
+
+  function tick() {
+    t++;
+    let due = 0;
+    retries = retries.filter((r) => { if (r.t <= t) { due += r.n; return false; } return true; });
+    let spikeNow = 0;
+    if (spike > 0) { spikeNow = Math.min(spike, 3.0); spike -= spikeNow; }
+    let base = BASE / 10;
+    if (mode === 2 && open > 0) { open--; base = 0; due = 0; }   // circuit breaker: clients fail fast
+    let arriving = base + spikeNow + due;
+    let shed = 0;
+    if (mode === 3 && queue + arriving > 2.0) { shed = Math.max(0, queue + arriving - 2.0); arriving -= shed; }
+    queue += arriving;
+    const served = Math.min(CAP / 10, queue);
+    queue -= served;
+    let timedOut = 0;
+    const LIMIT = 3.6;                                            // ~3 s of backlog = client gives up
+    if (queue > LIMIT) { timedOut = queue - LIMIT; queue = LIMIT; }
+    const lost = timedOut + shed;
+    if (lost > 0.001) {
+      if (mode === 0) retries.push({ t: t + 3, n: lost });
+      else if (mode === 1) retries.push({ t: t + 12 + rand(30), n: lost });
+      else if (mode === 2) { open = 60; }
+      else retries.push({ t: t + 18 + rand(16), n: lost });
+    }
+    hist.push([(arriving + shed) * 10, served * 10, lost * 10]);
+    if (hist.length > N) hist.shift();
+    st.arr.set(Math.round((arriving + shed) * 10), arriving * 10 > CAP * 1.2 ? "bad" : "");
+    st.good.set(Math.round(served * 10), served * 10 > CAP * 0.9 ? "good" : "warn");
+    st.bad.set(Math.round(lost * 10), lost > 0.05 ? "bad" : "good");
+    if (lost > 0.05) stormT++; else stormT = Math.max(0, stormT - 2);
+    const pill = K.$("#s3-pill");
+    const stuck = stormT > 40 && spike <= 0;
+    pill.className = "pill " + (stuck ? "bad" : lost > 0.05 ? "warn" : "good");
+    pill.innerHTML = "<i></i>" + (stuck ? "metastable: stuck in overload" : lost > 0.05 ? "overloaded" : "healthy");
+    const step = (X1 - X0) / (N - 1);
+    const pts = (k) => hist.map((v, i) => `${(X0 + i * step).toFixed(1)},${py(v[k]).toFixed(1)}`).join(" ");
+    lArr.setAttribute("points", pts(0)); lGood.setAttribute("points", pts(1)); lBad.setAttribute("points", pts(2));
+  }
+
+  const ctr = K.$("#s3-controls");
+  const spikeBtn = h("button", { class: "btn danger", type: "button" }, "Traffic spike");
+  spikeBtn.addEventListener("click", () => {
+    spike = 60;
+    setCap("#s3-cap", mode === 0
+      ? "A burst of traffic arrives. The line gets long, phones time out and <b>ask again</b> — and those retries keep the line long forever. Even after the burst is over, the system stays down: a <b>metastable failure</b>."
+      : "A burst of traffic arrives. Watch how the protection handles it.");
+  });
+  ctr.appendChild(spikeBtn);
+  const rst = h("button", { class: "btn", type: "button" }, "Reset");
+  rst.addEventListener("click", () => reset());
+  ctr.appendChild(rst);
+  ctr.appendChild(h("span", { class: "grow" }));
+  ctr.appendChild(seg(["No protection", "Exponential backoff", "Circuit breaker", "Load shedding"], 0, (m) => {
+    mode = m; reset();
+    setCap("#s3-cap", [
+      "<b>No protection:</b> every timed-out request is resent almost immediately, so the retries alone can keep the service pinned at overload.",
+      "<b>Exponential backoff:</b> clients wait longer and longer before retrying, and randomize the gap, so the retries arrive spread out instead of all at once.",
+      "<b>Circuit breaker:</b> after a burst of errors the client stops calling the service at all for a while. The queue drains, and traffic resumes on a healthy service.",
+      "<b>Load shedding:</b> the server notices it is near overload and rejects extra requests <i>immediately</i>. Rejections are cheap, so the ones it does accept are still answered on time.",
+    ][m]);
+  }, "s3-mode"));
+
+  let acc = 0;
+  const L = loop((dt) => { acc += dt; while (acc >= 100) { acc -= 100; tick(); } });
+  whenVisible(svg, () => L.start(), () => L.stop());
+})();
+
+/* ================= 4. ANATOMY OF A RESPONSE TIME ================= */
+(function anatomy() {
+  const svg = K.$("#s4-svg");
+  const CY = 82, SY = 206;
+  svg.append(
+    s("line", { x1: 60, y1: CY, x2: 636, y2: CY, class: "sv-wire" }),
+    s("line", { x1: 60, y1: SY, x2: 636, y2: SY, class: "sv-wire" }),
+    draw.label(60, CY - 26, "CLIENT (your phone)", "sv-label", "start"),
+    draw.label(60, SY + 62, "SERVER", "sv-label", "start"));
+  const busyBar = s("g", { class: "fade", style: { opacity: 0 } },
+    s("rect", { x: 190, y: SY - 9, width: 140, height: 18, rx: 5, class: "sv-panel" }),
+    draw.label(260, SY + 26, "someone else's slow request"));
+  svg.appendChild(busyBar);
+  const parts = {};
+  const mk = (el) => { const g = s("g", { class: "fade", style: { opacity: 0 } }); g.appendChild(el); svg.appendChild(g); return g; };
+  function build(busy) {
+    Object.values(parts).forEach((g) => g && g.remove());
+    const qStart = 190, qEnd = busy ? 330 : 250, sEnd = qEnd + 140, rEnd = sEnd + 100;
+    parts.req = mk(s("g", {},
+      s("line", { x1: 90, y1: CY, x2: qStart, y2: SY, class: "sv-wire-solid", style: { stroke: "var(--blue)", strokeWidth: 3.5 } }),
+      draw.label(96, 150, "network latency", "sv-label", "start")));
+    parts.queue = mk(s("g", {},
+      s("rect", { x: qStart, y: SY - 9, width: qEnd - qStart, height: 18, rx: 5, class: "sv-bad" }),
+      draw.label((qStart + qEnd) / 2, SY + 34, "queueing delay")));
+    parts.svc = mk(s("g", {},
+      s("rect", { x: qEnd, y: SY - 9, width: 140, height: 18, rx: 5, class: "sv-good" }),
+      draw.label(qEnd + 70, SY + 34, "service time")));
+    parts.res = mk(s("g", {},
+      s("line", { x1: sEnd, y1: SY, x2: rEnd, y2: CY, class: "sv-wire-solid", style: { stroke: "var(--blue)", strokeWidth: 3.5 } }),
+      draw.label(sEnd + 6, 150, "network latency", "sv-label", "start")));
+    parts.total = mk(s("g", {},
+      s("path", { d: `M90,${CY - 44} v-12 H${rEnd} v12`, class: "sv-wire-solid", style: { stroke: "var(--sun)", strokeWidth: 2.5 } }),
+      s("text", { x: (90 + rEnd) / 2, y: CY - 24, class: "sv-title", "text-anchor": "middle", style: { fill: "var(--sun)" } }, "response time — all the client can see")));
+    return { qEnd, sEnd, rEnd };
+  }
+  let busy = false, step = 0, geom = build(false), playing = false;
+  const order = ["req", "queue", "svc", "res", "total"];
+  const caps = () => [
+    "<b>1 · Network latency.</b> The request travels over the network to the server. Nothing is being computed — the request is just <i>latent</i>.",
+    busy
+      ? "<b>2 · Queueing delay.</b> The CPU is already chewing on somebody else's slow request. Yours waits its turn — <b>head-of-line blocking</b>."
+      : "<b>2 · Queueing delay.</b> The request waits until a CPU is free. On a quiet server this is short; on a busy one it dominates everything.",
+    "<b>3 · Service time.</b> Finally, the server is actually doing your work. This is the only part most server-side timers measure.",
+    "<b>4 · Network latency again.</b> The answer travels back, and may even wait in a buffer before it can be sent.",
+    busy
+      ? "<b>Response time</b> = everything added together. Your request took exactly as long to <i>process</i> as before, but you waited much longer — which is why response times must be measured <b>on the client side</b>."
+      : "<b>Response time</b> = network latency + queueing delay + service time + network latency. Only the client can see all of it.",
+  ];
+  const st = { net: stat("Network", "60 ms"), q: stat("Queue", "30 ms"), svc: stat("Service", "40 ms"), tot: stat("Response time", "—") };
+  Object.values(st).forEach((x) => K.$("#s4-stats").appendChild(x));
+  const ms = () => ({ net: 60, q: busy ? 80 : 30, svc: 40 });
+  function show(n) {
+    step = n;
+    order.forEach((k, i) => (parts[k].style.opacity = i < n ? 1 : 0));
+    const m = ms();
+    st.net.set(m.net + " ms"); st.q.set(m.q + " ms", busy ? "bad" : "warn"); st.svc.set(m.svc + " ms", "good");
+    st.tot.set(n >= 5 ? m.net * 2 + m.q + m.svc + " ms" : "—", n >= 5 ? (busy ? "bad" : "good") : "");
+    if (n > 0) setCap("#s4-cap", caps()[n - 1]);
+  }
+  const ctr = K.$("#s4-controls");
+  const stepBtn = h("button", { class: "btn primary", type: "button" }, "Step");
+  const playBtn = h("button", { class: "btn", type: "button" }, "Play");
+  const resetBtn = h("button", { class: "btn", type: "button" }, "Reset");
+  stepBtn.addEventListener("click", () => { if (playing) return; show(step >= 5 ? 1 : step + 1); });
+  playBtn.addEventListener("click", async () => {
+    if (playing) return; playing = true; stepBtn.disabled = true; playBtn.disabled = true;
+    show(0); await sleep(250);
+    for (let i = 1; i <= 5; i++) { show(i); await sleep(1300); }
+    playing = false; stepBtn.disabled = false; playBtn.disabled = false;
+  });
+  resetBtn.addEventListener("click", () => { if (playing) return; show(1); });
+  ctr.append(stepBtn, playBtn, resetBtn, h("span", { class: "grow" }));
+  K.$("#s4-seg").appendChild(seg(["Quiet server", "Slow request already on the CPU"], 0, (i) => {
+    if (playing) return;
+    busy = i === 1; busyBar.style.opacity = busy ? 1 : 0;
+    geom = build(busy); show(Math.max(step, 1));
+  }, "s4-busy"));
+  show(1);
+})();
+
+/* ================= 5. PERCENTILES ================= */
+(function percentiles() {
+  const svg = K.$("#s5-svg");
+  const BASE = 250, TOP = 52, X0 = 22, STEP = 5.38, W = 4.4, YMAX = 1500, XE = 560;
+  const py = (v) => BASE - Math.min(v, YMAX) / YMAX * (BASE - TOP);
+  svg.append(s("line", { x1: X0 - 4, y1: BASE, x2: XE, y2: BASE, class: "sv-wire-solid" }));
+  [0, 500, 1000, 1500].forEach((v) => svg.append(
+    s("line", { x1: X0 - 4, y1: py(v), x2: XE, y2: py(v), class: "sv-wire", style: { opacity: 0.5 } }),
+    draw.label(616, py(v) + 4, v + "ms", "sv-label", "start")));
+  svg.appendChild(draw.label(X0, 278, "100 requests to the same service · toy numbers", "sv-label", "start"));
+  const bars = Array.from({ length: 100 }, (_, i) => {
+    const r = s("rect", { x: X0 + i * STEP, y: py(0), width: W, height: 0, rx: 1.6, class: "sv-fill-line" });
+    svg.appendChild(r); return r;
+  });
+  const marks = ["mean", "p50", "p95", "p99"].map((k) => {
+    const line = s("line", { x1: X0 - 4, y1: py(0), x2: XE, y2: py(0), class: "sv-wire-solid", style: { stroke: k === "mean" ? "var(--ink-3)" : "var(--lilac)", strokeWidth: 2, strokeDasharray: k === "mean" ? "4 4" : "none" } });
+    const txt = s("text", { x: 566, y: py(0), class: "sv-label", style: { fill: k === "mean" ? "var(--ink-3)" : "var(--lilac)", fontWeight: 700 } }, k);
+    svg.append(line, txt); return { k, line, txt };
+  });
+  const pick = s("line", { x1: X0 - 4, y1: py(0), x2: XE, y2: py(0), class: "sv-wire-solid", style: { stroke: "var(--coral)", strokeWidth: 2.5 } });
+  const pickTxt = s("text", { x: X0 + 4, y: py(0) - 8, class: "sv-label", style: { fill: "var(--coral)", fontWeight: 700 } }, "");
+  svg.append(pick, pickTxt);
+
+  const st = { mean: stat("Mean", "—"), p50: stat("p50 median", "—"), p95: stat("p95", "—"), p99: stat("p99", "—") };
+  Object.values(st).forEach((x) => K.$("#s5-stats").appendChild(x));
+  let data = [], sorted = [], view = 0, pct = 50;
+  const sample = () => {
+    const r = Math.random();
+    if (r > 0.98) return Math.round(700 + Math.random() * 700);
+    if (r > 0.90) return Math.round(200 + Math.random() * 380);
+    return Math.round(55 + Math.random() * 75);
+  };
+  const at = (p) => sorted[Math.min(99, Math.max(0, Math.ceil(p / 100 * 100) - 1))];
+  function layout() {
+    const vals = view === 0 ? data : sorted;
+    vals.forEach((v, i) => {
+      const b = bars[i], y = py(v);
+      b.setAttribute("y", y); b.setAttribute("height", BASE - y);
+      b.setAttribute("class", v >= at(95) ? "sv-fill-coral" : v >= at(50) ? "sv-fill-sun" : "sv-fill-line");
+    });
+    const mean = Math.round(data.reduce((a, b) => a + b, 0) / data.length);
+    const vals4 = { mean, p50: at(50), p95: at(95), p99: at(99) };
+    st.mean.set(mean + " ms", "warn"); st.p50.set(at(50) + " ms", "good"); st.p95.set(at(95) + " ms", "warn"); st.p99.set(at(99) + " ms", "bad");
+    const placed = marks.map((m) => ({ m, v: vals4[m.k], y: py(vals4[m.k]) })).sort((a, b) => b.y - a.y);
+    let lastY = 1e9;
+    placed.forEach((o) => { const y = Math.min(o.y, lastY - 14); lastY = y; o.m.line.setAttribute("y1", o.y); o.m.line.setAttribute("y2", o.y); o.m.txt.setAttribute("y", y + 4); });
+    drawPick();
+  }
+  function drawPick() {
+    const v = at(pct), y = py(v);
+    pick.setAttribute("y1", y); pick.setAttribute("y2", y);
+    pickTxt.setAttribute("y", y - 8); pickTxt.textContent = `p${pct} = ${v} ms`;
+  }
+  function fresh() {
+    data = Array.from({ length: 100 }, sample);
+    sorted = data.slice().sort((a, b) => a - b);
+    layout();
+    setCap("#s5-cap", `A fresh batch. Half the users waited under <b>${at(50)} ms</b>, but 1 user in 100 waited <b>${at(99)} ms</b> or more. The mean sits above the median because the slow tail drags it up — it describes almost nobody.`);
+  }
+  const ctr = K.$("#s5-controls");
+  const nb = h("button", { class: "btn primary", type: "button" }, "New batch of 100");
+  nb.addEventListener("click", fresh); ctr.appendChild(nb);
+  ctr.appendChild(slider({ id: "s5-pct", label: "Percentile", min: 50, max: 99, step: 1, value: 50, format: (v) => "p" + v, onInput: (v) => { pct = v; drawPick(); } }));
+  K.$("#s5-seg").appendChild(seg(["Arrival order", "Sorted"], 0, (i) => {
+    view = i; layout();
+    setCap("#s5-cap", i === 1
+      ? "Sorted fastest to slowest. Now the percentiles are just positions along the row: <b>p50</b> is the bar in the middle, <b>p95</b> is the 95th bar, <b>p99</b> is the second-to-last."
+      : "Back to the order the requests actually arrived in. The slow ones are scattered at random — you can't feel them until you count.");
+  }, "s5-view"));
+  fresh();
+})();
+
+/* ================= 6. TAIL LATENCY AMPLIFICATION ================= */
+(function tails() {
+  const svg = K.$("#s6-svg");
+  const X0 = 250, SCALE = 0.40, ROW = 15, TOP = 26;
+  svg.appendChild(draw.phone(60, 160, "one tap"));
+  const fanG = s("g"); svg.appendChild(fanG);
+  const rowG = s("g"); svg.appendChild(rowG);
+  const totalLine = s("line", { x1: X0, y1: 18, x2: X0, y2: 300, class: "sv-wire", style: { stroke: "var(--coral)" } });
+  const totalTxt = s("text", { x: X0, y: 316, class: "sv-label", "text-anchor": "middle", style: { fill: "var(--coral)", fontWeight: 700 } }, "");
+  svg.append(totalLine, totalTxt);
+  [0, 200, 400, 600, 800].forEach((v) => svg.appendChild(draw.label(X0 + v * SCALE, 16, v ? v + "ms" : "0")));
+
+  const st = { n: stat("Backend calls", 5), slow: stat("Slow call chance", "5%"), worst: stat("Slowest call", "—"), user: stat("User waited", "—"), batch: stat("Slow screens (50 runs)", "—") };
+  Object.values(st).forEach((x) => K.$("#s6-stats").appendChild(x));
+  let N = 5, P = 5, rows = [], busy = false;
+  function build() {
+    K.clear(rowG); K.clear(fanG); rows = [];
+    for (let i = 0; i < N; i++) {
+      const y = TOP + i * ROW + (N < 8 ? 60 : 0);
+      fanG.appendChild(s("path", { d: `M92,160 C160,160 170,${y} 208,${y}`, class: "sv-wire", style: { strokeWidth: 1.2 } }));
+      const box = s("rect", { x: 208, y: y - 6, width: 34, height: 12, rx: 3, class: "sv-server" });
+      const bar = s("rect", { x: X0, y: y - 5, width: 0, height: 10, rx: 3, class: "sv-fill-mint" });
+      const val = s("text", { x: X0 + 6, y: y + 4, class: "sv-label" }, "");
+      rowG.append(box, bar, val);
+      rows.push({ y, bar, val });
+    }
+    totalLine.setAttribute("x1", X0); totalLine.setAttribute("x2", X0); totalTxt.textContent = "";
+    st.n.set(N); st.slow.set(P + "%");
+    const chance = Math.round((1 - Math.pow(1 - P / 100, N)) * 100);
+    const pill = K.$("#s6-math");
+    pill.className = "pill " + (chance > 40 ? "bad" : chance > 15 ? "warn" : "info");
+    pill.innerHTML = `<i></i>1 − (1 − ${(P / 100).toFixed(2)})<sup>${N}</sup> = <b>${chance}%</b> chance of a slow screen`;
+  }
+  const one = () => Math.random() * 100 < P ? 380 + Math.random() * 480 : 40 + Math.random() * 40;
+  async function run() {
+    if (busy) return; busy = true;
+    build();
+    const ds = rows.map(one);
+    const worst = Math.max(...ds);
+    await Promise.all(rows.map((r, i) => tween(300 + ds[i] * 0.6, (t) => {
+      const w = ds[i] * SCALE * t;
+      r.bar.setAttribute("width", w);
+      r.bar.setAttribute("class", ds[i] > 300 ? "sv-fill-coral" : "sv-fill-mint");
+      r.val.setAttribute("x", X0 + w + 6);
+      r.val.textContent = Math.round(ds[i] * t) + "ms";
+    }, ease.linear)));
+    totalLine.setAttribute("x1", X0 + worst * SCALE); totalLine.setAttribute("x2", X0 + worst * SCALE);
+    totalTxt.setAttribute("x", Math.min(600, X0 + worst * SCALE));
+    totalTxt.textContent = `screen appears after ${Math.round(worst)} ms`;
+    st.worst.set(Math.round(worst) + " ms", worst > 300 ? "bad" : "good");
+    st.user.set(Math.round(worst) + " ms", worst > 300 ? "bad" : "good");
+    setCap("#s6-cap", worst > 300
+      ? "One of the calls hit the slow tail — and the whole screen waited for it. Every other call was quick, and it made no difference at all."
+      : "All the calls were quick this time, so the screen appeared fast. Add more calls and this gets rarer.");
+    busy = false;
+  }
+  function batch() {
+    if (busy) return;
+    let slow = 0;
+    for (let k = 0; k < 50; k++) { let w = 0; for (let i = 0; i < N; i++) w = Math.max(w, one()); if (w > 300) slow++; }
+    const expect = Math.round((1 - Math.pow(1 - P / 100, N)) * 100);
+    st.batch.set(slow * 2 + "%", slow * 2 > 30 ? "bad" : "warn");
+    setCap("#s6-cap", `Out of 50 screen loads, <b>${slow}</b> were slow (${slow * 2}%). The maths predicts about <b>${expect}%</b>. Only ${P}% of backend calls are slow — but a screen needing ${N} of them inherits all their bad luck. That's <b>tail latency amplification</b>.`);
+  }
+  const ctr = K.$("#s6-controls");
+  const b1 = h("button", { class: "btn primary", type: "button" }, "Load one screen");
+  const b2 = h("button", { class: "btn", type: "button" }, "Run 50 screens");
+  b1.addEventListener("click", run); b2.addEventListener("click", batch);
+  ctr.append(b1, b2, h("span", { class: "grow" }));
+  ctr.appendChild(slider({ id: "s6-n", label: "Backend calls per screen", min: 1, max: 20, step: 1, value: 5, onInput: (v) => { N = v; build(); } }));
+  ctr.appendChild(slider({ id: "s6-p", label: "Slow calls", min: 1, max: 20, step: 1, value: 5, format: (v) => v + "%", onInput: (v) => { P = v; build(); } }));
+  build();
+})();
+
+/* ================= 7. FAULTS vs FAILURES ================= */
+(function faults() {
+  const svg = K.$("#s7-svg");
+  const layer = s("g");
+  svg.appendChild(draw.phone(48, 160, "a user"));
+  const items = [];
+  function box(id, x, y, w, hgt, title, sub) {
+    const rect = s("rect", { x: x - w / 2, y: y - hgt / 2, width: w, height: hgt, rx: 12, class: "node-box" });
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": `Break ${title}` }, rect,
+      s("text", { x, y: y + 2, class: "sv-text", "text-anchor": "middle", style: { fontSize: "13px", fontWeight: 700 } }, title),
+      sub ? draw.label(x, y + hgt / 2 + 16, sub) : null);
+    const cross = s("path", { d: `M${x - 12},${y - 12} L${x + 12},${y + 12} M${x + 12},${y - 12} L${x - 12},${y + 12}`, class: "sv-wire-solid", style: { stroke: "var(--coral)", strokeWidth: 3, opacity: 0 } });
+    g.appendChild(cross);
+    const it = { id, x, y, g, rect, cross, down: false, title };
+    g.addEventListener("click", () => toggle(it));
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(it); } });
+    svg.appendChild(g);
+    items.push(it); return it;
+  }
+  const wires = [];
+  const wire = (x1, y1, x2, y2) => { const w = s("path", { d: `M${x1},${y1} C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}`, class: "sv-wire" }); svg.appendChild(w); wires.push(w); return w; };
+  wire(78, 160, 128, 160);
+  const appY = [60, 160, 260];
+  appY.forEach((y) => wire(212, 160, 288, y));
+  appY.forEach((y) => wire(392, y, 468, 160));
+  const lb = box("lb", 170, 160, 84, 88, "load balancer", "no backup");
+  const apps = appY.map((y, i) => box("app" + i, 340, y, 104, 56, "app server " + (i + 1)));
+  const dbN = box("db", 520, 160, 100, 78, "database", "");
+  const replica = s("g", { class: "fade", style: { opacity: 0 } },
+    s("rect", { x: 470, y: 238, width: 100, height: 54, rx: 12, class: "sv-good" }),
+    s("text", { x: 520, y: 269, class: "sv-text", "text-anchor": "middle", style: { fontSize: "13px", fontWeight: 700 } }, "standby replica"));
+  svg.appendChild(replica);
+  svg.appendChild(layer);
+  const verdict = s("text", { x: 330, y: 306, class: "sv-title", "text-anchor": "middle" }, "");
+  svg.appendChild(verdict);
+
+  const st = { f: stat("Faults injected", 0), fail: stat("Failures", 0, "good"), up: stat("Serving users", "yes", "good") };
+  Object.values(st).forEach((x) => K.$("#s7-stats").appendChild(x));
+  let hasReplica = false, faultCount = 0, failCount = 0, monkey = null, lastState = true;
+
+  function evaluate() {
+    const appsDown = apps.filter((a) => a.down).length;
+    const dbDown = dbN.down && !hasReplica;
+    const failed = lb.down || appsDown === 3 || dbDown;
+    const anyDown = items.some((i) => i.down);
+    if (failed && lastState) failCount++;
+    lastState = !failed;
+    st.fail.set(failCount, failCount ? "bad" : "good");
+    st.up.set(failed ? "no" : "yes", failed ? "bad" : "good");
+    const pill = K.$("#s7-pill");
+    pill.className = "pill " + (failed ? "bad" : anyDown ? "warn" : "good");
+    pill.innerHTML = "<i></i>" + (failed ? "FAILURE: users see nothing" : anyDown ? "fault tolerated" : "service is up");
+    verdict.style.fill = failed ? "var(--coral)" : anyDown ? "var(--mint)" : "";
+    verdict.textContent = failed ? "failure" : anyDown ? "fault, not a failure" : "";
+    if (failed) {
+      setCap("#s7-cap", lb.down
+        ? "The <b>load balancer</b> has no backup, so its fault escalates into a whole-system <b>failure</b>. That is what a <b>single point of failure</b> means."
+        : dbDown
+          ? "The database is down and there is nowhere else to read or write. A single fault became a <b>failure</b>. Turn on the standby replica and try again."
+          : "All three app servers are down at once. Fault tolerance is always limited to a certain number of faults — beyond that, the system fails.");
+    } else if (anyDown) {
+      setCap("#s7-cap", dbN.down
+        ? "The database crashed, but the <b>standby replica</b> took over. Users never noticed: that's a <b>fault</b>, and the system <b>tolerated</b> it."
+        : `${appsDown} of 3 app servers ${appsDown === 1 ? "is" : "are"} down. The load balancer just sends everyone to the healthy ones — a <b>fault</b>, not a <b>failure</b>.`);
+    } else {
+      setCap("#s7-cap", "Everything healthy. Break things on purpose — that's <b>fault injection</b>, the heart of <b>chaos engineering</b>.");
+    }
+  }
+  function paint() {
+    items.forEach((it) => {
+      it.rect.classList.toggle("down", it.down);
+      it.cross.style.opacity = it.down ? 1 : 0;
+      it.g.style.opacity = it.down ? 0.85 : 1;
+    });
+  }
+  function toggle(it, silent) {
+    it.down = !it.down;
+    if (it.down) { faultCount++; st.f.set(faultCount, "warn"); it.rect.classList.add("sv-shake"); setTimeout(() => it.rect.classList.remove("sv-shake"), 420); }
+    paint(); evaluate();
+  }
+  const ctr = K.$("#s7-controls");
+  const rndBtn = h("button", { class: "btn danger", type: "button" }, "Break something random");
+  rndBtn.addEventListener("click", () => { const alive = items.filter((i) => !i.down); if (alive.length) toggle(alive[rand(alive.length)]); });
+  const fixBtn = h("button", { class: "btn good", type: "button" }, "Repair everything");
+  fixBtn.addEventListener("click", () => { items.forEach((i) => (i.down = false)); lastState = true; paint(); evaluate(); });
+  ctr.append(rndBtn, fixBtn, h("span", { class: "grow" }));
+  ctr.appendChild(seg(["No replica", "Standby DB replica"], 0, (i) => {
+    hasReplica = i === 1; replica.style.opacity = hasReplica ? 1 : 0; evaluate();
+  }, "s7-rep"));
+  const ctr2 = h("div", { class: "controls" });
+  ctr2.appendChild(seg(["Chaos monkey off", "Chaos monkey on"], 0, (i) => {
+    if (monkey) { clearInterval(monkey); monkey = null; }
+    if (i === 1) {
+      monkey = setInterval(() => {
+        if (document.hidden) return;
+        const alive = items.filter((x) => !x.down);
+        if (alive.length && Math.random() < 0.7) toggle(alive[rand(alive.length)]);
+        else { items.forEach((x) => (x.down = false)); lastState = true; paint(); evaluate(); }
+      }, 2600);
+      K.toast("Chaos monkey released");
+    }
+  }, "s7-monkey"));
+  ctr.parentNode.insertBefore(ctr2, K.$("#s7-stats").parentNode);
+  paint(); evaluate();
+})();
+
+/* ================= 8. HARDWARE / SOFTWARE / CONFIG FAULTS ================= */
+(function kinds() {
+  const svg = K.$("#s8-svg");
+  const COLS = 8, ROWS = 3, W = 62, H = 54, GX = 8, GY = 10, X0 = 46, Y0 = 62;
+  const machines = [];
+  svg.appendChild(draw.label(X0, 44, "RACK · 24 MACHINES, ALL RUNNING THE SAME CODE", "sv-label", "start"));
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const x = X0 + c * (W + GX), y = Y0 + r * (H + GY);
+    const rect = s("rect", { x, y, width: W, height: H, rx: 9, class: "mach" });
+    const led = s("circle", { cx: x + W - 12, cy: y + 11, r: 4, class: "sv-fill-mint" });
+    svg.append(rect, s("rect", { x: x + 9, y: y + 22, width: W - 18, height: 6, rx: 3, class: "sv-fill-surface" }),
+      s("rect", { x: x + 9, y: y + 34, width: W - 18, height: 6, rx: 3, class: "sv-fill-surface" }), led);
+    machines.push({ rect, led, state: "ok" });
+  }
+  const banner = s("text", { x: 330, y: 268, class: "sv-title", "text-anchor": "middle" }, "");
+  svg.appendChild(banner);
+
+  const st = { down: stat("Machines down", "0 / 24", "good"), corr: stat("Correlated?", "—"), svc: stat("Service", "up", "good") };
+  Object.values(st).forEach((x) => K.$("#s8-stats").appendChild(x));
+  let mode = 0, gradual = true;
+  const setM = (m, cls) => { m.state = cls; m.rect.setAttribute("class", "mach" + (cls === "down" ? " down" : cls === "new" ? " new" : "")); m.led.setAttribute("class", cls === "down" ? "sv-fill-coral" : cls === "new" ? "sv-fill-sun" : "sv-fill-mint"); };
+  function tally(text, correlated) {
+    const down = machines.filter((m) => m.state === "down").length;
+    st.down.set(`${down} / 24`, down === 0 ? "good" : down > 6 ? "bad" : "warn");
+    st.corr.set(correlated === null ? "—" : correlated ? "yes" : "no", correlated ? "bad" : correlated === false ? "good" : "");
+    const up = down < 12;
+    st.svc.set(up ? "up" : "down", up ? "good" : "bad");
+    banner.style.fill = up ? "var(--mint)" : "var(--coral)";
+    banner.textContent = text;
+  }
+  function reset() { machines.forEach((m) => setM(m, "ok")); tally("", null); }
+  function trigger() {
+    if (mode === 0) {
+      const alive = machines.filter((m) => m.state === "ok");
+      if (!alive.length) return;
+      const m = alive[rand(alive.length)];
+      setM(m, "down"); m.rect.classList.add("sv-shake");
+      tally("one machine gone · spares cover it", false);
+      setCap("#s8-cap", "A disk died — 2–5% of hard drives fail every year, so in a cluster of 10,000 disks you expect <b>about one failure a day</b>. Machines are <b>redundant</b>, so the service never noticed. These faults are <i>mostly independent</i>.");
+    } else if (mode === 1) {
+      machines.forEach((m) => setM(m, "down"));
+      tally("every machine, the same instant", true);
+      setCap("#s8-cap", "A <b>software fault</b> hits every machine at once, because they all run the same code: the 2012 <b>leap second</b> that hung Java apps through a Linux kernel bug, or the firmware bug that killed certain SSDs after exactly <b>32,768 hours</b>. Redundancy doesn't help — the faults are <b>strongly correlated</b>.");
+    } else {
+      const targets = gradual ? machines.slice(0, 3) : machines;
+      targets.forEach((m) => setM(m, "new"));
+      setTimeout(() => {
+        targets.forEach((m) => setM(m, "down"));
+        tally(gradual ? "3 canaries unhappy · roll it back" : "bad config everywhere", true);
+        setCap("#s8-cap", gradual
+          ? "The new configuration went to <b>3 machines first</b>. They started erroring, monitoring noticed, and the other 21 are untouched. Press <b>Roll back</b> to undo it."
+          : "The new configuration went everywhere at once, and everywhere at once is where it broke. Studies of large internet services found <b>configuration changes by operators were the leading cause of outages</b> — hardware faults only 10–25%. The answer isn't blaming the operator, it's gradual rollouts, fast rollback and <b>blameless postmortems</b>.");
+      }, 900);
+      tally("pushing new config…", true);
+    }
+  }
+  const ctr = K.$("#s8-controls");
+  const trig = h("button", { class: "btn danger", type: "button" }, "Trigger");
+  trig.addEventListener("click", trigger);
+  const back = h("button", { class: "btn good", type: "button" }, "Roll back");
+  back.addEventListener("click", () => { reset(); setCap("#s8-cap", "Rolled back. Being able to <b>undo quickly</b> is worth more than being sure you'll never make a mistake."); });
+  ctr.append(trig, back, h("span", { class: "grow" }));
+  const rollSeg = seg(["Gradual rollout", "All at once"], 0, (i) => { gradual = i === 0; }, "s8-roll");
+  rollSeg.style.display = "none";
+  ctr.appendChild(rollSeg);
+  K.$("#s8-seg").appendChild(seg(["Hardware fault", "Software bug", "Config change"], 0, (m) => {
+    mode = m; reset(); rollSeg.style.display = m === 2 ? "" : "none";
+    setCap("#s8-cap", [
+      "<b>Hardware faults</b> strike one machine at a time, at random. Annoying, survivable, and mostly independent of each other.",
+      "<b>Software faults</b> are shared: every machine runs the same code, so one unlucky condition can take them all down together.",
+      "<b>People</b> change configuration — the leading cause of outages in one study of large internet services. Choose a rollout style, then press Trigger.",
+    ][m]);
+  }, "s8-mode"));
+  reset();
+})();
+
+/* ================= 9. SCALABILITY ARCHITECTURES ================= */
+(function scaling() {
+  const svg = K.$("#s9-svg");
+  const archG = s("g"); svg.appendChild(archG);
+  const X0 = 382, X1 = 640, Y0 = 258, Y1 = 58, CMAX = 45;
+  svg.append(draw.label(30, 34, "THE MACHINES YOU RENT", "sv-label", "start"), draw.label(X0, 34, "COST vs LOAD · TOY NUMBERS", "sv-label", "start"));
+  const px = (l) => X0 + (l - 1) / 15 * (X1 - X0);
+  const py = (c) => Y0 - Math.min(c, CMAX) / CMAX * (Y0 - Y1);
+  svg.append(s("line", { x1: X0, y1: Y0, x2: X1, y2: Y0, class: "sv-wire-solid" }), s("line", { x1: X0, y1: Y0, x2: X0, y2: Y1, class: "sv-wire-solid" }));
+  [1, 4, 8, 12, 16].forEach((l) => svg.append(s("line", { x1: px(l), y1: Y0, x2: px(l), y2: Y0 + 5, class: "sv-wire-solid" }), draw.label(px(l), Y0 + 19, l + "×")));
+  [0, 15, 30, 45].forEach((c) => svg.append(s("line", { x1: X0 - 5, y1: py(c), x2: X0, y2: py(c), class: "sv-wire-solid" }), draw.label(X0 - 9, py(c) + 4, "$" + c, "sv-label", "end")));
+  svg.append(draw.label(510, Y0 + 38, "load (× today)"), draw.label(X0 - 8, Y1 - 12, "cost per month", "sv-label", "start"));
+
+  const MODELS = [
+    { name: "shared memory", max: 8, cost: (l) => 1.6 * Math.pow(l, 1.55), color: "var(--coral)" },
+    { name: "shared disk", max: 10, cost: (l) => 2.2 * Math.pow(l, 1.2), color: "var(--sun)" },
+    { name: "shared nothing", max: 16, cost: (l) => 2.4 * l, color: "var(--mint)" },
+  ];
+  MODELS.forEach((m, i) => {
+    let d = "";
+    for (let l = 1; l <= m.max + 0.001; l += 0.25) d += (d ? " L" : "M") + px(l) + "," + py(m.cost(l));
+    svg.appendChild(s("path", { d, class: "sv-wire-solid", style: { stroke: m.color, strokeWidth: 2.5, opacity: 0.55 } }));
+    svg.appendChild(s("text", { x: px(m.max), y: py(m.cost(m.max)) - 9, class: "sv-label", "text-anchor": "end", style: { fill: m.color, fontWeight: 700 } }, m.name));
+  });
+  const dot = s("circle", { cx: px(1), cy: py(MODELS[0].cost(1)), r: 6.5, class: "sv-fill-blue" });
+  const wall = s("text", { x: 0, y: 0, class: "sv-label", "text-anchor": "middle", style: { fill: "var(--coral)", fontWeight: 700 } }, "");
+  svg.append(dot, wall);
+
+  const st = { cost: stat("Cost", "$2"), nodes: stat("Machines", 1), ok: stat("Handles the load?", "yes", "good") };
+  Object.values(st).forEach((x) => K.$("#s9-stats").appendChild(x));
+  let load = 1, mode = 0;
+  function arch() {
+    K.clear(archG);
+    if (mode === 0) {
+      const size = 54 + Math.min(load, 8) * 12;
+      archG.appendChild(s("rect", { x: 175 - size / 2, y: 160 - size / 2, width: size, height: size, rx: 14, class: load > 8 ? "sv-bad" : "sv-server" }));
+      archG.appendChild(draw.label(175, 160 + size / 2 + 20, `1 machine · ${Math.min(load, 8) * 8} cores`));
+      archG.appendChild(draw.label(175, 76, "all threads share one RAM"));
+      if (load > 8) archG.appendChild(s("text", { x: 175, y: 164, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700, fill: "var(--coral)" } }, "no bigger machine"));
+    } else if (mode === 1) {
+      [95, 175, 255].forEach((x) => {
+        archG.appendChild(s("rect", { x: x - 30, y: 82, width: 60, height: 46, rx: 10, class: "sv-server" }));
+        archG.appendChild(s("line", { x1: x, y1: 128, x2: 175, y2: 190, class: load > 10 ? "sv-wire-live" : "sv-wire" }));
+      });
+      archG.appendChild(draw.db(175, 224, 130, 76, "shared disks (NAS / SAN)"));
+      archG.appendChild(draw.label(175, 70, "own CPU + RAM, one pile of disks"));
+      if (load > 10) archG.appendChild(s("text", { x: 175, y: 150, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700, fill: "var(--coral)" } }, "locking contention"));
+    } else {
+      const n = Math.min(load, 16);
+      for (let i = 0; i < n; i++) {
+        const x = 96 + (i % 4) * 54, y = 86 + Math.floor(i / 4) * 48;
+        archG.appendChild(s("rect", { x, y, width: 44, height: 38, rx: 8, class: "sv-server" }));
+        archG.appendChild(s("rect", { x: x + 8, y: y + 24, width: 28, height: 7, rx: 3.5, class: "sv-fill-lilac" }));
+      }
+      archG.appendChild(draw.label(175, 296, `${n} node${n === 1 ? "" : "s"} · each with its own CPU, RAM and disk`));
+      archG.appendChild(draw.label(175, 74, "coordinate over the network"));
+    }
+  }
+  function upd() {
+    const m = MODELS[mode];
+    const ok = load <= m.max;
+    const c = m.cost(Math.min(load, m.max));
+    dot.setAttribute("cx", px(Math.min(load, m.max))); dot.setAttribute("cy", py(c));
+    dot.setAttribute("class", ok ? "sv-fill-blue" : "sv-fill-coral");
+    wall.setAttribute("x", px(m.max)); wall.setAttribute("y", py(c) + 22);
+    wall.textContent = ok ? "" : "out of road";
+    st.cost.set("$" + c.toFixed(0), c > 30 ? "bad" : c > 15 ? "warn" : "good");
+    st.nodes.set(mode === 0 ? 1 : mode === 1 ? 3 : Math.min(load, 16));
+    st.ok.set(ok ? "yes" : "no", ok ? "good" : "bad");
+    arch();
+    const perX = (c / load).toFixed(1);
+    setCap("#s9-cap", !ok
+      ? (mode === 0
+        ? "There is no bigger machine to buy. <b>Vertical scaling</b> always ends at a wall, and the last few steps before the wall are the most expensive ones."
+        : "Contention and locking overhead cap the <b>shared-disk</b> approach. Past this point, adding machines stops helping.")
+      : (mode === 0
+        ? `At ${load}× the load, one big machine costs <b>$${c.toFixed(0)}</b> — about $${perX} per unit of load, and rising. Doubling the hardware costs much more than double.`
+        : mode === 1
+          ? `Machines have their own CPU and RAM but share an array of disks over a fast network. Traditional for on-premises data warehouses; contention limits how far it goes.`
+          : `At ${load}× the load, ${Math.min(load, 16)} ordinary nodes cost <b>$${c.toFixed(0)}</b> — a straight line, about $${perX} per unit of load at any size. That's <b>linear scalability</b>. The price is <b>sharding</b> and distributed-systems complexity.`));
+  }
+  K.$("#s9-controls").appendChild(slider({ id: "s9-load", label: "Load", min: 1, max: 16, step: 1, value: 1, format: (v) => v + "×", onInput: (v) => { load = v; upd(); } }));
+  K.$("#s9-seg").appendChild(seg(["Shared memory (up)", "Shared disk", "Shared nothing (out)"], 0, (m) => { mode = m; upd(); }, "s9-mode"));
+  upd();
+})();
+
+/* ================= 10. MAINTAINABILITY: COMPLEXITY ================= */
+(function maintain() {
+  const svg = K.$("#s10-svg");
+  const CX = 330, CY = 158, R = 112;
+  const edgeG = s("g"); const nodeG = s("g");
+  svg.append(edgeG, nodeG);
+  const hub = s("g", { class: "fade", style: { opacity: 0 } },
+    s("circle", { cx: CX, cy: CY, r: 34, class: "sv-good" }),
+    s("text", { x: CX, y: CY - 2, class: "sv-text", "text-anchor": "middle", style: { fontSize: "12px", fontWeight: 700 } }, "shared"),
+    s("text", { x: CX, y: CY + 13, class: "sv-text", "text-anchor": "middle", style: { fontSize: "12px", fontWeight: 700 } }, "abstraction"));
+  svg.appendChild(hub);
+
+  const st = { n: stat("Services", 4), e: stat("Connections", 6, "good"), risk: stat("Could break a change", "18%", "good") };
+  Object.values(st).forEach((x) => K.$("#s10-stats").appendChild(x));
+  let n = 4, abstract = false, busy = false;
+  const pos = (i) => { const a = -Math.PI / 2 + (i / n) * Math.PI * 2; return [CX + Math.cos(a) * R, CY + Math.sin(a) * R]; };
+  let edges = [], nodes = [];
+  function build() {
+    K.clear(edgeG); K.clear(nodeG); edges = []; nodes = [];
+    hub.style.opacity = abstract ? 1 : 0;
+    for (let i = 0; i < n; i++) {
+      const [x, y] = pos(i);
+      if (abstract) {
+        const e = s("line", { x1: x, y1: y, x2: CX, y2: CY, class: "edge" });
+        edgeG.appendChild(e); edges.push({ e, a: i, b: -1 });
+      } else {
+        for (let j = i + 1; j < n; j++) {
+          const [x2, y2] = pos(j);
+          const e = s("line", { x1: x, y1: y, x2: x2, y2: y2, class: "edge" });
+          edgeG.appendChild(e); edges.push({ e, a: i, b: j });
+        }
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      const [x, y] = pos(i);
+      const c = s("circle", { cx: x, cy: y, r: 19, class: "sv-server" });
+      nodeG.append(c, s("text", { x, y: y + 4, class: "sv-label", "text-anchor": "middle", style: { fontWeight: 700, fill: "var(--ink)" } }, "s" + (i + 1)));
+      nodes.push(c);
+    }
+    const count = abstract ? n : (n * (n - 1)) / 2;
+    st.n.set(n); st.e.set(count, count > 20 ? "bad" : count > 10 ? "warn" : "good");
+    const risk = Math.min(95, Math.round(count * 3));
+    st.risk.set(risk + "%", risk > 45 ? "bad" : risk > 20 ? "warn" : "good");
+    return count;
+  }
+  async function change() {
+    if (busy) return; busy = true;
+    const i = rand(n);
+    nodes[i].setAttribute("class", "sv-bad");
+    const touched = edges.filter((e) => e.a === i || e.b === i);
+    touched.forEach((e) => e.e.classList.add("risk"));
+    setCap("#s10-cap", abstract
+      ? `You change <b>s${i + 1}</b>. It only talks through the shared abstraction, so there is exactly <b>1 connection</b> to think about. Loosely coupled systems are easier to change — that's <b>evolvability</b>.`
+      : `You change <b>s${i + 1}</b>. It is wired straight into <b>${touched.length} other service${touched.length === 1 ? "" : "s"}</b>, and every one of them is a hidden assumption you might break.`);
+    await sleep(1600);
+    touched.forEach((e) => e.e.classList.remove("risk"));
+    nodes[i].setAttribute("class", "sv-server");
+    busy = false;
+  }
+  const ctr = K.$("#s10-controls");
+  const add = h("button", { class: "btn primary", type: "button" }, "Add a service");
+  add.addEventListener("click", () => {
+    if (n >= 10) { K.toast("Ten is quite enough, thank you"); return; }
+    n++; const c = build();
+    setCap("#s10-cap", abstract
+      ? `<b>${n} services, ${c} connections.</b> Each new service adds exactly one string. The system grows without the tangle.`
+      : `<b>${n} services, ${c} connections.</b> Every new service has to be wired to all the others, so the strings grow much faster than the boxes. This is how a <b>big ball of mud</b> is born.`);
+  });
+  const rem = h("button", { class: "btn", type: "button" }, "Remove one");
+  rem.addEventListener("click", () => { if (n > 3) { n--; build(); } });
+  const chg = h("button", { class: "btn", type: "button" }, "Make a change");
+  chg.addEventListener("click", change);
+  ctr.append(add, rem, chg, h("span", { class: "grow" }));
+  K.$("#s10-seg").appendChild(seg(["Direct connections", "Shared abstraction"], 0, (i) => {
+    abstract = i === 1; const c = build();
+    setCap("#s10-cap", abstract
+      ? `A good <b>abstraction</b> hides a lot of detail behind one clean façade — like SQL hiding on-disk structures, or a high-level language hiding machine code. ${n} services now need just <b>${c} connections</b>.`
+      : `Every service wired to every other: ${n} services need <b>${c} connections</b>. Nobody can hold that in their head, so changes get risky and slow.`);
+  }, "s10-mode"));
+  build();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "Your service's median response time is 200 ms and its p99 is 2 seconds. What does the p99 tell you?", options: ["The average request takes 2 seconds", "1 request in 100 takes 2 seconds or longer", "99% of requests take longer than 2 seconds", "The server is 99% busy"], answer: 1, why: "p99 means 99 out of 100 requests are faster than that value — so 1 in 100 is slower. Those tail latencies are what the unluckiest (often most valuable) users feel." },
+  { q: "Why does a social network copy each new post into every follower's timeline instead of querying when they read?", options: ["It saves disk space", "Reads become instant, at the cost of much more work per write", "Databases can't do joins", "It makes posting faster"], answer: 1, why: "Materializing the timeline turns 400 million lookups per second into about 1 million timeline writes per second, and readers just pick up a precomputed answer." },
+  { q: "One of three app servers crashes and users notice nothing. What just happened?", options: ["A failure", "A fault that the system tolerated", "A single point of failure", "A retry storm"], answer: 1, why: "A fault is one part going wrong; a failure is the whole system stopping. Redundancy kept the fault from escalating." },
+  { q: "Traffic spikes, clients time out and resend, and the system stays broken even after the spike ends. What is this called?", options: ["Tail latency amplification", "Head-of-line blocking", "A metastable failure caused by a retry storm", "Load shedding"], answer: 2, why: "Retries feed the overload, so the system stays stuck in the bad state. Exponential backoff, circuit breakers and load shedding are the standard cures." },
+  { q: "Why are software faults often worse than hardware faults?", options: ["They are harder to type", "Every node runs the same code, so they hit all of them at once", "Hardware never fails", "They only happen in the cloud"], answer: 1, why: "Hardware faults are mostly independent, so redundancy helps. Software faults are strongly correlated — like the 2012 leap second that hung Java apps everywhere." },
+  { q: "Which is the honest description of scaling out (shared-nothing)?", options: ["Always cheaper and simpler than one big machine", "Can scale linearly and survive machine loss, but needs sharding and distributed-systems complexity", "Only works in a data warehouse", "It removes the need to measure load"], answer: 1, why: "Shared-nothing can scale near-linearly and tolerate failures, but you pay with explicit sharding and all the trouble of distributed systems." },
+], 2);
+</script>
+</body>
+</html>

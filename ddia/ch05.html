@@ -1,0 +1,1463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 5 · Encoding &amp; Evolution</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-panel, .clickable:focus-visible .sv-panel { stroke: var(--blue); }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); align-items: center; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .lg-names { background: var(--lilac); } .lg-values { background: var(--sun); } .lg-marks { background: var(--blue); }
+  .row { transition: opacity .3s; cursor: pointer; }
+  .row.dim { opacity: .3; }
+  .fade { transition: opacity .35s; }
+  .reasons { display: flex; flex-wrap: wrap; gap: 6px; }
+  .codebox { font-family: var(--f-mono); font-size: 13px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-m); padding: 12px 14px; white-space: pre; overflow-x: auto; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">5</span> Chapter five</span>
+      <h1>Encoding and Evolution</h1>
+      <p class="lede">Inside a program, data is a web of little boxes joined by invisible strings. To send it anywhere you have to flatten it into a line of bytes — and the program that unpacks it may be a different, older, or newer version of your app.</p>
+      <p class="quote">“Everything changes and nothing stands still.” — Heraclitus of Ephesus, quoted at the start of the chapter</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#rollout">Changing the town</a>
+        <a href="#encode">Mailing a Lego castle</a>
+        <a href="#text">Postcards: JSON, XML, CSV</a>
+        <a href="#schema">The door with a list</a>
+        <a href="#bytes">How many bytes?</a>
+        <a href="#protobuf">Numbered coat hooks</a>
+        <a href="#avro">Two secret decoders</a>
+        <a href="#db">A note to your future self</a>
+        <a href="#services">Shouting across the playground</a>
+        <a href="#flow">Workflows &amp; mailboxes</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · encode → bytes → decode</span><span class="pill info"><i></i>tap the memory panel to send a record</span></div>
+      <svg id="hero-svg" viewBox="0 0 520 390" role="img" aria-label="A record in memory is flattened into bytes, sent across, and rebuilt in another program"></svg>
+    </div>
+  </section>
+
+  <!-- ============ 1. ROLLING UPGRADE + LOST FIELD ============ -->
+  <section class="scene" id="rollout">
+    <div class="wrap scene-grid full">
+      <div class="copy" style="max-width: 800px">
+        <span class="eyebrow">Big idea 1 · old and new at the same time</span>
+        <h2>Painting the town while everyone is still walking through it</h2>
+        <p class="story">Apps change. New features arrive, so the <b>data</b> they save changes too. But you can't change every computer at the same instant. Server code is usually updated a few machines at a time — a <b>rolling upgrade</b> — and phone apps only update when the user feels like it.</p>
+        <p class="story">So for a while, <b>old code and new code are both running</b>, reading each other's data. That needs two kinds of politeness: <b>backward compatibility</b> (new code can read old data) and <b>forward compatibility</b> (old code can read new data). The second one is harder, because yesterday's code has to be happy about things it has never heard of.</p>
+        <p class="imagine"><b>Try it:</b> upgrade the nodes one at a time and watch the traffic keep flowing. Then, in the second stage, let old code read a record that has a field it doesn't know — and see what happens when it saves it back.</p>
+      </div>
+      <div class="stack">
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">Rolling upgrade · five nodes</span><div class="stats" id="s1-stats"></div></div>
+          <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 660 300" role="img" aria-label="A load balancer sending requests to five server nodes being upgraded one at a time"></svg></div>
+          <div class="controls" id="s1-controls"></div>
+          <div class="caption" id="s1-cap" aria-live="polite">All five nodes run <b>v1</b>. Requests are flowing. Upgrade one node and nobody notices.</div>
+        </div>
+        <div class="scene-grid" style="padding:0">
+          <div class="copy">
+            <h3 style="font-size:24px">The field that fell out of the note</h3>
+            <p class="story">New code saves a record with a brand-new field, <b>nickname</b>. Then old code reads that record, changes something small, and writes it back. If the old code unpacked the record into an object that has no place to keep <b>nickname</b>, the field quietly disappears.</p>
+            <p class="story">The fix is for the decoder to <b>keep unknown fields</b> in a pocket and put them back when it writes. Good encoders do this for you.</p>
+            <details class="book">
+              <summary>What the book says</summary>
+              <div class="inner">
+                <p>A <b>rolling upgrade</b> (also called a staged rollout) deploys a new version to a few nodes at a time, with no downtime, which encourages frequent releases and better <b>evolvability</b>.</p>
+                <p><b>Backward compatibility:</b> newer code can read data written by older code. <b>Forward compatibility:</b> older code can read data written by newer code.</p>
+                <p>For APIs: for an older client to call a newer service you need backward compatibility on the request and forward compatibility on the response.</p>
+                <p>Figure 5-1: if an older version updates data written by a newer version and the record is decoded into a model object that does not preserve unknown fields, <b>data can be lost</b>.</p>
+              </div>
+            </details>
+          </div>
+          <div class="stage">
+            <div class="stage-head"><span class="stage-title">Old code updates a new record</span><span class="pill" id="s2-verdict"><i></i>3 fields stored</span></div>
+            <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 660 340" role="img" aria-label="New code writes a record with three fields; old code reads it, edits it and writes it back"></svg></div>
+            <div class="controls" id="s2-controls"></div>
+            <div class="caption" id="s2-cap" aria-live="polite">Press <b>Step</b> to follow one record through both versions of the app.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. ENCODING / DECODING ============ -->
+  <section class="scene" id="encode">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 2 · encoding and decoding</span>
+        <h2>You can't mail a Lego castle with the strings still attached</h2>
+        <p class="story">In memory, data is objects, lists and hash tables held together by <b>pointers</b> — tiny "it's over there" notes. A pointer is a house number inside <i>your</i> program only. Another program has completely different houses.</p>
+        <p class="story">So before data goes into a file or across a network, you flatten it into a self-contained line of bytes. That's <b>encoding</b> (also called serialization). Rebuilding the objects on the other side is <b>decoding</b> (parsing).</p>
+        <p class="imagine"><b>Try it:</b> step through a normal encoding, then switch to your language's own built-in format and try to open the parcel from a program written in a different language.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Programs keep data in two representations: in memory (objects, structs, lists, arrays, hash tables, trees, usually with pointers), and as a <b>self-contained sequence of bytes</b> for files and networks. <b>Encoding</b> = in-memory → bytes; <b>decoding</b> = bytes → in-memory.</p>
+            <p>Careful: "serialization" also means something completely different in transactions, so the book says <b>encoding</b>.</p>
+            <p>Some formats skip the step: <b>Cap'n Proto</b> and <b>FlatBuffers</b> are zero-copy formats usable both at runtime and on disk.</p>
+            <p>Language-built-ins — Java's <code>java.io.Serializable</code>, Python's <code>pickle</code>, Ruby's <code>Marshal</code>, Kryo — are convenient but: tied to one language; decoding instantiates arbitrary classes, a classic security hole that can allow remote code execution; versioning is an afterthought; and they are often slow and bloated. Use them only for very transient purposes.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Flatten · send · rebuild</span><span id="s3-seg"></span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 680 310" role="img" aria-label="Objects joined by pointers are flattened into bytes and rebuilt in another process"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <div class="caption" id="s3-cap" aria-live="polite">Three objects in memory, joined by pointers.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. TEXT FORMATS ============ -->
+  <section class="scene" id="text">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 3 · JSON, XML and CSV</span>
+        <h2>Writing it out in words on a postcard</h2>
+        <p class="story">The friendliest way to send data is to write it as <b>text</b>: JSON, XML or CSV. Anyone can read it, every language can parse it, and two companies can agree on it — which, honestly, is the hardest part of all.</p>
+        <p class="story">But text is vague. Is <code>1337</code> a number or the word "1337"? How big can a number be before it gets rounded? Where do you put a photo, which isn't text at all? And what if someone's name contains a comma?</p>
+        <p class="imagine"><b>Try it:</b> pick a format, then push each of the four values through it and see which ones come out changed.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>XML is criticized as too verbose and complicated. In XML and CSV you can't tell a number from a string of digits without an external schema. JSON distinguishes strings and numbers but not integers from floats, and doesn't specify precision.</p>
+            <p>Integers greater than 2<sup>53</sup> can't be represented exactly in an IEEE 754 double, so they break in JavaScript. X (Twitter) returns post IDs <b>twice</b> — once as a JSON number and once as a decimal string — to work around it.</p>
+            <p>JSON and XML have no binary string type, so people <b>Base64</b>-encode bytes as text: hacky, and about a third bigger.</p>
+            <p>CSV has no schema and is vague (commas and newlines inside values); its escaping rules are specified in RFC 4180 but not all parsers implement them correctly. Despite the flaws, these formats are good enough as interchange formats.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Push a value through the format</span><span id="s4-seg"></span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 660 330" role="img" aria-label="Four values sent through a chosen text format, showing what survives"></svg></div>
+        <div class="controls"><div class="stats" id="s4-stats"></div></div>
+        <div class="caption" id="s4-cap" aria-live="polite">Click a value on the left to send it through <b>JSON</b>.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. JSON SCHEMA ============ -->
+  <section class="scene" id="schema">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 4 · JSON Schema</span>
+        <h2>The doorkeeper with a clipboard</h2>
+        <p class="story">A <b>schema</b> is a written description of what a record is allowed to look like. <b>JSON Schema</b> is the popular one for JSON, and it can also check values: a <code>port</code> must be a whole number between 1 and 65,535.</p>
+        <p class="story">The interesting switch is the <b>content model</b>. An <b>open</b> model (the default) lets any extra field in. A <b>closed</b> model (<code>additionalProperties: false</code>) turns away anything not on the clipboard.</p>
+        <p class="imagine"><b>Try it:</b> send each field to the door with the model set to <b>open</b>, then flip to <b>closed</b> and send them again. Which switch would break an app that is being upgraded right now?</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>JSON Schema is used in OpenAPI service definitions, in schema registries (Confluent's Schema Registry, Red Hat's Apicurio) and in databases (PostgreSQL's <code>pg_jsonschema</code>, MongoDB's <code>$jsonSchema</code>).</p>
+            <p>It has primitive types (string, number, integer, object, array, boolean, null) plus a separate <b>validation</b> specification for constraints such as a minimum and maximum.</p>
+            <p><b>Open</b> content models (<code>additionalProperties: true</code>, the default) allow undeclared fields; <b>closed</b> ones allow only declared fields. So JSON Schemas usually define what <i>isn't</i> permitted rather than what is.</p>
+            <p>JSON has no map type with integer keys — object keys are always strings — so you express it with <code>patternProperties</code> and <code>additionalProperties: false</code>. With conditional if/else logic, named types and remote schema references, it is very powerful but unwieldy: resolving remote schemas and evolving schemas compatibly is hard.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Validator at the door</span><span id="s5-seg"></span></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 660 320" role="img" aria-label="Fields arriving at a JSON Schema validator, accepted or rejected"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="caption" id="s5-cap" aria-live="polite">Content model is <b>open</b>: unknown fields are welcome.</div>
+      </div>
+    </div>
+  </section>
+  <!-- ============ 5. BYTES ============ -->
+  <section class="scene" id="bytes">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 5 · binary encodings</span>
+        <h2>The same parcel, four sizes of wrapping</h2>
+        <p class="story">Here is one small record: a name, a favourite number, and two interests. Written as JSON text it takes <b>81 bytes</b>. <b>MessagePack</b>, a binary version of JSON, gets it down to 66 — not much, because with no schema it still has to spell out every field name.</p>
+        <p class="story">Formats that <i>have</i> a schema can drop the names entirely: <b>Protocol Buffers</b> uses 33 bytes and <b>Avro</b> just 32. Look at the yellow part of each bar: the values are almost identical every time. What shrinks is the packaging.</p>
+        <p class="imagine"><b>Try it:</b> click any coloured band to find out what those bytes are doing, then drag the slider to send a million records and watch the difference turn into megabytes.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The record is <code>{"userName": "Martin", "favoriteNumber": 1337, "interests": ["daydreaming", "hacking"]}</code>: 81 bytes as JSON with whitespace removed.</p>
+            <p>Binary JSON variants (MessagePack, CBOR, BSON, BJSON, UBJSON, BISON, Hessian, Smile) and binary XML (WBXML, Fast Infoset) exist in niches; none are as widely adopted as the textual versions. Because they prescribe no schema, they must include every field name. MessagePack takes <b>66 bytes</b>: <code>0x83</code> = object with 3 fields, <code>0xa8</code> = an 8-byte string, then <code>userName</code> in ASCII, then <code>0xa6</code> and <code>Martin</code>.</p>
+            <p>Protocol Buffers needs <b>33 bytes</b>, Avro <b>32</b> — the most compact of all.</p>
+            <p>Schema-based binary encodings can be much more compact; the schema is documentation that can't go stale, a schema database lets you check compatibility before deploying, and code generation gives compile-time type checking in statically typed languages.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Bytes per record · one scale</span><span id="s6-seg"></span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 660 300" role="img" aria-label="Bar chart comparing the size of one record in JSON, MessagePack, Protocol Buffers and Avro"></svg></div>
+        <div class="controls" id="s6-controls"></div>
+        <div class="controls"><div class="legend"><span><i class="lg-names"></i>field names</span><span><i class="lg-values"></i>the values</span><span><i class="lg-marks"></i>markers &amp; punctuation</span></div></div>
+        <div class="caption" id="s6-cap" aria-live="polite">Click a band in any bar to see what those bytes do.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. PROTOCOL BUFFERS ============ -->
+  <section class="scene" id="protobuf">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 6 · field tags</span>
+        <h2>Numbered coat hooks</h2>
+        <p class="story">In a Protocol Buffers schema every field gets a number: <code>user_name = 1</code>, <code>favorite_number = 2</code>, <code>interests = 3</code>. The encoded record never spells out the names — it just says "hook 1", "hook 2". You may <b>rename</b> a field freely, but you may never <b>renumber</b> one.</p>
+        <p class="story">Each field also carries a tiny type annotation. That's the trick that makes forward compatibility work: old code that meets an unknown hook number can read the type, skip exactly the right number of bytes, and keep the mystery bytes safe.</p>
+        <p class="imagine"><b>Step through</b> old code reading a record written by new code. Then pick the two rules-breaking scenarios and watch what goes wrong.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Protocol Buffers (protobuf) is a binary encoding from Google, similar to Apache Thrift (from Facebook). It requires a schema written in an <b>IDL</b>, and a code generator produces classes in many languages.</p>
+            <p>An encoded record is just the concatenation of its encoded fields; each is identified by its <b>field tag</b> and annotated with a datatype. Unset fields are simply omitted. Field type and tag are packed into a single byte, and integers use <b>variable-length</b> encoding: 1337 takes two bytes; –64 to 63 fit in one.</p>
+            <p><b>Adding</b> a field: give it a new tag number. Old code sees an unknown tag and can skip it using the datatype annotation, preserving the unknown field — forward compatibility. Reading old data with a new schema fills missing fields with a <b>default value</b> (empty string, 0) — backward compatibility.</p>
+            <p>You can never reuse an old tag number; tags used in the past can be <b>reserved</b>. Changing a datatype is sometimes possible, but a 64-bit value read by old 32-bit code will be <b>truncated</b>. There is no list type: <code>repeated</code> means the same tag simply appears several times.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Old code reads a new record</span><span id="s7-seg"></span></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 680 340" role="img" aria-label="An encoded protobuf record being read field tag by field tag by an older reader"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="caption" id="s7-cap" aria-live="polite">Press <b>Step</b> to move the old reader along the record, one field at a time.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7. AVRO ============ -->
+  <section class="scene" id="avro">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 7 · writer's and reader's schema</span>
+        <h2>Two secret decoder rings</h2>
+        <p class="story"><b>Avro</b> goes further: its bytes contain <i>no</i> names and <i>no</i> numbers. Just values, glued end to end. On its own the parcel is meaningless — you have to know the order the writer used.</p>
+        <p class="story">So Avro reads with <b>two</b> schemas: the <b>writer's schema</b> (exactly the one used to encode) and the <b>reader's schema</b> (what your code expects today). Avro lines the two up <b>by field name</b>: fields only the writer has are ignored, fields only the reader has are filled from the reader's declared <b>default</b>.</p>
+        <p class="imagine"><b>Try each scenario.</b> Shuffle the field order — still fine. Add a field with a default — fine. Add one <i>without</i> a default — that's where compatibility breaks.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Avro started in 2009 as a Hadoop subproject. It has two schema languages: Avro IDL for humans and a JSON-based one for machines. Our record encodes to <b>32 bytes</b>: nothing in the data identifies fields or types, so it can be decoded only with the writer's schema.</p>
+            <p>Resolution matches fields <b>by name</b>. Different field order is no problem. A field in the writer's schema but not the reader's is ignored; a field the reader expects but the writer lacks is filled with the <b>default declared in the reader's schema</b>.</p>
+            <p>You may add or remove only a field that <b>has a default value</b>. Adding one with no default breaks backward compatibility; removing one with no default breaks forward compatibility. <code>null</code> is not a default for everything: you need a <b>union type</b>, and null must be the first branch.</p>
+            <p>Where does the writer's schema come from? A large file stores it once at the start (Avro <b>object container files</b>); a database stores a version number per record and keeps a list of schema versions (Confluent's schema registry for Kafka, LinkedIn's Espresso); a network connection negotiates it at setup (Avro RPC).</p>
+            <p>Avro suits <b>dynamically generated schemas</b> — dump a relational table and each column becomes a field by name, with no tag numbers to assign by hand. Renaming a field via <b>aliases</b> in the reader's schema is backward but not forward compatible.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Schema resolution, field by field</span><span id="s8-seg"></span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 680 330" role="img" aria-label="Avro matching a writer's schema to a reader's schema by field name"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="caption" id="s8-cap" aria-live="polite">Both sides use the same schema. Press <b>Step</b> to decode one field at a time.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8. DATABASES ============ -->
+  <section class="scene" id="db">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 8 · dataflow through databases</span>
+        <h2>A note to your future self</h2>
+        <p class="story">Writing to a database is sending a message to whoever reads it later — often a future version of you. You replace all your app code in an afternoon, but the rows written five years ago are still sitting there in their original encoding. People say: <b>data outlives code</b>.</p>
+        <p class="story">Rewriting every row is expensive, so databases cheat kindly. Adding a column with a null default doesn't touch the old rows: when one is read, the missing column is filled in with null. LSM-tree storage engines rewrite rows into the newest format later, during <b>compaction</b>.</p>
+        <p class="imagine"><b>Try it:</b> deploy the new version, read an ancient row, then run a compaction and watch the old shapes quietly become the new shape.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Several processes usually access a database at once, and during a rolling upgrade some run new code and some old. So a value may be written by newer code and read by older code: <b>forward compatibility is often required for databases too</b>.</p>
+            <p>Migrating data into a new schema is possible but expensive on a large dataset, so most databases defer it, asynchronously and best-effort. LSM-tree engines rewrite data in the latest format during <b>compaction</b>; relational databases add a column with a null default without rewriting existing rows.</p>
+            <p>Schema evolution lets the whole database <i>appear</i> to use one schema even though the storage holds many historical versions. Harder changes — single-valued to multivalued, moving data to another table — still need rewriting at the application level, and staying compatible across such migrations is a research problem.</p>
+            <p>A snapshot for backup or for a data warehouse is written in one go and is immutable, so it is usually encoded with the <b>latest</b> schema — a good fit for Avro object container files, or a column-oriented format such as <b>Parquet</b>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">One table, three schema versions</span><div class="stats" id="s9-stats"></div></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 660 330" role="img" aria-label="Rows written in different years with different sets of columns"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="caption" id="s9-cap" aria-live="polite">Rows written in 2019, 2022 and 2025 — each in the schema that existed that day.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9. SERVICES ============ -->
+  <section class="scene" id="services">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 9 · REST and RPC</span>
+        <h2>Shouting across the playground</h2>
+        <p class="story">A <b>service</b> is a program that takes requests over the network. When it speaks HTTP we call it a <b>web service</b>, and the most popular style is <b>REST</b>: plain data formats, URLs that name things, and the features HTTP already has.</p>
+        <p class="story">An old idea called <b>RPC</b> tries to make a network call look exactly like calling a function next door. It never quite works. Calling the kid beside you always works. Shouting across the playground can be lost, can be slow, and worst of all: if no answer comes back, <b>you can't tell whether they heard you</b>.</p>
+        <p class="imagine"><b>Try it:</b> lose the response, then hit Retry. The cupcake gets paid for twice — unless the request carries an <b>idempotency key</b> so the server can spot the duplicate.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Services expose an application-specific API rather than arbitrary queries, which gives encapsulation. Microservices aim to make services <b>independently deployable and evolvable</b>, each owned by one team, so old and new versions of clients and servers run at once.</p>
+            <p>Service developers publish an <b>IDL</b>: <b>OpenAPI</b> (Swagger) for JSON web services, Protocol Buffers for gRPC. Frameworks like Spring Boot, FastAPI and gRPC handle routing, metrics, caching and authentication; tools generate clients, docs and compatibility checks.</p>
+            <p>RPC's promise of <b>location transparency</b> is fundamentally flawed. A network request is unpredictable; it can time out, and then you simply don't know what happened; retrying may perform the action twice unless you build in <b>idempotence</b>; latency is wildly variable; parameters must be encoded; and languages disagree about datatypes.</p>
+            <p>For services you can assume servers are updated first, so you need <b>backward compatibility on requests and forward compatibility on responses</b>. Because clients outside your organization may never upgrade, compatibility must be kept for a long time, often by running several API versions side by side (version in the URL, in an Accept header, or per API key).</p>
+            <p>Clients find servers through <b>service discovery</b> and <b>load balancing</b>: hardware load balancers, software ones (NGINX, HAProxy), DNS (which caches, so entries go stale), registries such as etcd and ZooKeeper with heartbeats, or a <b>service mesh</b> (Istio, Linkerd) using sidecars that handle encryption and observability.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">One cupcake, one payment?</span><span id="s10-seg"></span></div>
+        <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 660 320" role="img" aria-label="A client calling a payment service over a network that can lose the request or the response"></svg></div>
+        <div class="controls" id="s10-controls"></div>
+        <div class="controls"><div class="stats" id="s10-stats"></div></div>
+        <div class="caption" id="s10-cap" aria-live="polite">A local function call is predictable. A network call is a different animal.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 10. WORKFLOWS AND EVENTS ============ -->
+  <section class="scene" id="flow">
+    <div class="wrap scene-grid full">
+      <div class="copy" style="max-width: 800px">
+        <span class="eyebrow">Big idea 10 · workflows and event-driven systems</span>
+        <h2>The recipe that remembers, and the mailbox that waits</h2>
+        <p class="story">Paying for something touches several services: check for fraud, debit the card, deposit the money. That chain is a <b>workflow</b> and each link is a <b>task</b>. You can't wrap them in one database transaction, so what happens if the machine dies halfway?</p>
+        <p class="story"><b>Durable execution</b> frameworks (Temporal, Restate) write every call and its result to a durable log. When the task is re-run, finished calls aren't really made again — the framework replays the answers from the log. That gives exactly-once behaviour, as long as your code is <b>deterministic</b>.</p>
+        <p class="story">The other way to move data is to not wait at all: drop a message in a <b>message broker</b> and walk away. The broker holds it, redelivers it if a consumer crashes, and can hand the same message to many subscribers.</p>
+      </div>
+      <div class="stack">
+        <div class="scene-grid" style="padding:0">
+          <div class="copy">
+            <h3 style="font-size:24px">Crash it and see</h3>
+            <p class="story">Run the payment, press <b>Crash now</b> in the middle, then restart. Without a log, the card gets charged a second time. With the log, the first two steps are replayed from memory of what happened and only the unfinished step really runs.</p>
+            <details class="book">
+              <summary>What the book says</summary>
+              <div class="inner">
+                <p>Workflows are graphs of tasks, defined in code, a DSL, or markup such as <b>BPEL</b>; drawn with notations like <b>BPMN</b>. Temporal calls tasks <i>activities</i>; others say <i>durable functions</i>.</p>
+                <p>A <b>workflow engine</b> has an orchestrator (scheduling) and an executor (running). Airflow, Dagster and Prefect orchestrate ETL; Camunda and Orkes give a graphical notation; Temporal and Restate provide durable execution.</p>
+                <p>If a task fails the framework re-executes it but <b>skips RPC calls and state changes that already succeeded</b>, returning the previous results, because everything is logged to durable storage like a write-ahead log.</p>
+                <p>Catches: external services must still provide an <b>idempotent API</b> with unique IDs; the framework expects the same RPCs in the same order, so reordering calls is risky — deploy a new version instead of editing an existing workflow; and nondeterministic code (random numbers, clocks) breaks replay, which is why frameworks ship deterministic replacements and checkers like Temporal's Workflow Check.</p>
+              </div>
+            </details>
+          </div>
+          <div class="stage">
+            <div class="stage-head"><span class="stage-title">Payment workflow</span><span id="s11-seg"></span></div>
+            <div class="stage-scroll"><svg id="s11-svg" viewBox="0 0 660 300" role="img" aria-label="A three-step payment workflow with a durable log, crashing and replaying"></svg></div>
+            <div class="controls" id="s11-controls"></div>
+            <div class="controls"><div class="stats" id="s11-stats"></div></div>
+            <div class="caption" id="s11-cap" aria-live="polite">Press <b>Step</b> to run the workflow one task at a time.</div>
+          </div>
+        </div>
+        <div class="scene-grid flip" style="padding:0">
+          <div class="copy">
+            <h3 style="font-size:24px">Leave it in the mailbox</h3>
+            <p class="story">With a broker the sender doesn't wait for anyone. If a consumer is switched off, messages pile up safely and are delivered when it comes back. A <b>queue</b> gives each message to one consumer; a <b>topic</b> gives a copy to every subscriber.</p>
+            <p class="imagine"><b>Try it:</b> crash consumer B, publish a few messages, then bring B back.</p>
+            <details class="book">
+              <summary>What the book says</summary>
+              <div class="inner">
+                <p>In event-driven architectures a request is an <b>event</b> or <b>message</b>, sent via a <b>message broker</b> (event broker, message queue, message-oriented middleware) that stores it temporarily. Senders don't wait: communication is asynchronous.</p>
+                <p>A broker buffers when the recipient is unavailable, redelivers to crashed processes, removes the need for service discovery, lets one message reach several recipients, and decouples sender from recipient.</p>
+                <p>Two patterns: a named <b>queue</b> (one of the consumers receives each message) and a named <b>topic</b> (all subscribers receive it). Open source brokers include RabbitMQ, ActiveMQ, HornetQ, NATS, Redpanda and Apache Kafka; cloud ones include Amazon Kinesis, Azure Service Bus and Google Cloud Pub/Sub.</p>
+                <p>Brokers don't enforce a data model — a message is bytes plus metadata — so teams use Protocol Buffers, Avro or JSON with a <b>schema registry</b>, and <b>AsyncAPI</b> to specify messages. Many brokers delete messages after consumption; some can keep them forever, which is what <b>event sourcing</b> needs. A consumer that republishes messages must be careful to preserve unknown fields.</p>
+                <p>In <b>distributed actor frameworks</b> (Akka, Orleans, Erlang/OTP) each actor has private state and communicates only by asynchronous messages that may be lost — so location transparency works better than in RPC. Rolling upgrades still need forward and backward compatible message encodings.</p>
+              </div>
+            </details>
+          </div>
+          <div class="stage">
+            <div class="stage-head"><span class="stage-title">Broker</span><span id="s12-seg"></span></div>
+            <div class="stage-scroll"><svg id="s12-svg" viewBox="0 0 660 300" role="img" aria-label="A producer publishing messages to a broker that delivers them to consumers"></svg></div>
+            <div class="controls" id="s12-controls"></div>
+            <div class="controls"><div class="stats" id="s12-stats"></div></div>
+            <div class="caption" id="s12-cap" aria-live="polite">Mode: <b>named queue</b> — each message goes to exactly one consumer.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SUMMARY ============ -->
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The seesaws from this chapter</h2><p>Every encoding choice buys something and costs something else.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>Text formats (JSON, XML, CSV)</h4><p>Anyone can read them; every language parses them; easy to agree on between companies</p></div><span class="vs">vs</span><div class="side"><h4>Binary schema formats (Protobuf, Avro)</h4><p>Half the size and precise types, but you must decode before a human can read it</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Your language's own format</h4><p>One line of code to save an object</p></div><span class="vs">vs</span><div class="side"><h4>A standard format</h4><p>Other languages can read it, it's safer to decode, and versioning was actually thought about</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Field tags (Protocol Buffers)</h4><p>Numbers never change meaning; renaming is free; but tags are assigned by hand</p></div><span class="vs">vs</span><div class="side"><h4>Field names (Avro)</h4><p>Great for schemas generated automatically from a database; needs the writer's schema on hand</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Open content model</h4><p>Unknown fields pass through, so old and new code can share data</p></div><span class="vs">vs</span><div class="side"><h4>Closed content model</h4><p>Catches typos and junk, but rejects anything a newer version invents</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>RPC / REST request</h4><p>You get an answer right away — if the network cooperates</p></div><span class="vs">vs</span><div class="side"><h4>Message broker</h4><p>Send and forget; it buffers, redelivers and fans out, but nobody replies</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Rewrite all the data on upgrade</h4><p>One single schema everywhere, expensive on a big dataset</p></div><span class="vs">vs</span><div class="side"><h4>Let schemas evolve</h4><p>Old rows stay as they are and are translated when read or compacted</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>Grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>encoding</dt><dd>Flattening in-memory objects into a line of bytes. Also called serialization or marshaling.</dd></div>
+        <div class="word"><dt>decoding</dt><dd>Turning those bytes back into objects. Also called parsing or deserialization.</dd></div>
+        <div class="word"><dt>backward compatibility</dt><dd>New code can read data written by old code.</dd></div>
+        <div class="word"><dt>forward compatibility</dt><dd>Old code can read data written by new code — the trickier one.</dd></div>
+        <div class="word"><dt>rolling upgrade</dt><dd>Updating a few machines at a time so the service never goes down.</dd></div>
+        <div class="word"><dt>evolvability</dt><dd>How easy it is to change a system later.</dd></div>
+        <div class="word"><dt>schema</dt><dd>A written description of what a record looks like: its fields and their types.</dd></div>
+        <div class="word"><dt>schema evolution</dt><dd>Changing that description over time without breaking old data or old code.</dd></div>
+        <div class="word"><dt>schema migration</dt><dd>Actually rewriting stored data into a new shape. Expensive when there's a lot of it.</dd></div>
+        <div class="word"><dt>JSON Schema</dt><dd>A way to describe and check JSON, including rules like "between 1 and 65,535".</dd></div>
+        <div class="word"><dt>open / closed content model</dt><dd>Whether extra fields nobody declared are allowed in (open) or turned away (closed).</dd></div>
+        <div class="word"><dt>Base64</dt><dd>Writing raw bytes as ordinary text so they fit in JSON or XML. Makes them about a third bigger.</dd></div>
+        <div class="word"><dt>MessagePack</dt><dd>A binary version of JSON. Smaller, but still ships every field name.</dd></div>
+        <div class="word"><dt>Protocol Buffers</dt><dd>A compact binary format from Google where each field has a number.</dd></div>
+        <div class="word"><dt>field tag</dt><dd>That number. A short nickname for a field, so names never travel.</dd></div>
+        <div class="word"><dt>variable-length integer</dt><dd>Small numbers use fewer bytes; big ones use more.</dd></div>
+        <div class="word"><dt>Avro</dt><dd>A binary format with no names and no tags in the data — just values in schema order.</dd></div>
+        <div class="word"><dt>writer's schema</dt><dd>The exact schema used when the bytes were written.</dd></div>
+        <div class="word"><dt>reader's schema</dt><dd>What your code expects today. Avro translates between the two by field name.</dd></div>
+        <div class="word"><dt>schema registry</dt><dd>A list of every schema version, so a reader can look up the one it needs.</dd></div>
+        <div class="word"><dt>data outlives code</dt><dd>You can replace all your code in minutes; five-year-old rows stay exactly as they were.</dd></div>
+        <div class="word"><dt>IDL</dt><dd>Interface definition language: the file that describes an API, like OpenAPI or a .proto file.</dd></div>
+        <div class="word"><dt>RPC</dt><dd>Remote procedure call: pretending a network request is an ordinary function call.</dd></div>
+        <div class="word"><dt>idempotence</dt><dd>Doing something twice has the same effect as doing it once — so retries are safe.</dd></div>
+        <div class="word"><dt>service discovery</dt><dd>How a client finds out which machine is running the service right now.</dd></div>
+        <div class="word"><dt>durable execution</dt><dd>Logging every step of a workflow so a crashed run can carry on instead of starting over.</dd></div>
+        <div class="word"><dt>message broker</dt><dd>A mailbox in the middle that stores messages and delivers them later.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width: 820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Six quick questions. Finish all six to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible, ease } = K;
+K.page(5);
+const setCap = (id, html) => { K.$(id).innerHTML = html; };
+const rand = (n) => Math.floor(Math.random() * n);
+const rct = (x, y, w, hh, cls, r) => s("rect", { x, y, width: w, height: hh, rx: r === undefined ? 10 : r, class: cls });
+const txt = (x, y, t, cls, anchor, style) => s("text", { x, y, class: cls || "sv-label", "text-anchor": anchor || "middle", style: style || null }, t);
+function chip(x, y, w, hh, label, cls) {
+  const g = s("g", {});
+  const r = rct(x - w / 2, y - hh / 2, w, hh, cls || "sv-data-soft", Math.min(10, hh / 2));
+  const t = txt(x, y + 4, label, "sv-label", "middle", { fill: "var(--ink)", fontWeight: 700 });
+  g.append(r, t); g.rct = r; g.txt = t;
+  g.set = (label2, cls2) => { t.textContent = label2; if (cls2) r.setAttribute("class", cls2); };
+  return g;
+}
+function mkBtn(root, label, cls, fn) {
+  const b = h("button", { class: "btn " + (cls || ""), type: "button" }, label);
+  b.addEventListener("click", fn); root.appendChild(b); return b;
+}
+
+/* ================= HERO ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const FIELDS = ["userName", "favNumber", "interests"];
+  const ys = [110, 180, 250];
+  svg.append(txt(85, 42, "app v1 · in memory"), txt(260, 42, "bytes on the wire"), txt(435, 42, "app v2 · in memory"));
+  const leftPanel = rct(20, 62, 130, 240, "sv-panel", 14);
+  const rightPanel = rct(370, 62, 130, 240, "sv-panel", 14);
+  svg.append(leftPanel, rightPanel);
+  const gate = (x) => s("g", {}, rct(x, 120, 36, 130, "sv-server", 10));
+  svg.append(gate(170), gate(314));
+  svg.append(txt(188, 272, "encode"), txt(332, 272, "decode"));
+  svg.append(s("line", { x1: 206, y1: 185, x2: 314, y2: 185, class: "sv-wire" }));
+  const slots = [];
+  ys.forEach((y, i) => {
+    svg.appendChild(chip(85, y, 110, 34, FIELDS[i]));
+    const c = chip(435, y, 110, 34, "", "sv-panel");
+    c.rct.setAttribute("stroke-dasharray", "5 5");
+    slots.push(c); svg.appendChild(c);
+  });
+  const counter = txt(260, 336, "0 records encoded");
+  svg.append(counter);
+  const layer = s("g"); svg.appendChild(layer);
+  const hit = s("rect", { x: 20, y: 62, width: 130, height: 240, rx: 14, fill: "transparent", class: "clickable", tabindex: "0", role: "button", "aria-label": "Encode and send this record" });
+  svg.appendChild(hit);
+  let n = 0, busy = false, visible = false;
+  async function trip() {
+    if (busy) return; busy = true;
+    slots.forEach((c) => c.set("", "sv-panel"));
+    slots.forEach((c) => c.rct.setAttribute("stroke-dasharray", "5 5"));
+    const tags = FIELDS.map((f, i) => { const t = draw.tag(f); layer.appendChild(t); return { t, y: ys[i] }; });
+    await Promise.all(tags.map(({ t, y }) => fly(t, [85, y], [188, 185], 520)));
+    tags.forEach(({ t }) => t.remove());
+    const ribbon = s("g", { transform: "translate(-200,-200)" });
+    for (let i = 0; i < 12; i++) ribbon.appendChild(rct(-40 + i * 7, -5, 5, 10, "sv-data", 1.5));
+    layer.appendChild(ribbon);
+    await fly(ribbon, [188, 185], [332, 185], 720);
+    ribbon.remove();
+    await Promise.all(tags.map(async ({ t, y }, i) => {
+      const t2 = draw.tag(FIELDS[i]); layer.appendChild(t2);
+      await sleep(i * 90);
+      await fly(t2, [332, 185], [435, y], 470);
+      t2.remove();
+      slots[i].set(FIELDS[i], "sv-data-soft");
+      slots[i].rct.removeAttribute("stroke-dasharray");
+    }));
+    n++; counter.textContent = `${n} record${n === 1 ? "" : "s"} encoded`;
+    busy = false;
+  }
+  hit.addEventListener("click", trip);
+  hit.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); trip(); } });
+  whenVisible(svg, () => (visible = true), () => (visible = false));
+  (async function auto() { await sleep(700); for (;;) { if (visible && !K.reduced && !document.hidden) await trip(); await sleep(1700); } })();
+})();
+
+/* ================= 1a. ROLLING UPGRADE ================= */
+(function rollout() {
+  const svg = K.$("#s1-svg");
+  const XS = [90, 210, 330, 450, 570];
+  svg.appendChild(rct(250, 30, 160, 44, "sv-box", 12));
+  svg.appendChild(txt(330, 58, "load balancer", "sv-text"));
+  const nodes = XS.map((x, i) => {
+    svg.appendChild(s("path", { d: `M330,74 C330,110 ${x},110 ${x},146`, class: "sv-wire" }));
+    const g = draw.server(x, 190, 96, 86, `node ${i + 1}`);
+    svg.appendChild(g);
+    const badge = chip(x - 22, 163, 38, 18, "v1", "sv-data-soft");
+    svg.appendChild(badge);
+    return { x, g, badge, ver: 1, up: true };
+  });
+  const layer = s("g"); svg.appendChild(layer);
+  const stV1 = stat("on v1", 5), stV2 = stat("on v2", 0), stReq = stat("requests served", 0), stFail = stat("failed", 0, "good");
+  K.$("#s1-stats").append(stV1, stV2, stReq, stFail);
+  let served = 0, busy = false, next = 0, visible = false;
+  function tally() {
+    const a = nodes.filter((n) => n.ver === 1).length;
+    stV1.set(a); stV2.set(5 - a); stReq.set(served); stFail.set(0, "good");
+  }
+  async function request() {
+    const ups = nodes.filter((n) => n.up);
+    if (!ups.length) return;
+    const node = ups[rand(ups.length)];
+    const p = draw.parcel("sv-data", 14); layer.appendChild(p);
+    await fly(p, [330, 78], [node.x, 150], 380);
+    p.remove(); served++; stReq.set(served);
+  }
+  const ctr = K.$("#s1-controls");
+  const bUp = mkBtn(ctr, "Upgrade next node", "primary", () => upgrade());
+  const bAll = mkBtn(ctr, "Play whole rollout", "", async () => { while (next < 5) { await upgrade(); await sleep(250); } });
+  mkBtn(ctr, "Send a request", "", request);
+  mkBtn(ctr, "Reset", "", () => {
+    if (busy) return;
+    nodes.forEach((n) => { n.ver = 1; n.up = true; n.badge.set("v1", "sv-data-soft"); n.g.light.setAttribute("class", "sv-fill-mint"); });
+    next = 0; served = 0; tally(); bUp.disabled = bAll.disabled = false;
+    setCap("#s1-cap", "All five nodes run <b>v1</b>. Requests are flowing. Upgrade one node and nobody notices.");
+  });
+  async function upgrade() {
+    if (busy || next >= 5) return;
+    busy = true; bUp.disabled = bAll.disabled = true;
+    const node = nodes[next];
+    node.up = false; node.g.light.setAttribute("class", "sv-fill-coral"); node.badge.set("…", "sv-bad");
+    setCap("#s1-cap", `<b>Node ${next + 1}</b> stops taking traffic and restarts. The other four keep serving: no downtime, no failed requests.`);
+    await sleep(900);
+    node.ver = 2; node.up = true;
+    node.g.light.setAttribute("class", "sv-fill-mint"); node.badge.set("v2", "sv-good");
+    next++; tally();
+    if (next < 5) {
+      setCap("#s1-cap", `Now <b>${next} node${next === 1 ? "" : "s"} on v2</b> and <b>${5 - next} on v1</b>, all serving users at once. v2 writes records with a new <b>nickname</b> field, so v1 must survive reading them (<b>forward compatibility</b>) — and v2 must still understand v1's older records (<b>backward compatibility</b>).`);
+    } else {
+      setCap("#s1-cap", "Rollout finished with zero downtime. But data written during the mixed period still has to make sense to both versions — and old rows in the database were written by <b>v1</b> long ago.");
+      bUp.disabled = bAll.disabled = true;
+    }
+    busy = false;
+    if (next < 5) { bUp.disabled = bAll.disabled = false; }
+  }
+  tally();
+  const L = loop((dt, t) => { if (t - (L._last || 0) > 700) { L._last = t; request(); } });
+  whenVisible(svg, () => { visible = true; if (!K.reduced) L.start(); }, () => { visible = false; L.stop(); });
+})();
+
+/* ================= 1b. THE LOST FIELD ================= */
+(function lostField() {
+  const svg = K.$("#s2-svg");
+  svg.appendChild(draw.server(100, 95, 104, 86, "app v2 (new code)"));
+  svg.appendChild(draw.db(330, 92, 84, 86, "database"));
+  svg.appendChild(draw.server(560, 95, 104, 86, "app v1 (old code)"));
+  svg.appendChild(draw.arrow(158, 95, 284, 95));
+  svg.appendChild(draw.arrow(380, 95, 502, 95));
+  const cards = [[14, "what v2 wrote"], [240, "stored record"], [460, "v1's model object"]];
+  cards.forEach(([x, title]) => {
+    svg.appendChild(rct(x, 172, 186, 148, "sv-panel", 14));
+    svg.appendChild(txt(x + 93, 194, title));
+  });
+  const YS = [228, 262, 296];
+  const FIELDS = ["name: Martin", "photo: cat.png", "nickname: Marty"];
+  const mk = (cx) => YS.map((y, i) => { const c = chip(cx, y, 160, 28, "", "sv-panel"); c.rct.setAttribute("stroke-dasharray", "4 5"); svg.appendChild(c); return c; });
+  const A = mk(107), B = mk(333), C = mk(553);
+  const layer = s("g"); svg.appendChild(layer);
+  const pocket = txt(553, 316, "", "sv-label", "middle", { fill: "var(--ink-3)" });
+  svg.appendChild(pocket);
+  const fill = (c, label, cls) => { c.set(label, cls || "sv-data-soft"); c.rct.removeAttribute("stroke-dasharray"); };
+  const blank = (c) => { c.set("", "sv-panel"); c.rct.setAttribute("stroke-dasharray", "4 5"); };
+  let keep = false, step = 0, busy = false;
+  const verdict = K.$("#s2-verdict");
+  const setVerdict = (t, cls) => { verdict.className = "pill " + cls; verdict.innerHTML = "<i></i>" + t; };
+  const STEPS = [
+    async () => {
+      FIELDS.forEach((f, i) => fill(A[i], f, i === 2 ? "sv-good" : "sv-data-soft"));
+      setCap("#s2-cap", "<b>v2</b> builds a record with three fields. <b>nickname</b> is brand new — v1 has never heard of it.");
+    },
+    async () => {
+      for (let i = 0; i < 3; i++) { const t = draw.tag(FIELDS[i].split(":")[0]); layer.appendChild(t); await fly(t, [107, YS[i]], [333, YS[i]], 420); t.remove(); fill(B[i], FIELDS[i], i === 2 ? "sv-good" : "sv-data-soft"); }
+      setVerdict("3 fields stored", "good");
+      setCap("#s2-cap", "v2 <b>encodes</b> the record and writes it to the database. All three fields are on disk.");
+    },
+    async () => {
+      for (let i = 0; i < 3; i++) { const t = draw.tag(FIELDS[i].split(":")[0]); layer.appendChild(t); await fly(t, [333, YS[i]], [553, YS[i]], 420); t.remove(); }
+      fill(C[0], FIELDS[0]); fill(C[1], FIELDS[1]);
+      if (keep) { fill(C[2], "unknown: kept safe", "sv-good"); pocket.textContent = "decoder keeps a pocket for unknown bytes"; }
+      else { blank(C[2]); pocket.textContent = "no place for nickname in the v1 object"; pocket.style.fill = "var(--coral)"; }
+      setCap("#s2-cap", keep
+        ? "v1 <b>decodes</b> the record. It still doesn't understand <b>nickname</b>, but its decoder parks the unknown bytes in a pocket."
+        : "v1 <b>decodes</b> the record into its model object — which has fields only for name and photo. <b>nickname has nowhere to go.</b>");
+    },
+    async () => {
+      fill(C[0], "name: Martin K.", "sv-data-soft"); C[0].rct.setAttribute("class", "sv-data-soft sv-pop");
+      setCap("#s2-cap", "A user edits their name. v1 changes exactly one small thing: <b>Martin</b> → <b>Martin K.</b>");
+    },
+    async () => {
+      for (let i = 0; i < 3; i++) {
+        if (i === 2 && !keep) { B[2].rct.setAttribute("class", "sv-bad"); B[2].set("nickname: gone", "sv-bad"); continue; }
+        const t = draw.tag(i === 2 ? "nickname" : FIELDS[i].split(":")[0]); layer.appendChild(t);
+        await fly(t, [553, YS[i]], [333, YS[i]], 420); t.remove();
+        fill(B[i], i === 0 ? "name: Martin K." : FIELDS[i], i === 2 ? "sv-good" : "sv-data-soft");
+      }
+      if (keep) { setVerdict("3 fields stored", "good"); setCap("#s2-cap", "v1 writes the record back <b>with the unknown bytes put back in</b>. Nothing was lost, and v2 still sees Marty's nickname. This is what a well-behaved decoder does for you."); }
+      else { setVerdict("2 fields — data lost", "bad"); setCap("#s2-cap", "v1 writes back only what it understood. <b>nickname is gone forever</b> — and nobody got an error. This is Figure 5-1: forward compatibility isn't just about not crashing, it's about <b>preserving fields you don't understand</b>."); }
+    },
+  ];
+  const ctr = K.$("#s2-controls");
+  const bStep = mkBtn(ctr, "Step", "primary", doStep);
+  const bPlay = mkBtn(ctr, "Play", "", async () => { while (step < STEPS.length) { await doStep(); await sleep(420); } });
+  mkBtn(ctr, "Reset", "", reset);
+  ctr.appendChild(h("span", { class: "grow" }));
+  ctr.appendChild(seg(["v1 drops unknown fields", "v1 keeps unknown fields"], 0, (i) => { keep = i === 1; reset(); }, "s2-mode"));
+  async function doStep() {
+    if (busy || step >= STEPS.length) return;
+    busy = true; bStep.disabled = bPlay.disabled = true;
+    await STEPS[step](); step++;
+    busy = false; bStep.disabled = bPlay.disabled = step >= STEPS.length;
+  }
+  function reset() {
+    if (busy) return;
+    step = 0; [A, B, C].forEach((g) => g.forEach(blank));
+    pocket.textContent = ""; pocket.style.fill = "var(--ink-3)";
+    setVerdict("nothing stored yet", "");
+    bStep.disabled = bPlay.disabled = false;
+    setCap("#s2-cap", "Press <b>Step</b> to follow one record through both versions of the app.");
+  }
+  reset();
+})();
+/* ================= 2. ENCODE / DECODE ================= */
+(function encodeScene() {
+  const svg = K.$("#s3-svg");
+  svg.append(rct(20, 60, 220, 215, "sv-panel", 14), rct(516, 60, 150, 215, "sv-panel", 14));
+  const titleR = txt(591, 84, "process B · same app");
+  svg.append(txt(130, 84, "in memory · process A"), titleR);
+  svg.append(rct(266, 120, 36, 110, "sv-server", 10), rct(460, 120, 36, 110, "sv-server", 10));
+  svg.append(txt(284, 248, "encode"), txt(478, 248, "decode"));
+  const wire = s("line", { x1: 302, y1: 175, x2: 460, y2: 175, class: "sv-wire" });
+  svg.appendChild(wire);
+  const leftObjs = s("g"), rightObjs = s("g", { style: { opacity: 0 } });
+  const ptr1 = s("path", { d: "M112,146 C140,152 140,158 158,170", class: "sv-wire-solid" });
+  const ptr2 = s("path", { d: "M70,146 C56,170 62,200 76,224", class: "sv-wire-solid" });
+  const pl1 = txt(152, 160, "0x8f2"), pl2 = txt(44, 190, "0x4c1");
+  leftObjs.append(ptr1, ptr2, pl1, pl2,
+    chip(85, 126, 100, 40, "Person", "sv-box"), chip(175, 190, 110, 40, '"Martin"', "sv-box"), chip(95, 245, 120, 40, "interests[]", "sv-box"));
+  rightObjs.append(s("path", { d: "M608,146 C636,152 636,158 654,170", class: "sv-wire-solid", opacity: 0.001 }),
+    chip(581, 126, 100, 40, "Person", "sv-box"), chip(600, 190, 110, 40, '"Martin"', "sv-box"), chip(585, 245, 118, 40, "interests[]", "sv-box"),
+    txt(591, 100, "new addresses: 0x41c…"));
+  svg.append(leftObjs, rightObjs);
+  const strip = s("g", { style: { opacity: 0 } }), layer = s("g");
+  for (let i = 0; i < 22; i++) strip.appendChild(rct(-66 + i * 6, -7, 4.5, 14, "sv-data", 1.5));
+  strip.setAttribute("transform", "translate(284,175)");
+  svg.append(strip, layer);
+  const boom = txt(380, 148, "", "sv-text", "middle", { fill: "var(--coral)", fontWeight: 700 });
+  svg.appendChild(boom);
+  let mode = 0, step = 0, busy = false;
+  const STEPS = [
+    async () => {
+      [ptr1, ptr2].forEach((p) => p.setAttribute("style", "stroke: var(--coral)"));
+      [pl1, pl2].forEach((p) => p.setAttribute("style", "fill: var(--coral); font-weight: 700"));
+      boom.textContent = "0x8f2 means nothing over here";
+      setCap("#s3-cap", "Those arrows are <b>pointers</b> — house numbers inside process A's memory. Another process has completely different houses, so you can't just mail them.");
+    },
+    async () => {
+      strip.style.opacity = 1;
+      boom.textContent = "";
+      await tween(650, (t) => { leftObjs.style.opacity = String(1 - 0.6 * t); });
+      setCap("#s3-cap", "<b>Encoding:</b> the encoder walks the objects and writes one <b>self-contained</b> line of bytes — lengths and values instead of pointers.");
+    },
+    async () => {
+      await fly(strip, [284, 175], [478, 175], 800);
+      setCap("#s3-cap", "The bytes travel over the network (or get written to a file). Nothing in them refers to process A's memory.");
+    },
+    async () => {
+      if (mode === 1) {
+        strip.style.opacity = 0.3;
+        boom.textContent = "cannot instantiate class app.Person";
+        titleR.textContent = "process B · a Java service";
+        setCap("#s3-cap", "<b>Broken.</b> Python's <code>pickle</code> is tied to Python, so another language can't read it. And decoding one of these has to <b>instantiate arbitrary classes</b> — a classic security hole that can let an attacker run code on your server.");
+      } else {
+        strip.style.opacity = 0;
+        await tween(500, (t) => { rightObjs.style.opacity = String(t); });
+        setCap("#s3-cap", "<b>Decoding:</b> process B rebuilds the objects — at its own, totally different addresses. The data survived the trip; the pointers were never needed.");
+      }
+    },
+  ];
+  const ctr = K.$("#s3-controls");
+  const bStep = mkBtn(ctr, "Step", "primary", doStep);
+  const bPlay = mkBtn(ctr, "Play", "", async () => { while (step < STEPS.length) { await doStep(); await sleep(400); } });
+  mkBtn(ctr, "Reset", "", reset);
+  K.$("#s3-seg").appendChild(seg(["A standard format", "The language's own (pickle)"], 0, (i) => { mode = i; reset(); }, "s3-mode"));
+  async function doStep() {
+    if (busy || step >= STEPS.length) return;
+    busy = true; bStep.disabled = bPlay.disabled = true;
+    await STEPS[step](); step++;
+    busy = false; bStep.disabled = bPlay.disabled = step >= STEPS.length;
+  }
+  function reset() {
+    if (busy) return;
+    step = 0; leftObjs.style.opacity = 1; rightObjs.style.opacity = 0;
+    strip.style.opacity = 0; strip.setAttribute("transform", "translate(284,175)");
+    boom.textContent = ""; titleR.textContent = mode === 1 ? "process B · a Java service" : "process B · same app";
+    [ptr1, ptr2].forEach((p) => p.removeAttribute("style"));
+    [pl1, pl2].forEach((p) => p.removeAttribute("style"));
+    bStep.disabled = bPlay.disabled = false;
+    setCap("#s3-cap", "Three objects in memory, joined by pointers.");
+  }
+  reset();
+})();
+
+/* ================= 3. TEXT FORMATS ================= */
+(function textFormats() {
+  const svg = K.$("#s4-svg");
+  const YS = [90, 150, 210, 270];
+  const VALUES = ["1337 (a number)", "postId 9007199254740993", "photo: 2 KB of raw bytes", 'name: "Kim, Jr."'];
+  const R = {
+    JSON: [
+      ["1337", "warn", "JSON does tell strings from numbers — but it never says whether a number is an <b>integer or a float</b>, and it doesn't specify precision."],
+      ["9007199254740992", "bad", "Integers above 2<sup>53</sup> can't be held exactly in an IEEE 754 double, so JavaScript rounds the last digit away. X (Twitter) sends every post ID <b>twice</b>, once as a number and once as a string, to survive this."],
+      ["Base64 text, +33%", "warn", "JSON has no binary string type, so raw bytes are rewritten as <b>Base64</b> text. It works, but it's hacky and about a third bigger."],
+      ['"Kim, Jr."', "good", "Quoted strings handle commas fine, and JSON has good Unicode support."],
+    ],
+    XML: [
+      ["<n>1337</n>", "warn", "In XML you <b>cannot tell a number from a string of digits</b> without an external schema — and the tags make everything verbose."],
+      ["<id>9007…993</id>", "warn", "The digits survive as text, but nothing says it's a number, so whatever parses it has to guess (and may guess double)."],
+      ["Base64 text, +33%", "warn", "XML has no binary type either, so it's Base64 again."],
+      ["<name>Kim, Jr.</name>", "good", "Fine — but look how much syntax you paid for it. XML is often criticized for being too verbose and complicated."],
+    ],
+    CSV: [
+      ["1337", "warn", "CSV has <b>no schema at all</b>: the application has to decide what each column means, including whether this is a number."],
+      ["9007199254740993", "warn", "The digits are preserved exactly, but again nothing says it's a number — and if a new column is added you must handle that by hand."],
+      ["(no nesting)", "bad", "CSV supports only <b>tabular data with no nesting</b>, so a list of interests or a blob of bytes has nowhere to live."],
+      ["Kim | Jr. → 2 columns", "bad", "The comma inside the value splits the row. Escaping rules are specified in RFC 4180, but <b>not all parsers implement them correctly</b>."],
+    ],
+  };
+  const NAMES = ["JSON", "XML", "CSV"];
+  let fmt = 0;
+  svg.append(txt(110, 52, "a value in your program"), txt(325, 52, "encoded as…"), txt(530, 52, "what comes back out"));
+  svg.appendChild(rct(250, 70, 150, 230, "sv-server", 14));
+  const fmtName = txt(325, 176, "JSON", "sv-big");
+  svg.append(fmtName, txt(325, 204, "a text format"));
+  const results = [], srcs = [];
+  YS.forEach((y, i) => {
+    svg.appendChild(draw.arrow(204, y, 244, y));
+    svg.appendChild(draw.arrow(406, y, 412, y));
+    const c = chip(110, y, 188, 40, VALUES[i], "sv-data-soft");
+    c.setAttribute("class", "clickable"); c.setAttribute("tabindex", "0"); c.setAttribute("role", "button");
+    c.setAttribute("aria-label", "Send " + VALUES[i] + " through the format");
+    c.addEventListener("click", () => send(i));
+    c.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); send(i); } });
+    svg.appendChild(c); srcs.push(c);
+    const r = chip(530, y, 230, 40, "", "sv-panel"); r.rct.setAttribute("stroke-dasharray", "4 5");
+    svg.appendChild(r); results.push(r);
+  });
+  const layer = s("g"); svg.appendChild(layer);
+  const stOk = stat("came out fine", 0, "good"), stWarn = stat("vague", 0, "warn"), stBad = stat("broken", 0, "bad");
+  K.$("#s4-stats").append(stOk, stWarn, stBad);
+  const CLS = { good: "sv-good", warn: "sv-data-soft", bad: "sv-bad" };
+  let busy = false;
+  function tally() {
+    const seen = results.map((r, i) => r.tone).filter(Boolean);
+    stOk.set(seen.filter((t) => t === "good").length, "good");
+    stWarn.set(seen.filter((t) => t === "warn").length, "warn");
+    stBad.set(seen.filter((t) => t === "bad").length, "bad");
+  }
+  async function send(i) {
+    if (busy) return; busy = true;
+    const [out, tone, why] = R[NAMES[fmt]][i];
+    const t = draw.tag(VALUES[i].slice(0, 16)); layer.appendChild(t);
+    await fly(t, [110, YS[i]], [325, YS[i]], 420);
+    fmtName.setAttribute("class", "sv-big sv-pop");
+    await sleep(180); fmtName.setAttribute("class", "sv-big");
+    await fly(t, [325, YS[i]], [530, YS[i]], 420); t.remove();
+    results[i].set(out, CLS[tone]); results[i].rct.removeAttribute("stroke-dasharray");
+    results[i].tone = tone; tally();
+    setCap("#s4-cap", `<b>${NAMES[fmt]}</b> · ${why}`);
+    busy = false;
+  }
+  K.$("#s4-seg").appendChild(seg(NAMES, 0, (i) => {
+    fmt = i; fmtName.textContent = NAMES[i];
+    results.forEach((r) => { r.set("", "sv-panel"); r.rct.setAttribute("stroke-dasharray", "4 5"); r.tone = null; });
+    tally();
+    setCap("#s4-cap", `Click a value on the left to send it through <b>${NAMES[i]}</b>.`);
+  }, "s4-fmt"));
+  tally();
+})();
+
+/* ================= 4. JSON SCHEMA ================= */
+(function jsonSchema() {
+  const svg = K.$("#s5-svg");
+  svg.appendChild(rct(30, 60, 180, 212, "sv-panel", 14));
+  svg.append(txt(120, 84, "the schema"), txt(308, 40, "an incoming field"));
+  svg.append(chip(120, 118, 156, 28, "userName: string"), chip(120, 152, 156, 28, "port: integer"), chip(120, 186, 156, 28, "1 ≤ port ≤ 65535"));
+  const modelChip = chip(120, 228, 156, 28, "extra fields: yes", "sv-good");
+  svg.append(modelChip, txt(120, 258, "additionalProperties"));
+  svg.appendChild(rct(280, 74, 56, 176, "sv-server", 12));
+  svg.append(txt(308, 268, "validator"));
+  svg.appendChild(rct(390, 60, 240, 212, "sv-panel", 14));
+  svg.appendChild(txt(510, 84, "the accepted record"));
+  const ROWS = [110, 142, 174, 206, 238];
+  const slots = ROWS.map((y) => { const c = chip(510, y, 212, 26, "", "sv-panel"); c.rct.setAttribute("stroke-dasharray", "4 5"); svg.appendChild(c); return c; });
+  const tray = chip(510, 296, 240, 28, "rejected: 0", "sv-panel");
+  svg.appendChild(tray);
+  const layer = s("g"); svg.appendChild(layer);
+  let open = true, used = 0, rejected = 0, busy = false;
+  const FIELDS = [
+    { label: 'userName: "Martin"', ok: () => true, why: "Declared in the schema, and it really is a string. Straight in." },
+    { label: "port: 8080", ok: () => true, why: "Declared as an integer, and 8080 sits inside the allowed range." },
+    { label: "port: 99999", ok: () => false, why: "Rejected by a <b>validation rule</b>: the schema says a port must be between 1 and 65,535. This is the part Protocol Buffers and Avro schemas deliberately don't do." },
+    { label: 'port: "8080"', ok: () => false, why: "Rejected by <b>type</b>: the schema says integer, and this is a string of digits. Text formats can't tell those apart on their own — the schema is what decides." },
+    { label: 'nickname: "Marty"', ok: () => open, why: null },
+  ];
+  const ctr = K.$("#s5-controls");
+  FIELDS.forEach((f, i) => mkBtn(ctr, f.label, i === 4 ? "primary" : "", () => send(i)));
+  mkBtn(ctr, "Reset", "", reset);
+  K.$("#s5-seg").appendChild(seg(["open (default)", "closed"], 0, (i) => {
+    open = i === 0;
+    modelChip.set(open ? "extra fields: yes" : "extra fields: no", open ? "sv-good" : "sv-bad");
+    setCap("#s5-cap", open
+      ? "Content model is <b>open</b> (<code>additionalProperties: true</code>, the default): unknown fields are welcome, so a newer version can add fields without upsetting this validator."
+      : "Content model is <b>closed</b> (<code>additionalProperties: false</code>): only fields on the clipboard get in. Tidy — but a field invented by next week's version gets thrown away.");
+  }, "s5-model"));
+  async function send(i) {
+    if (busy) return; busy = true;
+    const f = FIELDS[i], ok = f.ok();
+    const t = draw.tag(f.label, ok ? "sv-data-soft" : "sv-data-soft"); layer.appendChild(t);
+    await fly(t, [308, 52], [308, 162], 420);
+    await sleep(180);
+    if (ok && used < slots.length) {
+      await fly(t, [308, 162], [510, ROWS[used]], 420); t.remove();
+      slots[used].set(f.label, "sv-good"); slots[used].rct.removeAttribute("stroke-dasharray"); used++;
+      setCap("#s5-cap", "<b>Accepted.</b> " + (f.why || (open
+        ? "<b>nickname</b> isn't in the schema at all, but the <b>open</b> content model lets it through — which is exactly how a newer version's fields survive an older validator."
+        : "")));
+    } else {
+      await fly(t, [308, 162], [510, 296], 420); t.remove();
+      rejected++; tray.set("rejected: " + rejected, "sv-bad");
+      setCap("#s5-cap", "<b>Rejected.</b> " + (f.why || "<b>nickname</b> isn't on the clipboard, and the <b>closed</b> content model allows only declared fields. Handy against typos; painful during a rolling upgrade."));
+    }
+    busy = false;
+  }
+  function reset() {
+    if (busy) return;
+    used = 0; rejected = 0;
+    slots.forEach((c) => { c.set("", "sv-panel"); c.rct.setAttribute("stroke-dasharray", "4 5"); });
+    tray.set("rejected: 0", "sv-panel");
+  }
+})();
+/* ================= 5. BYTES PER RECORD ================= */
+(function byteChart() {
+  const svg = K.$("#s6-svg");
+  const PX = 5.9, X0 = 136, YS = [90, 140, 190, 240];
+  const FORMATS = [
+    { name: "JSON text", parts: [
+      { b: 37, k: "names", why: 'Every single record repeats the field names — <b>"userName"</b>, <b>"favoriteNumber"</b>, <b>"interests"</b> — 37 of the 81 bytes, just labels.' },
+      { b: 34, k: "values", why: 'The values with their quotes: "Martin", 1337, "daydreaming", "hacking". Note that 1337 costs 4 bytes here, one per digit character.' },
+      { b: 10, k: "marks", why: "Braces, colons, commas and brackets: 10 bytes of punctuation so a parser can find where each thing starts and stops." }] },
+    { name: "MessagePack", parts: [
+      { b: 31, k: "names", why: "MessagePack is a binary JSON. Because it prescribes <b>no schema</b>, it still has to ship every field name — that's why it saves so little." },
+      { b: 26, k: "values", why: "The same values, but now 1337 is a real 2-byte number instead of four digit characters." },
+      { b: 9, k: "marks", why: "Nine marker bytes. The first, <b>0x83</b>, means “an object with 3 fields”. <b>0xa8</b> means “a string 8 bytes long”, so no closing quote or escaping is needed." }] },
+    { name: "Protocol Buffers", parts: [
+      { b: 0, k: "names", why: "" },
+      { b: 26, k: "values", why: "Only the values travel. Strings are UTF-8; 1337 uses a <b>variable-length integer</b>, 2 bytes, with the top bit of each byte saying “more to come”." },
+      { b: 7, k: "marks", why: "Seven bytes of scaffolding: four pack a <b>field tag</b> and its datatype into a single byte each, three give string lengths. No field names at all — the schema knows them." }] },
+    { name: "Avro", parts: [
+      { b: 0, k: "names", why: "" },
+      { b: 26, k: "values", why: "Just the values, glued together in schema order. Nothing in the data says which field this is, or even what type it is." },
+      { b: 6, k: "marks", why: "Six bytes: length prefixes for the strings, a branch marker for the <code>null | long</code> union, and the array's count and end marker. The most compact of all — but useless without the writer's schema." }] },
+  ];
+  const CLS = { names: "sv-fill-lilac", values: "sv-fill-sun", marks: "sv-fill-blue" };
+  [0, 20, 40, 60, 80].forEach((v) => {
+    const x = X0 + v * PX;
+    svg.appendChild(s("line", { x1: x, y1: 56, x2: x, y2: 268, class: "sv-wire", style: { opacity: 0.5 } }));
+    svg.appendChild(txt(x, 46, v === 80 ? "80 bytes" : String(v)));
+  });
+  svg.appendChild(txt(20, 28, "one small record · bytes on the wire", "sv-label", "start"));
+  const rows = FORMATS.map((f, i) => {
+    const y = YS[i], g = s("g", { class: "row" });
+    let x = X0;
+    const total = f.parts.reduce((a, p) => a + p.b, 0);
+    f.parts.forEach((p) => {
+      if (!p.b) return;
+      const r = rct(x, y - 15, p.b * PX, 30, CLS[p.k], 3);
+      r.style.cursor = "pointer";
+      r.addEventListener("click", () => { pick(i); setCap("#s6-cap", `<b>${f.name}</b> · ${p.b} bytes — ${p.why}`); });
+      g.appendChild(r); x += p.b * PX;
+    });
+    g.appendChild(txt(X0 - 12, y + 4, f.name, "sv-label", "end"));
+    g.appendChild(txt(x + 8, y + 4, total + " B", "sv-label", "start", { fill: "var(--ink)", fontWeight: 700 }));
+    svg.appendChild(g);
+    return { g, total, name: f.name };
+  });
+  svg.appendChild(txt(340, 290, "toy record: userName “Martin”, favoriteNumber 1337, interests [daydreaming, hacking]"));
+  const tiles = rows.map((r) => stat(r.name, r.total + " B"));
+  const ctr = K.$("#s6-controls");
+  let mult = 1;
+  const fmtBytes = (n) => n >= 1e6 ? (n / 1e6).toFixed(n / 1e6 < 10 ? 1 : 0) + " MB" : n >= 1e3 ? (n / 1e3).toFixed(n / 1e3 < 10 ? 1 : 0) + " KB" : n + " B";
+  const EXP = [1, 10, 100, 1000, 10000, 100000, 1000000];
+  const fmtCount = (n) => n >= 1e6 ? "1M" : n >= 1e3 ? n / 1e3 + "k" : String(n);
+  ctr.appendChild(slider({ id: "s6-records", label: "records sent", min: 0, max: 6, step: 1, value: 0, format: (v) => fmtCount(EXP[v]), onInput: (v) => { mult = EXP[v]; paint(); } }));
+  ctr.appendChild(h("span", { class: "grow" }));
+  const stats = h("div", { class: "stats" }); tiles.forEach((t) => stats.appendChild(t)); ctr.appendChild(stats);
+  function paint() { rows.forEach((r, i) => tiles[i].set(fmtBytes(r.total * mult), i === 3 ? "good" : i === 0 ? "warn" : "")); }
+  function pick(i) { rows.forEach((r, j) => r.g.classList.toggle("dim", i !== null && j !== i)); }
+  K.$("#s6-seg").appendChild(seg(["All four", "JSON", "MsgPack", "Protobuf", "Avro"], 0, (i) => {
+    pick(i === 0 ? null : i - 1);
+    setCap("#s6-cap", i === 0
+      ? "All four carry the same three values. The yellow band barely moves — what shrinks is the packaging around it."
+      : `<b>${rows[i - 1].name}</b>: ${rows[i - 1].total} bytes per record. Click a band to see what those bytes are doing.`);
+  }, "s6-pick"));
+  paint();
+})();
+
+/* ================= 6. PROTOCOL BUFFERS ================= */
+(function protobuf() {
+  const svg = K.$("#s7-svg");
+  const SC = [
+    { name: "New field, tag 4", blocks: [
+      { t: 1, ty: "string", v: '"Martin"', ok: ["user_name", "= Martin"] },
+      { t: 2, ty: "varint", v: "1337", ok: ["favorite_number", "= 1337"] },
+      { t: 3, ty: "string", v: '"daydreaming"', ok: ["interests", "+= daydreaming"] },
+      { t: 3, ty: "string", v: '"hacking"', ok: ["interests", "+= hacking"] },
+      { t: 4, ty: "varint", v: "1", kind: "unknown", ok: ["tag 4 · unknown", "skipped, kept safe"] }],
+      say: ["v1 knows tag 1 is a string called <b>user_name</b>. The tag and the type are packed into one byte, then a length byte, then the UTF-8 text.",
+        "Tag 2 is a <b>varint</b>. 1337 needs two bytes: the top bit of the first says “there's more coming”. Numbers from –64 to 63 fit in one byte.",
+        "Tag 3 again. Protocol Buffers has no list type — <code>repeated</code> just means the <b>same tag appears several times</b>.",
+        "The second interest, same tag 3.",
+        "<b>Tag 4 is a mystery</b> — v1's schema has never heard of it. But the datatype annotation says varint, so the reader knows <b>exactly how many bytes to skip</b>, and it can hold on to them instead of throwing them away. That's forward compatibility."] },
+    { name: "Someone reused tag 2", blocks: [
+      { t: 1, ty: "string", v: '"Martin"', ok: ["user_name", "= Martin"] },
+      { t: 2, ty: "string", v: '"Berlin"', kind: "bad", ok: ["favorite_number", "wrong type!"] },
+      { t: 3, ty: "string", v: '"daydreaming"', ok: ["interests", "+= daydreaming"] },
+      { t: 3, ty: "string", v: '"hacking"', ok: ["interests", "+= hacking"] }],
+      say: ["Fine so far: tag 1 is still user_name.",
+        "<b>Broken.</b> v2's author reused tag <b>2</b> for a new <code>city</code> field. v1 still believes tag 2 is a 64-bit number, so it tries to read a string as digits. A tag number is a promise you can never take back — that's why old tags should be <b>reserved</b> in the schema.",
+        "The rest of the record still parses, but field 2 is already nonsense.",
+        "Same again."] },
+    { name: "int32 became int64", blocks: [
+      { t: 1, ty: "string", v: '"Martin"', ok: ["user_name", "= Martin"] },
+      { t: 2, ty: "varint", v: "5000000000", kind: "bad", ok: ["favorite_number", "= 705032704"] },
+      { t: 3, ty: "string", v: '"daydreaming"', ok: ["interests", "+= daydreaming"] },
+      { t: 3, ty: "string", v: '"hacking"', ok: ["interests", "+= hacking"] }],
+      say: ["Tag 1, no trouble.",
+        "v2 widened this field from a 32-bit to a 64-bit integer, and wrote 5,000,000,000. New code reading old data would be fine — missing bits are filled with 0s. But <b>old code still holds the value in a 32-bit variable</b>, so it is silently <b>truncated</b> to 705032704.",
+        "Parsing carries on normally.",
+        "And the last interest."] },
+  ];
+  svg.appendChild(txt(340, 40, "the record on the wire, written by new code (v2)"));
+  svg.appendChild(rct(25, 196, 630, 124, "sv-panel", 14));
+  svg.appendChild(txt(340, 220, "what the old reader (v1) ended up with"));
+  const blocksG = s("g"), outG = s("g"), ptr = s("g", { style: { opacity: 0 } });
+  ptr.append(s("path", { d: "M-9,20 L9,20 L0,4 Z", class: "sv-fill-line", style: { fill: "var(--blue)" } }), txt(0, 42, "v1 reads", "sv-label", "middle", { fill: "var(--blue)", fontWeight: 700 }));
+  svg.append(blocksG, outG, ptr);
+  let sc = 0, step = 0, busy = false, blocks = [];
+  function build() {
+    K.clear(blocksG); K.clear(outG); blocks = [];
+    SC[sc].blocks.forEach((b, i) => {
+      const cx = 84 + i * 128, g = s("g", {});
+      const r = rct(cx - 59, 66, 118, 78, "sv-box", 12);
+      g.append(r, txt(cx, 94, `tag ${b.t} · ${b.ty}`), txt(cx, 122, b.v, "sv-text", "middle", { fontWeight: 700 }));
+      blocksG.appendChild(g); blocks.push({ g, r, cx, b });
+    });
+    ptr.style.opacity = 0;
+  }
+  const ctr = K.$("#s7-controls");
+  const bStep = mkBtn(ctr, "Step", "primary", doStep);
+  const bPlay = mkBtn(ctr, "Play", "", async () => { while (step < SC[sc].blocks.length) { await doStep(); await sleep(420); } });
+  mkBtn(ctr, "Reset", "", reset);
+  K.$("#s7-seg").appendChild(seg(SC.map((x) => x.name), 0, (i) => { if (busy) return; sc = i; step = 0; build(); bStep.disabled = bPlay.disabled = false; setCap("#s7-cap", "Press <b>Step</b> to move the old reader along the record, one field at a time."); }, "s7-sc"));
+  async function doStep() {
+    if (busy || step >= SC[sc].blocks.length) return;
+    busy = true; bStep.disabled = bPlay.disabled = true;
+    const it = blocks[step], b = it.b;
+    ptr.style.opacity = 1;
+    await fly(ptr, [step === 0 ? it.cx : blocks[step - 1].cx, 148], [it.cx, 148], step === 0 ? 1 : 380);
+    it.r.setAttribute("class", b.kind === "bad" ? "sv-bad" : b.kind === "unknown" ? "sv-data-soft" : "sv-good");
+    const cx = 88 + step * 126;
+    outG.appendChild(chip(cx, 258, 118, 30, b.ok[0], b.kind === "bad" ? "sv-bad" : b.kind === "unknown" ? "sv-data-soft" : "sv-good"));
+    outG.appendChild(txt(cx, 292, b.ok[1], "sv-label"));
+    setCap("#s7-cap", SC[sc].say[step]);
+    step++;
+    busy = false; bStep.disabled = bPlay.disabled = step >= SC[sc].blocks.length;
+  }
+  function reset() { if (busy) return; step = 0; build(); bStep.disabled = bPlay.disabled = false; setCap("#s7-cap", "Press <b>Step</b> to move the old reader along the record, one field at a time."); }
+  build();
+})();
+
+/* ================= 7. AVRO SCHEMA RESOLUTION ================= */
+(function avro() {
+  const svg = K.$("#s8-svg");
+  const V = { userName: '"Martin"', favoriteNumber: "1337", interests: "[2 items]", photoUrl: '"cat.png"' };
+  const SC = [
+    { name: "Same schema", w: ["userName", "favoriteNumber", "interests"], r: ["userName", "favoriteNumber", "interests"], d: {} },
+    { name: "Reordered", w: ["userName", "favoriteNumber", "interests"], r: ["interests", "userName", "favoriteNumber"], d: {} },
+    { name: "Reader adds a default", w: ["userName", "favoriteNumber", "interests"], r: ["userName", "favoriteNumber", "interests", "country"], d: { country: '"unknown"' } },
+    { name: "Reader adds, no default", w: ["userName", "favoriteNumber", "interests"], r: ["userName", "favoriteNumber", "interests", "country"], d: {} },
+    { name: "Writer adds a field", w: ["userName", "favoriteNumber", "interests", "photoUrl"], r: ["userName", "favoriteNumber", "interests"], d: {} },
+  ];
+  const SAY = {
+    match: (f) => `<b>${f}</b> is in both schemas, so Avro lines them up <b>by name</b> and copies the value across.`,
+    cross: (f) => `<b>${f}</b> sits in a different position on each side — that's fine. Avro matches fields by <b>name</b>, not by position, so the order may differ.`,
+    def: (f, v) => `The writer never wrote a <b>${f}</b>. The reader's schema declares a default (${v}), so Avro fills it in. This is why you may only add or remove fields <b>that have a default</b>.`,
+    nodef: (f) => `<b>Broken.</b> The reader expects <b>${f}</b>, the writer's schema has no such field, and the reader declares <b>no default</b> — so this data simply cannot be read. Adding a field without a default breaks backward compatibility.`,
+    ignore: (f) => `The writer wrote a <b>${f}</b>, but the reader's schema doesn't mention it, so those bytes are <b>skipped</b>. Old readers survive new writers.`,
+  };
+  svg.append(rct(20, 66, 190, 232, "sv-panel", 14), rct(470, 66, 190, 232, "sv-panel", 14));
+  svg.append(txt(115, 90, "writer's schema"), txt(565, 90, "reader's schema"), txt(320, 46, "the bytes: no names, no tags"), txt(320, 90, "values in writer order"));
+  const wG = s("g"), bG = s("g"), rG = s("g"), lineG = s("g"), layer = s("g");
+  svg.append(lineG, wG, bG, rG, layer);
+  const rowY = (i) => 130 + i * 44;
+  let sc = 0, step = 0, busy = false, plan = [], wChips = [], rChips = [], bChips = [];
+  function build() {
+    [wG, bG, rG, lineG].forEach(K.clear);
+    wChips = []; rChips = []; bChips = []; plan = [];
+    const S = SC[sc];
+    S.w.forEach((f, i) => {
+      const c = chip(115, rowY(i), 166, 32, f); wG.appendChild(c); wChips.push(c);
+      const b = chip(320, rowY(i), 140, 32, V[f], "sv-data"); b.txt.style.fill = "var(--ink)"; bG.appendChild(b); bChips.push(b);
+    });
+    S.r.forEach((f, i) => {
+      const label = S.d[f] ? f + " = " + S.d[f] : f;
+      const c = chip(565, rowY(i), 166, 32, label, "sv-panel");
+      c.rct.setAttribute("stroke-dasharray", "4 5"); rG.appendChild(c); rChips.push(c);
+    });
+    S.r.forEach((f, ri) => {
+      const wi = S.w.indexOf(f);
+      if (wi >= 0) plan.push({ kind: wi === ri ? "match" : "cross", wi, ri, f });
+      else plan.push({ kind: S.d[f] ? "def" : "nodef", ri, f });
+    });
+    S.w.forEach((f, wi) => { if (S.r.indexOf(f) < 0) plan.push({ kind: "ignore", wi, f }); });
+  }
+  const ctr = K.$("#s8-controls");
+  const bStep = mkBtn(ctr, "Step", "primary", doStep);
+  const bPlay = mkBtn(ctr, "Play", "", async () => { while (step < plan.length) { await doStep(); await sleep(400); } });
+  mkBtn(ctr, "Reset", "", reset);
+  K.$("#s8-seg").appendChild(seg(SC.map((x) => x.name), 0, (i) => { if (busy) return; sc = i; reset(); }, "s8-sc"));
+  async function doStep() {
+    if (busy || step >= plan.length) return;
+    busy = true; bStep.disabled = bPlay.disabled = true;
+    const a = plan[step];
+    if (a.kind === "nodef") {
+      rChips[a.ri].set(a.f + " = ???", "sv-bad"); rChips[a.ri].rct.removeAttribute("stroke-dasharray");
+    } else if (a.kind === "def") {
+      rChips[a.ri].set(a.f + " = " + SC[sc].d[a.f], "sv-good"); rChips[a.ri].rct.removeAttribute("stroke-dasharray");
+    } else if (a.kind === "ignore") {
+      wChips[a.wi].rct.setAttribute("class", "sv-panel"); bChips[a.wi].rct.setAttribute("class", "sv-panel");
+      bChips[a.wi].txt.style.fill = "var(--ink-3)";
+    } else {
+      lineG.appendChild(s("path", { d: `M392,${rowY(a.wi)} C430,${rowY(a.wi)} 440,${rowY(a.ri)} 480,${rowY(a.ri)}`, class: "sv-wire-solid", style: { stroke: "var(--mint)" } }));
+      const t = draw.tag(V[a.f], "sv-data"); layer.appendChild(t);
+      await fly(t, [320, rowY(a.wi)], [565, rowY(a.ri)], 520); t.remove();
+      rChips[a.ri].set(a.f + " = " + V[a.f], "sv-good"); rChips[a.ri].rct.removeAttribute("stroke-dasharray");
+    }
+    setCap("#s8-cap", a.kind === "def" ? SAY.def(a.f, SC[sc].d[a.f]) : SAY[a.kind](a.f));
+    step++;
+    busy = false; bStep.disabled = bPlay.disabled = step >= plan.length;
+  }
+  function reset() {
+    if (busy) return;
+    step = 0; build(); bStep.disabled = bPlay.disabled = false;
+    setCap("#s8-cap", "Press <b>Step</b> to decode one field at a time. Avro reads the bytes in the <b>writer's</b> order and delivers them into the <b>reader's</b> fields.");
+  }
+  build();
+  setCap("#s8-cap", "Both sides use the same schema. Press <b>Step</b> to decode one field at a time.");
+})();
+/* ================= 8. DATA OUTLIVES CODE ================= */
+(function database() {
+  const svg = K.$("#s9-svg");
+  const COLS = [240, 345, 450, 555], NAMES = ["name", "email", "phone", "nickname"];
+  const ROWS = [
+    { year: "written 2019", v: 1, vals: ["Martin", "m@x.com"] },
+    { year: "written 2021", v: 1, vals: ["Aaliyah", "a@x.com"] },
+    { year: "written 2023", v: 2, vals: ["Kofi", "k@x.com", "555-0102"] },
+    { year: "written 2025", v: 3, vals: ["Yuki", "y@x.com", "555-0199", "Yu"] },
+  ];
+  svg.appendChild(txt(330, 40, "one customers table · three schema versions on disk"));
+  COLS.forEach((x, i) => svg.appendChild(txt(x, 78, NAMES[i], "sv-label", "middle", { fill: "var(--ink-3)" })));
+  const YS = [110, 165, 220, 275];
+  const rows = ROWS.map((r, i) => {
+    const y = YS[i];
+    svg.appendChild(rct(40, y - 22, 580, 44, "sv-panel", 10));
+    svg.appendChild(txt(52, y + 4, r.year, "sv-label", "start"));
+    svg.appendChild(txt(52, y + 18, "schema v" + r.v, "sv-label", "start", { fill: "var(--ink-3)", fontSize: "9.5px" }));
+    const cells = COLS.map((x, c) => {
+      const has = c < r.vals.length;
+      const ch = chip(x, y, 96, 28, has ? r.vals[c] : "", has ? "sv-data-soft" : "sv-panel");
+      if (!has) ch.rct.setAttribute("stroke-dasharray", "4 5");
+      svg.appendChild(ch); return ch;
+    });
+    return { r, cells, y };
+  });
+  const stOld = stat("rows in an old format", 3, "warn"), stNew = stat("rows in the newest format", 1, "good"), stRw = stat("rows rewritten", 0);
+  K.$("#s9-stats").append(stOld, stNew, stRw);
+  let deployed = false, rewritten = 0, busy = false;
+  function tally() {
+    const old = rows.filter((x) => x.r.v < 3).length;
+    stOld.set(old, old ? "warn" : "good"); stNew.set(4 - old, "good"); stRw.set(rewritten);
+  }
+  const ctr = K.$("#s9-controls");
+  const bDeploy = mkBtn(ctr, "Deploy app v3", "primary", async () => {
+    if (busy) return; busy = true; deployed = true; bDeploy.disabled = true;
+    setCap("#s9-cap", "Every server is running <b>v3</b> within minutes. The rows on disk have not moved a byte: the 2019 row is still encoded exactly as 2019 left it. <b>Data outlives code.</b>");
+    busy = false;
+  });
+  mkBtn(ctr, "v3 reads the 2019 row", "", async () => {
+    if (busy) return; busy = true;
+    const row = rows[0];
+    for (let c = 2; c < 4; c++) {
+      row.cells[c].set("null", "sv-data-soft"); row.cells[c].rct.setAttribute("class", "sv-data-soft sv-pop");
+      await sleep(260);
+    }
+    setCap("#s9-cap", `v3 asks for <b>phone</b> and <b>nickname</b>, which that row never had. The database fills in <b>null</b> as it reads${deployed ? "" : " (you haven't even deployed v3 yet — try that first)"}. Adding a column with a null default doesn't rewrite a thing, so the whole table <i>looks</i> like one schema.`);
+    await sleep(900);
+    for (let c = 2; c < 4; c++) { row.cells[c].set("", "sv-panel"); row.cells[c].rct.setAttribute("stroke-dasharray", "4 5"); }
+    busy = false;
+  });
+  mkBtn(ctr, "Run LSM compaction", "", async () => {
+    if (busy) return; busy = true;
+    setCap("#s9-cap", "Compaction rewrites data anyway, so the storage engine takes the chance to re-encode each row in the <b>latest</b> schema. Cheap, because it was going to rewrite those files regardless.");
+    for (const x of rows) {
+      if (x.r.v === 3) continue;
+      x.cells.forEach((c, i) => {
+        if (i < x.r.vals.length) return;
+        c.set(i === 2 ? "null" : "null", "sv-good"); c.rct.removeAttribute("stroke-dasharray");
+      });
+      x.r.v = 3; rewritten++; tally();
+      await sleep(420);
+    }
+    setCap("#s9-cap", "Every row now uses schema <b>v3</b>. Notice what we never did: stop the database, or migrate the whole table in one go. Bigger changes — one value becoming many, or moving data to another table — <b>do</b> still need a real rewrite.");
+    busy = false;
+  });
+  mkBtn(ctr, "Reset", "", () => {
+    if (busy) return;
+    rows.forEach((x, i) => {
+      x.r.v = ROWS[i].v; rewritten = 0;
+      x.cells.forEach((c, ci) => {
+        const has = ci < x.r.vals.length;
+        c.set(has ? x.r.vals[ci] : "", has ? "sv-data-soft" : "sv-panel");
+        if (has) c.rct.removeAttribute("stroke-dasharray"); else c.rct.setAttribute("stroke-dasharray", "4 5");
+      });
+    });
+    deployed = false; bDeploy.disabled = false; tally();
+    setCap("#s9-cap", "Rows written in 2019, 2021, 2023 and 2025 — each in the schema that existed that day.");
+  });
+  tally();
+})();
+
+/* ================= 9. SERVICES: RPC OVER A NETWORK ================= */
+(function services() {
+  const svg = K.$("#s10-svg");
+  svg.appendChild(draw.phone(90, 150, "your app (client)"));
+  svg.appendChild(draw.server(540, 150, 120, 100, "payment service"));
+  svg.appendChild(s("line", { x1: 116, y1: 150, x2: 474, y2: 150, class: "sv-wire" }));
+  svg.appendChild(txt(300, 104, "the network"));
+  svg.appendChild(rct(400, 236, 240, 66, "sv-panel", 12));
+  svg.appendChild(txt(520, 258, "the service's ledger"));
+  const ledger = txt(520, 284, "no charges yet", "sv-text", "middle", { fontWeight: 700 });
+  svg.appendChild(ledger);
+  const clock = txt(90, 238, "", "sv-text", "middle", { fill: "var(--coral)", fontWeight: 700 });
+  svg.appendChild(clock);
+  const layer = s("g"); svg.appendChild(layer);
+  const stCalls = stat("requests sent", 0), stTo = stat("timeouts", 0, "good"), stCharge = stat("cupcakes charged", 0, "good"), stLat = stat("latency", "—");
+  K.$("#s10-stats").append(stCalls, stTo, stCharge, stLat);
+  let sent = 0, timeouts = 0, charges = 0, idem = false, keys = [], last = null, busy = false;
+  const key = "req-7f3";
+  function tally() {
+    stCalls.set(sent); stTo.set(timeouts, timeouts ? "warn" : "good");
+    stCharge.set(charges, charges > 1 ? "bad" : "good");
+    ledger.textContent = charges === 0 ? "no charges yet" : `${charges} × cupcake £2.50`;
+    ledger.style.fill = charges > 1 ? "var(--coral)" : "var(--ink)";
+  }
+  async function call(kind) {
+    if (busy) return; busy = true; last = kind === "local" ? last : kind;
+    if (kind === "local") {
+      const p = draw.parcel("sv-data", 14); layer.appendChild(p);
+      await fly(p, [90, 118], [90, 96], 150); await fly(p, [90, 96], [90, 118], 150); p.remove();
+      stLat.set("0.2 ms");
+      setCap("#s10-cap", "A <b>local function call</b> is predictable: it takes about the same time every time, it either returns, throws, or loops forever, and you can pass it a pointer to an object in memory. None of that is true across a network.");
+      busy = false; return;
+    }
+    sent++; tally();
+    const p = draw.parcel("sv-data", 16); layer.appendChild(p);
+    if (kind === "lose-req") {
+      await fly(p, [116, 150], [300, 150], 500);
+      p.firstChild.setAttribute("class", "sv-fill-coral");
+      await sleep(200); p.remove();
+      await waitTimeout("The <b>request</b> never arrived. Nothing was charged.");
+    } else {
+      await fly(p, [116, 150], [474, 150], 700); p.remove();
+      const dupe = idem && keys.indexOf(key) >= 0;
+      if (!dupe) { charges++; keys.push(key); }
+      tally();
+      await sleep(260);
+      const r = draw.parcel(dupe ? "sv-good" : "sv-data", 16); layer.appendChild(r);
+      if (kind === "lose-resp") {
+        await fly(r, [474, 150], [300, 150], 500);
+        r.firstChild.setAttribute("class", "sv-fill-coral");
+        await sleep(200); r.remove();
+        await waitTimeout(`The service <b>did</b> the work${dupe ? " — well, it spotted the duplicate and did nothing" : " and charged the card"}, but the <b>reply</b> got lost.`);
+      } else {
+        await fly(r, [474, 150], [116, 150], 700); r.remove();
+        stLat.set(120 + rand(90) + " ms");
+        setCap("#s10-cap", dupe
+          ? "The service saw the <b>same idempotency key</b> it had already handled, so it skipped the work and returned the first result. One cupcake, one charge."
+          : "It worked. The reply came back, and the cupcake is paid for exactly once.");
+      }
+    }
+    busy = false;
+  }
+  async function waitTimeout(what) {
+    clock.textContent = "waiting…"; stLat.set("…");
+    await sleep(900);
+    clock.textContent = "timeout";
+    timeouts++; tally(); stLat.set("timeout");
+    setCap("#s10-cap", `${what} From the client both cases look <b>exactly the same</b>: a timeout. You genuinely don't know whether the request was processed — which is what makes a blind retry dangerous.`);
+    await sleep(400); clock.textContent = "";
+  }
+  const ctr = K.$("#s10-controls");
+  mkBtn(ctr, "Call a local function", "", () => call("local"));
+  mkBtn(ctr, "Send over the network", "primary", () => call("ok"));
+  mkBtn(ctr, "Lose the request", "danger", () => call("lose-req"));
+  mkBtn(ctr, "Lose the response", "danger", () => call("lose-resp"));
+  mkBtn(ctr, "Retry the last request", "", () => call(last === "lose-req" ? "ok" : "ok"));
+  mkBtn(ctr, "Reset", "", () => {
+    if (busy) return;
+    sent = 0; timeouts = 0; charges = 0; keys = []; last = null; clock.textContent = ""; stLat.set("—"); tally();
+    setCap("#s10-cap", "A local function call is predictable. A network call is a different animal.");
+  });
+  K.$("#s10-seg").appendChild(seg(["plain retry", "with an idempotency key"], 0, (i) => {
+    idem = i === 1;
+    setCap("#s10-cap", idem
+      ? "Every request now carries a unique <b>idempotency key</b>. The service remembers the keys it has handled, so a retry of the same request changes nothing. This is what durable execution frameworks ask of third-party APIs."
+      : "Requests carry no key, so the service can't tell a retry from a genuine second order.");
+  }, "s10-idem"));
+  tally();
+})();
+
+/* ================= 10a. DURABLE EXECUTION ================= */
+(function workflow() {
+  const svg = K.$("#s11-svg");
+  const TASKS = [
+    { name: "check fraud", sub: "fraud service", log: "check_fraud → clean" },
+    { name: "debit card", sub: "card gateway", log: "debit_card → ok #A1" },
+    { name: "deposit funds", sub: "bank service", log: "deposit → ok #B7" },
+  ];
+  const CX = [110, 330, 550];
+  const boxes = TASKS.map((t, i) => {
+    const g = s("g", {});
+    const r = rct(CX[i] - 85, 62, 170, 78, "sv-box", 14);
+    g.append(r, txt(CX[i], 96, t.name, "sv-text", "middle", { fontWeight: 700 }), txt(CX[i], 118, t.sub));
+    svg.appendChild(g); return { r, g };
+  });
+  svg.appendChild(draw.arrow(197, 101, 243, 101));
+  svg.appendChild(draw.arrow(417, 101, 463, 101));
+  svg.appendChild(rct(25, 172, 610, 110, "sv-panel", 14));
+  const logTitle = txt(330, 196, "durable log (a write-ahead log)");
+  svg.appendChild(logTitle);
+  const slots = CX.map((x) => { const c = chip(x, 234, 190, 30, "", "sv-panel"); c.rct.setAttribute("stroke-dasharray", "4 5"); svg.appendChild(c); return c; });
+  const bolt = txt(330, 40, "", "sv-text", "middle", { fill: "var(--coral)", fontWeight: 700 });
+  svg.appendChild(bolt);
+  const stCharge = stat("card charged", "0 ×", "good"), stDep = stat("deposits", 0), stReplay = stat("replayed steps", 0);
+  K.$("#s11-stats").append(stCharge, stDep, stReplay);
+  let durable = true, step = 0, charged = 0, deposits = 0, replayed = 0, crashed = false, busy = false;
+  function tally() { stCharge.set(charged + " ×", charged > 1 ? "bad" : "good"); stDep.set(deposits); stReplay.set(replayed); }
+  async function runTask(i, replay) {
+    boxes[i].r.setAttribute("class", replay ? "sv-data-soft" : "sv-good");
+    if (replay) {
+      slots[i].rct.setAttribute("class", "sv-data-soft sv-pop");
+      setCap("#s11-cap", `<b>${TASKS[i].name}</b> is already in the log. The framework <b>pretends to make the call</b> and returns the recorded result instead — no second charge, no second deposit.`);
+      replayed++;
+    } else {
+      if (i === 1) charged++;
+      if (i === 2) deposits++;
+      slots[i].set(TASKS[i].log, "sv-good"); slots[i].rct.removeAttribute("stroke-dasharray");
+      setCap("#s11-cap", i === 1
+        ? "The card gateway really is called, and the result is written to the <b>durable log</b> before anything else happens."
+        : `<b>${TASKS[i].name}</b> ran and its result was appended to the log.`);
+    }
+    tally();
+    await sleep(replay ? 320 : 520);
+  }
+  const ctr = K.$("#s11-controls");
+  const bStep = mkBtn(ctr, "Step", "primary", doStep);
+  const bPlay = mkBtn(ctr, "Play", "", async () => { while (step < 3 && !crashed) { await doStep(); await sleep(300); } });
+  const bCrash = mkBtn(ctr, "Crash now", "danger", () => {
+    if (busy || crashed || step === 0 || step >= 3) return;
+    crashed = true; bolt.textContent = "the worker machine dies";
+    boxes[step].r.setAttribute("class", "sv-bad sv-shake");
+    setCap("#s11-cap", `The machine died after <b>${TASKS[step - 1].name}</b> finished but before <b>${TASKS[step].name}</b> ran. In a service architecture you can't wrap these in one database transaction, so now what?`);
+    bStep.disabled = bPlay.disabled = true; bRestart.disabled = false;
+  });
+  const bRestart = mkBtn(ctr, "Restart & replay", "good", async () => {
+    if (busy || !crashed) return;
+    busy = true; bRestart.disabled = true; bolt.textContent = ""; crashed = false;
+    const done = step;
+    if (durable) {
+      for (let i = 0; i < done; i++) await runTask(i, true);
+      setCap("#s11-cap", "Replay finished: the completed calls were served <b>from the log</b>. Only the unfinished work really happens now.");
+    } else {
+      step = 0;
+      slots.forEach((c) => { c.set("", "sv-panel"); c.rct.setAttribute("stroke-dasharray", "4 5"); });
+      for (let i = 0; i < done; i++) { await runTask(i, false); step++; }
+      setCap("#s11-cap", "With no log there is nothing to replay, so the whole workflow starts again — and the <b>card gets charged a second time</b>. That's the problem durable execution exists to solve.");
+    }
+    boxes.forEach((b, i) => { if (i >= step) b.r.setAttribute("class", "sv-box"); });
+    busy = false; bStep.disabled = bPlay.disabled = step >= 3;
+  });
+  bRestart.disabled = true;
+  mkBtn(ctr, "Reset", "", reset);
+  K.$("#s11-seg").appendChild(seg(["with a durable log", "no log"], 0, (i) => { durable = i === 0; logTitle.textContent = durable ? "durable log (a write-ahead log)" : "no durable log"; reset(); }, "s11-mode"));
+  async function doStep() {
+    if (busy || crashed || step >= 3) return;
+    busy = true; bStep.disabled = bPlay.disabled = true;
+    await runTask(step, false); step++;
+    if (step >= 3) setCap("#s11-cap", "Payment complete: fraud checked, card debited once, funds deposited once. <b>Exactly-once</b> — as long as the code replays deterministically, so no random numbers or clock readings.");
+    busy = false; bStep.disabled = bPlay.disabled = step >= 3;
+  }
+  function reset() {
+    if (busy) return;
+    step = 0; charged = 0; deposits = 0; replayed = 0; crashed = false; bolt.textContent = "";
+    boxes.forEach((b) => b.r.setAttribute("class", "sv-box"));
+    slots.forEach((c) => { c.set("", "sv-panel"); c.rct.setAttribute("stroke-dasharray", "4 5"); });
+    tally(); bStep.disabled = bPlay.disabled = false; bRestart.disabled = true;
+    setCap("#s11-cap", "Press <b>Step</b> to run the workflow one task at a time — then crash it halfway.");
+  }
+  reset();
+})();
+
+/* ================= 10b. MESSAGE BROKER ================= */
+(function broker() {
+  const svg = K.$("#s12-svg");
+  svg.appendChild(draw.server(80, 140, 96, 84, "producer"));
+  svg.appendChild(rct(220, 54, 200, 212, "sv-box", 16));
+  svg.appendChild(txt(320, 80, "message broker"));
+  svg.appendChild(s("line", { x1: 128, y1: 140, x2: 220, y2: 140, class: "sv-wire" }));
+  const SLOTY = [110, 142, 174, 206, 238];
+  const slots = SLOTY.map((y) => { const c = chip(320, y, 168, 26, "", "sv-panel"); c.rct.setAttribute("stroke-dasharray", "4 5"); svg.appendChild(c); return c; });
+  const CY = [108, 212];
+  const cons = CY.map((y, i) => {
+    svg.appendChild(s("path", { d: `M420,140 C450,140 460,${y} 500,${y}`, class: "sv-wire" }));
+    const g = draw.server(560, y, 104, 70, "consumer " + "AB"[i] + " · 0");
+    svg.appendChild(g);
+    return { g, got: g.lastChild, name: "AB"[i], up: true, n: 0, y };
+  });
+  const layer = s("g"); svg.appendChild(layer);
+  const stQ = stat("waiting in broker", 0), stA = stat("consumer A got", 0), stB = stat("consumer B got", 0), stLost = stat("lost", 0, "good");
+  K.$("#s12-stats").append(stQ, stA, stB, stLost);
+  let topic = false, queue = [], nextId = 1, rr = 0, busy = false;
+  function paint() {
+    slots.forEach((c, i) => {
+      const m = queue[i];
+      if (m) { c.set("msg #" + m.id + " → " + m.targets.filter((t) => !m.done.includes(t)).map((t) => "AB"[t]).join(""), "sv-data-soft"); c.rct.removeAttribute("stroke-dasharray"); }
+      else { c.set("", "sv-panel"); c.rct.setAttribute("stroke-dasharray", "4 5"); }
+    });
+    stQ.set(queue.length, queue.length ? "warn" : "good");
+    stA.set(cons[0].n); stB.set(cons[1].n); stLost.set(0, "good");
+    cons.forEach((c) => { c.got.textContent = "consumer " + c.name + " · " + c.n + (c.up ? "" : " (down)"); });
+  }
+  async function deliver() {
+    for (const m of [...queue]) {
+      for (const t of m.targets) {
+        if (m.done.includes(t) || !cons[t].up) continue;
+        const p = draw.parcel("sv-data", 14); layer.appendChild(p);
+        await fly(p, [420, 140], [508, cons[t].y], 420); p.remove();
+        m.done.push(t); cons[t].n++;
+        cons[t].g.light.setAttribute("class", "sv-fill-sun");
+        setTimeout(() => cons[t].g.light.setAttribute("class", "sv-fill-mint"), 300);
+        paint();
+      }
+      if (m.targets.every((t) => m.done.includes(t))) { queue = queue.filter((x) => x !== m); paint(); }
+    }
+  }
+  async function publish() {
+    if (busy) return; busy = true;
+    if (queue.length >= 5) { K.toast("The toy broker only shows 5 waiting messages"); busy = false; return; }
+    const p = draw.parcel("sv-data", 16); layer.appendChild(p);
+    await fly(p, [128, 140], [320, 92], 480); p.remove();
+    const targets = topic ? [0, 1] : [rr++ % 2];
+    queue.push({ id: nextId++, targets, done: [] });
+    paint();
+    setCap("#s12-cap", topic
+      ? "Published to a <b>named topic</b>: the broker will hand a copy to <b>every subscriber</b>. The sender doesn't wait for any of them."
+      : "Published to a <b>named queue</b>: the broker will give this message to <b>exactly one</b> consumer. The sender doesn't wait for a reply at all.");
+    await deliver();
+    busy = false;
+  }
+  const ctr = K.$("#s12-controls");
+  mkBtn(ctr, "Publish a message", "primary", publish);
+  mkBtn(ctr, "Crash consumer B", "danger", () => {
+    cons[1].up = false; cons[1].g.light.setAttribute("class", "sv-fill-coral"); paint();
+    setCap("#s12-cap", "Consumer B is down. Publish a few more: notice that <b>nothing is lost</b> — the broker keeps them, acting as a buffer. With a direct RPC call those requests would simply have failed.");
+  });
+  mkBtn(ctr, "Restart consumer B", "good", async () => {
+    if (busy) return; busy = true;
+    cons[1].up = true; cons[1].g.light.setAttribute("class", "sv-fill-mint");
+    setCap("#s12-cap", "B is back, and the broker <b>redelivers</b> everything that was waiting for it.");
+    await deliver(); busy = false;
+  });
+  mkBtn(ctr, "Reset", "", () => {
+    if (busy) return;
+    queue = []; nextId = 1; rr = 0;
+    cons.forEach((c) => { c.up = true; c.n = 0; c.g.light.setAttribute("class", "sv-fill-mint"); });
+    paint();
+  });
+  K.$("#s12-seg").appendChild(seg(["named queue", "named topic"], 0, (i) => {
+    topic = i === 1;
+    setCap("#s12-cap", topic
+      ? "Mode: <b>named topic</b> — every subscriber gets a copy of every message."
+      : "Mode: <b>named queue</b> — each message goes to exactly one consumer.");
+  }, "s12-mode"));
+  paint();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "Old code reads a record written by new code. What is that called?", options: ["Backward compatibility", "Forward compatibility", "A schema migration", "A rolling upgrade"], answer: 1, why: "Forward compatibility means older code can read data written by newer code. It's the harder one, because old code must ignore — and ideally keep — things it doesn't understand." },
+  { q: "Why is a binary encoding like Avro so much smaller than JSON?", options: ["It compresses the text", "It drops the field names, because the schema already knows them", "It stores fewer values", "It rounds the numbers"], answer: 1, why: "JSON repeats every field name in every record: 37 of its 81 bytes. Schema-based formats leave names out entirely — the values are almost the same size in all four encodings." },
+  { q: "In Protocol Buffers, which change is safe?", options: ["Reusing an old tag number for a new field", "Renaming a field but keeping its tag", "Changing a field's tag number", "Removing a field and reusing its tag"], answer: 1, why: "The encoded data never contains field names, only tags — so renaming is free, and renumbering (or reusing an old number) breaks every record ever written." },
+  { q: "An Avro reader needs a field the writer never wrote. What happens?", options: ["It crashes, always", "It is filled from the default declared in the reader's schema — if there is one", "The writer is asked to send it again", "The field is silently set to null"], answer: 1, why: "Schema resolution fills missing fields from the reader's declared default. A field added with no default breaks compatibility, and null is only a default if you declare a union with null first." },
+  { q: "Your request to a payment service times out. What do you know?", options: ["It definitely failed", "It definitely succeeded", "Nothing: the request or the reply may have been lost", "The service is down"], answer: 2, why: "A lost request and a lost response look identical from the client. That's why retrying can charge twice unless requests carry an idempotency key." },
+  { q: "A durable execution framework re-runs a task that crashed halfway. What does it do with the calls that already succeeded?", options: ["Makes them again", "Skips them and returns the results recorded in its log", "Rolls them back", "Asks the user"], answer: 1, why: "Every RPC and state change is logged to durable storage, so a replay pretends to make those calls and returns the previous results. That's what gives exactly-once behaviour — and why the code must be deterministic." },
+], 5);
+</script>
+</body>
+</html>

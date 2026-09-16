@@ -1,0 +1,1482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 3 · Data Models</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .clickable { cursor: pointer; }
+  .qcell { fill: var(--surface-2); stroke: var(--line); stroke-width: 1; transition: fill .35s; }
+  .qcell.shark { fill: var(--sun-soft); stroke: var(--sun); }
+  .qcell.scan { fill: var(--blue); stroke: var(--blue); transition: none; }
+  .qcell.done { fill: var(--mint-soft); stroke: var(--mint); }
+  .flash { animation: flash .7s ease-out; }
+  @keyframes flash { from { opacity: .25; } to { opacity: 1; } }
+  .fade { transition: opacity .4s; }
+  .code { font-family: var(--f-mono); font-size: 12px; line-height: 1.55; white-space: pre; overflow: auto;
+          padding: 12px 14px; margin: 0; color: var(--ink-2); background: var(--surface-2);
+          border-top: 1px solid var(--line); max-height: 300px; }
+  .code b { color: var(--blue); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+  .toggles .btn[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: var(--on-accent); }
+  @media (prefers-reduced-motion: reduce) { .flash { animation: none; } }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">3</span> Chapter three</span>
+      <h1>Data Models and Query Languages</h1>
+      <p class="lede">The same facts can be written down in very different shapes: neat tables, one nested document, or a web of arrows. The shape you pick decides which questions are easy to ask.</p>
+      <p class="quote">“The limits of my language mean the limits of my world.” — Ludwig Wittgenstein, quoted at the start of the chapter</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#declarative">Say what, not how</a>
+        <a href="#shape">Tables or one document</a>
+        <a href="#normalize">One name, one place</a>
+        <a href="#links">Many-to-many</a>
+        <a href="#star">The star warehouse</a>
+        <a href="#schema">Schema now or later</a>
+        <a href="#graph">Follow the arrows</a>
+        <a href="#graphql">Ask for exactly this</a>
+        <a href="#events">The logbook</a>
+        <a href="#frames">Grids of numbers</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · one résumé, three shapes</span><span class="pill info"><i></i>tap to change shape</span></div>
+      <svg id="hero-svg" viewBox="0 0 520 368" role="img" aria-label="The same seven facts about a person arranged as tables, as a nested document, and as a graph"></svg>
+    </div>
+  </section>
+
+  <!-- ============ 1. DECLARATIVE ============ -->
+  <section class="scene" id="declarative">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Warm-up · query languages</span>
+        <h2>Tell the kitchen what you want, not how to cook it</h2>
+        <p class="story">Imagine a marine biologist with a notebook of ocean sightings. The question: <b>how many sharks did I see each month?</b></p>
+        <p class="story">One way is to write out every step yourself: “start at row one, look at it, add it up if it's a shark, go to row two…” That's an <b>algorithm</b>, and it's what ordinary programming languages make you do.</p>
+        <p class="story">A <b>declarative</b> query language like SQL lets you describe the <i>pattern</i> you want instead. The database's <b>query optimizer</b> then picks the clever way: use an index, skip rows, split the work across CPU cores.</p>
+        <p class="imagine"><b>Try it:</b> run the hand-written loop, then the declarative query. Now slide the number of cores up and run both again. Only one of them gets faster.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Most applications are built by layering data models: real-world objects → a general-purpose <b>data model</b> (JSON documents, relational tables, graph vertices and edges) → bytes on disk → electrical signals. Each layer hides the complexity below it.</p>
+            <p>SQL, Cypher, SPARQL and Datalog are <b>declarative</b>: you say what conditions the results must meet and how to transform them (sorted, grouped, aggregated), not how to achieve it. Languages like Python and Java make you write the algorithm.</p>
+            <p>Because implementation details are hidden, the database can add performance improvements without any change to your queries, and can run a query <b>in parallel</b> across multiple cores and machines.</p>
+            <p>The chapter's real example: <code>SELECT date_trunc('month', observation_timestamp) AS observation_month, sum(num_animals) FROM observations WHERE family = 'Sharks' GROUP BY observation_month;</code> — expressible in MongoDB's aggregation pipeline too, with <code>$match</code> and <code>$group</code>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Sharks per month · toy data, 24 sightings</span><span id="q-seg"></span></div>
+        <div class="stage-scroll"><svg id="q-svg" viewBox="0 0 660 340" role="img" aria-label="A grid of 24 sighting records and a bar chart of sharks per month"></svg></div>
+        <div class="controls" id="q-controls"></div>
+        <div class="controls"><div class="stats" id="q-stats"></div></div>
+        <div class="caption" id="q-cap" aria-live="polite">Pick a way to ask the question, then press Run.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. RELATIONAL vs DOCUMENT ============ -->
+  <section class="scene" id="shape">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 1 · relational vs document</span>
+        <h2>Four folders, or one big scrapbook?</h2>
+        <p class="story">A résumé has a name, some jobs, some schools, some ways to contact you. In a <b>relational</b> database you split that across four tables: one row per job, one row per school, all pointing back to the user with a <b>foreign key</b>.</p>
+        <p class="story">In a <b>document</b> database you keep the whole thing as one piece of <b>JSON</b>, with the jobs and schools nested inside. It looks a lot more like the object in your program — that's why some developers say it reduces the <b>impedance mismatch</b>.</p>
+        <p class="story">The scrapbook wins when you want the <i>whole</i> profile at once: one read instead of four. It loses when you change one tiny thing, because the whole document usually has to be written out again.</p>
+        <p class="imagine"><b>Try it:</b> read the whole profile in both shapes, then change just the headline in both. Watch the two counters swap places.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Splitting a document-like structure into several tables is called <b>shredding</b>; it can lead to cumbersome schemas and complicated application code. One-to-many relationships form a <b>tree</b>, which JSON makes explicit.</p>
+            <p>The JSON representation has better <b>locality</b>: fetching a profile from the relational schema needs multiple queries or a messy multiway join. But the database usually loads the <i>entire</i> document, and rewrites the entire document on update — so keep documents small and avoid frequent small updates.</p>
+            <p>Locality isn't unique to documents: Google's <b>Spanner</b> can interleave a table's rows inside a parent table, Oracle has multi-table index cluster tables, and Bigtable-style wide-column stores use <b>column families</b>.</p>
+            <p><b>ORMs</b> (ActiveRecord, Hibernate) reduce translation boilerplate but can't hide the two models, and make it easy to write the <b>N+1 query problem</b>: one query for N comments, then N more to look up each author.</p>
+            <p>One-to-many is often “one-to-few”. For a genuinely large number of related items — thousands of comments on a celebrity's post — embedding them all in one document is too unwieldy, and separate tables are better.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Same profile, two storage shapes</span><span id="d-seg"></span></div>
+        <div class="stage-scroll"><svg id="d-svg" viewBox="0 0 660 340" role="img" aria-label="Four related tables compared with one JSON document"></svg></div>
+        <div class="controls" id="d-controls"></div>
+        <div class="controls"><div class="stats" id="d-stats"></div></div>
+        <div class="caption" id="d-cap" aria-live="polite">Choose a shape, then read or edit the profile.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. NORMALIZATION ============ -->
+  <section class="scene" id="normalize">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 2 · normalization</span>
+        <h2>Write the city's name once, or on every card?</h2>
+        <p class="story">Five people all live in the same town. You can write the town's <b>name</b> on every profile — or write a meaningless <b>ID</b> on every profile and keep the name in one little table of its own.</p>
+        <p class="story">Keeping it in one place is called <b>normalizing</b>. IDs never need to change, because they mean nothing to humans. Names do change — and if the name is copied five times, all five copies must be found and updated.</p>
+        <p class="story">The price of normalizing is that every read needs an extra lookup, called a <b>join</b>, to turn the ID back into something a person can read.</p>
+        <p class="imagine"><b>Try it:</b> copy the name everywhere, rename the town, then hit <b>Crash!</b> halfway through. Some cards say the old name and some say the new one. Now do the same with IDs.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>In the book's example a profile stores <code>region_id: "us:91"</code> instead of the text “Washington, DC”. Advantages of the standardized list: consistent spelling, no ambiguity, easy updating, localization into other languages, and better search (the list can encode that Washington is on the US East Coast).</p>
+            <p>Normalized data is usually <b>faster to write</b> (one copy) but <b>slower to query</b> (needs joins). Denormalized data is faster to read but more expensive to write, and risks <b>inconsistency</b> if a process crashes halfway. Denormalization is a form of derived data.</p>
+            <p>Some document databases have no joins at all, so you do them in application code; MongoDB offers <code>$lookup</code> in an aggregation pipeline.</p>
+            <p>X (formerly Twitter) stores only post IDs and sender IDs in each precomputed timeline, then looks up the content, like count and profile picture when the timeline is read — a join in application code called <b>hydrating</b> the IDs. It's done that way because likes and profile pictures change fast.</p>
+            <p>Normalization is better for OLTP; analytics often fares better denormalized. Neither is good or bad — they're trade-offs between read cost, write cost and effort.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Five profiles in Bytetown</span><span id="n-seg"></span></div>
+        <div class="stage-scroll"><svg id="n-svg" viewBox="0 0 680 330" role="img" aria-label="Five profile cards storing a city name directly or as an ID pointing at a regions table"></svg></div>
+        <div class="controls" id="n-controls"></div>
+        <div class="controls"><div class="stats" id="n-stats"></div></div>
+        <div class="caption" id="n-cap" aria-live="polite">Pick how the town is stored, then read or rename.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. MANY-TO-MANY ============ -->
+  <section class="scene" id="links">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 3 · many-to-many</span>
+        <h2>The lost-property book that works both ways</h2>
+        <p class="story">One person works at many companies over their life; one company has many employees. That's a <b>many-to-many</b> relationship, and it doesn't fit inside one self-contained document.</p>
+        <p class="story">The usual answer is a little book in the middle — an <b>associative table</b> (or <b>join table</b>) — where each line says “person 1 worked at company 2”.</p>
+        <p class="story">People want to read that book in <i>both directions</i>: “where did Lucy work?” and “who worked at NASA?”. Without a <b>secondary index</b> you have to read every line. With an index on each column, you jump straight to the lines you need.</p>
+        <p class="imagine"><b>Try it:</b> ask in both directions with the indexes off, then switch them on and watch how many lines get read.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Positions and education are <b>one-to-many</b>; <code>region_id</code> is <b>many-to-one</b>; organizations and schools as entities make it <b>many-to-many</b>, usually stored as an <b>associative table</b> where each row links one user ID to one organization ID.</p>
+            <p>A denormalized option is to store the references on <i>both</i> sides (the résumé lists the org, the org lists the résumé), but then the relationship lives in two places and they can disagree.</p>
+            <p>A normalized representation stores the relationship once and relies on <b>secondary indexes</b> on both the <code>user_id</code> and <code>org_id</code> columns so it can be queried efficiently in both directions. Many document databases can index fields inside arrays, such as <code>org_id</code> inside <code>positions</code>.</p>
+            <p>The document model also can't refer directly to a nested item — you have to say “the second item in the list of positions for user 251”. It is, however, great for user-orderable lists like a to-do list, because order is just the array order.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">positions (user_id, org_id)</span><span id="m-seg"></span></div>
+        <div class="stage-scroll"><svg id="m-svg" viewBox="0 0 680 340" role="img" aria-label="People on the left, organizations on the right, and a join table in the middle"></svg></div>
+        <div class="controls" id="m-controls"></div>
+        <div class="controls"><div class="stats" id="m-stats"></div></div>
+        <div class="caption" id="m-cap" aria-live="polite">Ask a question in either direction.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. STAR SCHEMA ============ -->
+  <section class="scene" id="star">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 4 · schemas for analytics</span>
+        <h2>A star in the middle of the warehouse</h2>
+        <p class="story">A supermarket's data warehouse keeps one gigantic <b>fact table</b>: one row every single time someone buys one product. Petabytes of rows.</p>
+        <p class="story">Each row is mostly IDs: which product, which store, which day, which customer. Those point outwards to smaller <b>dimension tables</b> holding the <i>who, what, where, when, how and why</i>. Drawn on a whiteboard, the rays look like a <b>star</b>.</p>
+        <p class="story">Break the dimensions into smaller dimensions (brand, category) and you get a <b>snowflake</b>: tidier, but more hops. Squash everything into the fact table instead and you get <b>one big table</b>: no joins at all, but a lot more disk.</p>
+        <p class="imagine"><b>Try it:</b> run the same question in all three shapes and compare the joins, the width of the fact table, and the storage bar.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Data warehouses are usually relational. Common conventions: <b>star schema</b>, <b>snowflake schema</b>, dimensional modeling, and <b>one big table (OBT)</b>. ETL processes translate operational data into the chosen schema.</p>
+            <p>Each row of <code>fact_sales</code> is an event — a customer's purchase of a product (or a page view, for website traffic). Some columns are attributes like price and cost; others are foreign keys into dimension tables such as <code>dim_product</code> (SKU, description, brand, category, fat content, package size).</p>
+            <p>Even dates get a dimension table, so queries can tell holidays from ordinary days. Fact tables often have over a hundred columns; dimension tables are wide too (<code>dim_store</code> may record the square footage, the in-store bakery, when it was last remodeled).</p>
+            <p>A star or snowflake is mostly many-to-one relationships. Snowflake schemas are more normalized, but star schemas are often preferred because they're simpler for analysts. OBT precomputes the joins: more storage, sometimes faster queries — and denormalization is unproblematic here, because the data is a historical log that doesn't change.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">“Total sales of organic bananas in June”</span><span id="st-seg"></span></div>
+        <div class="stage-scroll"><svg id="st-svg" viewBox="0 0 680 380" role="img" aria-label="A fact table in the centre with dimension tables around it"></svg></div>
+        <div class="controls" id="st-controls"></div>
+        <div class="controls"><div class="stats" id="st-stats"></div></div>
+        <div class="caption" id="st-cap" aria-live="polite">Pick a schema shape, then run the query.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. SCHEMA ON READ / WRITE ============ -->
+  <section class="scene" id="schema">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 5 · schema flexibility</span>
+        <h2>Tidy the whole cupboard now, or as you go?</h2>
+        <p class="story">Today every record stores one <code>name</code> field. Tomorrow you want <code>first_name</code> and <code>last_name</code> instead. There are two ways to get there.</p>
+        <p class="story"><b>Schema-on-write</b> (the relational way): change the table's shape up front. Adding an empty column is fast, but filling it in rewrites <i>every single row</i> — slow and risky on a big table.</p>
+        <p class="story"><b>Schema-on-read</b> (the document way): change nothing. Start writing new records in the new shape, and add a few lines of code that patch up old records when they're read. Nothing is rewritten — but that patch-up code has to live in your app forever.</p>
+        <p class="imagine"><b>Try it:</b> ship the change both ways. Then read an old record and watch where the split actually happens.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Document databases are often called <b>schemaless</b>, but that's misleading: the code that reads the data assumes a structure. A better term is <b>schema-on-read</b> (structure is implicit, interpreted when read) versus <b>schema-on-write</b> (explicit, enforced by the database on write). It's like dynamic versus static type checking.</p>
+            <p>The book's own example: <code>if (user &amp;&amp; user.name &amp;&amp; !user.first_name) { user.first_name = user.name.split(" ")[0]; }</code> versus <code>ALTER TABLE users ADD COLUMN first_name text DEFAULT NULL;</code> followed by an <code>UPDATE</code> that rewrites every row.</p>
+            <p>Adding a column with a default is fast even on large tables; the UPDATE is slow, and changing a column's datatype often copies the whole table. Tools exist for online migrations, but large migrations remain operationally challenging.</p>
+            <p>Schema-on-read shines when data is <b>heterogeneous</b>: many types of object, or a structure decided by external systems you don't control. When all records really do have the same structure, a schema documents and enforces it.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Splitting name into first + last</span><span id="sc-seg"></span></div>
+        <div class="stage-scroll"><svg id="sc-svg" viewBox="0 0 660 340" role="img" aria-label="Eight user records being migrated either by rewriting every row or by patching them up at read time"></svg></div>
+        <div class="controls" id="sc-controls"></div>
+        <div class="controls"><div class="stats" id="sc-stats"></div></div>
+        <div class="caption" id="sc-cap" aria-live="polite">Choose an approach, then ship the change.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7. GRAPH ============ -->
+  <section class="scene" id="graph">
+    <div class="wrap scene-grid full">
+      <div class="copy" style="max-width:760px">
+        <span class="eyebrow">Big idea 6 · graph data models</span>
+        <h2>Follow the arrows until you get there</h2>
+        <p class="story">When almost everything is connected to everything, a graph fits best. <b>Vertices</b> are things (people, places, web pages); <b>edges</b> are arrows between them, each with a label like <code>BORN_IN</code> or <code>WITHIN</code>.</p>
+        <p class="story">Here's a question that graphs are brilliant at: <b>which people were born in the United States but now live in Europe?</b> The tricky part is that “inside the US” could be a state, a county or a city — you don't know how many arrows you'll have to follow.</p>
+        <p class="imagine"><b>Step through it.</b> Watch the two sets grow outwards from “United States” and “Europe”, then meet in the middle. Switch the language panel to see the very same question in five different languages.</p>
+      </div>
+      <div class="stack">
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">Who emigrated from the US to Europe?</span><div class="stats" id="g-stats"></div></div>
+          <div class="stage-scroll"><svg id="g-svg" viewBox="0 0 680 400" role="img" aria-label="A graph of people and nested places, with a step-by-step query traversal"></svg></div>
+          <div class="controls" id="g-controls"></div>
+          <div class="caption" id="g-cap" aria-live="polite">Press Step to run the query one move at a time.</div>
+        </div>
+        <div class="scene-grid" style="padding:0">
+          <div class="copy">
+            <h3 style="font-size:24px">Five languages, one question</h3>
+            <p class="story">In <b>Cypher</b>, <code>:WITHIN*0..</code> means “follow a WITHIN edge zero or more times”, like <code>*</code> in a search pattern. Four lines.</p>
+            <p class="story">The same graph fits fine in SQL tables — one table of vertices, one of edges — but the query needs a <b>recursive common table expression</b>, and it balloons to 31 lines. Same answer, much more typing.</p>
+            <p class="story"><b>Triple stores</b> say everything in three-word sentences: <i>(subject, predicate, object)</i>, like <code>(lucy, marriedTo, alain)</code>. <b>SPARQL</b> queries those. <b>Datalog</b> builds the answer up rule by rule, and a rule may call itself — which is exactly what makes the traversal work.</p>
+            <details class="book">
+              <summary>What the book says</summary>
+              <div class="inner">
+                <p>In the <b>property graph</b> model (Neo4j, Memgraph, KùzuDB) each vertex has an ID, a label, incoming and outgoing edges and a set of properties; each edge has an ID, a tail vertex, a head vertex, a label and properties. It maps onto two relational tables — <code>vertices</code> and <code>edges</code> — with indexes on both <code>tail_vertex</code> and <code>head_vertex</code> so you can traverse forwards and backwards.</p>
+                <p>Any vertex can connect to any other: there's no schema restricting what may be associated, which makes graphs good for <b>evolvability</b>. A limitation: an edge joins only two vertices, while a join table row can express three-way relationships.</p>
+                <p>In a <b>triple store</b> everything is a <code>(subject, predicate, object)</code> statement; the object is either a primitive value (a property) or another vertex (an edge). Turtle/N3 and RDF/XML are encodings; <b>SPARQL</b> is the query language; the <b>Semantic Web</b> lives on in JSON-LD, Wikidata, Schema.org and Open Graph.</p>
+                <p><b>Datalog</b> (Datomic, LogicBlox, CozoDB, LinkedIn's LIquid) defines derived virtual tables with rules like <code>within_recursive(...) :- ...</code>; rules can invoke themselves, enabling graph traversal.</p>
+                <p>Facebook keeps one graph of people, locations, events, check-ins and comments; search engines keep <b>knowledge graphs</b>. The <b>GQL</b> ISO standard, based on Cypher, was published in 2024.</p>
+              </div>
+            </details>
+          </div>
+          <div class="stage">
+            <div class="stage-head"><span class="stage-title">The same query, five ways</span><span id="g-lang"></span></div>
+            <pre class="code" id="g-code">…</pre>
+            <div class="controls"><div class="stats" id="g-lines"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8. GRAPHQL ============ -->
+  <section class="scene" id="graphql">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 7 · GraphQL</span>
+        <h2>Order exactly what's on your plate</h2>
+        <p class="story">A chat app on your phone doesn't want “everything about every message”. It wants precisely the fields it will draw on screen — and nothing else, because every extra byte travels over a phone network.</p>
+        <p class="story"><b>GraphQL</b> lets the app write down the shape it wants, and the answer comes back as JSON in exactly that shape. Change the screen, change the query — no server change needed.</p>
+        <p class="story">It is deliberately <b>limited</b>, because the queries come from strangers' devices. No recursion, no arbitrary search conditions: otherwise a phone could accidentally knock the server over.</p>
+        <p class="imagine"><b>Try it:</b> switch fields on and off and watch the reply grow and shrink. Then try the recursive one.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>GraphQL is intended for <b>OLTP</b> queries: it lets client software request a JSON document with a particular structure containing the fields needed to render its UI. The response “contains exactly those attributes that were requested, no more and no less”.</p>
+            <p>It does <b>not</b> allow recursive queries (unlike Cypher, SPARQL, SQL or Datalog) or arbitrary search conditions, because queries come from untrusted sources and expensive queries could cause a denial of service.</p>
+            <p>It accepts duplication on purpose: a sender's name and image URL are repeated in every message, and the content of a replied-to message is duplicated under <code>replyTo</code>, because that's simpler for the client than making another request.</p>
+            <p>The server can store the data normalized and do the joins itself — but only joins declared in the GraphQL schema can be requested. GraphQL can sit on top of a relational, document <i>or</i> graph database. Costs: tooling to convert queries into REST/gRPC calls, plus authorization, rate limiting and performance concerns.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">query ChatApp { … }</span><span class="pill info"><i></i>toy byte counts</span></div>
+        <div class="stage-scroll"><svg id="gq-svg" viewBox="0 0 660 330" role="img" aria-label="A GraphQL query on the left and the matching JSON response on the right"></svg></div>
+        <div class="controls"><div class="toggles" id="gq-toggles"></div></div>
+        <div class="controls"><div class="stats" id="gq-stats"></div></div>
+        <div class="caption" id="gq-cap" aria-live="polite">Switch a field off and the reply loses exactly that field.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9. EVENT SOURCING ============ -->
+  <section class="scene" id="events">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 8 · event sourcing and CQRS</span>
+        <h2>The logbook that can rebuild the whole office</h2>
+        <p class="story">A conference is complicated: people book seats, companies buy ten at a time, someone cancels, the organizer moves to a bigger room. Just answering “how many seats are left?” gets messy.</p>
+        <p class="story">So don't store the answer — store what <b>happened</b>. Every change is written as an <b>event</b> in an append-only log, named in the past tense, and never changed afterwards. That's <b>event sourcing</b>.</p>
+        <p class="story">Then build <b>materialized views</b> (also called read models) from that log: a seats counter, a bookings board, a badge printer. If a view has a bug, you delete it, fix the code and replay the log. That split between writing events and reading views is <b>CQRS</b>.</p>
+        <p class="imagine"><b>Try it:</b> book and cancel with the buggy view code — the seat count drifts. Then switch to the fixed code and press Rebuild.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A request from a user is a <b>command</b>; it is validated first (were there enough seats?), and only once it is valid does it become a <b>fact</b> appended to the log. A view that consumes the log is not allowed to reject an event.</p>
+            <p>Events should be named in the <b>past tense</b>, because an event records that something happened. A later change or cancellation is a separate event.</p>
+            <p>Advantages: intent is clearer than row edits; views are <b>reproducible</b> (delete and recompute with fixed code); many views optimized for different queries; new views from the existing log; mistakes reversed with a later event; the log doubles as an <b>audit log</b>; logs absorb write bursts.</p>
+            <p>Downsides: event processing must be <b>deterministic</b> (put the exchange rate <i>in</i> the event); immutability clashes with deletion requests under GDPR (hence <b>crypto-shredding</b>); and reprocessing must not repeat side effects like confirmation emails.</p>
+            <p>Like a star-schema fact table, a log is a collection of past events — but fact table rows all share columns and are unordered, while events have many types and their <b>order matters</b>. Implementations: EventStoreDB, MartenDB, Axon, or Apache Kafka plus stream processors.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Conference booking · toy numbers</span><span id="e-seg"></span></div>
+        <div class="stage-scroll"><svg id="e-svg" viewBox="0 0 680 370" role="img" aria-label="An append-only event log feeding three materialized views"></svg></div>
+        <div class="controls" id="e-controls"></div>
+        <div class="controls"><div class="stats" id="e-stats"></div></div>
+        <div class="caption" id="e-cap" aria-live="polite">Append an event and watch all three views update.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 10. DATAFRAMES ============ -->
+  <section class="scene" id="frames">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 9 · DataFrames, matrices, arrays</span>
+        <h2>Turning a list into a grid of numbers</h2>
+        <p class="story">A data scientist's table of movie ratings is a list: “user 1 gave movie 3 four stars”. Machine-learning algorithms don't want a list — they want a <b>matrix</b>: one row per user, one column per movie.</p>
+        <p class="story">A <b>DataFrame</b> (pandas, R, Spark) does that reshaping. Most of the grid stays empty, because most people haven't seen most movies. That's called a <b>sparse</b> matrix, and it's completely fine.</p>
+        <p class="story">Words aren't numbers, so a category like a movie's genre gets <b>one-hot encoded</b>: one column per genre, with a 1 in the right one and 0 everywhere else.</p>
+        <p class="imagine"><b>Try it:</b> pivot the ratings into the grid, then one-hot encode the genre and watch three new columns appear.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>DataFrames (R, pandas, Apache Spark, ArcticDB, Dask) look like a relational table and support relational-like bulk operators — filter, group, aggregate, and <b>merge</b> (what a database calls a join). But instead of a declarative query language they're driven by a series of commands, matching how data scientists incrementally “wrangle” data, usually on a private copy.</p>
+            <p>A common use is transforming relational-like data into a matrix, like a pivot table: users as rows, movies as columns. The matrix is <b>sparse</b>, may have thousands of columns, and wouldn't fit well in a relational database — but NumPy and DataFrame libraries handle it easily.</p>
+            <p>A matrix contains only numbers, so dates are scaled to floats and small fixed sets of values get <b>one-hot encoding</b> (which also generalizes to movies in several genres). Then linear algebra — the basis of many ML algorithms, such as recommending movies — becomes possible.</p>
+            <p>Related: <b>array databases</b> such as TileDB for geospatial rasters, medical imaging and telescope data; DataFrames for financial time series; and DataFrame APIs added to Spark and Flink.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Ratings table → user × movie matrix</span><span class="pill info"><i></i>toy data: 4 users, 5 movies</span></div>
+        <div class="stage-scroll"><svg id="f-svg" viewBox="0 0 660 340" role="img" aria-label="A ratings table being pivoted into a sparse matrix with one-hot encoded genre columns"></svg></div>
+        <div class="controls" id="f-controls"></div>
+        <div class="controls"><div class="stats" id="f-stats"></div></div>
+        <div class="caption" id="f-cap" aria-live="polite">Press Pivot to reshape the list into a grid.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SUMMARY ============ -->
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The seesaws from this chapter</h2><p>No model is “right”. Each one makes some questions easy and others awkward.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>Relational tables</h4><p>Great at joins, many-to-one and many-to-many</p></div><span class="vs">vs</span><div class="side"><h4>JSON documents</h4><p>Great at trees, locality and looking like your code</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Normalized</h4><p>One copy of each fact: cheap writes, needs joins</p></div><span class="vs">vs</span><div class="side"><h4>Denormalized</h4><p>Copies everywhere: fast reads, expensive risky writes</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Schema-on-write</h4><p>The database enforces the shape; migrations rewrite rows</p></div><span class="vs">vs</span><div class="side"><h4>Schema-on-read</h4><p>Nothing to migrate; every reader handles old shapes</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Star / snowflake</h4><p>Narrow facts plus dimension tables, more joins</p></div><span class="vs">vs</span><div class="side"><h4>One big table</h4><p>Joins precomputed, far more storage</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Declarative query</h4><p>Say the pattern; the optimizer finds indexes and parallelism</p></div><span class="vs">vs</span><div class="side"><h4>Hand-written algorithm</h4><p>Total control, and all the work is yours</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Graph model</h4><p>Variable-length traversals in four lines of Cypher</p></div><span class="vs">vs</span><div class="side"><h4>SQL over tables</h4><p>Same answer, 31 lines of recursive CTE</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Update in place</h4><p>One current state, hard to reverse or explain</p></div><span class="vs">vs</span><div class="side"><h4>Event log + views</h4><p>Auditable and rebuildable, but views must be deterministic</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>Grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>data model</dt><dd>The shape you choose for your data: tables, documents, or a graph.</dd></div>
+        <div class="word"><dt>relational model</dt><dd>Data as tables (relations) of rows (tuples). Proposed by Edgar Codd in 1970.</dd></div>
+        <div class="word"><dt>document model</dt><dd>Data as self-contained JSON documents with things nested inside.</dd></div>
+        <div class="word"><dt>declarative query</dt><dd>You describe the answer you want; the database works out how to get it.</dd></div>
+        <div class="word"><dt>query optimizer</dt><dd>The part of the database that picks indexes, join order and parallelism for you.</dd></div>
+        <div class="word"><dt>impedance mismatch</dt><dd>The awkward gap between objects in code and rows in tables.</dd></div>
+        <div class="word"><dt>ORM</dt><dd>A library that translates between objects and tables for you.</dd></div>
+        <div class="word"><dt>N+1 query problem</dt><dd>Fetching N things, then doing one extra query for each of them instead of one join.</dd></div>
+        <div class="word"><dt>one-to-many</dt><dd>One profile has many jobs. It makes a tree.</dd></div>
+        <div class="word"><dt>many-to-many</dt><dd>Many people worked at many companies. It makes a web.</dd></div>
+        <div class="word"><dt>join</dt><dd>Looking up an ID to fetch the record it points at.</dd></div>
+        <div class="word"><dt>join table</dt><dd>A little middle table whose rows just link two IDs together.</dd></div>
+        <div class="word"><dt>normalization</dt><dd>Storing each human-readable fact in exactly one place and pointing at it with IDs.</dd></div>
+        <div class="word"><dt>denormalization</dt><dd>Keeping copies of a fact in many records so reads don't need joins.</dd></div>
+        <div class="word"><dt>hydrating IDs</dt><dd>Turning stored IDs back into names and pictures when a page is shown.</dd></div>
+        <div class="word"><dt>locality</dt><dd>Keeping things that are read together stored together.</dd></div>
+        <div class="word"><dt>shredding</dt><dd>Chopping one document-shaped thing into several tables.</dd></div>
+        <div class="word"><dt>schema-on-write</dt><dd>The database checks the shape when data goes in.</dd></div>
+        <div class="word"><dt>schema-on-read</dt><dd>Nothing is checked on the way in; the reading code figures it out.</dd></div>
+        <div class="word"><dt>star schema</dt><dd>A big fact table in the middle with dimension tables around it.</dd></div>
+        <div class="word"><dt>fact table</dt><dd>One row per event that happened — a sale, a click, a page view.</dd></div>
+        <div class="word"><dt>dimension table</dt><dd>The who, what, where and when that a fact row points at.</dd></div>
+        <div class="word"><dt>vertex &amp; edge</dt><dd>A dot and an arrow: the two pieces every graph is made of.</dd></div>
+        <div class="word"><dt>property graph</dt><dd>A graph where dots and arrows both carry labels and key-value properties.</dd></div>
+        <div class="word"><dt>triple store</dt><dd>A database of three-word sentences: subject, predicate, object.</dd></div>
+        <div class="word"><dt>event sourcing</dt><dd>Storing what happened as an append-only log instead of overwriting the answer.</dd></div>
+        <div class="word"><dt>materialized view</dt><dd>A ready-made answer built from the log, which can always be rebuilt.</dd></div>
+        <div class="word"><dt>CQRS</dt><dd>Writing in one shape (events) and reading from another (views).</dd></div>
+        <div class="word"><dt>DataFrame</dt><dd>A table you reshape step by step, on the way to a grid of numbers.</dd></div>
+        <div class="word"><dt>one-hot encoding</dt><dd>Turning a category into columns of 0s with a single 1.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width: 820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Six quick questions. Finish all six to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible, ease, lerp } = K;
+K.page(3);
+const setCap = (id, html) => { K.$(id).innerHTML = html; };
+const T = (x, y, t, cls = "sv-label", a = "middle") => s("text", { x, y, class: cls, "text-anchor": a }, t);
+const BOX = (x, y, w, hh, cls = "sv-box", r = 12) => s("rect", { x, y, width: w, height: hh, rx: r, class: cls });
+const mkBtn = (ctr, label, cls, fn) => { const b = h("button", { class: "btn " + cls, type: "button" }, label); b.addEventListener("click", fn); ctr.appendChild(b); return b; };
+
+/* ================= HERO: one résumé, three shapes ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const chrome = {
+    table: s("g", { class: "fade" }),
+    tree: s("g", { class: "fade", style: { opacity: 0 } }),
+    graph: s("g", { class: "fade", style: { opacity: 0 } }),
+  };
+  // table chrome
+  [[40, 74, 440, 58, "users"], [40, 150, 210, 92, "positions"], [270, 150, 210, 92, "education"], [40, 258, 440, 58, "contact_info"]]
+    .forEach(([x, y, w, hh, name]) => {
+      chrome.table.append(BOX(x, y, w, hh, "sv-panel", 10), T(x + 10, y + 16, name, "sv-label", "start"));
+    });
+  // tree chrome
+  [[120, 178], [260, 178], [400, 178]].forEach(([x, y]) => {
+    chrome.tree.appendChild(s("path", { d: `M260,112 C260,150 ${x},140 ${x},${y}`, class: "sv-wire" }));
+    chrome.tree.appendChild(s("line", { x1: x, y1: 202, x2: x, y2: 238, class: "sv-wire" }));
+  });
+  chrome.tree.append(T(120, 172, "positions"), T(260, 172, "education"), T(400, 172, "contact"));
+  // graph chrome
+  const gPts = [[110, 110], [110, 286], [410, 110], [410, 286], [260, 62], [260, 316]];
+  gPts.forEach(([x, y]) => chrome.graph.appendChild(s("line", { x1: 260, y1: 200, x2: x, y2: y, class: "sv-wire-solid" })));
+  svg.append(chrome.table, chrome.tree, chrome.graph);
+
+  const items = [
+    { t: "Barack", cls: "sv-data-soft", pos: [[150, 106], [260, 96], [260, 200]] },
+    { t: "President", cls: "sv-data-soft", pos: [[140, 196], [120, 200], [110, 110]] },
+    { t: "Senator", cls: "sv-data-soft", pos: [[140, 226], [120, 252], [110, 286]] },
+    { t: "Harvard", cls: "sv-data-soft", pos: [[370, 196], [260, 200], [410, 110]] },
+    { t: "Columbia", cls: "sv-data-soft", pos: [[370, 226], [260, 252], [410, 286]] },
+    { t: "London", cls: "sv-good", pos: [[350, 106], [400, 200], [260, 62]] },
+    { t: "@barack", cls: "sv-good", pos: [[150, 288], [400, 252], [260, 316]] },
+  ];
+  const tags = items.map((it) => { const g = draw.tag(it.t, it.cls); svg.appendChild(g); return g; });
+  const title = T(260, 34, "the same 7 facts, filed three ways", "sv-label");
+  const cap = T(260, 356, "shape: TABLES", "sv-title");
+  svg.append(title, cap);
+  const names = ["TABLES (relational)", "ONE DOCUMENT (JSON tree)", "A GRAPH (dots and arrows)"];
+  let mode = 0, busy = false, visible = false;
+  tags.forEach((g, i) => g.setAttribute("transform", `translate(${items[i].pos[0][0]},${items[i].pos[0][1]})`));
+  cap.textContent = "shape: " + names[0];
+
+  async function go(next) {
+    if (busy) return; busy = true;
+    const from = mode; mode = next;
+    Object.values(chrome).forEach((g, i) => (g.style.opacity = i === mode ? 1 : 0));
+    cap.textContent = "shape: " + names[mode];
+    await Promise.all(tags.map((g, i) => fly(g, items[i].pos[from], items[i].pos[mode], 850, ease.inOut)));
+    busy = false;
+  }
+  svg.setAttribute("tabindex", "0");
+  svg.style.cursor = "pointer";
+  svg.addEventListener("click", () => go((mode + 1) % 3));
+  svg.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go((mode + 1) % 3); } });
+  whenVisible(svg, () => (visible = true), () => (visible = false));
+  (async function auto() {
+    for (;;) { await sleep(3800); if (visible && !K.reduced && !document.hidden && !busy) go((mode + 1) % 3); }
+  })();
+})();
+
+/* ================= 1. DECLARATIVE vs HAND-WRITTEN ================= */
+(function declarative() {
+  const svg = K.$("#q-svg");
+  const CW = 44, CH = 40, GX = 8, GY = 10, X0 = 28, Y0 = 92, COLS = 6;
+  const MON = ["Jan", "Feb", "Mar"];
+  const shark = [1,0,1,1,0,1, 0,1,1,0,1,0, 1,1,0,1,0,1, 0,1,1,1,0,1];
+  const month = [0,1,2,0,1,2, 1,0,2,2,0,1, 2,1,0,0,2,1, 0,2,1,0,1,2];
+  const num   = [3,1,2,5,1,4, 2,3,6,1,2,2, 4,3,1,2,1,5, 2,3,4,2,1,3];
+  svg.append(T(X0, 44, "OBSERVATIONS · 24 ROWS", "sv-label", "start"),
+             T(X0, 64, "yellow rows are the Sharks family", "sv-label", "start"));
+  const cells = [];
+  for (let i = 0; i < 24; i++) {
+    const x = X0 + (i % COLS) * (CW + GX), y = Y0 + Math.floor(i / COLS) * (CH + GY);
+    const r = s("rect", { x, y, width: CW, height: CH, rx: 7, class: "qcell" + (shark[i] ? " shark" : "") });
+    svg.append(r, T(x + CW / 2, y + 17, MON[month[i]]), T(x + CW / 2, y + 31, num[i] + "×", "sv-label"));
+    cells.push(r);
+  }
+  // chart
+  const BX = 430, BY0 = 300, BW = 52, MAXV = 24;
+  svg.append(T(BX, 44, "SHARKS SEEN PER MONTH", "sv-label", "start"));
+  [0, 8, 16, 24].forEach((v) => {
+    const y = BY0 - (v / MAXV) * 190;
+    svg.append(s("line", { x1: BX, y1: y, x2: 648, y2: y, class: "sv-wire", style: { opacity: .55 } }), T(BX - 8, y + 4, String(v), "sv-label", "end"));
+  });
+  const bars = MON.map((m, i) => {
+    const x = BX + 16 + i * 74;
+    const rect = s("rect", { x, y: BY0, width: BW, height: 0, rx: 5, class: "sv-data" });
+    const val = T(x + BW / 2, BY0 - 6, "0", "sv-label");
+    svg.append(rect, T(x + BW / 2, BY0 + 20, m), rect, val);
+    return { rect, val, x };
+  });
+  const totals = [0, 0, 0];
+  function drawBars() {
+    totals.forEach((v, i) => {
+      const hgt = (v / MAXV) * 190;
+      bars[i].rect.setAttribute("height", hgt); bars[i].rect.setAttribute("y", BY0 - hgt);
+      bars[i].val.setAttribute("y", BY0 - hgt - 6); bars[i].val.textContent = String(v);
+    });
+  }
+  const pointer = s("rect", { x: -100, y: 0, width: CW + 6, height: CH + 6, rx: 9, fill: "none", stroke: "var(--blue)", "stroke-width": 3 });
+  svg.appendChild(pointer);
+
+  const stRows = stat("Rows examined", 0), stSteps = stat("Steps (toy)", 0), stCores = stat("Cores used", 1);
+  K.$("#q-stats").append(stRows, stSteps, stCores);
+  let mode = 0, cores = 1, busy = false;
+  K.$("#q-seg").appendChild(seg(["Hand-written loop", "Declarative query"], 0, (i) => { mode = i; reset(); }, "q-mode"));
+  const ctr = K.$("#q-controls");
+  const runB = mkBtn(ctr, "▶ Run the query", "primary", run);
+  const resB = mkBtn(ctr, "Reset", "", reset);
+  ctr.appendChild(h("span", { class: "grow" }));
+  ctr.appendChild(slider({ id: "q-cores", label: "CPU cores", min: 1, max: 4, value: 1, onInput: (v) => { cores = v; reset(); } }));
+
+  function reset() {
+    if (busy) return;
+    cells.forEach((c, i) => c.setAttribute("class", "qcell" + (shark[i] ? " shark" : "")));
+    totals[0] = totals[1] = totals[2] = 0; drawBars();
+    pointer.setAttribute("x", -100);
+    stRows.set(0); stSteps.set(0); stCores.set(mode === 0 ? 1 : cores, mode === 0 ? "bad" : "good");
+    setCap("#q-cap", mode === 0
+      ? "The <b>hand-written loop</b> visits every row in the order you wrote. Extra cores can't help unless you write the parallel code yourself."
+      : "The <b>declarative query</b> just describes the pattern: <code>WHERE family = 'Sharks' GROUP BY month</code>. The optimizer decides the rest.");
+  }
+  async function run() {
+    if (busy) return; busy = true; runB.disabled = resB.disabled = true;
+    reset(); busy = true;
+    const idxs = mode === 0 ? cells.map((_, i) => i) : cells.map((_, i) => i).filter((i) => shark[i]);
+    const nc = mode === 0 ? 1 : cores;
+    stCores.set(nc, mode === 0 ? "bad" : "good");
+    if (mode === 1) setCap("#q-cap", `The optimizer used the <b>index on family</b> to skip non-shark rows, and split the work across <b>${nc} core${nc > 1 ? "s" : ""}</b>.`);
+    let steps = 0, seen = 0;
+    for (let i = 0; i < idxs.length; i += nc) {
+      const batch = idxs.slice(i, i + nc);
+      batch.forEach((id) => cells[id].setAttribute("class", "qcell scan"));
+      const first = batch[0];
+      pointer.setAttribute("x", X0 + (first % COLS) * (CW + GX) - 3);
+      pointer.setAttribute("y", Y0 + Math.floor(first / COLS) * (CH + GY) - 3);
+      await sleep(mode === 0 ? 85 : 150);
+      batch.forEach((id) => {
+        cells[id].setAttribute("class", "qcell done");
+        if (shark[id]) totals[month[id]] += num[id];
+      });
+      seen += batch.length; steps++;
+      drawBars(); stRows.set(seen); stSteps.set(steps, steps <= 8 ? "good" : "warn");
+    }
+    pointer.setAttribute("x", -100);
+    setCap("#q-cap", mode === 0
+      ? `Done: <b>${seen} rows</b> examined in <b>${steps} steps</b>. You told the computer exactly how to do it, so that's the only way it can be done.`
+      : `Done: only <b>${seen} shark rows</b> examined, in <b>${steps} steps</b> on ${nc} core${nc > 1 ? "s" : ""}. Same question, same answer — the database found a faster route. <i>Toy step counts.</i>`);
+    busy = false; runB.disabled = resB.disabled = false;
+  }
+  reset();
+})();
+
+/* ================= 2. TABLES vs ONE DOCUMENT ================= */
+(function shape() {
+  const svg = K.$("#d-svg");
+  const tables = s("g", { class: "fade" }), docg = s("g", { class: "fade", style: { opacity: 0 } });
+  const TB = [
+    { x: 30, y: 62, w: 270, h: 78, name: "users", rows: ["251 · Barack Obama", "headline: Former President"] },
+    { x: 330, y: 62, w: 300, h: 78, name: "positions", rows: ["251 · President", "251 · US Senator (D-IL)"] },
+    { x: 30, y: 158, w: 270, h: 78, name: "education", rows: ["251 · Harvard 1988–91", "251 · Columbia 1981–83"] },
+    { x: 330, y: 158, w: 300, h: 78, name: "contact_info", rows: ["251 · barackobama.com", "251 · x.com/barackobama"] },
+  ];
+  const tboxes = TB.map((t) => {
+    const r = BOX(t.x, t.y, t.w, t.h, "sv-panel", 10);
+    const g = s("g", {}, r, T(t.x + 12, t.y + 20, t.name, "sv-label", "start"));
+    t.rows.forEach((row, i) => g.appendChild(T(t.x + 12, t.y + 42 + i * 18, row, "sv-text", "start")));
+    tables.appendChild(g);
+    return r;
+  });
+  const DOCX = 170, DOCY = 56, DOCW = 330, DOCH = 208;
+  const docRect = BOX(DOCX, DOCY, DOCW, DOCH, "sv-good", 14);
+  docg.append(docRect, T(DOCX + 14, DOCY + 22, "one JSON document · user 251", "sv-label", "start"));
+  ["{", '  "first_name": "Barack",', '  "headline": "Former President",', '  "positions": [', '     {"job_title": "President"},', '     {"job_title": "US Senator"} ],', '  "education": [ Harvard, Columbia ],', '  "contact_info": { website, x }', "}"]
+    .forEach((l, i) => docg.appendChild(T(DOCX + 14, DOCY + 44 + i * 18, l, "sv-text", "start")));
+  svg.append(tables, docg);
+  const reader = s("g", {}, draw.server(330, 300, 108, 44, null), T(330, 307, "query engine", "sv-label"));
+  svg.appendChild(reader);
+  const layer = s("g"); svg.appendChild(layer);
+
+  const stReads = stat("Disk reads", 0), stBytes = stat("Bytes rewritten", 0, ""), stShape = stat("Shape", "tables");
+  K.$("#d-stats").append(stReads, stBytes, stShape);
+  let mode = 0, busy = false;
+  K.$("#d-seg").appendChild(seg(["Four tables", "One document"], 0, (i) => {
+    if (busy) return; mode = i;
+    tables.style.opacity = i === 0 ? 1 : 0; docg.style.opacity = i === 1 ? 1 : 0;
+    stShape.set(i === 0 ? "tables" : "document");
+    stReads.set(0); stBytes.set(0, "");
+    setCap("#d-cap", i === 0
+      ? "The profile is <b>shredded</b> into four tables. Each child row points back at user 251 with a <b>foreign key</b>."
+      : "The whole profile is one nested JSON <b>document</b>. The tree of one-to-many relationships is right there in the shape.");
+  }, "d-mode"));
+  const ctr = K.$("#d-controls");
+  const b1 = mkBtn(ctr, "Read the whole profile", "primary", read);
+  const b2 = mkBtn(ctr, "Change just the headline", "", edit);
+  const lock = (v) => { busy = v; b1.disabled = b2.disabled = v; };
+
+  async function read() {
+    if (busy) return; lock(true); stBytes.set(0, "");
+    let reads = 0; stReads.set(0);
+    if (mode === 0) {
+      setCap("#d-cap", "Fetching a profile from tables means <b>one lookup per table</b> (or a messy multiway join).");
+      for (const t of TB) {
+        const p = draw.parcel("sv-data", 14); layer.appendChild(p);
+        await fly(p, [330, 278], [t.x + t.w / 2, t.y + t.h / 2], 420);
+        tboxes[TB.indexOf(t)].setAttribute("class", "sv-good");
+        await fly(p, [t.x + t.w / 2, t.y + t.h / 2], [330, 278], 380);
+        p.remove(); reads++; stReads.set(reads, reads > 1 ? "warn" : "good");
+      }
+      await sleep(250); tboxes.forEach((r) => r.setAttribute("class", "sv-panel"));
+      setCap("#d-cap", "<b>4 disk reads</b> for one profile. That's the cost of splitting a document-shaped thing across tables.");
+    } else {
+      setCap("#d-cap", "Everything is stored next to each other — this is called <b>locality</b>.");
+      const p = draw.parcel("sv-data", 14); layer.appendChild(p);
+      await fly(p, [330, 278], [DOCX + DOCW / 2, DOCY + DOCH / 2], 500);
+      docRect.classList.add("flash");
+      await fly(p, [DOCX + DOCW / 2, DOCY + DOCH / 2], [330, 278], 450);
+      p.remove(); docRect.classList.remove("flash");
+      stReads.set(1, "good");
+      setCap("#d-cap", "<b>1 disk read</b>. One continuous string of JSON, fetched in one go.");
+    }
+    lock(false);
+  }
+  async function edit() {
+    if (busy) return; lock(true); stReads.set(0);
+    if (mode === 0) {
+      tboxes[0].setAttribute("class", "sv-data-soft"); tboxes[0].classList.add("flash");
+      stBytes.set(48, "good");
+      setCap("#d-cap", "Only the <b>users</b> row changes: about 48 bytes rewritten. The jobs and schools aren't touched. <i>Toy byte counts.</i>");
+      await sleep(900); tboxes[0].setAttribute("class", "sv-panel");
+    } else {
+      docRect.setAttribute("class", "sv-data-soft"); docRect.classList.add("flash");
+      stBytes.set(612, "bad");
+      setCap("#d-cap", "Changing one field usually means <b>rewriting the entire document</b>: about 612 bytes. That's why documents should stay small. <i>Toy byte counts.</i>");
+      await sleep(900); docRect.setAttribute("class", "sv-good"); docRect.classList.remove("flash");
+    }
+    lock(false);
+  }
+})();
+
+/* ================= 3. NORMALIZATION ================= */
+(function normalize() {
+  const svg = K.$("#n-svg");
+  const OLD = "Bytetown", NEW = "Bitville";
+  svg.appendChild(T(24, 40, "FIVE PEOPLE WHO ALL LIVE IN THE SAME TOWN", "sv-label", "start"));
+  const cards = [80, 200, 320, 440, 560].map((cx, i) => {
+    const r = BOX(cx - 52, 74, 104, 64, "sv-box", 12);
+    const val = T(cx, 120, OLD, "sv-text");
+    const link = s("line", { x1: cx, y1: 138, x2: 340, y2: 238, class: "sv-wire", style: { opacity: 0 } });
+    svg.append(link, r, T(cx, 96, "profile " + (i + 1), "sv-label"), val);
+    return { r, val, link, cx, name: OLD };
+  });
+  const regRect = BOX(240, 238, 200, 62, "sv-db", 12);
+  const regRow = T(340, 284, "91 → " + OLD, "sv-text");
+  const regG = s("g", { class: "fade", style: { opacity: 0 } }, regRect, T(340, 260, "regions table (one copy)", "sv-label"), regRow);
+  svg.appendChild(regG);
+  const layer = s("g"); svg.appendChild(layer);
+
+  const stW = stat("Writes", 0), stL = stat("Extra lookups", 0), stBad = stat("Copies that disagree", 0);
+  K.$("#n-stats").append(stW, stL, stBad);
+  let mode = 0, busy = false, crashed = false;
+  K.$("#n-seg").appendChild(seg(["Copy the name", "Point to an ID"], 0, (i) => {
+    if (busy) return; mode = i; crashed = false;
+    regG.style.opacity = i === 1 ? 1 : 0;
+    cards.forEach((c) => {
+      c.link.style.opacity = i === 1 ? 0.8 : 0;
+      c.name = i === 1 ? regRow.textContent.split("→ ")[1] : c.name;
+      c.val.textContent = i === 1 ? "region_id 91" : c.name;
+      c.val.setAttribute("class", i === 1 ? "sv-label" : "sv-text");
+      c.r.setAttribute("class", "sv-box");
+    });
+    stW.set(0); stL.set(0); stBad.set(0, "");
+    setCap("#n-cap", i === 0
+      ? "<b>Denormalized:</b> the town's name is written out on every profile. Reading is instant — no lookup needed."
+      : "<b>Normalized:</b> each profile stores a meaningless <b>ID</b>. The human-readable name lives in exactly one row.");
+  }, "n-mode"));
+  const ctr = K.$("#n-controls");
+  const bRead = mkBtn(ctr, "Read a profile", "", read);
+  const bRen = mkBtn(ctr, "Rename the town", "primary", rename);
+  const bCrash = mkBtn(ctr, "Crash!", "danger", () => { crashed = true; });
+  bCrash.disabled = true;
+  const lock = (v) => { busy = v; bRead.disabled = bRen.disabled = v; };
+
+  async function read() {
+    if (busy) return; lock(true); stL.set(0);
+    const c = cards[1]; c.r.setAttribute("class", "sv-good");
+    if (mode === 1) {
+      setCap("#n-cap", "The profile only has <b>region_id 91</b>, which means nothing to a human. Time for a <b>join</b>.");
+      const p = draw.parcel("sv-data", 14); layer.appendChild(p);
+      await fly(p, [c.cx, 138], [340, 240], 500);
+      regRect.classList.add("flash");
+      const back = draw.tag(regRow.textContent.split("→ ")[1], "sv-good"); layer.appendChild(back);
+      p.remove();
+      await fly(back, [340, 240], [c.cx, 120], 500);
+      await sleep(600); back.remove(); regRect.classList.remove("flash");
+      stL.set(1, "warn");
+      setCap("#n-cap", "One extra <b>lookup</b> per read to turn the ID into a name. That's the price of keeping one copy.");
+    } else {
+      stL.set(0, "good");
+      setCap("#n-cap", `The name <b>${c.name}</b> is right there in the profile: <b>zero extra lookups</b>. Denormalized data reads fast.`);
+    }
+    await sleep(500); c.r.setAttribute("class", "sv-box"); lock(false);
+  }
+  async function rename() {
+    if (busy) return; lock(true); crashed = false; stBad.set(0, "");
+    const target = cards[0].val.textContent === NEW || regRow.textContent.includes(NEW) ? OLD : NEW;
+    let writes = 0; stW.set(0);
+    if (mode === 1) {
+      setCap("#n-cap", "Normalized: the name lives in <b>one place</b>, so renaming is <b>one write</b>.");
+      regRect.classList.add("flash"); regRow.textContent = "91 → " + target;
+      writes = 1; stW.set(1, "good");
+      cards.forEach((c) => (c.name = target));
+      await sleep(900); regRect.classList.remove("flash");
+      setCap("#n-cap", `<b>1 write</b>, and every profile now reads back “${target}”. Nothing can disagree, because there is only one copy.`);
+    } else {
+      bCrash.disabled = false;
+      setCap("#n-cap", "Denormalized: the app must find and update <b>every copy</b>. Press <b>Crash!</b> partway through…");
+      for (const c of cards) {
+        if (crashed) break;
+        c.r.setAttribute("class", "sv-data-soft");
+        await sleep(520);
+        c.val.textContent = target; c.name = target; writes++; stW.set(writes, "warn");
+        c.r.setAttribute("class", "sv-box");
+      }
+      bCrash.disabled = true;
+      const bad = cards.filter((c) => c.name !== target).length;
+      cards.forEach((c) => { if (c.name !== target) c.r.setAttribute("class", "sv-bad"); });
+      stBad.set(bad, bad ? "bad" : "good");
+      setCap("#n-cap", bad
+        ? `The process died after <b>${writes} of 5 writes</b>. Now <b>${bad} profiles say the old name</b> and the rest say the new one — the database is <b>inconsistent</b>.`
+        : `<b>5 writes</b> for one rename — more code, more writes, more disk, and a real risk if anything crashes halfway.`);
+      await sleep(900); cards.forEach((c) => c.r.setAttribute("class", "sv-box"));
+    }
+    lock(false);
+  }
+  setCap("#n-cap", "<b>Denormalized:</b> the town's name is written out on every profile. Reading is instant — no lookup needed.");
+})();
+
+/* ================= 4. MANY-TO-MANY ================= */
+(function links() {
+  const svg = K.$("#m-svg");
+  const PEOPLE = ["Lucy", "Alain", "Priya"], ORGS = ["NASA", "Acme", "Globex"];
+  const ROWS = [[0, 0], [0, 1], [1, 1], [1, 2], [2, 0], [2, 2], [0, 2]];
+  const py = [90, 170, 250], oy = [90, 170, 250];
+  const pc = PEOPLE.map((n, i) => {
+    const r = BOX(34, py[i] - 24, 112, 48, "sv-server", 12);
+    svg.append(r, T(90, py[i] + 5, n, "sv-text"));
+    return r;
+  });
+  const oc = ORGS.map((n, i) => {
+    const r = BOX(534, oy[i] - 24, 112, 48, "sv-db", 12);
+    svg.append(r, T(590, oy[i] + 5, n, "sv-text"));
+    return r;
+  });
+  svg.append(T(90, 46, "PEOPLE", "sv-label"), T(590, 46, "ORGANIZATIONS", "sv-label"));
+  svg.appendChild(BOX(250, 56, 180, 226, "sv-panel", 12));
+  svg.appendChild(T(340, 76, "positions", "sv-label"));
+  const rowRects = ROWS.map((r, i) => {
+    const y = 88 + i * 27;
+    const rect = BOX(258, y, 164, 23, "sv-box", 6);
+    svg.append(rect, T(340, y + 16, `user ${r[0] + 1} → org ${r[1] + 1}`, "sv-label"));
+    return rect;
+  });
+  const idxL = s("g", { class: "fade", style: { opacity: .35 } }, BOX(250, 292, 86, 26, "sv-good", 8), T(293, 309, "idx user_id", "sv-label"));
+  const idxR = s("g", { class: "fade", style: { opacity: .35 } }, BOX(344, 292, 86, 26, "sv-good", 8), T(387, 309, "idx org_id", "sv-label"));
+  svg.append(idxL, idxR);
+
+  const stScan = stat("Rows examined", 0), stHit = stat("Matches", 0), stIdx = stat("Indexes", "off", "bad");
+  K.$("#m-stats").append(stScan, stHit, stIdx);
+  let dir = 0, indexed = false, busy = false;
+  K.$("#m-seg").appendChild(seg(["Who worked at NASA?", "Where did Lucy work?"], 0, (i) => { dir = i; }, "m-dir"));
+  const ctr = K.$("#m-controls");
+  const bRun = mkBtn(ctr, "▶ Run the query", "primary", run);
+  ctr.appendChild(h("span", { class: "grow" }));
+  ctr.appendChild(h("span", { class: "slider" }, h("label", {}, "Secondary indexes")));
+  ctr.appendChild(seg(["Off", "On"], 0, (i) => {
+    indexed = i === 1; stIdx.set(indexed ? "on" : "off", indexed ? "good" : "bad");
+    idxL.style.opacity = idxR.style.opacity = indexed ? 1 : .25;
+  }, "m-idx"));
+
+  function clearVis() {
+    rowRects.forEach((r) => r.setAttribute("class", "sv-box"));
+    pc.forEach((r) => r.setAttribute("class", "sv-server"));
+    oc.forEach((r) => r.setAttribute("class", "sv-db"));
+  }
+  async function run() {
+    if (busy) return; busy = true; bRun.disabled = true; clearVis();
+    const key = dir === 0 ? 1 : 0, want = 0;
+    (dir === 0 ? oc : pc)[0].setAttribute("class", dir === 0 ? "sv-data-soft" : "sv-data-soft");
+    const matches = ROWS.map((r, i) => (r[key] === want ? i : -1)).filter((i) => i >= 0);
+    let seen = 0; stScan.set(0); stHit.set(0);
+    if (indexed) {
+      (dir === 0 ? idxR : idxL).querySelector("rect").classList.add("flash");
+      setCap("#m-cap", `The index on <b>${dir === 0 ? "org_id" : "user_id"}</b> points straight at the matching rows — no scanning.`);
+      await sleep(600);
+      for (const i of matches) { rowRects[i].setAttribute("class", "sv-good"); seen++; stScan.set(seen, "good"); await sleep(320); }
+      (dir === 0 ? idxR : idxL).querySelector("rect").classList.remove("flash");
+    } else {
+      setCap("#m-cap", "No index, so the database must read <b>every row</b> of the join table and check it.");
+      for (let i = 0; i < ROWS.length; i++) {
+        rowRects[i].setAttribute("class", "sv-data-soft");
+        await sleep(220); seen++; stScan.set(seen, "warn");
+        rowRects[i].setAttribute("class", matches.includes(i) ? "sv-good" : "sv-box");
+      }
+    }
+    const outIdx = matches.map((i) => ROWS[i][dir === 0 ? 0 : 1]);
+    outIdx.forEach((j) => (dir === 0 ? pc : oc)[j].setAttribute("class", "sv-data-soft"));
+    stHit.set(outIdx.length, "good");
+    const names = outIdx.map((j) => (dir === 0 ? PEOPLE : ORGS)[j]).join(", ");
+    setCap("#m-cap", `Answer: <b>${names}</b>. Examined <b>${seen} rows</b> ${indexed ? "using the index" : "by scanning"}. The <i>same</i> join table answers the question in <b>both directions</b> — that's why you index both columns.`);
+    busy = false; bRun.disabled = false;
+  }
+})();
+
+/* ================= 5. STAR SCHEMA ================= */
+(function star() {
+  const svg = K.$("#st-svg");
+  function dim(cx, cy, w, name, cols) {
+    const r = BOX(cx - w / 2, cy - 28, w, 56, "sv-db", 10);
+    const g = s("g", { class: "fade" }, r, T(cx, cy - 8, name, "sv-text"), T(cx, cy + 12, cols, "sv-label"));
+    svg.appendChild(g); g.rect = r; return g;
+  }
+  const factRect = BOX(255, 147, 170, 86, "sv-server", 12);
+  const factTitle = T(340, 178, "fact_sales", "sv-title");
+  const factSub = T(340, 202, "1 row per item sold", "sv-label");
+  const factCols = T(340, 220, "12 columns", "sv-label");
+  const rays = s("g");
+  svg.append(rays, factRect, factTitle, factSub, factCols);
+  const D = {
+    product: dim(120, 70, 150, "dim_product", "sku, brand, category"),
+    store: dim(560, 70, 150, "dim_store", "city, sq ft, bakery?"),
+    date: dim(120, 310, 150, "dim_date", "day, month, holiday?"),
+    customer: dim(560, 310, 150, "dim_customer", "age, loyalty tier"),
+  };
+  const SUB = {
+    brand: dim(78, 160, 96, "dim_brand", "logo, owner"),
+    category: dim(188, 160, 110, "dim_category", "fruit / dairy"),
+  };
+  const rayLines = [[120, 98, 268, 150], [560, 98, 412, 150], [120, 282, 268, 230], [560, 282, 412, 230]];
+  const rayEls = rayLines.map(([x1, y1, x2, y2]) => { const l = s("line", { x1: x2, y1: y2, x2: x1, y2: y1, class: "sv-wire" }); rays.appendChild(l); return l; });
+  const subLines = [[100, 98, 82, 132], [150, 98, 180, 132]].map(([x1, y1, x2, y2]) => { const l = s("line", { x1, y1, x2, y2, class: "sv-wire" }); rays.appendChild(l); return l; });
+  const barBg = BOX(60, 348, 560, 14, "sv-panel", 7);
+  const bar = s("rect", { x: 60, y: 348, width: 220, height: 14, rx: 7, class: "sv-data" });
+  svg.append(T(60, 340, "STORAGE USED · TOY NUMBERS", "sv-label", "start"), barBg, bar);
+
+  const stJoins = stat("Joins per query", 4), stCols = stat("Fact columns", 12), stGB = stat("Storage (toy)", "40 GB");
+  K.$("#st-stats").append(stJoins, stCols, stGB);
+  const layer = s("g"); svg.appendChild(layer);
+  let mode = 0, busy = false;
+  const SHAPES = [
+    { joins: 4, cols: 12, gb: 40, cap: "A <b>star schema</b>: one narrow fact table, four dimension tables around it like rays." },
+    { joins: 6, cols: 12, gb: 38, cap: "A <b>snowflake schema</b>: the product dimension is split again into brand and category. More normalized, two more hops." },
+    { joins: 0, cols: 120, gb: 95, cap: "<b>One big table</b>: the joins are precomputed into the fact table. No joins left to do — but 120 wide columns and much more disk." },
+  ];
+  K.$("#st-seg").appendChild(seg(["Star", "Snowflake", "One big table"], 0, (i) => { if (!busy) { mode = i; apply(); } }, "st-mode"));
+  mkBtn(K.$("#st-controls"), "▶ Run the query", "primary", run);
+
+  function apply() {
+    const sh = SHAPES[mode];
+    const showDims = mode !== 2, showSub = mode === 1;
+    Object.values(D).forEach((g) => (g.style.opacity = showDims ? 1 : 0));
+    Object.values(SUB).forEach((g) => (g.style.opacity = showSub ? 1 : 0));
+    rayEls.forEach((l) => (l.style.opacity = showDims ? 1 : 0));
+    subLines.forEach((l) => (l.style.opacity = showSub ? 1 : 0));
+    factRect.setAttribute("x", mode === 2 ? 60 : 255);
+    factRect.setAttribute("width", mode === 2 ? 560 : 170);
+    factCols.textContent = sh.cols + " columns";
+    factSub.textContent = mode === 2 ? "every dimension folded in" : "1 row per item sold";
+    stJoins.set(sh.joins, sh.joins === 0 ? "good" : sh.joins > 4 ? "warn" : "");
+    stCols.set(sh.cols, sh.cols > 100 ? "warn" : "");
+    stGB.set(sh.gb + " GB", sh.gb > 60 ? "bad" : "good");
+    bar.setAttribute("width", (sh.gb / 100) * 560);
+    setCap("#st-cap", sh.cap);
+  }
+  async function run() {
+    if (busy) return; busy = true;
+    factRect.classList.add("flash");
+    const order = mode === 2 ? [] : [["product", D.product, 120, 70], ["store", D.store, 560, 70], ["date", D.date, 120, 310], ["customer", D.customer, 560, 310]];
+    const extra = mode === 1 ? [["brand", SUB.brand, 78, 160], ["category", SUB.category, 188, 160]] : [];
+    let n = 0; stJoins.set(0);
+    if (mode === 2) {
+      setCap("#st-cap", "Everything the query needs is already <b>in the row</b>: product name, store city, the date, the customer. <b>Zero joins</b>.");
+      await sleep(700); factRect.classList.remove("flash"); stJoins.set(0, "good"); busy = false; return;
+    }
+    setCap("#st-cap", "The fact row holds mostly <b>IDs</b>. Each one has to be joined to a dimension table to get something readable.");
+    for (const [name, g, x, y] of order.concat(extra)) {
+      const p = draw.parcel("sv-data", 13); layer.appendChild(p);
+      const from = extra.some((e) => e[0] === name) ? [120, 70] : [340, 190];
+      await fly(p, from, [x, y], 380);
+      g.rect.classList.add("flash");
+      await sleep(160); p.remove(); g.rect.classList.remove("flash");
+      n++; stJoins.set(n, n > 4 ? "warn" : "");
+    }
+    factRect.classList.remove("flash");
+    setCap("#st-cap", mode === 0
+      ? "<b>4 joins</b>, one per dimension. Analysts find this easy to read and write."
+      : "<b>6 joins</b>: product now has to be joined to brand and category too. More normalized, but more work per query.");
+    busy = false;
+  }
+  apply();
+})();
+
+/* ================= 6. SCHEMA ON WRITE vs ON READ ================= */
+(function schema() {
+  const svg = K.$("#sc-svg");
+  const NAMES = ["Ada Lovelace", "Alan Turing", "Grace Hopper", "Jean Bartik", "Ken Thompson", "Barbara Liskov", "Radia Perlman", "Frances Allen"];
+  svg.appendChild(T(30, 40, "users · 8 STORED RECORDS  (a real table would have millions)", "sv-label", "start"));
+  const recs = NAMES.map((n, i) => {
+    const cx = 100 + (i % 4) * 160, cy = 96 + Math.floor(i / 4) * 92;
+    const r = BOX(cx - 70, cy - 32, 140, 64, "sv-box", 10);
+    const l1 = T(cx, cy - 8, "name:", "sv-label");
+    const l2 = T(cx, cy + 14, '"' + n + '"', "sv-text");
+    const ghost = T(cx, cy + 30, "", "sv-label");
+    ghost.setAttribute("style", "fill: var(--blue)");
+    svg.append(r, l1, l2, ghost);
+    return { r, l1, l2, ghost, cx, cy, name: n, migrated: false };
+  });
+  const codeRect = BOX(150, 250, 360, 70, "sv-panel", 12);
+  const codeG = s("g", { class: "fade", style: { opacity: 0 } }, codeRect,
+    T(166, 272, 'if (user.name && !user.first_name) {', "sv-label", "start"),
+    T(166, 290, '  user.first_name = user.name.split(" ")[0];', "sv-label", "start"),
+    T(166, 308, '}', "sv-label", "start"));
+  svg.appendChild(codeG);
+  const layer = s("g"); svg.appendChild(layer);
+
+  const stRw = stat("Rows rewritten", 0), stFix = stat("Read-time fixes", 0), stState = stat("Status", "old shape");
+  K.$("#sc-stats").append(stRw, stFix, stState);
+  let mode = 0, busy = false, shipped = false, nextRead = 0;
+  K.$("#sc-seg").appendChild(seg(["Schema-on-write", "Schema-on-read"], 0, (i) => { if (!busy) { mode = i; reset(); } }, "sc-mode"));
+  const ctr = K.$("#sc-controls");
+  const bShip = mkBtn(ctr, "Ship the change", "primary", ship);
+  const bRead = mkBtn(ctr, "Read a record", "", readOne);
+  const bReset = mkBtn(ctr, "Reset", "", reset);
+  const lock = (v) => { busy = v; bShip.disabled = bRead.disabled = bReset.disabled = v; };
+
+  function reset() {
+    if (busy) return;
+    shipped = false; nextRead = 0;
+    recs.forEach((rc) => {
+      rc.migrated = false; rc.r.setAttribute("class", "sv-box");
+      rc.l1.textContent = "name:"; rc.l2.textContent = '"' + rc.name + '"'; rc.ghost.textContent = "";
+    });
+    codeG.style.opacity = 0;
+    stRw.set(0); stFix.set(0); stState.set("old shape");
+    setCap("#sc-cap", mode === 0
+      ? "<b>Schema-on-write:</b> the database enforces the shape. To add <code>first_name</code> you run a migration."
+      : "<b>Schema-on-read:</b> no shape is enforced. You can simply start writing the new fields and cope with old ones in code.");
+  }
+  async function ship() {
+    if (busy) return; lock(true);
+    if (mode === 0) {
+      setCap("#sc-cap", "<code>ALTER TABLE users ADD COLUMN first_name text DEFAULT NULL;</code> — adding an empty column is <b>fast</b>, even on a huge table.");
+      recs.forEach((rc) => rc.r.setAttribute("class", "sv-good"));
+      await sleep(900);
+      setCap("#sc-cap", "<code>UPDATE users SET first_name = split_part(name, ' ', 1);</code> — now <b>every single row</b> has to be rewritten.");
+      let n = 0;
+      for (const rc of recs) {
+        rc.r.setAttribute("class", "sv-data-soft");
+        await sleep(260);
+        const [f, ...rest] = rc.name.split(" ");
+        rc.l1.textContent = 'first: "' + f + '"'; rc.l2.textContent = 'last: "' + rest.join(" ") + '"';
+        rc.migrated = true; rc.r.setAttribute("class", "sv-good");
+        n++; stRw.set(n, "warn");
+      }
+      shipped = true; stState.set("migrated", "good");
+      setCap("#sc-cap", "<b>8 rows rewritten.</b> On a table with 500 million rows that's hours of writing — which is why teams use online migration tools.");
+    } else {
+      codeG.style.opacity = 1;
+      shipped = true; stRw.set(0, "good"); stState.set("new code shipped", "good");
+      recs.slice(6).forEach((rc) => {
+        const [f, ...rest] = rc.name.split(" ");
+        rc.l1.textContent = 'first: "' + f + '"'; rc.l2.textContent = 'last: "' + rest.join(" ") + '"';
+        rc.migrated = true; rc.r.setAttribute("class", "sv-good");
+      });
+      setCap("#sc-cap", "<b>Nothing was rewritten.</b> New records (the green ones) are written in the new shape; the old ones stay exactly as they were, and this little bit of code handles them when they're read.");
+    }
+    lock(false);
+  }
+  async function readOne() {
+    if (busy) return; lock(true);
+    const rc = recs[nextRead % recs.length]; nextRead++;
+    rc.r.setAttribute("class", "sv-server");
+    if (!shipped) {
+      setCap("#sc-cap", "Before the change, every record has one <code>name</code> field. Nothing to fix.");
+    } else if (rc.migrated) {
+      setCap("#sc-cap", `<b>${rc.name}</b> is already stored in the new shape, so it's read straight off the disk.`);
+    } else {
+      const p = draw.tag(rc.name); layer.appendChild(p);
+      await fly(p, [rc.cx, rc.cy], [330, 268], 520);
+      codeRect.classList.add("flash");
+      await sleep(500);
+      const [f] = rc.name.split(" ");
+      p.remove(); codeRect.classList.remove("flash");
+      rc.ghost.textContent = "app fills in first: " + f;
+      stFix.set(Number(stFix.querySelector(".v").textContent) + 1, "warn");
+      setCap("#sc-cap", `<b>${rc.name}</b> was written before the change, so the <b>reading code</b> splits the name — every time, forever. Nothing on disk changed.`);
+    }
+    await sleep(600); rc.r.setAttribute("class", rc.migrated ? "sv-good" : "sv-box");
+    lock(false);
+  }
+  reset();
+})();
+
+/* ================= 7. GRAPH TRAVERSAL ================= */
+(function graph() {
+  const svg = K.$("#g-svg");
+  const N = {
+    namerica: ["North America", 110, 50, 124], usa: ["United States", 110, 120, 120], idaho: ["Idaho", 110, 190, 90],
+    europe: ["Europe", 505, 45, 96], uk: ["United Kingdom", 415, 120, 128], england: ["England", 415, 190, 96],
+    london: ["London", 415, 260, 92], france: ["France", 600, 120, 92], normandy: ["Normandy", 600, 190, 106],
+    stlo: ["Saint-Lô", 600, 260, 96], lucy: ["Lucy", 200, 340, 86], alain: ["Alain", 330, 340, 90],
+  };
+  const EDGES = [
+    [110, 174, 110, 136], [110, 104, 110, 66], [415, 244, 415, 206], [415, 174, 415, 136],
+    [440, 104, 480, 62], [600, 244, 600, 206], [600, 174, 600, 136], [570, 104, 535, 62],
+    [175, 324, 127, 208], [360, 330, 550, 268], [240, 332, 373, 272], [348, 324, 406, 278], [245, 340, 283, 340],
+  ];
+  EDGES.forEach(([a, b, c, d]) => svg.appendChild(draw.arrow(a, b, c, d, "sv-wire-solid")));
+  [[118, 158, "within"], [118, 88, "within"], [423, 158, "within"], [608, 158, "within"], [446, 88, "within"]]
+    .forEach(([x, y, t]) => svg.appendChild(T(x, y, t, "sv-label", "start")));
+  svg.append(T(100, 276, "born_in", "sv-label", "end"), T(283, 306, "lives_in", "sv-label"),
+             T(398, 314, "lives_in", "sv-label", "start"), T(496, 306, "born_in", "sv-label"),
+             T(264, 364, "married_to", "sv-label"));
+  const nodes = {};
+  Object.entries(N).forEach(([k, [label, x, y, w]]) => {
+    const r = BOX(x - w / 2, y - 16, w, 32, "sv-box", 8);
+    svg.append(r, T(x, y + 5, label, "sv-text"));
+    nodes[k] = r;
+  });
+  svg.appendChild(T(24, 26, "PLACES ARE VERTICES · ARROWS ARE EDGES WITH LABELS", "sv-label", "start"));
+
+  const stE = stat("Edges followed", 0), stU = stat("In the US set", 0), stEu = stat("In the Europe set", 0), stA = stat("Answer", "—");
+  K.$("#g-stats").append(stE, stU, stEu, stA);
+  let edges = 0, usN = 0, euN = 0, i = 0, busy = false;
+  const setCls = (k, c) => nodes[k].setAttribute("class", c);
+  const STEPS = [
+    { cap: "Look up the vertex whose <b>name</b> is “United States”. With an index on the name property, that's instant.", run: () => { setCls("usa", "sv-good"); usN = 1; } },
+    { cap: "Follow <b>WITHIN</b> edges <i>backwards</i>: Idaho is inside the US. In Cypher <code>:WITHIN*0..</code> means “as many hops as it takes”.", run: () => { setCls("idaho", "sv-good"); usN = 2; edges += 1; } },
+    { cap: "Now do the same from the other end: find the vertex named <b>Europe</b>.", run: () => { setCls("europe", "sv-db"); euN = 1; } },
+    { cap: "One hop back from Europe: the <b>United Kingdom</b> and <b>France</b> are both inside it.", run: () => { setCls("uk", "sv-db"); setCls("france", "sv-db"); euN = 3; edges += 2; } },
+    { cap: "Another hop: <b>England</b> and <b>Normandy</b>. Different countries nest differently — France has régions, the US has states.", run: () => { setCls("england", "sv-db"); setCls("normandy", "sv-db"); euN = 5; edges += 2; } },
+    { cap: "One more hop reaches the cities: <b>London</b> and <b>Saint-Lô</b>. A fixed number of joins could never have known how deep to go.", run: () => { setCls("london", "sv-db"); setCls("stlo", "sv-db"); euN = 7; edges += 2; } },
+    { cap: "Follow incoming <b>BORN_IN</b> edges into the US set: <b>Lucy</b> was born in Idaho.", run: () => { setCls("lucy", "sv-server"); edges += 1; } },
+    { cap: "Follow incoming <b>LIVES_IN</b> edges into the Europe set: <b>Lucy and Alain</b> both live in London.", run: () => { setCls("alain", "sv-server"); edges += 2; } },
+    { cap: "Intersect the two sets. Alain lives in Europe but was born in Saint-Lô, so the answer is just <b>Lucy</b>.", run: () => { setCls("lucy", "sv-data-soft"); setCls("alain", "sv-box"); stA.set("Lucy", "good"); } },
+  ];
+  function paint() { stE.set(edges); stU.set(usN, usN ? "good" : ""); stEu.set(euN, euN ? "good" : ""); }
+  function reset() {
+    Object.keys(nodes).forEach((k) => setCls(k, "sv-box"));
+    edges = usN = euN = 0; i = 0; stA.set("—", ""); paint();
+    setCap("#g-cap", "Press <b>Step</b> to run the query one move at a time.");
+  }
+  function step() {
+    if (i >= STEPS.length) { setCap("#g-cap", "Finished. Press <b>Reset</b> to run it again."); return false; }
+    const st = STEPS[i++]; st.run(); paint(); setCap("#g-cap", st.cap); return true;
+  }
+  const ctr = K.$("#g-controls");
+  const bStep = mkBtn(ctr, "Step ▸", "", () => { if (!busy) step(); });
+  const bPlay = mkBtn(ctr, "▶ Play", "primary", async () => {
+    if (busy) return; busy = true; bStep.disabled = bPlay.disabled = true;
+    if (i >= STEPS.length) reset();
+    while (step()) await sleep(1500);
+    busy = false; bStep.disabled = bPlay.disabled = false;
+  });
+  mkBtn(ctr, "Reset", "", () => { if (!busy) reset(); });
+  reset();
+
+  /* ---- the same query in five languages ---- */
+  const LANGS = [
+    { n: "Cypher", lines: [
+      "MATCH",
+      "  (person) -[:BORN_IN]->  () -[:WITHIN*0..]-> (:Location {name:'United States'}),",
+      "  (person) -[:LIVES_IN]-> () -[:WITHIN*0..]-> (:Location {name:'Europe'})",
+      "RETURN person.name",
+    ], note: "Four lines. <code>*0..</code> does the variable-length traversal." },
+    { n: "SPARQL", lines: [
+      "PREFIX : <urn:example:>",
+      "SELECT ?personName WHERE {",
+      "  ?person :name ?personName.",
+      '  ?person :bornIn  / :within* / :name "United States".',
+      '  ?person :livesIn / :within* / :name "Europe".',
+      "}",
+    ], note: "Cypher borrowed its pattern matching from SPARQL, so they look alike." },
+    { n: "SQL", lines: [
+      "WITH RECURSIVE",
+      "  -- in_usa is the set of vertex IDs of all locations within the United States",
+      "  in_usa(vertex_id) AS (",
+      "      SELECT vertex_id FROM vertices",
+      "        WHERE label = 'Location' AND properties->>'name' = 'United States'",
+      "    UNION",
+      "      SELECT edges.tail_vertex FROM edges",
+      "        JOIN in_usa ON edges.head_vertex = in_usa.vertex_id",
+      "        WHERE edges.label = 'within'",
+      "  ),",
+      "  -- in_europe is the set of vertex IDs of all locations within Europe",
+      "  in_europe(vertex_id) AS (",
+      "      SELECT vertex_id FROM vertices",
+      "        WHERE label = 'Location' AND properties->>'name' = 'Europe'",
+      "    UNION",
+      "      SELECT edges.tail_vertex FROM edges",
+      "        JOIN in_europe ON edges.head_vertex = in_europe.vertex_id",
+      "        WHERE edges.label = 'within'",
+      "  ),",
+      "  -- born_in_usa is the set of vertex IDs of all people born in the US",
+      "  born_in_usa(vertex_id) AS (",
+      "    SELECT edges.tail_vertex FROM edges",
+      "      JOIN in_usa ON edges.head_vertex = in_usa.vertex_id",
+      "      WHERE edges.label = 'born_in'",
+      "  ),",
+      "  -- lives_in_europe is the set of vertex IDs of all people living in Europe",
+      "  lives_in_europe(vertex_id) AS (",
+      "    SELECT edges.tail_vertex FROM edges",
+      "      JOIN in_europe ON edges.head_vertex = in_europe.vertex_id",
+      "      WHERE edges.label = 'lives_in'",
+      "  )",
+      "SELECT vertices.properties->>'name'",
+      "FROM vertices",
+      "-- join people born in the US with people living in Europe",
+      "JOIN born_in_usa     ON vertices.vertex_id = born_in_usa.vertex_id",
+      "JOIN lives_in_europe ON vertices.vertex_id = lives_in_europe.vertex_id;",
+    ], note: "The graph fits in two tables, but the query needs a <b>recursive CTE</b>: 31 lines instead of 4." },
+    { n: "Datalog", lines: [
+      "within_recursive(LocID, PlaceName) :- location(LocID, PlaceName, _).",
+      "within_recursive(LocID, PlaceName) :- within(LocID, ViaID),",
+      "                                      within_recursive(ViaID, PlaceName).",
+      "migrated(PName, BornIn, LivingIn)  :- person(PersonID, PName),",
+      "                                      born_in(PersonID, BornID),",
+      "                                      within_recursive(BornID, BornIn),",
+      "                                      lives_in(PersonID, LivingID),",
+      "                                      within_recursive(LivingID, LivingIn).",
+      'us_to_europe(Person) :- migrated(Person, "United States", "Europe").',
+    ], note: "Rules build up virtual tables; rule 2 calls itself, which is what walks the chain." },
+    { n: "Turtle", lines: [
+      "@prefix : <urn:example:>.",
+      '_:lucy     a :Person;   :name "Lucy";          :bornIn _:idaho.',
+      '_:idaho    a :Location; :name "Idaho";         :type "state";   :within _:usa.',
+      '_:usa      a :Location; :name "United States"; :type "country"; :within _:namerica.',
+      '_:namerica a :Location; :name "North America"; :type "continent".',
+    ], note: "Not a query: this is the <b>data</b> as triples — (subject, predicate, object)." },
+  ];
+  const code = K.$("#g-code");
+  const stLang = stat("Language", "Cypher"), stLines = stat("Lines", 4, "good");
+  K.$("#g-lines").append(stLang, stLines);
+  const note = h("span", { class: "pill info" }, h("i"), "four lines");
+  K.$("#g-lines").appendChild(note);
+  function setLang(k) {
+    const L = LANGS[k];
+    code.textContent = L.lines.join("\n");
+    const n = L.lines.filter((l) => l.trim() && !l.trim().startsWith("--")).length;
+    stLang.set(L.n); stLines.set(n, n > 20 ? "bad" : "good");
+    note.innerHTML = "<i></i>" + L.note.replace(/<[^>]+>/g, "");
+  }
+  K.$("#g-lang").appendChild(seg(["Cypher", "SPARQL", "SQL", "Datalog", "Turtle"], 0, setLang, "g-lang-seg"));
+  setLang(0);
+})();
+
+/* ================= 8. GRAPHQL ================= */
+(function graphql() {
+  const svg = K.$("#gq-svg");
+  svg.append(BOX(16, 54, 300, 262, "sv-panel", 12), BOX(340, 54, 304, 262, "sv-box", 12),
+             T(20, 42, "THE QUERY THE APP SENDS", "sv-label", "start"),
+             T(344, 42, "THE JSON THAT COMES BACK", "sv-label", "start"));
+  const qg = s("g"), rg = s("g");
+  svg.append(qg, rg);
+  const F = { ts: true, content: true, sName: true, sImg: true, rContent: true, rSender: true };
+  const WEIGHT = { ts: 14, content: 32, sName: 26, sImg: 58, rContent: 36, rSender: 30 };
+  const stF = stat("Fields on", 6), stB = stat("Bytes / message", 0), stTot = stat("50 messages", 0);
+  K.$("#gq-stats").append(stF, stB, stTot);
+
+  function lines() {
+    const q = ["query ChatApp {", "  channels {", "    name", "    recentMessages(latest: 50) {"];
+    if (F.ts) q.push("      timestamp");
+    if (F.content) q.push("      content");
+    if (F.sName || F.sImg) {
+      q.push("      sender {");
+      if (F.sName) q.push("        fullName");
+      if (F.sImg) q.push("        imageUrl");
+      q.push("      }");
+    }
+    if (F.rContent || F.rSender) {
+      q.push("      replyTo {");
+      if (F.rContent) q.push("        content");
+      if (F.rSender) q.push("        sender { fullName }");
+      q.push("      }");
+    }
+    q.push("    }", "  }", "}");
+    const r = ['{ "channels": [ {', '  "name": "#general",', '  "recentMessages": [ {'];
+    if (F.ts) r.push('    "timestamp": 1693143024,');
+    if (F.content) r.push('    "content": "Great! And you?",');
+    if (F.sName || F.sImg) {
+      const parts = [];
+      if (F.sName) parts.push('"fullName": "Caleb"');
+      if (F.sImg) parts.push('"imageUrl": "https://…"');
+      r.push('    "sender": {' + parts.join(", ") + "},");
+    }
+    if (F.rContent || F.rSender) {
+      r.push('    "replyTo": {');
+      if (F.rContent) r.push('      "content": "Hey! How are y\'all?",');
+      if (F.rSender) r.push('      "sender": {"fullName": "Aaliyah"}');
+      r.push("    }");
+    }
+    r.push("  } ]", "} ] }");
+    return [q, r];
+  }
+  function render() {
+    const [q, r] = lines();
+    K.clear(qg); K.clear(rg);
+    q.slice(0, 15).forEach((l, i) => qg.appendChild(T(28, 76 + i * 16, l, "sv-label", "start")));
+    r.slice(0, 15).forEach((l, i) => rg.appendChild(T(352, 76 + i * 16, l, "sv-label", "start")));
+    const on = Object.keys(F).filter((k) => F[k]);
+    const bytes = 42 + on.reduce((a, k) => a + WEIGHT[k], 0);
+    stF.set(on.length, on.length ? "good" : "warn");
+    stB.set(bytes + " B", bytes > 180 ? "warn" : "good");
+    stTot.set((bytes * 50 / 1000).toFixed(1) + " kB", bytes > 180 ? "warn" : "good");
+  }
+  const LABELS = { ts: "timestamp", content: "message text", sName: "sender name", sImg: "sender photo", rContent: "reply preview", rSender: "reply author" };
+  const tg = K.$("#gq-toggles");
+  Object.keys(LABELS).forEach((k) => {
+    const b = h("button", { type: "button", class: "btn small", "aria-pressed": "true" }, LABELS[k]);
+    b.addEventListener("click", () => {
+      F[k] = !F[k]; b.setAttribute("aria-pressed", String(F[k])); render();
+      setCap("#gq-cap", F[k]
+        ? `Added <b>${LABELS[k]}</b> to the query, so it appears in the reply. <b>No server change was needed.</b>`
+        : `Removed <b>${LABELS[k]}</b>. The reply contains exactly the fields you asked for — no more, no less.`);
+    });
+    tg.appendChild(b);
+  });
+  const locked = h("button", { type: "button", class: "btn small danger" }, "every reply, recursively ✕");
+  locked.addEventListener("click", () => {
+    K.toast("GraphQL doesn't allow recursive queries");
+    setCap("#gq-cap", "Not allowed. GraphQL <b>forbids recursion and arbitrary search conditions</b> on purpose: the query comes from someone's phone, and an expensive query could knock the server over.");
+  });
+  tg.appendChild(locked);
+  render();
+})();
+
+/* ================= 9. EVENT SOURCING + CQRS ================= */
+(function events() {
+  const svg = K.$("#e-svg");
+  svg.append(BOX(24, 56, 212, 296, "sv-panel", 12), T(130, 78, "EVENT LOG · APPEND-ONLY", "sv-label"));
+  const logG = s("g"); svg.appendChild(logG);
+  const seatsRect = BOX(272, 62, 180, 100, "sv-server", 12);
+  const seatsVal = T(362, 128, "—", "sv-big");
+  svg.append(seatsRect, seatsVal, T(362, 86, "view 1 · seats left", "sv-label"));
+  const bookRect = BOX(474, 62, 182, 156, "sv-db", 12);
+  const bookG = s("g");
+  svg.append(bookRect, T(565, 86, "view 2 · bookings board", "sv-label"), bookG);
+  const badgeRect = BOX(272, 186, 180, 116, "sv-good", 12);
+  const badgeG = s("g");
+  svg.append(badgeRect, T(362, 210, "view 3 · badge printer", "sv-label"), badgeG);
+  [[240, 112, 268, 112], [240, 150, 268, 230], [240, 130, 470, 130]].forEach(([a, b, c, d]) => svg.appendChild(draw.arrow(a, b, c, d, "sv-wire")));
+  const layer = s("g"); svg.appendChild(layer);
+
+  const stN = stat("Events in log", 0), stS = stat("Seats left", "—"), stB = stat("Badges queued", 0), stV = stat("View code", "v1");
+  K.$("#e-stats").append(stN, stS, stB, stV);
+  const log = [];
+  let version = 1, busy = false;
+  K.$("#e-seg").appendChild(seg(["view code v1 (buggy)", "v2 (fixed)"], 0, (i) => {
+    version = i + 1; stV.set("v" + version, version === 1 ? "bad" : "good");
+    setCap("#e-cap", version === 1
+      ? "View code <b>v1</b> has a bug: it forgets to give a seat back when someone cancels. The events are fine — the <i>view</i> is wrong."
+      : "View code <b>v2</b> handles cancellations. The old views are still wrong until you <b>rebuild</b> them from the log.");
+  }, "e-ver"));
+
+  function derive(upTo) {
+    let cap = 0, taken = 0; const board = [];
+    for (const e of (upTo === undefined ? log : log.slice(0, upTo))) {
+      if (e.type === "opened") cap += e.n;
+      if (e.type === "room") cap += e.n;
+      if (e.type === "booked") { taken += e.n; board.push(e.who + " × " + e.n); }
+      if (e.type === "cancelled") { if (version === 2) { taken -= e.n; if (board.length) board.push("(1 cancelled)"); } }
+    }
+    return { cap, taken, left: cap - taken, board };
+  }
+  function paintViews(v) {
+    seatsVal.textContent = log.length ? String(v.left) : "—";
+    K.clear(bookG); K.clear(badgeG);
+    v.board.slice(-4).forEach((b, i) => bookG.appendChild(T(565, 112 + i * 24, b, "sv-text")));
+    badgeG.appendChild(T(362, 248, log.length ? v.taken + " badges" : "—", "sv-title"));
+    badgeG.appendChild(T(362, 274, "ready to print", "sv-label"));
+    stS.set(log.length ? v.left : "—", v.left < 0 ? "bad" : "good");
+    stB.set(v.taken);
+    stN.set(log.length);
+  }
+  function drawLog() {
+    K.clear(logG);
+    log.slice(-7).forEach((e, i) => {
+      const y = 100 + i * 34;
+      logG.appendChild(BOX(36, y - 13, 188, 26, e.type === "cancelled" ? "sv-bad" : "sv-data-soft", 8));
+      logG.appendChild(T(130, y + 4, e.label, "sv-label"));
+    });
+    if (log.length > 7) logG.appendChild(T(130, 340, "…older events above", "sv-label"));
+  }
+  async function append(e, capText) {
+    if (busy) return; busy = true;
+    log.push(e); drawLog();
+    setCap("#e-cap", capText);
+    const p = draw.parcel("sv-data", 14); layer.appendChild(p);
+    await fly(p, [230, 300], [362, 112], 420);
+    seatsRect.classList.add("flash");
+    await fly(p, [362, 112], [565, 130], 320); bookRect.classList.add("flash");
+    await fly(p, [565, 130], [362, 240], 320); badgeRect.classList.add("flash");
+    p.remove();
+    paintViews(derive());
+    await sleep(200);
+    [seatsRect, bookRect, badgeRect].forEach((r) => r.classList.remove("flash"));
+    busy = false;
+  }
+  const ctr = K.$("#e-controls");
+  mkBtn(ctr, "Registration opened (100 seats)", "primary", () => append({ type: "opened", n: 100, label: "registration_opened 100" }, "Event 1: <b>registration_opened</b>. Events are named in the <b>past tense</b> — they record something that already happened."));
+  mkBtn(ctr, "Acme booked 3 seats", "", () => append({ type: "booked", n: 3, who: "Acme", label: "seats_booked Acme ×3" }, "The command was checked first (were there enough seats?). Once valid it becomes a <b>fact</b> in the log, and all three views update from it."));
+  mkBtn(ctr, "1 attendee cancelled", "danger", () => append({ type: "cancelled", n: 1, label: "booking_cancelled ×1" }, version === 1 ? "A cancellation is appended — the earlier booking is <b>not erased</b>. But view code v1 ignores cancellations, so the seat count is now <b>wrong</b>." : "A cancellation is appended, and v2 gives the seat back."));
+  mkBtn(ctr, "Moved to a bigger room (+50)", "", () => append({ type: "room", n: 50, label: "capacity_changed +50" }, "The organizer moved the conference. Another event, and the seats-left view recomputes."));
+  mkBtn(ctr, "Delete the views & rebuild", "good", async () => {
+    if (busy || !log.length) return; busy = true;
+    seatsVal.textContent = "—"; K.clear(bookG); K.clear(badgeG);
+    setCap("#e-cap", "All three views are <b>deleted</b>. Nothing is lost: they were only ever derived from the log.");
+    await sleep(700);
+    for (let i = 0; i < log.length; i++) {
+      const p = draw.parcel("sv-data", 12); layer.appendChild(p);
+      await fly(p, [230, 120 + i * 10], [362, 112], 220);
+      p.remove();
+      paintViews(derive(i + 1));
+      await sleep(140);
+    }
+    paintViews(derive());
+    setCap("#e-cap", version === 2
+      ? "Replayed <b>every event in order</b> with the fixed code, and the views are correct again. That reproducibility is the whole point of event sourcing."
+      : "Replayed every event in order — but with <b>v1</b> code, so the same bug comes back. Switch to v2 and rebuild again.");
+    busy = false;
+  });
+  paintViews(derive());
+})();
+
+/* ================= 10. DATAFRAMES & MATRICES ================= */
+(function frames() {
+  const svg = K.$("#f-svg");
+  const R = [[0, 0, 5], [0, 2, 3], [1, 1, 4], [1, 4, 2], [2, 0, 4], [2, 3, 5], [3, 2, 1], [3, 4, 4]];
+  const GENRE = ["comedy", "drama", "horror", "comedy", "drama"];
+  const CX = 340, CY = 108, CW = 34, CH = 30;
+  svg.append(BOX(20, 60, 240, 258, "sv-panel", 12), T(140, 82, "ratings · 8 rows", "sv-label"));
+  const rowY = (i) => 108 + i * 25;
+  const rowRects = R.map((r, i) => {
+    const rect = BOX(32, rowY(i) - 13, 216, 24, "sv-box", 6);
+    svg.append(rect, T(140, rowY(i) + 4, `user ${r[0] + 1} · movie ${r[1] + 1} · ★${r[2]}`, "sv-label"));
+    return rect;
+  });
+  // matrix chrome
+  svg.appendChild(T(CX - 16, 66, "user × movie matrix", "sv-label", "start"));
+  for (let c = 0; c < 5; c++) svg.appendChild(T(CX + c * CW + CW / 2, CY - 18, "M" + (c + 1), "sv-label"));
+  for (let r = 0; r < 4; r++) svg.appendChild(T(CX - 10, CY + r * CH + 20, "U" + (r + 1), "sv-label", "end"));
+  const cellEls = [];
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++) {
+    const x = CX + c * CW, y = CY + r * CH;
+    const rect = s("rect", { x: x + 2, y: y + 2, width: CW - 4, height: CH - 4, rx: 5, class: "sv-panel" });
+    const txt = T(x + CW / 2, y + CH / 2 + 5, "·", "sv-label");
+    svg.append(rect, txt); cellEls.push({ rect, txt, x, y });
+  }
+  // one-hot block
+  const oh = s("g", { class: "fade", style: { opacity: 0 } });
+  oh.appendChild(T(520, 66, "movie genre, one-hot", "sv-label", "start"));
+  ["com", "dra", "hor"].forEach((g, c) => oh.appendChild(T(536 + c * 38, CY - 18, g, "sv-label")));
+  const ohCells = [];
+  for (let r = 0; r < 5; r++) {
+    oh.appendChild(T(512, CY + r * CH + 20, "M" + (r + 1), "sv-label", "end"));
+    for (let c = 0; c < 3; c++) {
+      const on = ["comedy", "drama", "horror"][c] === GENRE[r];
+      const rect = s("rect", { x: 520 + c * 38, y: CY + r * CH + 2, width: 34, height: CH - 4, rx: 5, class: on ? "sv-data-soft" : "sv-panel" });
+      const txt = T(537 + c * 38, CY + r * CH + 21, on ? "1" : "0", "sv-label");
+      oh.append(rect, txt); ohCells.push(rect);
+    }
+  }
+  svg.appendChild(oh);
+  const layer = s("g"); svg.appendChild(layer);
+
+  const stR = stat("Rows in the list", 8), stC = stat("Matrix cells", 20), stFill = stat("Filled", "0%"), stCols = stat("Columns", 3);
+  K.$("#f-stats").append(stR, stC, stFill, stCols);
+  let busy = false, pivoted = false;
+  const ctr = K.$("#f-controls");
+  const bP = mkBtn(ctr, "Pivot into a matrix", "primary", pivot);
+  const bO = mkBtn(ctr, "One-hot encode the genre", "", onehot);
+  mkBtn(ctr, "Reset", "", reset);
+
+  function reset() {
+    if (busy) return;
+    pivoted = false;
+    cellEls.forEach((c) => { c.rect.setAttribute("class", "sv-panel"); c.txt.textContent = "·"; });
+    rowRects.forEach((r) => r.setAttribute("class", "sv-box"));
+    oh.style.opacity = 0; stFill.set("0%"); stCols.set(3); stC.set(20);
+    setCap("#f-cap", "On the left is a plain list: one row per rating. Machine-learning code wants a <b>grid</b> instead.");
+  }
+  async function pivot() {
+    if (busy) return; busy = true; bP.disabled = true;
+    setCap("#f-cap", "<b>Pivoting</b>: every rating moves to the cell where its user's row meets its movie's column.");
+    for (let i = 0; i < R.length; i++) {
+      const [u, m, v] = R[i];
+      rowRects[i].setAttribute("class", "sv-good");
+      const tag = draw.tag("★" + v, "sv-data-soft"); layer.appendChild(tag);
+      const cell = cellEls[u * 5 + m];
+      await fly(tag, [140, rowY(i)], [cell.x + CW / 2, cell.y + CH / 2], 480);
+      tag.remove();
+      cell.rect.setAttribute("class", "sv-data-soft"); cell.txt.textContent = String(v);
+      stFill.set(Math.round(((i + 1) / 20) * 100) + "%", "warn");
+    }
+    pivoted = true; busy = false; bP.disabled = false;
+    setCap("#f-cap", "Only <b>8 of 20 cells</b> are filled — most people haven't rated most movies. That's a <b>sparse</b> matrix, and DataFrame and NumPy libraries handle it happily even with thousands of columns.");
+  }
+  async function onehot() {
+    if (busy) return; busy = true;
+    oh.style.opacity = 1;
+    setCap("#f-cap", "A matrix can only hold <b>numbers</b>, so the word “comedy” becomes three columns with a single <b>1</b> in the right one. That's <b>one-hot encoding</b> — and a movie in two genres just gets two 1s.");
+    stCols.set(3 + 3, "good");
+    for (const c of ohCells) { c.classList.add("flash"); await sleep(60); }
+    await sleep(400); ohCells.forEach((c) => c.classList.remove("flash"));
+    busy = false;
+  }
+  reset();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "What does a declarative query language like SQL let you skip?", options: ["Storing the data", "Writing the algorithm for how to find the answer", "Naming the table", "Saying what you want"], answer: 1, why: "You describe the pattern of the result; the query optimizer chooses indexes, join order and even parallel execution." },
+  { q: "You store a whole résumé as one JSON document. What do you gain?", options: ["Free joins", "Locality: one read fetches the whole profile", "Smaller updates", "Automatic indexes"], answer: 1, why: "The tree of one-to-many relationships is stored together, so it comes back in one read. The cost is that a small update usually rewrites the whole document." },
+  { q: "A town's name is copied onto 5,000 profiles and then changes. What's the risk?", options: ["Reads get slower", "Some copies get updated and others don't, leaving the data inconsistent", "The ID stops working", "Nothing, names never change"], answer: 1, why: "Denormalized data needs every copy updated. A crash halfway leaves the database inconsistent — which is why normalized data stores each human-meaningful fact once." },
+  { q: "In a star schema, what lives in the fact table?", options: ["One row per customer", "One row per event, mostly IDs pointing at dimension tables", "The company's rules", "Only text descriptions"], answer: 1, why: "Each fact row is one event — a purchase, a click — with attributes like price plus foreign keys into dimension tables for the who, what, where and when." },
+  { q: "“Schema-on-read” really means…", options: ["There is no schema at all", "The database enforces the shape when writing", "The structure is implicit, and the code that reads the data interprets it", "Schemas are read from a file"], answer: 2, why: "Document databases are called schemaless, but the reading code still assumes a structure. It's just not enforced by the database on write." },
+  { q: "Why is a graph database good at “people born in the US who now live in Europe”?", options: ["It stores fewer bytes", "It can follow a chain of edges a variable number of times", "Graphs never need indexes", "SQL cannot express it at all"], answer: 1, why: "You don't know in advance how many WITHIN hops separate a city from a country. Cypher's :WITHIN*0.. handles it in one line; SQL can do it with a recursive CTE, but it takes 31 lines instead of 4." },
+], 3);
+</script>
+</body>
+</html>

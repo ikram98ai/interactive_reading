@@ -1,0 +1,122 @@
+<meta charset="utf-8">
+<title>Data Town</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .home-hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 40px; align-items: end; padding-block: 56px 28px; }
+  .home-hero h1 { font-size: clamp(52px, 9vw, 112px); font-weight: 800; letter-spacing: -0.045em; line-height: .92; }
+  .home-hero h1 span { color: var(--blue); }
+  .home-hero .lede { font-size: clamp(18px, 2.1vw, 22px); color: var(--ink-2); margin-top: 18px; max-width: 40ch; }
+  .howto { display: flex; flex-direction: column; gap: 10px; }
+  .howto div { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; font-size: 16px; color: var(--ink-2); }
+  .howto svg { width: 34px; height: 34px; }
+  .howto b { color: var(--ink); }
+  @media (max-width: 860px) { .home-hero { grid-template-columns: 1fr; gap: 24px; padding-block: 34px 18px; } }
+  .route { margin-block: 12px 8px; }
+  .stop { cursor: pointer; }
+  .stop circle.ring { fill: var(--surface); stroke: var(--ink); stroke-width: 2.5; transition: fill .2s; }
+  .stop:hover circle.ring, .stop:focus-visible circle.ring { fill: var(--sun-soft); }
+  .stop.done circle.ring { fill: var(--mint-soft); stroke: var(--mint); }
+  .stop text.n { font-family: var(--f-display); font-weight: 800; font-size: 19px; fill: var(--ink); }
+  .stop text.t { font-family: var(--f-body); font-weight: 700; font-size: 14px; fill: var(--ink); }
+  .grid-ch { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; padding-block: 18px 70px; }
+  .chcard { display: grid; grid-template-columns: 46px 1fr; gap: 12px; text-decoration: none; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 14px; transition: border-color .15s, transform .15s; }
+  .chcard:hover { border-color: var(--blue); transform: translateY(-2px); }
+  .chcard.soon { opacity: .5; }
+  .chcard.soon .num { background: var(--line); color: var(--ink-3); }
+  .chcard.soon .pill { margin-top: 8px; }
+  .stop.soon { opacity: .42; }
+  .stop.soon circle.ring { stroke-dasharray: 5 5; stroke: var(--line-strong); }
+  .chcard .num { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 12px; background: var(--ink); color: var(--bg); font-family: var(--f-display); font-size: 21px; font-weight: 800; }
+  .chcard.done .num { background: var(--mint); color: var(--on-accent); }
+  .chcard h3 { font-size: 17.5px; font-weight: 700; letter-spacing: -0.01em; }
+  .chcard p { font-size: 14.5px; color: var(--ink-2); margin-top: 4px; }
+  .progress-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .bar { width: 180px; height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--mint); border-radius: 99px; }
+</style>
+
+<header class="topbar"><div class="wrap"><a class="brand" href="index.html" id="brand">Data Town</a><span class="where">Designing Data-Intensive Applications, 2nd edition</span></div></header>
+
+<main class="wrap">
+  <section class="home-hero">
+    <div>
+      <span class="ch-tag"><span class="num">5</span> chapters ready to explore</span>
+      <h1 style="margin-top:18px">Data <span>Town</span></h1>
+      <p class="lede">A picture-book tour of <i>Designing Data-Intensive Applications</i>. Every chapter is a set of small machines you can poke, break, and fix, so the ideas make sense even if you're ten.</p>
+    </div>
+    <div class="howto" aria-label="How each chapter works">
+      <div><svg viewBox="0 0 34 34" aria-hidden="true"><rect x="3" y="3" width="28" height="28" rx="8" class="sv-server"/><circle cx="17" cy="17" r="5" class="sv-fill-sun"/></svg><span><b>Read a tiny story.</b> Every idea starts with an everyday picture, like a waiter, a detective, or a scorebook.</span></div>
+      <div><svg viewBox="0 0 34 34" aria-hidden="true"><rect x="3" y="3" width="28" height="28" rx="8" class="sv-db"/><path d="M12 10 L24 17 L12 24 Z" class="sv-fill-lilac"/></svg><span><b>Play with the machine.</b> Press buttons, drag sliders, crash computers, and watch what happens.</span></div>
+      <div><svg viewBox="0 0 34 34" aria-hidden="true"><rect x="3" y="3" width="28" height="28" rx="8" class="sv-good"/><path d="M10 17 l5 5 l9 -10" fill="none" stroke="var(--mint)" stroke-width="3" stroke-linecap="round"/></svg><span><b>Peek at the book's words</b> in “What the book says,” then take the quick quiz.</span></div>
+    </div>
+  </section>
+
+  <section aria-label="Route map">
+    <div class="progress-line"><h2 style="font-size:26px">The route</h2><div class="bar" aria-hidden="true"><i id="bar-fill" style="width:0%"></i></div><span class="score" id="progress-text">0 of 5 explored</span><span class="pill">chapters 6–14 not built yet</span></div>
+    <div class="stage route"><div class="stage-scroll"><svg id="map" viewBox="0 0 1100 330" role="img" aria-label="Route map with 14 chapter stops"></svg></div></div>
+  </section>
+
+  <div class="grid-ch" id="cards"></div>
+</main>
+
+<script src="kit.js"></script>
+<script>
+(function () {
+  const { h, s, draw, CHAPTERS, BUILT, getProgress, file, fly, sleep, whenVisible } = K;
+  const short = ["Trade-offs", "Requirements", "Data models", "Storage", "Encoding", "Replication", "Sharding", "Transactions", "Distributed trouble", "Consensus", "Batch", "Streams", "Streaming philosophy", "Doing right"];
+  const p = getProgress();
+  const ready = (c) => c.n <= BUILT;
+  const done = CHAPTERS.filter((c) => ready(c) && p[c.n]).length;
+  K.$("#bar-fill").style.width = `${(done / BUILT) * 100}%`;
+  K.$("#progress-text").textContent = `${done} of ${BUILT} explored`;
+  const brand = K.$("#brand");
+  brand.prepend(s("svg", { class: "brand-mark", viewBox: "0 0 26 26", "aria-hidden": "true" },
+    s("rect", { x: 1, y: 9, width: 11, height: 16, rx: 2.5, class: "sv-fill-blue" }), s("rect", { x: 14, y: 3, width: 11, height: 22, rx: 2.5, class: "sv-fill-ink" }),
+    s("rect", { x: 4, y: 3, width: 5, height: 5, rx: 1.5, class: "sv-fill-sun" })));
+
+  const svg = K.$("#map");
+  const pts = CHAPTERS.map((c, i) => i < 7 ? [110 + i * 146, 100] : [110 + (13 - i) * 146, 238]);
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 1; i < pts.length; i++) {
+    if (i === 7) d += ` C1080,100 1080,238 ${pts[7][0]},${pts[7][1]}`;
+    else d += ` L${pts[i][0]},${pts[i][1]}`;
+  }
+  svg.appendChild(s("path", { d, style: { fill: "none", stroke: "var(--line-strong)", strokeWidth: 10, strokeLinecap: "round", strokeLinejoin: "round" } }));
+  svg.appendChild(s("path", { d, class: "sv-wire-live", style: { strokeWidth: 2.5 } }));
+  CHAPTERS.forEach((c, i) => {
+    const [x, y] = pts[i];
+    const kids = [
+      s("circle", { cx: x, cy: y, r: 26, class: "ring" }),
+      s("text", { x, y: y + 7, class: "n", "text-anchor": "middle" }, String(c.n)),
+      s("text", { x, y: i < 7 ? y - 40 : y + 50, class: "t", "text-anchor": "middle" }, short[i]),
+    ];
+    svg.appendChild(ready(c)
+      ? s("a", { href: file(c.n), class: "stop" + (p[c.n] ? " done" : ""), "aria-label": `Chapter ${c.n}: ${c.title}` }, ...kids)
+      : s("g", { class: "stop soon", "aria-label": `Chapter ${c.n}: ${c.title} — coming soon` }, ...kids));
+  });
+  const bus = draw.parcel("sv-data", 18); svg.appendChild(bus);
+  let visible = false;
+  whenVisible(svg, () => (visible = true), () => (visible = false));
+  (async function ride() {
+    if (K.reduced) { bus.setAttribute("transform", `translate(${pts[0][0]},${pts[0][1] - 0})`); return; }
+    const path = svg.querySelector("path"), len = path.getTotalLength();
+    for (;;) {
+      if (!visible || document.hidden) { await sleep(400); continue; }
+      await K.tween(16000, (t) => { const q = path.getPointAtLength(t * len); bus.setAttribute("transform", `translate(${q.x},${q.y})`); }, K.ease.linear);
+      await sleep(800);
+    }
+  })();
+
+  const cards = K.$("#cards");
+  CHAPTERS.forEach((c) => {
+    const inner = [h("span", { class: "num" }, ready(c) && p[c.n] ? "✓" : String(c.n)),
+      h("span", {}, h("h3", {}, c.title), h("p", {}, c.kid), ready(c) ? null : h("span", { class: "pill" }, "coming soon"))];
+    cards.appendChild(ready(c)
+      ? h("a", { class: "chcard" + (p[c.n] ? " done" : ""), href: file(c.n) }, ...inner)
+      : h("div", { class: "chcard soon" }, ...inner));
+  });
+})();
+</script>

@@ -1,0 +1,1788 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 4 · Storage &amp; Retrieval</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .cellr { fill: var(--surface-2); stroke: var(--line); stroke-width: 1; transition: fill .18s, stroke .18s, opacity .18s; }
+  .cellr.read { fill: var(--blue-soft); stroke: var(--blue); }
+  .cellr.hit  { fill: var(--mint-soft); stroke: var(--mint); }
+  .cellr.miss { fill: var(--coral-soft); stroke: var(--coral); }
+  .cellr.data { fill: var(--sun-soft); stroke: var(--sun); }
+  .cellr.page { fill: var(--lilac-soft); stroke: var(--lilac); }
+  .cellr.wal  { fill: var(--blue-soft); stroke: var(--blue); }
+  .dim { opacity: .3; }
+  .clickable { cursor: pointer; }
+  .clickable:hover rect, .clickable:focus-visible rect { stroke: var(--blue); }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .codeish { font-family: var(--f-mono); font-size: 13.5px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-m); padding: 12px 14px; color: var(--ink-2); overflow-x: auto; white-space: pre; }
+  .reasons { display: flex; flex-wrap: wrap; gap: 6px; }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">4</span> Chapter four</span>
+      <h1>Storage and Retrieval</h1>
+      <p class="lede">A database only has two jobs: put your stuff away, and find it again fast. This chapter opens the filing cabinet and shows you the tricks inside.</p>
+      <p class="quote">“A computer does not primarily compute in the sense of doing arithmetic. […] They primarily are filing systems.” — Richard Feynman, 1985, quoted at the start of the chapter</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#log">The endless notebook</a>
+        <a href="#sstable">Sorted file &amp; thumb tabs</a>
+        <a href="#lsm">Tidy-up crew (LSM)</a>
+        <a href="#bloom">Bloom filter</a>
+        <a href="#btree">B-tree pages</a>
+        <a href="#compare">LSM vs B-tree</a>
+        <a href="#secondary">Second ways to search</a>
+        <a href="#columns">Columns, not rows</a>
+        <a href="#multi">Maps &amp; words</a>
+        <a href="#vectors">Searching by meaning</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · write, index, find</span><span class="pill info"><i></i>tap the index to look something up</span></div>
+      <svg id="hero-svg" viewBox="0 0 520 416" role="img" aria-label="Writes are appended to a log file on disk while an in-memory index remembers where each key landed"></svg>
+    </div>
+  </section>
+
+  <!-- ============ 1. LOG + HASH INDEX ============ -->
+  <section class="scene" id="log">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Warm-up · the world's simplest database</span>
+        <h2>The notebook you only ever add to</h2>
+        <p class="story">Here is a whole database in two lines of shell script: to <b>store</b> something, add a line to the end of a file. To <b>read</b> it, search the file for that key and take the <i>last</i> line that matches.</p>
+        <div class="codeish">db_set () { echo "$1,$2" &gt;&gt; database }
+db_get () { grep "^$1," database | tail -n 1 }</div>
+        <p class="story">Writing is wonderfully fast, because adding to the end of a file is the simplest thing a computer can do. Reading is terrible: to find one key you read <i>every</i> line, so twice the data means twice the wait. That's called <b>O(n)</b>.</p>
+        <p class="story">The fix is an <b>index</b>: a little extra map that says where things are. Keep a <b>hash map</b> in memory from each key to the <b>byte offset</b> of its newest line, and a lookup becomes one jump.</p>
+        <p class="imagine"><b>Try it:</b> append a few lines, look up key 42 with the index switched off, then switch the index on and look it up again. Watch “rows read” change.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Many databases internally use a <b>log</b>: an append-only sequence of records on disk (not the human-readable “application log”). Old values are never overwritten; the last occurrence of a key wins.</p>
+            <p>An <b>index</b> is an additional structure <i>derived</i> from the primary data. Adding or removing one never changes the contents, only performance. Well-chosen indexes speed up reads, but every index costs disk space and <b>slows down writes</b>, so databases make you choose them.</p>
+            <p>The in-memory hash index still has four problems: you never free the space used by old entries; the map has to be rebuilt by scanning the whole log on restart; it must fit in memory (on-disk hash maps need lots of random I/O and fiddly collision logic); and <b>range queries</b> (“all keys from 10000 to 19999”) are not efficient.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">db_set / db_get</span><span id="s1-seg"></span></div>
+        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 660 340" role="img" aria-label="An append-only log file next to an in-memory hash index"></svg></div>
+        <div class="controls" id="s1-controls"></div>
+        <div class="controls"><div class="stats" id="s1-stats"></div></div>
+        <div class="caption" id="s1-cap" aria-live="polite">Append a few lines, then look a key up.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. SSTABLE ============ -->
+  <section class="scene" id="sstable">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 1 · sorted files</span>
+        <h2>A dictionary with thumb tabs</h2>
+        <p class="story">Nobody reads a dictionary from page one. The words are in <b>order</b>, so you flip to roughly the right place and read a few lines. A <b>Sorted String Table</b> — an <b>SSTable</b> — is a file built the same way: sorted by key, each key appearing once.</p>
+        <p class="story">Because it's sorted, the index doesn't need every key. Keep only the <b>first key of each block</b>: that's a <b>sparse index</b>. Looking for <i>handiwork</i>? It must sit between <i>handicap</i> and <i>handlebar</i>, so jump to that block and scan a few kilobytes.</p>
+        <p class="story">Blocks can also be <b>compressed</b>, which saves disk space and I/O bandwidth for a little extra CPU time.</p>
+        <p class="imagine"><b>Try it:</b> search for <i>handheld</i>, a word that isn't in the file. The sorted order still tells you exactly which block to check — and that it's definitely not there.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>An <b>SSTable</b> stores key-value pairs sorted by key, each key exactly once. Pairs are grouped into <b>blocks</b> of a few kilobytes; only the first key of each block goes into the index, which is therefore <b>sparse</b>. That index lives inside the SSTable, stored as an immutable B-tree, a trie, or similar.</p>
+            <p>In the book's example, one block starts at <i>handbag</i> and the next at <i>handsome</i>; the key <i>handiwork</i> must lie between them, so you seek to <i>handbag</i>'s offset and scan forward. A block of a few kilobytes scans very quickly.</p>
+            <p>Each block can be compressed (the shaded area in Figure 4-2), saving space and I/O bandwidth at the cost of CPU time.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">SSTable · sparse index</span><div class="stats" id="s2-stats"></div></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 660 350" role="img" aria-label="A sparse index pointing at blocks of a sorted string table"></svg></div>
+        <div class="controls" id="s2-controls"></div>
+        <div class="caption" id="s2-cap" aria-live="polite">Pick a word to look for.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. LSM ============ -->
+  <section class="scene" id="lsm">
+    <div class="wrap scene-grid full">
+      <div class="copy" style="max-width:760px">
+        <span class="eyebrow">Big idea 2 · log-structured storage</span>
+        <h2>The tidy-up crew at the toy library</h2>
+        <p class="story">Sorted files are great to read but awkward to write: you can't just add to the end without spoiling the order. So log-structured engines cheat. New writes go into a small sorted pile <i>in memory</i> called the <b>memtable</b>. When it gets full, the whole pile is written out to disk in sorted order as a brand-new <b>SSTable segment</b>, and it is never changed again.</p>
+        <p class="story">To read, you look in the memtable, then in the newest segment, then the next-older one, until you find the key. Meanwhile a background <b>tidy-up crew</b> — <b>compaction</b> — merges old segments together, keeping only the newest value for each key, exactly like the merge step of mergesort.</p>
+        <p class="story">Deleting doesn't erase anything either. It writes a special “it's gone” marker called a <b>tombstone</b>, and the merge finally drops the key for real. And because a crash could lose the memtable, every write is first appended to a separate log on disk.</p>
+        <p class="imagine"><b>Step through all 22 steps</b> below. Watch the memtable fill and flush, watch a lookup walk from newest to oldest, and watch the merge pick the lower key each time.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <ul>
+              <li>Writes go into an in-memory ordered structure (red-black tree, skip list, or trie) called the <b>memtable</b>.</li>
+              <li>When the memtable passes a threshold — typically a few megabytes — it is written out as the newest <b>segment</b>; a new memtable takes over immediately.</li>
+              <li>Reads check the memtable, then each segment from newest to oldest.</li>
+              <li>A background <b>merging and compaction</b> process combines segments and discards overwritten or deleted values.</li>
+            </ul>
+            <p>A separate on-disk log makes the memtable crash-safe; it can be discarded once the memtable has been written out. Deletes append a <b>tombstone</b>, which is dropped once merged into the oldest segment.</p>
+            <p>This is the <b>Log-Structured Merge-tree (LSM-tree)</b>, published in 1996 and used by <b>RocksDB</b>, <b>Cassandra</b>, <b>ScyllaDB</b> and <b>HBase</b>, all inspired by Google's <b>Bigtable</b> paper (which coined “SSTable” and “memtable”). Segment files are immutable, so crash recovery is easy: delete the unfinished file and start again. They also suit object storage — SlateDB and Delta Lake do exactly that.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">LSM-tree · step by step</span><div class="stats" id="s3-stats"></div></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 660 370" role="img" aria-label="Memtable, write-ahead log and SSTable segments being merged"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <div class="caption" id="s3-cap" aria-live="polite">Press Step to begin.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. BLOOM FILTER ============ -->
+  <section class="scene" id="bloom">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 3 · a fast “definitely not here”</span>
+        <h2>The bouncer with a very small notebook</h2>
+        <p class="story">Looking for a key that doesn't exist is the slowest thing an LSM engine does: it has to open every segment to be sure. A <b>Bloom filter</b> is a tiny bitmap that answers “is this key in this file?” almost instantly.</p>
+        <p class="story">To add a key, you hash it into a few numbers and switch those bits to 1. To ask about a key, you hash it the same way and peek at those bits. If <i>any</i> of them is 0, the key is <b>definitely not</b> in the file: skip it. If all are 1, the key is <b>probably</b> there, so go and check properly.</p>
+        <p class="story">Sometimes other keys have already set all the bits you check, and the filter says “probably” about a key that was never added. That's a <b>false positive</b>: you do a little wasted work, and nothing breaks.</p>
+        <p class="imagine"><b>Try it:</b> add all three keys, then query <i>handsome</i>. It was never added, yet every one of its bits is 1. You just made a false positive.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Each segment often carries a <b>Bloom filter</b>: hash every key in the SSTable into a set of numbers used as indexes into a bit array, and set those bits. The book's example uses 16 bits and the key <i>handbag</i> hashing to (2, 9, 4); the query <i>handheld</i> hashes to (6, 11, 2).</p>
+            <p>If at least one queried bit is 0, the key <b>definitely</b> isn't in that SSTable. If all are 1 it's <i>likely</i> present, but may be a <b>false positive</b>, in which case you consult the sparse index, decode the block, find nothing, and move on to the next-oldest segment. No harm done.</p>
+            <p>Rule of thumb: about <b>10 bits per key</b> gives a 1% false-positive rate, and the rate drops tenfold for every 5 extra bits per key. Bloom filters don't help <b>range queries</b>, which is why range queries are relatively more expensive on LSM storage.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">16-bit Bloom filter · toy hashes</span><div class="stats" id="s4-stats"></div></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 660 300" role="img" aria-label="A sixteen bit array with keys hashed into three bits each"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <div class="caption" id="s4-cap" aria-live="polite">Add some keys to the filter, then ask about one.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. B-TREE ============ -->
+  <section class="scene" id="btree">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 4 · update in place</span>
+        <h2>Signposts all the way down</h2>
+        <p class="story">The other great family of indexes is the <b>B-tree</b>, invented in 1970 and still the standard in almost every relational database. Instead of big immutable files, it chops the database into fixed-size <b>pages</b> (4 KiB traditionally; PostgreSQL uses 8 KiB, MySQL 16 KiB) and <i>overwrites</i> them in place.</p>
+        <p class="story">One page is the <b>root</b>. It holds a few boundary keys and signposts to child pages: “keys 200–300 are over there.” You follow signposts until you reach a <b>leaf page</b> holding the actual keys. With a <b>branching factor</b> of several hundred, three or four levels cover almost any database.</p>
+        <p class="story">Adding a key to a page that's already full means <b>splitting</b> it into two half-full pages and telling the parent about the new boundary. If the parent is full too, the split travels upward — and if a crash lands in the middle, the tree can end up broken. That's what the <b>write-ahead log</b> is for.</p>
+        <p class="imagine"><b>Try all three modes:</b> look up 251, insert 334 into a full page, then crash the database halfway through the split and recover from the log.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>B-trees keep key-value pairs sorted by key, in fixed-size <b>pages</b> identified by a <b>page number</b> that works like a pointer on disk. Each child is responsible for a continuous range of keys; the keys between references are the boundaries. A leaf page holds values inline or references to them.</p>
+            <p>Inserting into a full page <b>splits</b> it into two half-full pages and updates the parent, possibly all the way to a new root. This keeps the tree balanced: depth O(log n). A four-level tree of 4 KiB pages with branching factor 500 holds up to <b>250 TB</b>.</p>
+            <p>Overwriting several pages at once is dangerous: a crash can leave an orphan page, and hardware may leave a <b>torn page</b>. So B-trees keep a <b>write-ahead log (WAL)</b> — in filesystems the same idea is called journaling — where every modification is appended before it touches the tree. Data is durable once it is in the WAL and <b>fsync</b>ed.</p>
+            <p>Variants: <b>copy-on-write</b> (LMDB) instead of a WAL, abbreviated keys for a higher branching factor, leaf pages laid out sequentially, and sibling pointers for scanning in order.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">B-tree</span><span id="s5-seg"></span></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 660 340" role="img" aria-label="A B-tree with a root page, an interior page and leaf pages"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="caption" id="s5-cap" aria-live="polite">Press Step to walk the tree.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. COMPARE ============ -->
+  <section class="scene" id="compare">
+    <div class="wrap scene-grid full">
+      <div class="copy" style="max-width:760px">
+        <span class="eyebrow">Big idea 5 · which one should you use?</span>
+        <h2>Ink on the page, or a fresh sheet every time?</h2>
+        <p class="story">A B-tree rubs out and rewrites the same pages, wherever they happen to sit on the disk: lots of small scattered <b>random writes</b>. An LSM engine writes whole files at a time in one long stroke: fewer, bigger <b>sequential writes</b>. Disks — spinning ones especially, but SSDs too — are happier with the long strokes.</p>
+        <p class="story">Watch the counter marked <b>write amplification</b>: how many bytes actually hit the disk for every byte your app writes. A B-tree writes each record to the log <i>and</i> rewrites a whole page, even if only a few bytes changed. An LSM engine writes the log, the flushed file, and then rewrites data again during compaction.</p>
+        <p class="story">Rule of thumb: <b>LSM-trees suit write-heavy work; B-trees are faster and more predictable for reads</b>. But benchmarks depend enormously on your workload, so measure with your own data.</p>
+        <p class="imagine"><b>Try it:</b> run the B-tree for a while, then switch to LSM. Compare the two bars — and notice the LSM bar jump when compaction runs.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><b>Reads:</b> a B-tree reads one page per level, so it's fast and predictable; LSM reads may check several SSTables, helped by Bloom filters. Range queries are simple on B-trees; on LSM they must scan all segments in parallel and merge.</p>
+            <p><b>Writes:</b> high write throughput can stall an LSM engine if the memtable fills faster than compaction drains it — RocksDB applies <b>backpressure</b>, suspending reads and writes. On SSDs, sequential writes still beat random ones because flash is written a page at a time but erased a block at a time, and random writes force more <b>garbage collection</b> (and wear the drive out faster).</p>
+            <p><b>Write amplification</b> = bytes written to disk ÷ bytes you would have written to a plain log. LSM-trees usually amplify less because they never rewrite whole pages and can compress blocks. Measure for long enough that compaction has started, or you'll flatter the LSM engine.</p>
+            <p><b>Space:</b> B-trees fragment and need processes like PostgreSQL's <b>vacuum</b>; LSM files are rewritten anyway and compress better, but deleted data can linger in old levels until the tombstone reaches the bottom — a real problem when you must prove data was erased. Immutable segments make cheap <b>snapshots</b>.</p>
+            <p><b>Keeping everything in memory:</b> when a dataset fits in RAM, in-memory stores such as <b>Memcached</b>, <b>Redis</b>, <b>VoltDB</b>, <b>SingleStore</b>, <b>RAMCloud</b> and Oracle <b>TimesTen</b> skip disk structures entirely. Their speed comes not from avoiding disk reads (the OS caches those anyway) but from avoiding the work of <i>encoding</i> data into a disk-friendly form.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Bytes hitting the disk · toy numbers</span><span id="s6-seg"></span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 660 320" role="img" aria-label="Disk blocks being written randomly or sequentially, with a write amplification chart"></svg></div>
+        <div class="controls" id="s6-controls"></div>
+        <div class="controls"><div class="stats" id="s6-stats"></div></div>
+        <div class="caption" id="s6-cap" aria-live="polite">Press Play to send writes to the disk.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7. SECONDARY INDEXES ============ -->
+  <section class="scene" id="secondary">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 6 · more than one way in</span>
+        <h2>Sorted by name, but you want all the red ones</h2>
+        <p class="story">A <b>primary key</b> index finds one row by its ID. A <b>secondary index</b> lets you search by something else — colour, user ID, date — and the values there aren't unique, so each entry keeps a <i>list</i> of matching rows.</p>
+        <p class="story">What the index stores at the end of that list matters. It can be a pointer into a <b>heap file</b> where rows live in no particular order; it can be the row itself (a <b>clustered index</b>); or it can carry a copy of a few columns so some questions are answered by the index alone: a <b>covering index</b>.</p>
+        <p class="story">Every copy costs. More columns in the index means more disk space and slower writes. And in a heap file, making a value bigger can force the whole row to move.</p>
+        <p class="imagine"><b>Try it:</b> ask “which toys are red?” in all three modes and count the reads. Then press <b>Grow a value</b> in heap mode and watch the row have to move house.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A secondary index is built from a key-value index; because indexed values aren't unique, entries hold either a list of row identifiers (a <b>postings list</b>) or are made unique by appending a row ID. Both B-trees and log-structured storage can implement one.</p>
+            <p>In a <b>clustered index</b> the row is stored inside the index — MySQL's <b>InnoDB</b> always clusters on the primary key, and SQL Server allows one per table. Otherwise the value is a reference: the primary key (InnoDB's secondary indexes) or a location in a <b>heap file</b>, the approach <b>Postgres</b> uses.</p>
+            <p>A <b>covering index</b> (index with included columns) stores some columns in the index so a query can be answered without touching the heap — the index <i>covers</i> the query. Faster reads, more space, slower writes.</p>
+            <p>Updating a heap record in place works while the new value fits; a bigger value must move, so every index must be updated to the new location, or a <b>forwarding pointer</b> is left behind.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Index on “colour”</span><span id="s7-seg"></span></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 660 330" role="img" aria-label="A secondary index pointing at a heap file, a clustered index, or covering columns"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="controls"><div class="stats" id="s7-stats"></div></div>
+        <div class="caption" id="s7-cap" aria-live="polite">Ask the question in each mode and compare the reads.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8. COLUMNS ============ -->
+  <section class="scene" id="columns">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 7 · storage for analytics</span>
+        <h2>Don't carry the whole shopping bag</h2>
+        <p class="story">Analysts ask questions like “did people buy more fruit or more candy on Saturdays in 2024?” That touches millions of rows — but only three of the hundred-plus columns in the sales table.</p>
+        <p class="story">Ordinary <b>row-oriented</b> storage keeps everything from one row side by side, so the engine drags all hundred columns off the disk and throws most of them away. <b>Column-oriented</b> storage keeps each column in its own place, so a query loads only the columns it names.</p>
+        <p class="story">Columns full of repeats also squash beautifully. Turn a column into one <b>bitmap</b> per distinct value — one bit per row, 1 if that row has that value — and a filter becomes a bitwise AND or OR. Long stretches of zeros get shortened again by <b>run-length encoding</b>.</p>
+        <p class="imagine"><b>Try it:</b> run the same query in row mode and column mode and compare “cells read”. Then switch to bitmaps and combine two conditions.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Fact tables are often over a hundred columns wide, yet a typical warehouse query reads four or five. <b>Column-oriented storage</b> stores the values of each column together; every column keeps rows in the same order, so the 23rd entry of each column reassembles the 23rd row. Engines break tables into blocks of thousands or millions of rows and store columns separately inside each block.</p>
+            <p>Used by <b>Snowflake</b>, <b>DuckDB</b>, <b>Pinot</b>, <b>Druid</b>, formats such as <b>Parquet</b>, <b>ORC</b>, <b>Lance</b> and <b>Nimble</b>, in-memory formats <b>Arrow</b> and Pandas/NumPy, and time-series stores like InfluxDB IOx and TimescaleDB.</p>
+            <p><b>Bitmap encoding</b> turns a column with n distinct values into n bitmaps. Sparse bitmaps are <b>run-length encoded</b>; <b>roaring bitmaps</b> switch between representations. <code>WHERE product_sk IN (31, 68, 69)</code> becomes a bitwise OR; <code>WHERE product_sk = 30 AND store_sk = 3</code> becomes a bitwise AND.</p>
+            <p>Choosing a <b>sort order</b> (say date first, product second) makes date-range queries fast and gives the first sort column long runs that compress to almost nothing. Writes arrive in a sorted in-memory store and are merged into new column files in bulk — log-structured again. Don't confuse column stores with <b>wide-column</b> (column-family) databases like Bigtable and HBase, which are row-oriented.</p>
+            <p>Queries get fast CPUs through <b>query compilation</b> (generate and JIT-compile code, often with LLVM) or <b>vectorized processing</b> (predefined operators chewing through batches of column values). <b>Materialized views</b> and <b>data cubes</b> precompute popular aggregates — fast, but less flexible than the raw data.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">fact_sales · 12 toy rows</span><span id="s8-seg"></span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 660 370" role="img" aria-label="A fact table read by rows, by columns, or as bitmaps"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="controls"><div class="stats" id="s8-stats"></div></div>
+        <div class="caption" id="s8-cap" aria-live="polite">Run the query and watch which cells have to be read.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9. MULTIDIMENSIONAL + FULL TEXT ============ -->
+  <section class="scene" id="multi">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 8 · searching two things at once</span>
+        <h2>Restaurants on a map, words in a book</h2>
+        <p class="story">A normal index sorts by one thing. Combine two into a <b>concatenated index</b> — like a phone book sorted by (lastname, firstname) — and you can search by last name, or last <i>and</i> first, but never by first name alone.</p>
+        <p class="story">Now look for every restaurant inside the rectangle you can see on a map. A one-dimensional index gives you every restaurant in that <i>band of latitude</i>, right around the planet, and you filter the rest by hand. A <b>multidimensional index</b> such as an <b>R-tree</b> groups nearby places into boxes, so you open only the boxes your rectangle touches.</p>
+        <p class="story">Full-text search is the same trick with a huge number of dimensions: one per word. An <b>inverted index</b> maps each word to the list of documents containing it — and if you write those lists as bitmaps, “red AND apples” is once again a bitwise AND.</p>
+        <p class="imagine"><b>Try both modes.</b> In the map, compare how many restaurants each index has to examine. In the words mode, watch two bitmaps combine into an answer.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A <b>concatenated index</b> appends one column to another; it can't answer a query on the second column alone. Two-dimensional range queries (latitude <i>and</i> longitude together) need a <b>space-filling curve</b> plus a B-tree, or specialized <b>R-trees</b> / <b>Bkd-trees</b> — PostGIS builds R-trees on PostgreSQL's GiST facility. The same applies to (red, green, blue) colour search or (date, temperature) weather search.</p>
+            <p><b>Full-text search</b> treats each term as a dimension. The <b>inverted index</b> maps a term to its <b>postings list</b> of document IDs, which can be stored as a sparse bitmap. <b>Lucene</b> (behind Elasticsearch and Solr) keeps term → postings in SSTable-like sorted files merged in the background; PostgreSQL's <b>GIN</b> index does something similar.</p>
+            <p><b>n-grams</b> (the trigrams of “hello” are hel, ell, llo) allow substring and even regular-expression search, at the cost of a large index. Lucene handles typos with a <b>Levenshtein automaton</b> that finds words within a given <b>edit distance</b>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Two dimensions at once</span><span id="s9-seg"></span></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 660 340" role="img" aria-label="A map query compared between a one-dimensional index and an R-tree, and an inverted index of words"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="controls"><div class="stats" id="s9-stats"></div></div>
+        <div class="caption" id="s9-cap" aria-live="polite">Pick an index and run the query.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 10. VECTORS ============ -->
+  <section class="scene" id="vectors">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 9 · searching by meaning</span>
+        <h2>Neighbours in a space made of meaning</h2>
+        <p class="story">Someone types “how do I close my account?” but your help page is called “cancelling your subscription”. No word matches. <b>Semantic search</b> fixes that by turning each document into a list of numbers — a <b>vector embedding</b> — produced by an embedding model.</p>
+        <p class="story">Think of each document as a dot in a huge space. Documents that <i>mean</i> similar things land near each other. To search, you embed the question too and look for the nearest dots, measuring with <b>cosine similarity</b> or <b>Euclidean distance</b>.</p>
+        <p class="story">A <b>flat index</b> compares the question to every single dot: perfectly accurate, and slow. An <b>HNSW</b> index keeps layers of the space — a sparse top layer for big jumps, denser layers below — so you glide toward the answer in a handful of hops. It's approximate, and usually right.</p>
+        <p class="imagine"><b>Run both.</b> Count the distance calculations in the flat index, then in HNSW. Do they find the same neighbours?</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Semantic search underpins <b>retrieval-augmented generation</b>, where search results are fed into a large language model. Embedding models (Word2Vec, BERT, GPT and newer multimodal models) map text, images, audio or video into a vector of floating-point numbers — often more than 1,000 of them — whose positions encode meaning.</p>
+            <p>Careful: the <b>vector</b> of vectorized query processing is a batch of values for fast CPU work; the <b>vector</b> of an embedding is a point in multidimensional space. Different meanings, same word.</p>
+            <p>Vector indexes: <b>flat</b> (exact, reads every vector), <b>IVF</b> (space clustered into partitions called centroids; a query picks how many <b>probes</b> to check — more probes, more accurate, slower), and <b>HNSW</b> (Hierarchical Navigable Small World: layered graphs, entering at a sparse top layer and descending into denser ones). IVF and HNSW are approximate. Facebook's <b>Faiss</b> and PostgreSQL's <b>pgvector</b> implement both.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Nearest neighbours</span><span id="s10-seg"></span></div>
+        <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 660 380" role="img" aria-label="Documents plotted in a meaning space, searched exhaustively or through HNSW layers"></svg></div>
+        <div class="controls" id="s10-controls"></div>
+        <div class="controls"><div class="stats" id="s10-stats"></div></div>
+        <div class="caption" id="s10-cap" aria-live="polite">Search for “how do I close my account?”</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SUMMARY ============ -->
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The seesaws from this chapter</h2><p>Every storage engine is a bargain: make one thing fast and something else gets slower.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>No index</h4><p>Fastest possible writes; reads scan everything</p></div><span class="vs">vs</span><div class="side"><h4>Indexes</h4><p>Fast reads, but extra disk space and slower writes</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Log-structured (LSM)</h4><p>Immutable files, sequential writes, high write throughput, lower write amplification</p></div><span class="vs">vs</span><div class="side"><h4>Update in place (B-tree)</h4><p>Fixed pages overwritten where they lie; fast, predictable reads and range scans</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Sequential writes</h4><p>Few big strokes; kinder to SSD garbage collection</p></div><span class="vs">vs</span><div class="side"><h4>Random writes</h4><p>Many small scattered page writes; more wear, less throughput</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Heap file reference</h4><p>One copy of the row; an extra hop to fetch it</p></div><span class="vs">vs</span><div class="side"><h4>Clustered / covering index</h4><p>Data inside the index: fewer hops, more duplication</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Row-oriented (OLTP)</h4><p>Whole records together for point reads and writes</p></div><span class="vs">vs</span><div class="side"><h4>Column-oriented (analytics)</h4><p>Read only the columns you asked for, compressed hard</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Raw data</h4><p>Any question you like, computed from scratch</p></div><span class="vs">vs</span><div class="side"><h4>Materialized views &amp; cubes</h4><p>Precomputed answers: instant, but only the ones you planned</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Exact search (flat index)</h4><p>Always the true nearest neighbours, one comparison per document</p></div><span class="vs">vs</span><div class="side"><h4>Approximate (IVF, HNSW)</h4><p>A few hops instead of millions, occasionally imperfect</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>Grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>log</dt><dd>A file you only ever add to, never edit. The newest line about a key wins.</dd></div>
+        <div class="word"><dt>index</dt><dd>An extra map built from the data that helps you find things without reading everything.</dd></div>
+        <div class="word"><dt>hash index</dt><dd>A map kept in memory from each key to the exact spot in the file where its value sits.</dd></div>
+        <div class="word"><dt>byte offset</dt><dd>How many bytes into the file something starts — like a page number for a computer.</dd></div>
+        <div class="word"><dt>SSTable</dt><dd>Sorted String Table: a file of key-value pairs kept in key order, each key once.</dd></div>
+        <div class="word"><dt>sparse index</dt><dd>An index that remembers only the first key of each block, not every key.</dd></div>
+        <div class="word"><dt>memtable</dt><dd>The small sorted pile of recent writes kept in memory before it's written to disk.</dd></div>
+        <div class="word"><dt>segment</dt><dd>One SSTable file on disk. Once written, it never changes again.</dd></div>
+        <div class="word"><dt>compaction</dt><dd>Background tidying that merges segments and throws away old and deleted values.</dd></div>
+        <div class="word"><dt>LSM-tree</dt><dd>Log-Structured Merge-tree: memtable plus a cascade of segments that get merged.</dd></div>
+        <div class="word"><dt>tombstone</dt><dd>A marker meaning “this key was deleted”, kept until the merge can drop it for good.</dd></div>
+        <div class="word"><dt>Bloom filter</dt><dd>A tiny bitmap that can say “definitely not here” instantly, or “probably here”.</dd></div>
+        <div class="word"><dt>false positive</dt><dd>When the filter says “probably here” about something that isn't. Harmless, just wasted work.</dd></div>
+        <div class="word"><dt>B-tree</dt><dd>A tree of fixed-size pages full of signposts, overwritten in place. The classic index.</dd></div>
+        <div class="word"><dt>page</dt><dd>A fixed-size block of disk, typically 4 KiB, that a B-tree reads and writes as one lump.</dd></div>
+        <div class="word"><dt>branching factor</dt><dd>How many child pages one page points at — usually several hundred.</dd></div>
+        <div class="word"><dt>page split</dt><dd>When a full page is cut into two half-full ones and the parent learns the new boundary.</dd></div>
+        <div class="word"><dt>write-ahead log (WAL)</dt><dd>Every change written to an append-only file first, so a crash can be undone.</dd></div>
+        <div class="word"><dt>write amplification</dt><dd>How many bytes really hit the disk for each byte your app writes.</dd></div>
+        <div class="word"><dt>sequential vs random writes</dt><dd>One long stroke versus lots of little scattered pokes. Disks prefer the stroke.</dd></div>
+        <div class="word"><dt>secondary index</dt><dd>A second way to search — by colour, date, user — where many rows can share a value.</dd></div>
+        <div class="word"><dt>heap file</dt><dd>Where rows are kept in no particular order; indexes point at spots inside it.</dd></div>
+        <div class="word"><dt>clustered index</dt><dd>An index that keeps the whole row inside itself, so there's no extra hop.</dd></div>
+        <div class="word"><dt>covering index</dt><dd>An index carrying a few extra columns so some questions never touch the table.</dd></div>
+        <div class="word"><dt>column-oriented storage</dt><dd>Storing each column's values together so a query loads only the columns it needs.</dd></div>
+        <div class="word"><dt>bitmap encoding</dt><dd>One row of 0s and 1s per distinct value, so filters become fast bit operations.</dd></div>
+        <div class="word"><dt>run-length encoding</dt><dd>Writing “twelve zeros” instead of writing twelve zeros.</dd></div>
+        <div class="word"><dt>materialized view / data cube</dt><dd>Answers worked out in advance and saved, so popular questions are instant.</dd></div>
+        <div class="word"><dt>inverted index</dt><dd>Word → the list of documents that contain it. How search engines work.</dd></div>
+        <div class="word"><dt>vector embedding</dt><dd>A list of numbers standing for a document's meaning; similar meanings land nearby.</dd></div>
+        <div class="word"><dt>HNSW</dt><dd>A layered map of the meaning space that finds close-enough neighbours in a few hops.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width: 820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Six quick questions. Finish all six to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible, ease, lerp } = K;
+K.page(4);
+const setCap = (id, html) => { K.$(id).innerHTML = html; };
+const rnd = (n) => Math.floor(Math.random() * n);
+const txt = (x, y, t, cls = "sv-label", anchor = "middle") => s("text", { x, y, class: cls, "text-anchor": anchor }, t);
+const rect = (x, y, w, hgt, cls = "sv-panel", rx = 8) => s("rect", { x, y, width: w, height: hgt, rx, class: cls });
+const btn = (label, cls, fn) => { const b = h("button", { type: "button", class: "btn " + (cls || "") }, label); b.addEventListener("click", fn); return b; };
+
+/* ================= HERO ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const writes = [["12", "London"], ["42", "S.Francisco"], ["77", "Oslo"], ["42", "Tokyo"], ["91", "Cairo"], ["12", "Lima"], ["77", "Delhi"]];
+  const MAX = writes.length;
+  svg.append(
+    txt(40, 42, "WRITES", "sv-label", "start"),
+    txt(132, 42, "INDEX (in memory)", "sv-label", "start"),
+    txt(292, 42, "LOG FILE ON DISK", "sv-label", "start"),
+    rect(132, 52, 130, 308, "sv-server", 14),
+    rect(292, 52, 210, 308, "sv-db", 14));
+  svg.appendChild(draw.phone(60, 210, "app"));
+  const gLog = s("g"), gIdx = s("g"), layer = s("g");
+  svg.append(gLog, gIdx, layer);
+  const note = txt(260, 396, "0 values stored", "sv-label");
+  svg.appendChild(note);
+  const hit = s("rect", { x: 132, y: 52, width: 130, height: 308, rx: 14, fill: "transparent", class: "clickable" });
+  const hitG = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Look up a key using the index" }, hit);
+  svg.appendChild(hitG);
+
+  const rows = [];
+  let n = 0, busy = false, visible = false;
+  const rowY = (i) => 68 + i * 41;
+  function render() {
+    K.clear(gLog); K.clear(gIdx);
+    rows.forEach((r, i) => {
+      const y = rowY(i);
+      r.logRect = s("rect", { x: 302, y, width: 190, height: 30, rx: 6, class: "cellr data" });
+      gLog.append(r.logRect, txt(312, y + 20, r.k + "," + r.v, "sv-label", "start"));
+    });
+    const latest = {};
+    rows.forEach((r, i) => { latest[r.k] = i; });
+    Object.keys(latest).sort().forEach((k, j) => {
+      const y = rowY(j), i = latest[k];
+      const rr = s("rect", { x: 142, y, width: 110, height: 30, rx: 6, class: "cellr" });
+      rows[i].idxRect = rr;
+      gIdx.append(rr, txt(152, y + 20, k + " → line " + (i + 1), "sv-label", "start"));
+    });
+    rows.forEach((r, i) => { if (latest[r.k] !== i) r.logRect.style.opacity = 0.45; });
+    note.textContent = rows.length + (rows.length === 1 ? " line on disk" : " lines on disk");
+  }
+  async function write() {
+    if (busy) return; busy = true;
+    if (rows.length >= MAX) { rows.length = 0; n = 0; render(); busy = false; return; }
+    const [k, v] = writes[n % writes.length]; n++;
+    const p = draw.parcel("sv-data", 16, k);
+    layer.appendChild(p);
+    await fly(p, [88, 210], [197, rowY(rows.length) + 15], 520);
+    await fly(p, [197, rowY(rows.length) + 15], [397, rowY(rows.length) + 15], 480);
+    p.remove();
+    rows.push({ k, v });
+    render();
+    busy = false;
+  }
+  async function look() {
+    if (busy || !rows.length) return; busy = true;
+    const keys = [...new Set(rows.map((r) => r.k))];
+    const k = keys[rnd(keys.length)];
+    let idx = -1;
+    rows.forEach((r, i) => { if (r.k === k) idx = i; });
+    const r = rows[idx];
+    r.idxRect.classList.add("read");
+    await sleep(320);
+    const p = draw.parcel("sv-data-soft", 14, k);
+    layer.appendChild(p);
+    const y = rowY(idx) + 15;
+    await fly(p, [197, y], [397, y], 420);
+    r.logRect.classList.add("hit");
+    await sleep(420);
+    p.firstChild.setAttribute("class", "sv-good");
+    await fly(p, [397, y], [88, 210], 620);
+    p.remove();
+    r.idxRect.classList.remove("read"); r.logRect.classList.remove("hit");
+    busy = false;
+  }
+  hitG.addEventListener("click", look);
+  hitG.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); look(); } });
+  whenVisible(svg, () => (visible = true), () => (visible = false));
+  render();
+  (async function auto() {
+    await sleep(500);
+    for (;;) {
+      if (visible && !K.reduced && !document.hidden) await write();
+      await sleep(1500);
+    }
+  })();
+})();
+
+/* ================= 1. LOG + HASH INDEX ================= */
+(function scLog() {
+  const svg = K.$("#s1-svg");
+  const script = [["12", "London"], ["42", "S.Francisco"], ["77", "Oslo"], ["42", "Tokyo"], ["12", "Lima"], ["91", "Cairo"], ["77", "Delhi"], ["42", "Quito"], ["91", "Perth"], ["12", "Rome"]];
+  const MAX = script.length;
+  svg.append(
+    txt(40, 52, "IN-MEMORY HASH INDEX", "sv-label", "start"),
+    txt(330, 52, "APPEND-ONLY LOG FILE ON DISK", "sv-label", "start"));
+  const gMapWrap = s("g"), gMap = s("g"), gLog = s("g");
+  gMapWrap.appendChild(gMap);
+  svg.append(gMapWrap, gLog);
+
+  const rows = [];
+  let mode = 0, busy = false, next = 0;
+  const mapRects = {};
+  const st = { rows: stat("Lines on disk", 0), read: stat("Lines read", 0), cost: stat("Lookup cost", "O(n)", "warn") };
+  Object.values(st).forEach((x) => K.$("#s1-stats").appendChild(x));
+
+  const lastOf = (k) => { let i = -1; rows.forEach((r, j) => { if (r.k === k) i = j; }); return i; };
+  function render() {
+    K.clear(gLog); K.clear(gMap);
+    for (const k in mapRects) delete mapRects[k];
+    rows.forEach((r, i) => {
+      const y = 70 + i * 24, latest = lastOf(r.k) === i;
+      r.rect = s("rect", { x: 330, y, width: 290, height: 20, rx: 5, class: "cellr" + (latest ? " data" : "") });
+      if (!latest) r.rect.style.opacity = 0.45;
+      gLog.append(r.rect, txt(340, y + 14, r.k + "," + r.v, "sv-label", "start"), txt(612, y + 14, "byte #" + r.off, "sv-label", "end"));
+    });
+    const keys = [...new Set(rows.map((r) => r.k))].sort();
+    keys.forEach((k, j) => {
+      const y = 70 + j * 24, i = lastOf(k);
+      const rr = s("rect", { x: 40, y, width: 210, height: 20, rx: 5, class: "cellr" });
+      mapRects[k] = rr;
+      gMap.append(rr, txt(50, y + 14, k + "  →  byte #" + rows[i].off, "sv-label", "start"));
+    });
+    gMapWrap.setAttribute("class", mode === 0 ? "dim" : "");
+    st.rows.set(rows.length);
+  }
+  function append() {
+    if (busy) return;
+    if (rows.length >= MAX) {
+      setCap("#s1-cap", "The log is full of <b>old versions</b> that nobody will ever read again. A real log-structured engine runs <b>compaction</b> to reclaim that space — that's the next scene but one.");
+      return;
+    }
+    const [k, v] = script[next++];
+    const off = rows.length ? rows[rows.length - 1].off + rows[rows.length - 1].k.length + rows[rows.length - 1].v.length + 2 : 0;
+    rows.push({ k, v, off });
+    render();
+    setCap("#s1-cap", "<b>db_set " + k + " " + v + "</b> — appended to the end of the file. The old line for " + k + " is still there, just faded: it is simply out of date.");
+  }
+  async function lookup(key) {
+    if (busy) return;
+    if (!rows.some((r) => r.k === key)) { setCap("#s1-cap", "Key <b>" + key + "</b> hasn't been written yet. Append a few more lines first."); return; }
+    busy = true; buttons.forEach((b) => (b.disabled = true));
+    rows.forEach((r) => r.rect.classList.remove("read", "hit", "miss"));
+    Object.values(mapRects).forEach((r) => r.classList.remove("read"));
+    let read = 0;
+    const found = lastOf(key);
+    if (mode === 0) {
+      setCap("#s1-cap", "No index. <b>db_get</b> reads the file from the very beginning, remembering the last line that matched…");
+      for (let i = 0; i < rows.length; i++) {
+        rows[i].rect.classList.add("read"); read++; st.read.set(read, read > 4 ? "bad" : "warn");
+        await sleep(K.reduced ? 40 : 170);
+      }
+      rows.forEach((r, i) => { if (i !== found) r.rect.classList.remove("read"); });
+      rows[found].rect.classList.add("hit");
+      setCap("#s1-cap", "Found <b>" + key + " = " + rows[found].v + "</b> — but only after reading <b>all " + read + " lines</b>. Double the data and it takes double the time: that's <b>O(n)</b>.");
+    } else {
+      setCap("#s1-cap", "The hash index already knows where <b>" + key + "</b> lives…");
+      mapRects[key].classList.add("read");
+      await sleep(450);
+      read = 1; st.read.set(1, "good");
+      rows[found].rect.classList.add("hit");
+      setCap("#s1-cap", "One jump straight to <b>byte #" + rows[found].off + "</b> and the answer is <b>" + rows[found].v + "</b>. One read instead of " + rows.length + ". The old lines were never touched.");
+    }
+    st.read.set(read, read === 1 ? "good" : read > 4 ? "bad" : "warn");
+    busy = false; buttons.forEach((b) => (b.disabled = false));
+  }
+  const ctr = K.$("#s1-controls");
+  const buttons = [];
+  const add = (label, cls, fn) => { const b = btn(label, cls, fn); buttons.push(b); ctr.appendChild(b); };
+  add("Append a line", "primary", append);
+  add("Look up 12", "", () => lookup("12"));
+  add("Look up 42", "", () => lookup("42"));
+  add("Look up 77", "", () => lookup("77"));
+  add("Reset", "", () => { if (busy) return; rows.length = 0; next = 0; render(); st.read.set(0); setCap("#s1-cap", "Empty file. Append a few lines."); });
+  K.$("#s1-seg").appendChild(seg(["No index · scan", "Hash index"], 0, (i) => {
+    mode = i; render(); st.cost.set(i === 0 ? "O(n)" : "O(1)", i === 0 ? "warn" : "good");
+    setCap("#s1-cap", i === 0
+      ? "Index off: every lookup scans the whole file from the start."
+      : "Index on: a <b>hash map in memory</b> holds the byte offset of the newest line for each key. It must fit in RAM, and it has to be rebuilt by scanning the log after a restart.");
+  }, "s1-mode"));
+  append(); append(); append(); append();
+  setCap("#s1-cap", "Four lines written. Try a lookup with the index off, then on.");
+})();
+
+/* ================= 2. SSTABLE + SPARSE INDEX ================= */
+(function scSSTable() {
+  const svg = K.$("#s2-svg");
+  const blocks = [
+    ["handbag", "handcuff", "handful"],
+    ["handicap", "handiwork", "handkerchief"],
+    ["handlebar", "handprint", "handshake"],
+    ["handsome", "handstand", "handy"]];
+  svg.append(
+    txt(40, 44, "SPARSE INDEX (in memory)", "sv-label", "start"),
+    txt(270, 44, "SSTABLE · SORTED BY KEY", "sv-label", "start"),
+    txt(620, 44, "COMPRESSED BLOCKS", "sv-label", "end"));
+  const idxRects = [], keyRects = [], blockRects = [];
+  blocks.forEach((keys, b) => {
+    const y0 = 56 + b * 72;
+    const br = rect(270, y0, 350, 64, "sv-panel", 10);
+    blockRects.push(br); svg.appendChild(br);
+    keys.forEach((k, i) => {
+      const y = y0 + 6 + i * 18;
+      const kr = s("rect", { x: 282, y, width: 326, height: 16, rx: 4, class: "cellr" });
+      keyRects.push({ rect: kr, key: k, block: b });
+      svg.append(kr, txt(290, y + 12, k, "sv-label", "start"));
+    });
+    const ir = s("rect", { x: 40, y: y0 + 20, width: 190, height: 22, rx: 6, class: "cellr" });
+    idxRects.push(ir);
+    svg.append(ir, txt(50, y0 + 35, keys[0] + " → block " + (b + 1), "sv-label", "start"),
+      draw.arrow(234, y0 + 31, 266, y0 + 31, "sv-wire"));
+  });
+  const layer = s("g"); svg.appendChild(layer);
+  const st = { read: stat("Keys read", 0), idx: stat("Index entries", "4 of 12 keys"), res: stat("Result", "—") };
+  Object.values(st).forEach((x) => K.$("#s2-stats").appendChild(x));
+
+  let busy = false;
+  const buttons = [];
+  async function run(query) {
+    if (busy) return; busy = true; buttons.forEach((b) => (b.disabled = true));
+    idxRects.forEach((r) => r.classList.remove("read", "hit"));
+    keyRects.forEach((k) => k.rect.classList.remove("read", "hit", "miss"));
+    blockRects.forEach((r) => r.classList.remove("dim"));
+    st.read.set(0); st.res.set("—");
+    setCap("#s2-cap", "Step 1 · which block could hold <b>" + query + "</b>? Walk the <b>sparse index</b>, looking for the last first-key that is not bigger than it.");
+    let chosen = 0;
+    for (let b = 0; b < blocks.length; b++) {
+      idxRects[b].classList.add("read");
+      await sleep(K.reduced ? 40 : 320);
+      if (blocks[b][0] <= query) chosen = b; else idxRects[b].classList.remove("read");
+    }
+    idxRects.forEach((r, b) => { if (b !== chosen) r.classList.remove("read"); });
+    idxRects[chosen].classList.add("hit");
+    const nextKey = chosen < blocks.length - 1 ? blocks[chosen + 1][0] : "the end of the file";
+    setCap("#s2-cap", "Because the file is <b>sorted</b>, " + query + " must sit between <b>" + blocks[chosen][0] + "</b> and <b>" + nextKey + "</b>. Seek straight to block " + (chosen + 1) + " — no other block can possibly hold it.");
+    blockRects.forEach((r, b) => { if (b !== chosen) r.classList.add("dim"); });
+    const tag = draw.tag("seek", "sv-data-soft"); layer.appendChild(tag);
+    await fly(tag, [234, 56 + chosen * 72 + 31], [300, 56 + chosen * 72 + 31], 450);
+    tag.remove();
+    let read = 0, hit = null;
+    for (const k of keyRects) {
+      if (k.block !== chosen) continue;
+      k.rect.classList.add("read"); read++; st.read.set(read, "good");
+      await sleep(K.reduced ? 40 : 340);
+      if (k.key === query) { hit = k; break; }
+    }
+    if (hit) {
+      hit.rect.classList.remove("read"); hit.rect.classList.add("hit");
+      st.res.set("found", "good");
+      setCap("#s2-cap", "Found <b>" + query + "</b> after reading only <b>" + read + " keys</b> out of 12 — and the index in memory holds just <b>4</b> of them. Real blocks are a few kilobytes and are scanned in a blink.");
+    } else {
+      keyRects.filter((k) => k.block === chosen).forEach((k) => { k.rect.classList.remove("read"); k.rect.classList.add("miss"); });
+      st.res.set("not here", "bad");
+      setCap("#s2-cap", "<b>" + query + "</b> is not in the file. The sorted order proves it: if it existed it would be inside block " + (chosen + 1) + ", and it isn't. Only <b>" + read + " keys</b> were read to be sure.");
+    }
+    busy = false; buttons.forEach((b) => (b.disabled = false));
+  }
+  const ctr = K.$("#s2-controls");
+  ["handiwork", "handy", "handheld", "handcuff"].forEach((q) => {
+    const b = btn("Find “" + q + "”", q === "handheld" ? "danger" : "primary", () => run(q));
+    buttons.push(b); ctr.appendChild(b);
+  });
+  ctr.appendChild(h("span", { class: "grow" }));
+  ctr.appendChild(h("span", { class: "pill" }, "handheld is not in the file"));
+})();
+
+/* ================= 3. LSM-TREE ================= */
+(function scLSM() {
+  const svg = K.$("#s3-svg");
+  const gRoot = s("g"); svg.appendChild(gRoot);
+  const COL = [215, 355, 495], CW = 130;
+  const MEMCAP = 4;
+
+  function fresh() { return { mem: [], wal: [], segs: [], nextId: 1, probe: null, merge: null, flash: null }; }
+  let S = fresh(), i = 0, playing = false, timer = 0;
+
+  function put(st, k, v) {
+    const r = st.mem.find((x) => x.k === k);
+    if (r) { r.v = v; r.tomb = false; } else { st.mem.push({ k, v, tomb: false }); st.mem.sort((a, b) => (a.k < b.k ? -1 : 1)); }
+    st.wal.push("put " + k + "=" + v);
+    st.flash = { where: "mem", k };
+    st.probe = null;
+  }
+  function del(st, k) {
+    const r = st.mem.find((x) => x.k === k);
+    if (r) { r.v = null; r.tomb = true; } else { st.mem.push({ k, v: null, tomb: true }); st.mem.sort((a, b) => (a.k < b.k ? -1 : 1)); }
+    st.wal.push("delete " + k);
+    st.flash = { where: "mem", k };
+    st.probe = null;
+  }
+  function flush(st) {
+    st.segs.unshift({ id: st.nextId++, rows: st.mem.map((r) => ({ k: r.k, v: r.v, tomb: r.tomb })) });
+    st.mem = []; st.wal = []; st.flash = { where: "seg", id: st.segs[0].id }; st.probe = null;
+  }
+  function probe(st, target) {
+    const path = [];
+    let answer = null, done = false;
+    const inMem = st.mem.find((r) => r.k === target);
+    path.push({ where: "mem", hit: !!inMem });
+    if (inMem) { answer = inMem.tomb ? "deleted" : inMem.v; done = true; }
+    st.segs.forEach((sg) => {
+      if (done) return;
+      const row = sg.rows.find((r) => r.k === target);
+      path.push({ where: "seg", id: sg.id, hit: !!row });
+      if (row) { answer = row.tomb ? "deleted" : row.v; done = true; }
+    });
+    st.probe = { target, path, answer };
+    st.flash = null;
+  }
+
+  const steps = [];
+  const w = (k, v, cap) => steps.push({ cap, fn: (st) => put(st, k, v) });
+  w("ben", 5, "Write <b>ben = 5</b>. It lands in the <b>memtable</b> (a sorted structure in memory) and is also appended to the <b>write-ahead log</b> on disk, in case the power goes out.");
+  w("ana", 2, "Write <b>ana = 2</b>. The memtable keeps itself <b>sorted by key</b>, so ana slots in above ben. The log on disk stays in arrival order — it only needs to be replayable.");
+  w("dot", 9, "Write <b>dot = 9</b>. Still only in memory and in the log. Nothing has been sorted onto disk yet.");
+  w("ben", 6, "Write <b>ben = 6</b>. Inside the memtable the old value is simply replaced — it never reached disk, so there is nothing to clean up.");
+  w("eli", 1, "Write <b>eli = 1</b>. The memtable now holds 4 keys, which is our toy threshold (real ones are a few megabytes). Time to write it out.");
+  steps.push({ cap: "<b>Flush.</b> The whole memtable is written to disk in sorted order as <b>segment 1</b>, an SSTable that will never be modified again. The memtable is emptied and the log can be discarded.", fn: flush });
+  w("cat", 4, "Writes carry on into a fresh memtable while segment 1 sits quietly on disk. Write <b>cat = 4</b>.");
+  w("ana", 7, "Write <b>ana = 7</b>. Segment 1 still says ana = 2, and that's fine: the newer value simply lives in a newer place.");
+  steps.push({ cap: "<b>Delete dot.</b> Nothing is erased. A <b>tombstone</b> is appended — a marker that says “dot is gone” — which will shadow the older value until a merge can drop both.", fn: (st) => del(st, "dot") });
+  w("fig", 3, "Write <b>fig = 3</b>. Four entries again: the memtable is full.");
+  steps.push({ cap: "<b>Flush again.</b> Segment 2 is written. Segments are always listed newest first, because that's the order reads have to check them in.", fn: flush });
+  steps.push({ cap: "<b>Look up ana.</b> Check the memtable (empty), then the <b>newest</b> segment — found, <b>ana = 7</b>. The search stops there, so the stale ana = 2 in segment 1 is never even seen.", fn: (st) => probe(st, "ana") });
+  steps.push({ cap: "<b>Look up ben.</b> Not in the memtable, not in segment 2, found in segment 1: <b>ben = 6</b>. Older keys cost more reads.", fn: (st) => probe(st, "ben") });
+  steps.push({ cap: "<b>Look up zoe.</b> Every segment has to be opened before you can say “not here”. That's the slow case — and exactly what a <b>Bloom filter</b> fixes (next scene).", fn: (st) => probe(st, "zoe") });
+  steps.push({ cap: "<b>Compaction begins.</b> The tidy-up crew merges the two segments, like the merge step of mergesort: look at the first key of each file and copy the lower one out.", fn: (st) => { st.probe = null; st.merge = { a: st.segs[1], b: st.segs[0], i: 0, j: 0, out: [], note: "" }; } });
+  function mergeStep(st) {
+    const m = st.merge, A = m.a.rows, B = m.b.rows;
+    const ra = A[m.i], rb = B[m.j];
+    if (!ra && !rb) { m.note = "done"; return; }
+    if (ra && rb && ra.k === rb.k) {
+      m.i++; m.j++;
+      if (rb.tomb) { m.note = "drop " + rb.k; } else { m.out.push({ k: rb.k, v: rb.v, tomb: false }); m.note = "keep newer " + rb.k; }
+    } else if (!rb || (ra && ra.k < rb.k)) {
+      m.i++;
+      if (ra.tomb) m.note = "drop " + ra.k; else { m.out.push({ k: ra.k, v: ra.v, tomb: false }); m.note = "copy " + ra.k; }
+    } else {
+      m.j++;
+      if (rb.tomb) m.note = "drop " + rb.k; else { m.out.push({ k: rb.k, v: rb.v, tomb: false }); m.note = "copy " + rb.k; }
+    }
+  }
+  steps.push({ cap: "Both files start with <b>ana</b>. Same key in two segments means the <b>newer one wins</b>: ana = 7 goes to the output, ana = 2 is thrown away.", fn: mergeStep });
+  steps.push({ cap: "Now it's <b>ben</b> against <b>cat</b>. ben is lower, and only the older segment has it, so <b>ben = 6</b> is copied straight across.", fn: mergeStep });
+  steps.push({ cap: "<b>cat = 4</b> is copied from the newer segment. Note how little memory this needs: one key from each file at a time.", fn: mergeStep });
+  steps.push({ cap: "Both files are at <b>dot</b>, and the newer one holds a <b>tombstone</b>. Both are dropped — this is the moment the deleted data really disappears from disk.", fn: mergeStep });
+  steps.push({ cap: "<b>eli = 1</b> copied across.", fn: mergeStep });
+  steps.push({ cap: "<b>fig = 3</b> copied across. Both inputs are now exhausted.", fn: mergeStep });
+  steps.push({ cap: "<b>Merge complete.</b> The new segment replaces both inputs, which are deleted. One file, sorted, no duplicates, no deleted keys — and reads got faster. Reads were served from the old segments the whole time the merge was running.", fn: (st) => { const m = st.merge; st.segs = [{ id: st.nextId++, rows: m.out }]; st.merge = null; st.flash = { where: "seg", id: st.segs[0].id }; } });
+
+  const stp = { step: stat("Step", "0 / " + steps.length), segs: stat("Segments", 0), mem: stat("Memtable", "0 / " + MEMCAP) };
+  Object.values(stp).forEach((x) => K.$("#s3-stats").appendChild(x));
+
+  function rowText(r) { return r.tomb ? r.k + "  tombstone" : r.k + "  =  " + r.v; }
+  function drawBox(x, y, w2, hgt, title, cls) {
+    gRoot.append(txt(x, y - 8, title, "sv-label", "start"), rect(x, y, w2, hgt, cls || "sv-panel", 12));
+  }
+  function drawRows(x, y, w2, rows, hi) {
+    rows.forEach((r, n) => {
+      const ry = y + n * 24;
+      const cls = r.tomb ? "cellr miss" : "cellr data";
+      const rr = s("rect", { x: x + 8, y: ry, width: w2 - 16, height: 20, rx: 5, class: cls + (hi === r.k ? " sv-pop" : "") });
+      gRoot.append(rr, txt(x + 16, ry + 14, rowText(r), "sv-label", "start"));
+    });
+  }
+  function render() {
+    K.clear(gRoot);
+    const hi = S.flash && S.flash.where === "mem" ? S.flash.k : null;
+    drawBox(30, 56, 150, 130, "MEMTABLE · IN MEMORY", "sv-server");
+    drawRows(30, 64, 150, S.mem, hi);
+    if (!S.mem.length) gRoot.appendChild(txt(105, 128, "(empty)", "sv-label sv-muted"));
+    drawBox(30, 226, 150, 116, "WRITE-AHEAD LOG · DISK", "sv-box");
+    S.wal.forEach((line, n) => gRoot.appendChild(txt(40, 250 + n * 22, line, "sv-label", "start")));
+    if (!S.wal.length) gRoot.appendChild(txt(105, 288, "(discarded)", "sv-label sv-muted"));
+
+    if (S.merge) {
+      const m = S.merge;
+      drawBox(COL[0], 56, CW, 200, "SEGMENT " + m.b.id + " · NEWER", "sv-db");
+      m.b.rows.forEach((r, n) => {
+        const ry = 64 + n * 24, used = n < m.j;
+        const rr = s("rect", { x: COL[0] + 8, y: ry, width: CW - 16, height: 20, rx: 5, class: "cellr " + (r.tomb ? "miss" : "data") });
+        if (used) rr.style.opacity = 0.3;
+        gRoot.append(rr, txt(COL[0] + 16, ry + 14, rowText(r), "sv-label", "start"));
+        if (n === m.j) gRoot.appendChild(txt(COL[0] + CW + 4, ry + 14, "◀", "sv-label", "start"));
+      });
+      drawBox(COL[1], 56, CW, 200, "SEGMENT " + m.a.id + " · OLDER", "sv-db");
+      m.a.rows.forEach((r, n) => {
+        const ry = 64 + n * 24, used = n < m.i;
+        const rr = s("rect", { x: COL[1] + 8, y: ry, width: CW - 16, height: 20, rx: 5, class: "cellr " + (r.tomb ? "miss" : "data") });
+        if (used) rr.style.opacity = 0.3;
+        gRoot.append(rr, txt(COL[1] + 16, ry + 14, rowText(r), "sv-label", "start"));
+        if (n === m.i) gRoot.appendChild(txt(COL[1] + CW + 4, ry + 14, "◀", "sv-label", "start"));
+      });
+      drawBox(COL[2], 56, CW, 200, "MERGED OUTPUT", "sv-good");
+      drawRows(COL[2], 64, CW, m.out, null);
+      gRoot.appendChild(txt(COL[2] + CW / 2, 280, m.note || "comparing…", "sv-label"));
+    } else {
+      S.segs.forEach((sg, n) => {
+        if (n > 2) return;
+        const x = COL[n];
+        const pr = S.probe && S.probe.path.find((p) => p.id === sg.id);
+        const cls = pr ? (pr.hit ? "sv-good" : "sv-bad") : "sv-db";
+        drawBox(x, 56, CW, 200, "SEGMENT " + sg.id + (n === 0 ? " · NEWEST" : ""), cls);
+        drawRows(x, 64, CW, sg.rows, null);
+        if (pr) gRoot.appendChild(txt(x + CW / 2, 276, pr.hit ? "found here" : "not here", "sv-label"));
+      });
+      if (!S.segs.length) gRoot.appendChild(txt(COL[1] + CW / 2, 150, "no segments on disk yet", "sv-label sv-muted"));
+    }
+    if (S.probe) {
+      const p0 = S.probe.path[0];
+      gRoot.appendChild(txt(105, 200, p0.hit ? "found here" : "not here", "sv-label"));
+      gRoot.appendChild(txt(215, 318, "get(“" + S.probe.target + "”)  →  " + (S.probe.answer === null ? "not found" : S.probe.answer), "sv-title", "start"));
+    }
+    stp.step.set(i + " / " + steps.length);
+    stp.segs.set(S.merge ? 2 : S.segs.length);
+    stp.mem.set(S.mem.length + " / " + MEMCAP, S.mem.length >= MEMCAP ? "warn" : "");
+  }
+  function doStep() {
+    if (i >= steps.length) return;
+    const st = steps[i];
+    st.fn(S); i++;
+    render();
+    setCap("#s3-cap", st.cap);
+    bStep.disabled = i >= steps.length;
+  }
+  function stopPlay() { playing = false; clearTimeout(timer); bPlay.textContent = "Play"; bPlay.classList.remove("danger"); }
+  function tick() { if (!playing) return; if (i >= steps.length) { stopPlay(); return; } doStep(); timer = setTimeout(tick, K.reduced ? 500 : 1700); }
+  const bStep = btn("Step ›", "primary", () => { stopPlay(); doStep(); });
+  const bPlay = btn("Play", "", () => {
+    if (playing) { stopPlay(); return; }
+    if (i >= steps.length) return;
+    playing = true; bPlay.textContent = "Pause"; bPlay.classList.add("danger"); tick();
+  });
+  const bReset = btn("Reset", "", () => { stopPlay(); S = fresh(); i = 0; render(); bStep.disabled = false; setCap("#s3-cap", "Press Step to begin."); });
+  K.$("#s3-controls").append(bStep, bPlay, bReset, h("span", { class: "grow" }), h("span", { class: "pill info" }, h("i"), "memtable holds 4 keys in this toy"));
+  whenVisible(svg, () => {}, () => stopPlay());
+  render();
+})();
+
+/* ================= 4. BLOOM FILTER ================= */
+(function scBloom() {
+  const svg = K.$("#s4-svg");
+  const BITS = 16, CW = 30, GAP = 4, X0 = 58, BY = 150;
+  const hashes = { handbag: [2, 9, 4], handful: [5, 13, 9], handiwork: [0, 12, 7], handheld: [6, 11, 2], handsome: [4, 9, 13], handcuff: [1, 8, 15] };
+  const inFile = ["handbag", "handful", "handiwork"];
+  const bits = new Array(BITS).fill(0);
+  const cells = [], labels = [];
+  svg.append(txt(58, 60, "SSTABLE'S BLOOM FILTER · 16 BITS", "sv-label", "start"),
+    txt(602, 60, "toy hash function", "sv-label", "end"));
+  for (let b = 0; b < BITS; b++) {
+    const x = X0 + b * (CW + GAP);
+    const r = s("rect", { x, y: BY, width: CW, height: CW, rx: 6, class: "cellr" });
+    const t = txt(x + CW / 2, BY + 20, "0", "sv-label");
+    cells.push(r); labels.push(t);
+    svg.append(r, t, txt(x + CW / 2, BY + 46, String(b), "sv-label sv-muted"));
+  }
+  const keyTag = txt(330, 92, "", "sv-title");
+  const arrows = s("g");
+  const verdict = txt(330, 240, "", "sv-title");
+  const verdictSub = txt(330, 264, "", "sv-label");
+  svg.append(arrows, keyTag, verdict, verdictSub);
+  const st = { set: stat("Bits set to 1", "0 / 16"), keys: stat("Keys added", 0), ans: stat("Verdict", "—") };
+  Object.values(st).forEach((x) => K.$("#s4-stats").appendChild(x));
+
+  let busy = false, added = [];
+  const buttons = [];
+  function paint() {
+    bits.forEach((b, n) => { labels[n].textContent = String(b); cells[n].classList.toggle("data", b === 1); });
+    st.set.set(bits.filter(Boolean).length + " / 16", bits.filter(Boolean).length > 9 ? "warn" : "good");
+    st.keys.set(added.length);
+  }
+  function clearMarks() { cells.forEach((c) => c.classList.remove("read", "hit", "miss")); K.clear(arrows); }
+  function drawArrows(key, idxs) {
+    K.clear(arrows);
+    keyTag.textContent = key;
+    idxs.forEach((b) => {
+      const x = X0 + b * (CW + GAP) + CW / 2;
+      arrows.appendChild(draw.arrow(330, 104, x, BY - 8, "sv-wire"));
+    });
+  }
+  async function addKey(key) {
+    if (busy) return; busy = true; buttons.forEach((b) => (b.disabled = true));
+    clearMarks();
+    const idxs = hashes[key];
+    drawArrows(key, idxs);
+    verdict.textContent = ""; verdictSub.textContent = "";
+    setCap("#s4-cap", "Hashing <b>" + key + "</b> gives the numbers (" + idxs.join(", ") + "). Those bits get switched to <b>1</b>.");
+    for (const b of idxs) { cells[b].classList.add("hit"); bits[b] = 1; paint(); await sleep(K.reduced ? 40 : 360); }
+    if (!added.includes(key)) added.push(key);
+    paint();
+    setCap("#s4-cap", "<b>" + key + "</b> is now in this SSTable, and the filter has recorded it in just three bits. The whole filter is tiny compared with the data — about <b>10 bits per key</b> gives a 1% false-positive rate.");
+    busy = false; buttons.forEach((b) => (b.disabled = false));
+  }
+  async function query(key) {
+    if (busy) return; busy = true; buttons.forEach((b) => (b.disabled = true));
+    clearMarks();
+    const idxs = hashes[key];
+    drawArrows(key, idxs);
+    verdict.textContent = ""; verdictSub.textContent = "";
+    setCap("#s4-cap", "Is <b>" + key + "</b> in this SSTable? Hash it the same way — (" + idxs.join(", ") + ") — and peek at those bits.");
+    let allSet = true;
+    for (const b of idxs) {
+      await sleep(K.reduced ? 40 : 360);
+      if (bits[b] === 1) cells[b].classList.add("hit");
+      else { cells[b].classList.add("miss"); allSet = false; break; }
+    }
+    await sleep(300);
+    if (!allSet) {
+      verdict.textContent = "definitely NOT in this file";
+      verdict.style.fill = "var(--coral)";
+      verdictSub.textContent = "skip the whole segment — no disk read at all";
+      st.ans.set("skip", "good");
+      setCap("#s4-cap", "One of the bits is <b>0</b>, so <b>" + key + "</b> was never added. The engine can <b>skip this whole segment</b> without touching the disk. This is where Bloom filters earn their keep.");
+    } else {
+      const really = added.includes(key);
+      verdict.textContent = "probably here — go and check";
+      verdict.style.fill = "var(--sun)";
+      verdictSub.textContent = really ? "read the block: really there" : "read the block: not there after all";
+      st.ans.set(really ? "maybe ✓" : "false +", really ? "warn" : "bad");
+      setCap("#s4-cap", really
+        ? "All three bits are <b>1</b>, so the engine consults the sparse index and decodes the block — and <b>" + key + "</b> really is there."
+        : "All three bits are <b>1</b>, so the engine reads the block… and <b>" + key + "</b> isn't there. A <b>false positive</b>: other keys happened to set those bits. A little wasted work, nothing broken — the search just moves on to the next-oldest segment.");
+    }
+    busy = false; buttons.forEach((b) => (b.disabled = false));
+  }
+  const ctr = K.$("#s4-controls");
+  inFile.forEach((k) => { const b = btn("Add " + k, "good", () => addKey(k)); buttons.push(b); ctr.appendChild(b); });
+  ctr.appendChild(h("span", { class: "grow" }));
+  ["handheld", "handsome", "handcuff"].forEach((k) => { const b = btn("Is " + k + " here?", "primary", () => query(k)); buttons.push(b); ctr.appendChild(b); });
+  const bR = btn("Reset", "", () => {
+    if (busy) return;
+    bits.fill(0); added = []; clearMarks(); keyTag.textContent = ""; verdict.textContent = ""; verdictSub.textContent = "";
+    st.ans.set("—"); paint(); setCap("#s4-cap", "Empty filter. Add some keys.");
+  });
+  buttons.push(bR); ctr.appendChild(bR);
+  paint();
+})();
+
+/* ================= 5. B-TREE ================= */
+(function scBTree() {
+  const svg = K.$("#s5-svg");
+  const g = s("g"); svg.appendChild(g);
+  const KEYW = 38;
+  function pageNode(x, y, w, hgt, keys, cls) {
+    const n = keys.length, refW = (w - n * KEYW) / (n + 1), refs = [];
+    g.appendChild(rect(x, y, w, hgt, cls || "sv-box", 8));
+    let cx = x;
+    for (let k = 0; k <= n; k++) {
+      const rc = cx + refW / 2;
+      refs.push(rc);
+      g.appendChild(s("circle", { cx: rc, cy: y + hgt / 2, r: 5, class: "sv-fill-blue" }));
+      cx += refW;
+      if (k < n) {
+        g.append(s("line", { x1: cx, y1: y, x2: cx, y2: y + hgt, class: "sv-wire-solid", style: { strokeWidth: 1 } }),
+          txt(cx + KEYW / 2, y + hgt / 2 + 4, String(keys[k]), "sv-label"));
+        cx += KEYW;
+        g.appendChild(s("line", { x1: cx, y1: y, x2: cx, y2: y + hgt, class: "sv-wire-solid", style: { strokeWidth: 1 } }));
+      }
+    }
+    return refs;
+  }
+  function leafNode(x, y, keys, cls, markKey) {
+    const w = keys.length * 54;
+    g.append(rect(x, y, w, 50, cls || "sv-db", 8));
+    keys.forEach((k, n) => {
+      const cx = x + 8 + n * 54;
+      const hot = markKey === k;
+      g.append(s("rect", { x: cx, y: y + 6, width: 46, height: 38, rx: 5, class: "cellr" + (hot ? " hit" : " data") }),
+        txt(cx + 23, y + 22, String(k), "sv-label"),
+        txt(cx + 23, y + 37, "value", "sv-label sv-muted"));
+    });
+    return w;
+  }
+  const modes = [
+    { label: "Look up 251", n: 5 },
+    { label: "Insert 334", n: 5 },
+    { label: "Crash mid-split", n: 4 }];
+  let mode = 0, step = 0;
+
+  const caps = {
+    0: [
+      "Every lookup starts at the <b>root page</b>. It holds a handful of boundary keys and a reference to a child page for each range between them.",
+      "We want <b>251</b>. It sits between the boundaries <b>200</b> and <b>300</b>, so follow that reference down. One page read so far.",
+      "This page breaks 200–300 into smaller ranges. <b>251</b> falls between <b>250</b> and <b>270</b>: follow that reference. Two page reads.",
+      "We've reached a <b>leaf page</b>, which holds real keys and their values (or references to them). Scan it for 251…",
+      "<b>Found 251</b> in three page reads. With a <b>branching factor</b> of several hundred, three or four levels cover almost any database — a four-level tree of 4 KiB pages with branching factor 500 can hold 250 TB."],
+    1: [
+      "Insert <b>334</b>. First find the page whose range covers it: the parent says 334 belongs between the boundaries <b>333</b> and <b>345</b>.",
+      "That leaf page is <b>full</b> — six keys and no free space. We can't just write 334 into it.",
+      "So the page is <b>split</b> into two half-full pages: <b>333–337</b> (which takes the new key 334) and <b>337–345</b>.",
+      "The <b>parent</b> is rewritten to point at both children, with the boundary key <b>337</b> between them.",
+      "Done — and the tree is still <b>balanced</b>. If the parent had been full too, it would have split as well, possibly all the way up until a brand-new root is created above the old one."],
+    2: [
+      "A split is dangerous, because <b>several pages must be overwritten</b>: the two new children and the parent. First, every change is appended to the <b>write-ahead log</b>.",
+      "The first new page is written to disk successfully.",
+      "<b>Crash!</b> The power goes out before the parent page is updated. Now a page exists that no parent points at — an <b>orphan page</b>. The tree is corrupted, and half the keys are unreachable.",
+      "On restart the database <b>replays the write-ahead log</b>, redoing the whole split, and the tree is consistent again. This is why B-trees keep a WAL (filesystems call the same idea journaling), and why data counts as durable only once it has been <b>fsync</b>ed to that log."]
+  };
+
+  function render() {
+    K.clear(g);
+    if (mode === 0) {
+      g.appendChild(txt(60, 48, "ROOT PAGE", "sv-label", "start"));
+      const refs = pageNode(60, 60, 540, 40, [100, 200, 300, 400, 500], step === 0 ? "sv-good" : "sv-box");
+      if (step >= 1) {
+        g.appendChild(s("circle", { cx: refs[2], cy: 80, r: 8, class: "sv-fill-sun" }));
+        g.appendChild(draw.arrow(refs[2], 102, 340, 146, "sv-wire-solid"));
+        g.appendChild(txt(60, 138, "PAGE FOR KEYS 200–300", "sv-label", "start"));
+        const r2 = pageNode(190, 150, 300, 40, [210, 230, 250, 270], step === 1 ? "sv-good" : "sv-box");
+        if (step >= 2) {
+          g.appendChild(s("circle", { cx: r2[3], cy: 170, r: 8, class: "sv-fill-sun" }));
+          g.appendChild(draw.arrow(r2[3], 192, 420, 238, "sv-wire-solid"));
+          g.appendChild(txt(250, 232, "LEAF PAGE FOR KEYS 250–270", "sv-label", "start"));
+          leafNode(250, 244, [250, 251, 253, 255, 262, 268], step >= 3 ? "sv-good" : "sv-db", step >= 4 ? 251 : null);
+        }
+      }
+      g.appendChild(txt(620, 48, "looking for 251", "sv-label", "end"));
+    } else if (mode === 1) {
+      const parentKeys = step >= 3 ? [333, 337, 345] : [333, 345];
+      g.appendChild(txt(170, 48, "PARENT PAGE", "sv-label", "start"));
+      const refs = pageNode(170, 60, 340, 40, parentKeys, step === 3 ? "sv-good" : "sv-box");
+      if (step === 0) g.appendChild(s("circle", { cx: refs[1], cy: 80, r: 8, class: "sv-fill-sun" }));
+      if (step <= 1) {
+        g.append(draw.arrow(refs[1], 102, 330, 166, "sv-wire-solid"), txt(200, 158, "LEAF PAGE 333–345 · FULL", "sv-label", "start"));
+        leafNode(196, 170, [333, 335, 337, 340, 342, 345], step === 1 ? "sv-bad" : "sv-db", null);
+        if (step === 1) g.appendChild(txt(330, 248, "no room for 334", "sv-title"));
+        g.appendChild(txt(330, 290, step === 0 ? "inserting 334…" : "the page is full", "sv-label"));
+      } else {
+        g.append(draw.arrow(refs[0], 102, 150, 166, "sv-wire-solid"), draw.arrow(refs[refs.length - 1], 102, 470, 166, "sv-wire-solid"));
+        g.appendChild(txt(96, 158, "NEW PAGE 333–337", "sv-label", "start"));
+        leafNode(96, 170, [333, 334, 335], "sv-good", 334);
+        g.appendChild(txt(390, 158, "NEW PAGE 337–345", "sv-label", "start"));
+        leafNode(390, 170, [337, 340, 342, 345], "sv-good", null);
+        g.appendChild(txt(330, 290, step >= 3 ? "parent now knows the boundary key 337" : "two half-full pages — the parent doesn't know yet", "sv-label"));
+      }
+    } else {
+      const broken = step === 2;
+      g.appendChild(txt(170, 48, "PARENT PAGE", "sv-label", "start"));
+      const refs = pageNode(170, 60, 340, 40, step >= 3 ? [333, 337, 345] : [333, 345], broken ? "sv-bad" : "sv-box");
+      const okLeft = step >= 1;
+      if (okLeft) {
+        if (step >= 3) g.appendChild(draw.arrow(refs[0], 102, 150, 156, "sv-wire-solid"));
+        g.appendChild(txt(96, 148, step === 2 ? "ORPHAN PAGE · NO PARENT" : "NEW PAGE 333–337", "sv-label", "start"));
+        leafNode(96, 160, [333, 334, 335], broken ? "sv-bad" : "sv-good", null);
+      }
+      if (step >= 3) {
+        g.appendChild(draw.arrow(refs[refs.length - 1], 102, 470, 156, "sv-wire-solid"));
+        g.appendChild(txt(390, 148, "NEW PAGE 337–345", "sv-label", "start"));
+        leafNode(390, 160, [337, 340, 342, 345], "sv-good", null);
+      }
+      g.append(txt(60, 248, "WRITE-AHEAD LOG ON DISK", "sv-label", "start"), rect(60, 258, 540, 44, "sv-box", 10));
+      const walText = ["split page 333–345 at key 337", "split page 333–345 at key 337  ·  wrote left page", "split page 333–345 at key 337  ·  wrote left page", "replayed: left page, right page, parent updated  ✓"][step];
+      g.appendChild(txt(76, 285, walText, "sv-label", "start"));
+      if (broken) g.appendChild(txt(330, 224, "tree corrupted", "sv-title"));
+    }
+  }
+  function setStep(n) { step = Math.max(0, Math.min(modes[mode].n - 1, n)); render(); setCap("#s5-cap", caps[mode][step]); bStep.disabled = step >= modes[mode].n - 1; }
+  const bStep = btn("Step ›", "primary", () => setStep(step + 1));
+  const bBack = btn("‹ Back", "", () => setStep(step - 1));
+  const bReset = btn("Reset", "", () => setStep(0));
+  K.$("#s5-controls").append(bBack, bStep, bReset, h("span", { class: "grow" }), h("span", { class: "pill info" }, h("i"), "branching factor here is 6; real ones are hundreds"));
+  K.$("#s5-seg").appendChild(seg(modes.map((m) => m.label), 0, (i) => { mode = i; setStep(0); }, "s5-mode"));
+  setStep(0);
+})();
+
+/* ================= 6. WRITE AMPLIFICATION ================= */
+(function scDisk() {
+  const svg = K.$("#s6-svg");
+  const COLS = 16, ROWS = 5, CW = 22, GAP = 2, X0 = 36, Y0 = 84, WY = 252;
+  const cells = [], walCells = [];
+  svg.appendChild(txt(36, 66, "DISK BLOCKS · one block = 100 bytes (toy numbers)", "sv-label", "start"));
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const rr = s("rect", { x: X0 + c * (CW + GAP), y: Y0 + r * (CW + GAP), width: CW, height: CW, rx: 4, class: "cellr" });
+    cells.push(rr); svg.appendChild(rr);
+  }
+  svg.appendChild(txt(36, 244, "WRITE-AHEAD LOG · always appended in order", "sv-label", "start"));
+  for (let c = 0; c < COLS; c++) {
+    const rr = s("rect", { x: X0 + c * (CW + GAP), y: WY, width: CW, height: CW, rx: 4, class: "cellr" });
+    walCells.push(rr); svg.appendChild(rr);
+  }
+  const head = s("path", { d: "M0,0 L6,-11 L-6,-11 Z", class: "sv-fill-coral" });
+  svg.appendChild(head);
+  const cellX = (n) => X0 + (n % COLS) * (CW + GAP) + CW / 2;
+  const cellY = (n) => Y0 + Math.floor(n / COLS) * (CW + GAP);
+  const moveHead = (n) => head.setAttribute("transform", "translate(" + cellX(n) + "," + (cellY(n) - 2) + ")");
+  moveHead(0);
+
+  /* chart */
+  const AX = 496, BY0 = 250, BTOP = 92;
+  svg.append(txt(496, 66, "write amplification", "sv-label", "start"),
+    s("line", { x1: AX, y1: BTOP - 8, x2: AX, y2: BY0, class: "sv-wire-solid" }));
+  for (let v = 0; v <= 8; v += 2) {
+    const y = BY0 - (v / 8) * (BY0 - BTOP);
+    svg.append(s("line", { x1: AX, y1: y, x2: AX + 146, y2: y, class: "sv-wire", style: { strokeWidth: 1, opacity: 0.5 } }),
+      txt(AX - 6, y + 4, v + "×", "sv-label", "end"));
+  }
+  const barB = s("rect", { x: 520, y: BY0, width: 44, height: 0, rx: 4, class: "sv-db" });
+  const barL = s("rect", { x: 585, y: BY0, width: 44, height: 0, rx: 4, class: "sv-data-soft" });
+  svg.append(barB, barL, txt(542, BY0 + 18, "B-tree", "sv-label"), txt(607, BY0 + 18, "LSM", "sv-label"));
+  const barBT = txt(542, BY0 - 6, "", "sv-label"), barLT = txt(607, BY0 - 6, "", "sv-label");
+  svg.append(barBT, barLT);
+
+  const st = { app: stat("Written by app", "0 B"), disk: stat("Written to disk", "0 B"), amp: stat("Amplification", "—"), seek: stat("Seeks", 0) };
+  Object.values(st).forEach((x) => K.$("#s6-stats").appendChild(x));
+
+  const S = [
+    { app: 0, disk: 0, seeks: 0, cursor: 0, mem: 0, flushes: 0 },
+    { app: 0, disk: 0, seeks: 0, cursor: 0, mem: 0, flushes: 0 }];
+  let mode = 0, running = false, onScreen = false, acc = 0, wal = 0;
+  const recent = [];
+  function mark(n, cls) {
+    const c = cells[n % cells.length];
+    c.setAttribute("class", "cellr " + cls);
+    recent.push(c);
+    while (recent.length > 34) { const old = recent.shift(); if (!recent.includes(old)) old.setAttribute("class", "cellr"); }
+  }
+  function markWal() { walCells.forEach((c, n) => c.setAttribute("class", "cellr" + (n === wal % COLS ? " wal" : ""))); wal++; }
+  function fmt(b) { return b >= 1000 ? (b / 1000).toFixed(1) + " kB" : b + " B"; }
+  function bars() {
+    [[S[0], barB, barBT], [S[1], barL, barLT]].forEach(([s0, bar, lab]) => {
+      const amp = s0.app ? s0.disk / s0.app : 0;
+      const hgt = Math.min(1, amp / 8) * (BY0 - BTOP);
+      bar.setAttribute("y", BY0 - hgt); bar.setAttribute("height", hgt);
+      lab.setAttribute("y", BY0 - hgt - 6);
+      lab.textContent = s0.app ? amp.toFixed(1) + "×" : "";
+    });
+    const s0 = S[mode], amp = s0.app ? s0.disk / s0.app : 0;
+    st.app.set(fmt(s0.app)); st.disk.set(fmt(s0.disk));
+    st.amp.set(s0.app ? amp.toFixed(1) + "×" : "—", amp > 4 ? "bad" : amp > 0 ? "good" : "");
+    st.seek.set(s0.seeks, s0.seeks > 40 ? "bad" : "");
+  }
+  function step() {
+    const s0 = S[mode];
+    s0.app += 100; s0.disk += 100; markWal();
+    if (mode === 0) {
+      const page = rnd(Math.floor(cells.length / 4)) * 4;
+      for (let k = 0; k < 4; k++) mark(page + k, "page");
+      s0.disk += 400; s0.seeks++; moveHead(page);
+      setCap("#s6-cap", "A <b>B-tree</b> writes 100 bytes of record into the log, then rewrites a <b>whole page</b> somewhere else on the disk — even if only a few bytes changed. Scattered pages mean <b>random writes</b> and a seek every time.");
+    } else {
+      s0.mem++;
+      if (s0.mem >= 8) {
+        s0.mem = 0; s0.flushes++;
+        for (let k = 0; k < 8; k++) mark(s0.cursor + k, "data");
+        s0.disk += 800; s0.seeks++; moveHead(s0.cursor);
+        s0.cursor = (s0.cursor + 8) % cells.length;
+        if (s0.flushes % 3 === 0) {
+          for (let k = 0; k < 8; k++) mark(s0.cursor + k, "page");
+          s0.disk += 800; s0.seeks++;
+          s0.cursor = (s0.cursor + 8) % cells.length;
+          setCap("#s6-cap", "<b>Compaction</b> just ran: old segments were merged and written out again. That rewriting is why LSM engines amplify writes too — measure long enough to see it, or you'll flatter them.");
+        } else {
+          setCap("#s6-cap", "The <b>memtable</b> filled up and was flushed: eight blocks written <b>side by side in one stroke</b>. One seek for eight records, and nothing was overwritten.");
+        }
+      }
+    }
+    bars();
+  }
+  const L = loop((dt) => { acc += dt; while (acc > 260) { acc -= 260; step(); } });
+  const bPlay = btn("Play", "primary", () => {
+    running = !running;
+    bPlay.textContent = running ? "Pause" : "Play";
+    bPlay.classList.toggle("danger", running);
+    if (running && onScreen) L.start(); else L.stop();
+  });
+  const bReset = btn("Reset", "", () => {
+    S.forEach((x) => Object.assign(x, { app: 0, disk: 0, seeks: 0, cursor: 0, mem: 0, flushes: 0 }));
+    cells.concat(walCells).forEach((c) => c.setAttribute("class", "cellr"));
+    recent.length = 0; wal = 0; moveHead(0); bars();
+  });
+  K.$("#s6-controls").append(bPlay, bReset, h("span", { class: "grow" }),
+    h("span", { class: "legend" },
+      h("span", {}, h("i", { style: { background: "var(--lilac)" } }), "page / compaction rewrite"),
+      h("span", {}, h("i", { style: { background: "var(--sun)" } }), "fresh sequential file"),
+      h("span", {}, h("i", { style: { background: "var(--blue)" } }), "log")));
+  K.$("#s6-seg").appendChild(seg(["B-tree · update in place", "LSM · append only"], 0, (i) => {
+    mode = i; bars();
+    setCap("#s6-cap", i === 0
+      ? "<b>B-tree:</b> each record is logged, then a whole 4-block page is overwritten wherever it happens to live."
+      : "<b>LSM:</b> each record is logged and buffered in memory; every eight records the memtable is flushed as one long sequential run, and compaction rewrites data again later.");
+  }, "s6-mode"));
+  whenVisible(svg, () => { onScreen = true; if (running) L.start(); }, () => { onScreen = false; L.stop(); });
+  bars();
+})();
+
+/* ================= 7. SECONDARY INDEXES ================= */
+(function scSecondary() {
+  const svg = K.$("#s7-svg");
+  const g = s("g"), layer = s("g");
+  svg.append(g, layer);
+  const base = [
+    { id: 1, name: "kite", color: "red" },
+    { id: 2, name: "drum", color: "blue" },
+    { id: 3, name: "yo-yo", color: "red" },
+    { id: 4, name: "bear", color: "green" },
+    { id: 5, name: "ball", color: "red" },
+    { id: 6, name: "robot", color: "blue" }];
+  let items, heap, moved, mode = 0, busy = false;
+  const st = { reads: stat("Reads for the query", "—"), copies: stat("Copies of the name", 1), write: stat("Write cost", "low", "good") };
+  Object.values(st).forEach((x) => K.$("#s7-stats").appendChild(x));
+  const colors = ["blue", "green", "red"];
+  const idxRects = {}, slotRects = {};
+
+  function reset() {
+    items = base.map((x) => ({ ...x }));
+    heap = [3, 1, 6, 4, 5, 2].map((id) => ({ id, fwd: null }));
+    moved = null;
+  }
+  const rightTitle = () => ["HEAP FILE · NO PARTICULAR ORDER", "CLUSTERED INDEX ON id · ROWS INSIDE", "HEAP FILE · NO PARTICULAR ORDER"][mode];
+  const slotOf = (id) => (moved && moved.id === id ? moved.oldSlot : heap.findIndex((hh) => hh.id === id));
+  function indexText(c) {
+    const ids = items.filter((x) => x.color === c).map((x) => x.id);
+    if (mode === 0) return c + "  →  slot " + ids.map(slotOf).join(", slot ");
+    if (mode === 1) return c + "  →  id " + ids.join(", ");
+    return c + "  →  " + ids.map((id) => items.find((x) => x.id === id).name).join(", ");
+  }
+  function rightRows() {
+    if (mode === 1) return items.map((it) => ({ key: it.id, label: "id " + it.id + "   " + it.name + "   " + it.color }));
+    return heap.map((hh, n) => ({
+      key: hh.id,
+      label: hh.fwd !== null ? "slot " + n + "   moved → slot " + hh.fwd : (hh.id === null ? "slot " + n + "   (free)" : "slot " + n + "   #" + hh.id + " " + items.find((x) => x.id === hh.id).name + " " + items.find((x) => x.id === hh.id).color),
+      fwd: hh.fwd
+    }));
+  }
+  function render() {
+    K.clear(g); K.clear(layer);
+    for (const k in idxRects) delete idxRects[k];
+    for (const k in slotRects) delete slotRects[k];
+    g.append(txt(40, 50, "SECONDARY INDEX ON COLOUR", "sv-label", "start"), rect(40, 60, 230, 150, "sv-panel", 12));
+    colors.forEach((c, i) => {
+      const y = 76 + i * 44;
+      const rr = s("rect", { x: 50, y, width: 210, height: 32, rx: 6, class: "cellr" });
+      idxRects[c] = rr;
+      g.append(rr, txt(60, y + 21, indexText(c), "sv-label", "start"));
+    });
+    if (mode === 2) g.appendChild(txt(40, 232, "the index carries a copy of the name column", "sv-label", "start"));
+    g.append(txt(330, 50, rightTitle(), "sv-label", "start"), rect(330, 60, 300, 250, mode === 1 ? "sv-server" : "sv-box", 12));
+    rightRows().forEach((r, n) => {
+      const y = 76 + n * 38;
+      const rr = s("rect", { x: 340, y, width: 280, height: 30, rx: 6, class: "cellr" + (r.fwd !== null && r.fwd !== undefined ? " miss" : " data") });
+      slotRects["slot" + n] = rr;
+      if (r.key !== null && r.key !== undefined) slotRects["id" + r.key] = rr;
+      g.append(rr, txt(350, y + 20, r.label, "sv-label", "start"));
+    });
+    st.copies.set(mode === 2 ? 2 : 1, mode === 2 ? "warn" : "good");
+    st.write.set(mode === 2 ? "higher" : mode === 1 ? "medium" : "low", mode === 2 ? "warn" : "good");
+  }
+  async function query() {
+    if (busy) return; busy = true; buttons.forEach((b) => (b.disabled = true));
+    render();
+    let reads = 1;
+    idxRects.red.classList.add("read");
+    st.reads.set(reads, "good");
+    setCap("#s7-cap", "Read 1: the index entry for <b>red</b>. In a secondary index one value can match many rows, so the entry holds a whole list.");
+    await sleep(700);
+    if (mode === 2) {
+      idxRects.red.classList.add("hit");
+      setCap("#s7-cap", "Done — <b>one read</b>. The names were stored <i>inside</i> the index, so the query never touched the table at all: the index <b>covers</b> the query. The price is a second copy of the name column and slower writes.");
+      st.reads.set(1, "good");
+    } else {
+      const ids = items.filter((x) => x.color === "red").map((x) => x.id);
+      for (const id of ids) {
+        const hops = [];
+        if (mode === 0 && moved && moved.id === id) hops.push(slotRects["slot" + moved.oldSlot], slotRects["id" + id]);
+        else hops.push(slotRects[mode === 1 ? "id" + id : "slot" + slotOf(id)]);
+        let from = [270, 120];
+        for (const target of hops) {
+          if (!target) continue;
+          const tag = draw.tag(mode === 1 ? "id " + id : "slot", "sv-data-soft");
+          layer.appendChild(tag);
+          const ty = Number(target.getAttribute("y")) + 15;
+          await fly(tag, from, [340, ty], 420);
+          tag.remove();
+          target.classList.add("hit");
+          reads++; st.reads.set(reads, reads > 4 ? "bad" : reads > 3 ? "warn" : "good");
+          from = [420, ty];
+          await sleep(280);
+        }
+      }
+      setCap("#s7-cap", mode === 0
+        ? "<b>" + reads + " reads</b>: one in the index, then one hop into the <b>heap file</b> for each matching row. The heap keeps rows in no particular order, and every index just points at a location in it."
+        : "<b>" + reads + " reads</b>: the index gives primary keys, then each row is fetched from the <b>clustered index</b>, where the rows themselves are stored. That's how InnoDB's secondary indexes work.");
+    }
+    busy = false; buttons.forEach((b) => (b.disabled = false));
+  }
+  async function grow() {
+    if (busy) return; busy = true; buttons.forEach((b) => (b.disabled = true));
+    if (mode === 0) {
+      const slot = heap.findIndex((hh) => hh.id === 3);
+      items.find((x) => x.id === 3).name = "yo-yo-deluxe-2000";
+      heap[slot] = { id: null, fwd: heap.length };
+      heap.push({ id: 3, fwd: null });
+      moved = { id: 3, oldSlot: slot };
+      render();
+      slotRects["id3"].classList.add("hit");
+      setCap("#s7-cap", "The new value is <b>too big for its old spot</b>, so the row moves to the end of the heap. Either every index has to be updated to the new location, or — as here — a <b>forwarding pointer</b> is left behind, costing an extra hop forever after.");
+    } else if (mode === 1) {
+      items.find((x) => x.id === 3).name = "yo-yo-deluxe-2000";
+      render();
+      setCap("#s7-cap", "In a <b>clustered index</b> the row lives inside the index page itself, so growing it may split that page — the B-tree page split you saw earlier. No forwarding pointers, but index maintenance instead.");
+    } else {
+      items.find((x) => x.id === 3).name = "yo-yo-deluxe-2000";
+      render();
+      idxRects.red.classList.add("read");
+      setCap("#s7-cap", "A <b>covering index</b> keeps its own copy of the name, so <i>both</i> the table and the index have to be written. Every duplicated column makes reads faster and writes slower — the trade-off behind every index in this chapter.");
+    }
+    busy = false; buttons.forEach((b) => (b.disabled = false));
+  }
+  const ctr = K.$("#s7-controls");
+  const buttons = [];
+  [["Which toys are red?", "primary", query], ["Grow a value", "danger", grow], ["Reset", "", () => { if (busy) return; reset(); render(); st.reads.set("—"); setCap("#s7-cap", "Ask the question in each mode and compare the reads."); }]]
+    .forEach(([l, c, fn]) => { const b = btn(l, c, fn); buttons.push(b); ctr.appendChild(b); });
+  K.$("#s7-seg").appendChild(seg(["Heap file", "Clustered", "Covering"], 0, (i) => {
+    if (busy) return;
+    mode = i; reset(); render(); st.reads.set("—");
+    setCap("#s7-cap", ["The index stores a <b>location in the heap file</b> — Postgres works this way.",
+      "The rows live <b>inside the primary-key index</b>. MySQL's InnoDB always clusters on the primary key; its secondary indexes store primary keys, not locations.",
+      "The index carries <b>extra columns</b> along for the ride, so some queries never touch the table."][i]);
+  }, "s7-mode"));
+  reset(); render();
+})();
+
+/* ================= 8. COLUMN STORAGE ================= */
+(function scColumns() {
+  const svg = K.$("#s8-svg");
+  const g = s("g"); svg.appendChild(g);
+  const COLN = ["date_key", "product_sk", "store_sk", "promo_sk", "cust_sk", "quantity"];
+  const DATA = [
+    [140102, 69, 4, "—", 191, 1], [140102, 69, 5, 19, 192, 3], [140102, 69, 5, "—", 193, 1], [140102, 74, 3, 23, 194, 4],
+    [140103, 31, 2, "—", 195, 1], [140103, 31, 3, "—", 196, 3], [140103, 31, 3, 21, 197, 1], [140103, 31, 8, "—", 198, 5],
+    [140103, 31, 7, "—", 199, 1], [140103, 68, 1, "—", 200, 2], [140104, 68, 1, "—", 201, 4], [140104, 68, 2, "—", 202, 1]];
+  const NEED = [1, 5];
+  let mode = 0, busy = false;
+  const st = { cells: stat("Cells read", 0), cols: stat("Columns touched", "—"), ans: stat("Answer", "—") };
+  Object.values(st).forEach((x) => K.$("#s8-stats").appendChild(x));
+  const cellRects = [];
+
+  function renderTable() {
+    K.clear(g); cellRects.length = 0;
+    g.appendChild(txt(36, 50, mode === 0 ? "ROW-ORIENTED · whole rows stored side by side" : "COLUMN-ORIENTED · each column stored together", "sv-label", "start"));
+    COLN.forEach((c, n) => g.appendChild(txt(100 + n * 92 + 43, 72, c, "sv-label")));
+    DATA.forEach((row, r) => {
+      const y = 80 + r * 22;
+      g.appendChild(txt(80, y + 14, "row " + (r + 1), "sv-label sv-muted", "end"));
+      cellRects.push([]);
+      row.forEach((v, c) => {
+        const x = 100 + c * 92;
+        const rr = s("rect", { x, y, width: 86, height: 20, rx: 4, class: "cellr" });
+        cellRects[r].push(rr);
+        g.append(rr, txt(x + 43, y + 14, String(v), "sv-label"));
+      });
+    });
+    if (mode === 1) COLN.forEach((c, n) => {
+      const x = 100 + n * 92;
+      g.appendChild(s("rect", { x: x - 3, y: 77, width: 92, height: 270, rx: 8, fill: "none", stroke: NEED.includes(n) ? "var(--blue)" : "var(--line)", "stroke-width": NEED.includes(n) ? 2 : 1, "stroke-dasharray": "4 4" }));
+    });
+    g.appendChild(txt(36, 362, "SELECT SUM(quantity) WHERE product_sk IN (31, 68)   ·   toy table: 12 rows, 6 columns", "sv-label", "start"));
+  }
+  function renderBitmaps() {
+    K.clear(g); cellRects.length = 0;
+    const vals = [31, 68, 69, 74];
+    g.append(txt(36, 50, "product_sk column, turned into one bitmap per distinct value", "sv-label", "start"),
+      txt(60, 86, "product_sk", "sv-label", "start"));
+    vals.forEach((v, n) => g.appendChild(txt(212 + n * 58 + 22, 86, "p=" + v, "sv-label")));
+    g.append(txt(470 + 22, 86, "store=3", "sv-label"), txt(560 + 22, 86, "result", "sv-label"));
+    bitRects.length = 0;
+    DATA.forEach((row, r) => {
+      const y = 100 + r * 20;
+      g.append(s("rect", { x: 60, y, width: 100, height: 17, rx: 4, class: "cellr data" }), txt(110, y + 13, String(row[1]), "sv-label"));
+      const line = [];
+      vals.forEach((v, n) => {
+        const bit = row[1] === v ? 1 : 0;
+        const rr = s("rect", { x: 212 + n * 58, y, width: 44, height: 17, rx: 4, class: "cellr" + (bit ? " data" : "") });
+        g.append(rr, txt(212 + n * 58 + 22, y + 13, String(bit), "sv-label"));
+        line.push({ rect: rr, bit });
+      });
+      const sbit = row[2] === 3 ? 1 : 0;
+      const sr = s("rect", { x: 470, y, width: 44, height: 17, rx: 4, class: "cellr" + (sbit ? " data" : "") });
+      g.append(sr, txt(492, y + 13, String(sbit), "sv-label"));
+      const res = s("rect", { x: 560, y, width: 44, height: 17, rx: 4, class: "cellr" });
+      const resT = txt(582, y + 13, "", "sv-label");
+      g.append(res, resT);
+      bitRects.push({ line, store: { rect: sr, bit: sbit }, res, resT });
+    });
+    g.appendChild(txt(36, 358, "run-length encoding of p=31:  4 zeros, 5 ones, 3 zeros  —  three numbers instead of twelve bits", "sv-label", "start"));
+  }
+  const bitRects = [];
+  function render() { if (mode === 2) renderBitmaps(); else renderTable(); }
+
+  async function runQuery() {
+    if (busy) return; busy = true; buttons.forEach((b) => (b.disabled = true));
+    render();
+    let read = 0, sum = 0;
+    if (mode === 0) {
+      st.cols.set("all 6", "bad");
+      setCap("#s8-cap", "Row store: the engine loads <b>every column of every row</b> off the disk, parses it, and throws most of it away.");
+      for (let r = 0; r < DATA.length; r++) {
+        cellRects[r].forEach((rr) => rr.classList.add("read"));
+        read += 6; st.cells.set(read, "bad");
+        if (DATA[r][1] === 31 || DATA[r][1] === 68) { sum += DATA[r][5]; cellRects[r][5].classList.add("hit"); }
+        await sleep(K.reduced ? 30 : 150);
+      }
+      setCap("#s8-cap", "Answer: <b>" + sum + "</b>, after reading <b>" + read + " cells</b>. Only " + (read / 3) + " of them were ever needed. Now imagine a real fact table with over a hundred columns.");
+    } else {
+      st.cols.set("2 of 6", "good");
+      setCap("#s8-cap", "Column store: load only <b>product_sk</b> and <b>quantity</b>. The other four columns are never touched.");
+      for (const c of NEED) {
+        for (let r = 0; r < DATA.length; r++) {
+          cellRects[r][c].classList.add("read"); read++; st.cells.set(read, "good");
+          await sleep(K.reduced ? 20 : 70);
+        }
+      }
+      DATA.forEach((row, r) => { if (row[1] === 31 || row[1] === 68) { sum += row[5]; cellRects[r][5].classList.add("hit"); } });
+      setCap("#s8-cap", "Same answer, <b>" + sum + "</b>, from <b>" + read + " cells</b> instead of 72. Every column stores its rows in the same order, so the 23rd entry of each column always belongs to the 23rd row.");
+    }
+    st.ans.set(sum, "good");
+    busy = false; buttons.forEach((b) => (b.disabled = false));
+  }
+  async function runBitmap(kind) {
+    if (busy) return; busy = true; buttons.forEach((b) => (b.disabled = true));
+    render();
+    const isOr = kind === "or";
+    setCap("#s8-cap", isOr
+      ? "<b>product_sk IN (31, 68)</b> — load the two bitmaps and compute a bitwise <b>OR</b>. No values are parsed at all, just bits."
+      : "<b>product_sk = 31 AND store_sk = 3</b> — load one bitmap from each column and compute a bitwise <b>AND</b>. It works because both columns keep their rows in the same order.");
+    let hits = 0;
+    for (let r = 0; r < bitRects.length; r++) {
+      const b = bitRects[r];
+      const a = b.line[0].bit, c = isOr ? b.line[1].bit : b.store.bit;
+      b.line[0].rect.classList.add("read");
+      (isOr ? b.line[1].rect : b.store.rect).classList.add("read");
+      const out = isOr ? (a | c) : (a & c);
+      b.resT.textContent = String(out);
+      b.res.classList.add(out ? "hit" : "miss");
+      if (out) hits++;
+      await sleep(K.reduced ? 30 : 130);
+    }
+    st.cells.set(24, "good"); st.cols.set("2 of 6", "good"); st.ans.set(hits + " rows", "good");
+    setCap("#s8-cap", (isOr ? "OR" : "AND") + " gives <b>" + hits + " matching rows</b> using nothing but bit operations, which CPUs do absurdly fast. Sparse bitmaps get squashed further by <b>run-length encoding</b>: “four zeros, five ones, three zeros”.");
+    busy = false; buttons.forEach((b) => (b.disabled = false));
+  }
+  const ctr = K.$("#s8-controls");
+  const buttons = [];
+  const bQuery = btn("Run the query", "primary", runQuery);
+  const bOr = btn("product IN (31, 68)", "primary", () => runBitmap("or"));
+  const bAnd = btn("product = 31 AND store = 3", "primary", () => runBitmap("and"));
+  const bReset = btn("Reset", "", () => { if (busy) return; render(); st.cells.set(0); st.ans.set("—"); });
+  [bQuery, bOr, bAnd, bReset].forEach((b) => buttons.push(b));
+  function syncButtons() {
+    K.clear(ctr);
+    if (mode === 2) ctr.append(bOr, bAnd, bReset); else ctr.append(bQuery, bReset);
+  }
+  K.$("#s8-seg").appendChild(seg(["Row store", "Column store", "Bitmaps"], 0, (i) => {
+    if (busy) return;
+    mode = i; render(); syncButtons(); st.cells.set(0); st.ans.set("—"); st.cols.set("—");
+    setCap("#s8-cap", ["All six values of a row sit together on disk — great for fetching or updating one whole record.",
+      "Each column lives in its own file, so an analytical query loads only the columns it names.",
+      "Each distinct value becomes a bitmap: one bit per row, 1 where the row has that value."][i]);
+  }, "s8-mode"));
+  render(); syncButtons();
+})();
+
+/* ================= 9. MULTIDIMENSIONAL + FULL TEXT ================= */
+(function scMulti() {
+  const svg = K.$("#s9-svg");
+  const g = s("g"); svg.appendChild(g);
+  const PTS = [
+    [20, 70], [28, 78], [34, 66], [22, 86], [38, 82], [14, 74],
+    [64, 72], [72, 84], [80, 68], [68, 90], [86, 76], [76, 62],
+    [24, 28], [33, 35], [28, 24], [40, 31], [18, 38], [36, 20],
+    [62, 26], [70, 34], [78, 22], [66, 18], [84, 30], [74, 40]];
+  const GROUPS = [[0, 5], [6, 11], [12, 17], [18, 23]];
+  const Q = { x0: 20, x1: 45, y0: 22, y1: 40 };
+  const px = (v) => 60 + v * 3.6, py = (v) => 290 - v * 2.2;
+  let mode = 0, busy = false;
+  const st = { seen: stat("Restaurants examined", 0), hit: stat("Inside the rectangle", 0), kind: stat("Index", "—") };
+  Object.values(st).forEach((x) => K.$("#s9-stats").appendChild(x));
+  const dots = [], boxes = [];
+
+  function renderMap() {
+    K.clear(g); dots.length = 0; boxes.length = 0;
+    g.append(txt(60, 44, "RESTAURANTS ON A MAP", "sv-label", "start"),
+      s("line", { x1: px(0), y1: py(0), x2: px(100), y2: py(0), class: "sv-wire-solid" }),
+      s("line", { x1: px(0), y1: py(0), x2: px(0), y2: py(100), class: "sv-wire-solid" }));
+    [0, 25, 50, 75, 100].forEach((v) => {
+      g.append(txt(px(v), py(0) + 18, String(v), "sv-label sv-muted"), txt(px(0) - 8, py(v) + 4, String(v), "sv-label sv-muted", "end"));
+    });
+    g.append(txt(px(50), py(0) + 34, "longitude", "sv-label"), txt(px(0) - 8, py(100) - 12, "latitude", "sv-label", "end"));
+    GROUPS.forEach(([a, b]) => {
+      const xs = PTS.slice(a, b + 1).map((p) => p[0]), ys = PTS.slice(a, b + 1).map((p) => p[1]);
+      const bx = { x0: Math.min(...xs) - 3, x1: Math.max(...xs) + 3, y0: Math.min(...ys) - 3, y1: Math.max(...ys) + 3 };
+      const r = s("rect", { x: px(bx.x0), y: py(bx.y1), width: px(bx.x1) - px(bx.x0), height: py(bx.y0) - py(bx.y1), rx: 8, fill: "none", stroke: "var(--lilac)", "stroke-width": 1.5, "stroke-dasharray": "5 5", opacity: 0 });
+      boxes.push({ rect: r, bx, a, b });
+      g.appendChild(r);
+    });
+    g.appendChild(s("rect", { x: px(Q.x0), y: py(Q.y1), width: px(Q.x1) - px(Q.x0), height: py(Q.y0) - py(Q.y1), rx: 4, fill: "var(--blue-soft)", stroke: "var(--blue)", "stroke-width": 2, opacity: 0.75 }));
+    PTS.forEach((p) => {
+      const c = s("circle", { cx: px(p[0]), cy: py(p[1]), r: 5, class: "sv-fill-lilac" });
+      dots.push(c); g.appendChild(c);
+    });
+    g.append(txt(460, 90, "the map window you can see:", "sv-label", "start"),
+      txt(460, 112, "latitude  22 – 40", "sv-label", "start"),
+      txt(460, 132, "longitude 20 – 45", "sv-label", "start"),
+      txt(460, 168, "dashed boxes = R-tree", "sv-label", "start"),
+      txt(460, 188, "groups of nearby places", "sv-label", "start"));
+  }
+  const inQ = (p) => p[0] >= Q.x0 && p[0] <= Q.x1 && p[1] >= Q.y0 && p[1] <= Q.y1;
+  async function runMap(useTree) {
+    if (busy) return; busy = true; buttons.forEach((b) => (b.disabled = true));
+    renderMap();
+    boxes.forEach((b) => b.rect.setAttribute("opacity", useTree ? 1 : 0));
+    let seen = 0, hits = 0;
+    st.kind.set(useTree ? "R-tree" : "1-D index");
+    let candidates = [];
+    if (useTree) {
+      setCap("#s9-cap", "An <b>R-tree</b> keeps nearby places in the same box. First check which boxes <b>overlap</b> the map window — most can be ruled out without looking inside them at all.");
+      for (const b of boxes) {
+        const hitBox = !(b.bx.x1 < Q.x0 || b.bx.x0 > Q.x1 || b.bx.y1 < Q.y0 || b.bx.y0 > Q.y1);
+        b.rect.setAttribute("stroke", hitBox ? "var(--blue)" : "var(--line-strong)");
+        b.rect.setAttribute("opacity", hitBox ? 1 : 0.35);
+        if (hitBox) for (let i = b.a; i <= b.b; i++) candidates.push(i);
+        await sleep(K.reduced ? 40 : 400);
+      }
+    } else {
+      setCap("#s9-cap", "A <b>concatenated index</b> on (latitude, longitude) can only narrow one dimension. It hands you <b>every restaurant in this band of latitude</b> — right around the planet — and you check the longitudes yourself.");
+      g.appendChild(s("rect", { x: px(0), y: py(Q.y1), width: px(100) - px(0), height: py(Q.y0) - py(Q.y1), rx: 4, fill: "var(--sun-soft)", opacity: 0.55 }));
+      PTS.forEach((p, i) => { if (p[1] >= Q.y0 && p[1] <= Q.y1) candidates.push(i); });
+    }
+    for (const i of candidates) {
+      dots[i].setAttribute("class", "sv-fill-blue");
+      dots[i].setAttribute("r", 7);
+      seen++; st.seen.set(seen, seen > 8 ? "bad" : "good");
+      if (inQ(PTS[i])) { dots[i].setAttribute("class", "sv-fill-mint"); hits++; st.hit.set(hits, "good"); }
+      await sleep(K.reduced ? 30 : 180);
+    }
+    setCap("#s9-cap", useTree
+      ? "The R-tree opened <b>one box</b> and examined <b>" + seen + "</b> restaurants to find the <b>" + hits + "</b> in view. With millions of rows, skipping whole boxes is everything."
+      : "It examined <b>" + seen + "</b> restaurants to find the same <b>" + hits + "</b>. Half of them were nowhere near the window — they just happened to share a latitude. That's why two-dimensional queries need a <b>multidimensional index</b>.");
+    busy = false; buttons.forEach((b) => (b.disabled = false));
+  }
+
+  const docs = [
+    { id: 1, text: "red apples and green pears" },
+    { id: 2, text: "a red kite" },
+    { id: 3, text: "green apples" },
+    { id: 4, text: "apples and honey" },
+    { id: 5, text: "red apples in a red bowl" }];
+  const terms = ["red", "apples", "green"];
+  const bitsOf = (t) => docs.map((d) => (d.text.split(" ").includes(t) ? 1 : 0));
+  const termRects = {}, resRects = [], docRects = [];
+  function renderWords() {
+    K.clear(g); resRects.length = 0; docRects.length = 0;
+    g.append(txt(40, 60, "DOCUMENTS", "sv-label", "start"), txt(340, 60, "INVERTED INDEX · term → postings bitmap", "sv-label", "start"));
+    docs.forEach((d, i) => {
+      const y = 80 + i * 40;
+      const rr = s("rect", { x: 40, y, width: 270, height: 32, rx: 6, class: "cellr" });
+      docRects.push(rr);
+      g.append(rr, txt(50, y + 21, d.id + "   " + d.text, "sv-label", "start"));
+    });
+    docs.forEach((d, i) => g.appendChild(txt(392 + i * 44, 96, "doc " + d.id, "sv-label sv-muted")));
+    terms.forEach((t, r) => {
+      const y = 110 + r * 44, bits = bitsOf(t);
+      g.appendChild(txt(360, y + 22, t, "sv-label", "end"));
+      termRects[t] = [];
+      bits.forEach((b, i) => {
+        const rr = s("rect", { x: 370 + i * 44, y, width: 38, height: 32, rx: 6, class: "cellr" + (b ? " data" : "") });
+        termRects[t].push({ rect: rr, bit: b });
+        g.append(rr, txt(389 + i * 44, y + 21, String(b), "sv-label"));
+      });
+    });
+    g.appendChild(txt(360, 288, "AND", "sv-label", "end"));
+    docs.forEach((d, i) => {
+      const rr = s("rect", { x: 370 + i * 44, y: 266, width: 38, height: 32, rx: 6, class: "cellr" });
+      const tt = txt(389 + i * 44, 287, "", "sv-label");
+      resRects.push({ rect: rr, text: tt });
+      g.append(rr, tt);
+    });
+  }
+  async function runWords(a, b) {
+    if (busy) return; busy = true; buttons.forEach((bb) => (bb.disabled = true));
+    renderWords();
+    st.kind.set("inverted");
+    setCap("#s9-cap", "Load the postings bitmap for <b>" + a + "</b> and the one for <b>" + b + "</b>. Each has one bit per document: 1 means “this word is in that document”.");
+    const A = bitsOf(a), B = bitsOf(b);
+    let hits = 0;
+    for (let i = 0; i < docs.length; i++) {
+      termRects[a][i].rect.classList.add("read");
+      termRects[b][i].rect.classList.add("read");
+      const out = A[i] & B[i];
+      resRects[i].text.textContent = String(out);
+      resRects[i].rect.classList.add(out ? "hit" : "miss");
+      if (out) { hits++; docRects[i].classList.add("hit"); }
+      await sleep(K.reduced ? 40 : 300);
+    }
+    st.seen.set(2, "good"); st.hit.set(hits, "good");
+    setCap("#s9-cap", "A bitwise <b>AND</b> gives the documents containing both words: <b>" + hits + "</b> of them. Lucene (behind Elasticsearch and Solr) keeps these term → postings lists in SSTable-like sorted files, merged in the background — the same log-structured idea as earlier in the chapter.");
+    busy = false; buttons.forEach((bb) => (bb.disabled = false));
+  }
+
+  const ctr = K.$("#s9-controls");
+  const buttons = [];
+  const mk = (label, cls, fn) => { const b = btn(label, cls, fn); buttons.push(b); return b; };
+  const bFlat = mk("Concatenated (lat, long) index", "primary", () => runMap(false));
+  const bTree = mk("R-tree", "primary", () => runMap(true));
+  const bAnd1 = mk("red AND apples", "primary", () => runWords("red", "apples"));
+  const bAnd2 = mk("green AND apples", "primary", () => runWords("green", "apples"));
+  function syncControls() { K.clear(ctr); if (mode === 0) ctr.append(bFlat, bTree); else ctr.append(bAnd1, bAnd2); }
+  K.$("#s9-seg").appendChild(seg(["Map · two dimensions", "Words · inverted index"], 0, (i) => {
+    if (busy) return;
+    mode = i; st.seen.set(0); st.hit.set(0); st.kind.set("—");
+    if (i === 0) { renderMap(); setCap("#s9-cap", "Find every restaurant inside the blue rectangle. Try each index and compare how many places it has to look at."); }
+    else { renderWords(); setCap("#s9-cap", "Which documents contain <b>both</b> words? Pick a pair."); }
+    syncControls();
+  }, "s9-mode"));
+  renderMap(); syncControls();
+})();
+
+/* ================= 10. VECTOR SEARCH ================= */
+(function scVectors() {
+  const svg = K.$("#s10-svg");
+  const g = s("g"); svg.appendChild(g);
+  const DOCS = [
+    [24, 72, "cancel my subscription", 2, -14], [40, 86, "delete my profile", 12, 4], [19, 64, "terminate contract", 12, 4],
+    [38, 70], [44, 84], [30, 56], [52, 66], [60, 80], [68, 58], [74, 72],
+    [80, 46], [66, 36], [54, 28, "star schema basics", 12, 4], [44, 40], [36, 30],
+    [26, 42], [18, 30], [12, 50], [48, 52], [58, 46]];
+  const QUERY = [28, 70];
+  const L1 = DOCS.map((_, i) => i).filter((i) => i % 3 === 0);
+  const L2 = DOCS.map((_, i) => i).filter((i) => i % 9 === 0);
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  function neighbours(layer, i, k) {
+    return layer.filter((j) => j !== i).sort((a, b) => dist(DOCS[i], DOCS[a]) - dist(DOCS[i], DOCS[b])).slice(0, k);
+  }
+  let mode = 0, busy = false;
+  const st = { cmp: stat("Distance checks", 0), near: stat("Nearest found", "—"), kind: stat("Accuracy", "—") };
+  Object.values(st).forEach((x) => K.$("#s10-stats").appendChild(x));
+
+  const panels = [];
+  const PX = (v, p) => p.x + (v / 100) * p.w;
+  const PY = (v, p) => p.y + p.h - (v / 100) * p.h;
+  function drawPanel(p, nodes, edges, title) {
+    g.append(txt(p.x, p.y - 8, title, "sv-label", "start"), rect(p.x, p.y, p.w, p.h, "sv-panel", 12));
+    const marks = {};
+    if (edges) nodes.forEach((i) => neighbours(nodes, i, 3).forEach((j) => {
+      g.appendChild(s("line", { x1: PX(DOCS[i][0], p), y1: PY(DOCS[i][1], p), x2: PX(DOCS[j][0], p), y2: PY(DOCS[j][1], p), class: "sv-wire-solid", style: { strokeWidth: 1, opacity: 0.35 } }));
+    }));
+    nodes.forEach((i) => {
+      const c = s("circle", { cx: PX(DOCS[i][0], p), cy: PY(DOCS[i][1], p), r: 6, class: "sv-fill-lilac" });
+      marks[i] = c; g.appendChild(c);
+    });
+    const q = s("path", { d: "M0,-9 L9,0 L0,9 L-9,0 Z", class: "sv-fill-coral", transform: "translate(" + PX(QUERY[0], p) + "," + PY(QUERY[1], p) + ")" });
+    g.appendChild(q);
+    return { p, marks };
+  }
+  function render() {
+    K.clear(g); panels.length = 0;
+    if (mode === 0) {
+      const p = { x: 60, y: 70, w: 560, h: 280 };
+      panels.push(drawPanel(p, DOCS.map((_, i) => i), false, "MEANING SPACE · every document is a point"));
+      DOCS.forEach((d) => {
+        if (!d[2]) return;
+        g.appendChild(txt(PX(d[0], p) + d[3], PY(d[1], p) + d[4], d[2], "sv-label", "start"));
+      });
+      g.appendChild(txt(p.x + 14, p.y + 22, "◆ = your question, turned into a vector too", "sv-label", "start"));
+    } else {
+      panels.push(drawPanel({ x: 60, y: 50, w: 560, h: 76 }, L2, true, "LAYER 2 · a few nodes, big jumps"));
+      panels.push(drawPanel({ x: 60, y: 160, w: 560, h: 76 }, L1, true, "LAYER 1 · denser"));
+      panels.push(drawPanel({ x: 60, y: 270, w: 560, h: 88 }, DOCS.map((_, i) => i), true, "LAYER 0 · every document"));
+    }
+  }
+  async function runFlat() {
+    if (busy) return; busy = true; buttons.forEach((b) => (b.disabled = true));
+    mode = 0; render();
+    const P = panels[0];
+    st.kind.set("exact", "good");
+    setCap("#s10-cap", "A <b>flat index</b> compares the question's vector with <b>every</b> document vector, one by one.");
+    let cmp = 0;
+    const scored = [];
+    for (let i = 0; i < DOCS.length; i++) {
+      const line = s("line", { x1: PX(QUERY[0], P.p), y1: PY(QUERY[1], P.p), x2: PX(DOCS[i][0], P.p), y2: PY(DOCS[i][1], P.p), class: "sv-wire-solid", style: { stroke: "var(--sun)", strokeWidth: 1 } });
+      g.appendChild(line);
+      P.marks[i].setAttribute("class", "sv-fill-blue");
+      cmp++; st.cmp.set(cmp, "bad");
+      scored.push([i, dist(QUERY, DOCS[i])]);
+      await sleep(K.reduced ? 20 : 110);
+      line.remove();
+      P.marks[i].setAttribute("class", "sv-fill-lilac");
+    }
+    scored.sort((a, b) => a[1] - b[1]);
+    scored.slice(0, 3).forEach(([i]) => { P.marks[i].setAttribute("class", "sv-fill-mint"); P.marks[i].setAttribute("r", 8); });
+    st.near.set("doc " + (scored[0][0] + 1), "good");
+    setCap("#s10-cap", "The three nearest documents are highlighted — including <b>“cancelling your subscription”</b>, which shares no words at all with the question. Perfectly accurate, but it cost <b>" + cmp + " distance calculations</b>. With ten million documents, that's ten million.");
+    busy = false; buttons.forEach((b) => (b.disabled = false));
+  }
+  async function runHnsw() {
+    if (busy) return; busy = true; buttons.forEach((b) => (b.disabled = true));
+    mode = 1; render();
+    st.kind.set("approximate", "warn");
+    const layers = [{ nodes: L2, panel: panels[0], name: "layer 2" }, { nodes: L1, panel: panels[1], name: "layer 1" }, { nodes: DOCS.map((_, i) => i), panel: panels[2], name: "layer 0" }];
+    let cur = L2[L2.length - 1], cmp = 1, visited = [];
+    st.cmp.set(cmp, "good");
+    for (const L of layers) {
+      const P = L.panel;
+      P.marks[cur].setAttribute("class", "sv-fill-sun");
+      P.marks[cur].setAttribute("r", 9);
+      setCap("#s10-cap", "In <b>" + L.name + "</b>, look at the neighbours of the current node and hop to whichever is closest to the question. Upper layers are sparse, so each hop covers a lot of ground.");
+      await sleep(K.reduced ? 60 : 700);
+      for (;;) {
+        const ns = neighbours(L.nodes, cur, 3);
+        let best = cur, bestD = dist(QUERY, DOCS[cur]), moved = false;
+        for (const j of ns) {
+          P.marks[j].setAttribute("class", "sv-fill-blue");
+          cmp++; st.cmp.set(cmp, "good");
+          const d = dist(QUERY, DOCS[j]);
+          if (d < bestD) { bestD = d; best = j; moved = true; }
+          await sleep(K.reduced ? 30 : 220);
+        }
+        if (!moved) break;
+        g.appendChild(s("line", { x1: PX(DOCS[cur][0], P.p), y1: PY(DOCS[cur][1], P.p), x2: PX(DOCS[best][0], P.p), y2: PY(DOCS[best][1], P.p), class: "sv-wire-solid", style: { stroke: "var(--sun)", strokeWidth: 2.5 } }));
+        P.marks[cur].setAttribute("class", "sv-fill-lilac");
+        cur = best;
+        P.marks[cur].setAttribute("class", "sv-fill-sun");
+        P.marks[cur].setAttribute("r", 9);
+        visited.push(cur);
+        await sleep(K.reduced ? 40 : 300);
+      }
+      P.marks[cur].setAttribute("class", "sv-fill-mint");
+      await sleep(K.reduced ? 40 : 300);
+    }
+    st.near.set("doc " + (cur + 1), "good");
+    setCap("#s10-cap", "Landed on <b>doc " + (cur + 1) + "</b> — the same answer — after only <b>" + cmp + " distance calculations</b> instead of 20. HNSW is <b>approximate</b>: a very close neighbour could be missed, which is nearly always a price worth paying. <b>IVF</b> indexes do something similar by splitting the space into partitions and checking only a few <b>probes</b>.");
+    busy = false; buttons.forEach((b) => (b.disabled = false));
+  }
+  const ctr = K.$("#s10-controls");
+  const buttons = [];
+  const b1 = btn("Search · flat index", "primary", runFlat);
+  const b2 = btn("Search · HNSW", "primary", runHnsw);
+  const b3 = btn("Reset", "", () => { if (busy) return; render(); st.cmp.set(0); st.near.set("—"); st.kind.set("—"); });
+  [b1, b2, b3].forEach((b) => { buttons.push(b); ctr.appendChild(b); });
+  ctr.append(h("span", { class: "grow" }), h("span", { class: "pill" }, "real embeddings have 1,000+ dimensions"));
+  K.$("#s10-seg").appendChild(seg(["Flat · check everything", "HNSW · layers"], 0, (i) => { if (busy) return; mode = i; render(); st.cmp.set(0); st.near.set("—"); }, "s10-mode"));
+  render();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "Why is appending to a log so fast, and why is reading from one without an index so slow?", options: ["Appending is fast and reading is fast too", "Appending needs no searching; reading has to scan every line, which is O(n)", "Logs are compressed", "Logs are stored in memory"], answer: 1, why: "Appending is the simplest possible write. Without an index, db_get scans the whole file and takes twice as long when the data doubles." },
+  { q: "An SSTable's sparse index only holds the first key of each block. How can it still find any key?", options: ["It guesses", "It scans the whole file anyway", "Because the file is sorted, a key must lie between two index entries, so you seek to that block and scan it", "It keeps every key in memory as well"], answer: 2, why: "Sorted order is what makes a sparse index work: the key you want can only be inside one particular block." },
+  { q: "During LSM compaction, the same key appears in two segments. What happens?", options: ["Both values are kept", "The value from the newer segment wins and the older one is discarded", "The merge fails", "The older value wins"], answer: 1, why: "The merge copies the lowest key each time and keeps only the most recent value, exactly like the merge step of mergesort." },
+  { q: "A Bloom filter says a key is NOT in a segment. What does that mean?", options: ["It might still be there", "It is definitely not there, so the segment can be skipped", "You must read the block to be sure", "The filter is broken"], answer: 1, why: "A 0 bit proves the key was never added. Only the “probably here” answer can be wrong — that's the false positive." },
+  { q: "Why does a B-tree need a write-ahead log?", options: ["To compress pages", "To sort the keys", "Because a page split overwrites several pages at once, and a crash in the middle would corrupt the tree", "To speed up reads"], answer: 2, why: "Every modification is appended to the WAL before it touches the tree, so a crash can be recovered by replaying the log." },
+  { q: "An analyst sums one column out of a hundred-column table with billions of rows. Which storage layout wins?", options: ["Row-oriented, because rows are stored together", "Column-oriented, because only the needed columns are read and they compress well", "Neither, they're the same", "An in-memory hash index"], answer: 1, why: "Column stores read only the columns a query names, and repeated values compress hard with bitmap and run-length encoding." },
+], 4);
+</script>
+</body>
+</html>
