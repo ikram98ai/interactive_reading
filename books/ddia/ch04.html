@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="../../assets/style.css">
 <style>
   .cellr { fill: var(--surface-2); stroke: var(--line); stroke-width: 1; transition: fill .18s, stroke .18s, opacity .18s; }
   .cellr.read { fill: var(--blue-soft); stroke: var(--blue); }
@@ -420,7 +420,8 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
 
 <footer id="chapter-end"></footer>
 
-<script src="kit.js"></script>
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
 <script>
 const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible, ease, lerp } = K;
 K.page(4);

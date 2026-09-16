@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Book Simulations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .lib-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 40px; align-items: end; padding-block: 56px 26px; }
+  .lib-hero h1 { font-size: clamp(46px, 8vw, 96px); font-weight: 800; letter-spacing: -0.04em; line-height: .94; }
+  .lib-hero h1 span { color: var(--blue); }
+  .lib-hero .lede { font-size: clamp(17px, 2vw, 21px); color: var(--ink-2); margin-top: 18px; max-width: 42ch; }
+  .howto { display: flex; flex-direction: column; gap: 10px; }
+  .howto div { display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: start; font-size: 15.5px; color: var(--ink-2); }
+  .howto b { color: var(--ink); }
+  .howto .n { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--ink); color: var(--bg); font-family: var(--f-mono); font-size: 13px; font-weight: 700; }
+  @media (max-width: 860px) { .lib-hero { grid-template-columns: 1fr; gap: 24px; padding-block: 32px 16px; } }
+</style>
+</head>
+<body>
+<header class="topbar"><div class="wrap">
+  <a class="brand" href="index.html" id="brand">Book Simulations</a>
+  <span class="where">books turned into things you can play with</span>
+</div></header>
+
+<main class="wrap">
+  <section class="lib-hero">
+    <div>
+      <span class="ch-tag"><span class="num" id="book-count">1</span> book on the shelf</span>
+      <h1 style="margin-top:18px">My reading, <span>running</span></h1>
+      <p class="lede">Every book I read gets turned into a set of small interactive machines: one page per chapter, built so the ideas are clear.</p>
+    </div>
+  </section>
+
+  <section aria-label="Books">
+    <div class="section-title"><h2>The shelf</h2><p>Open a book to see its chapter map.</p></div>
+    <div class="shelf" id="shelf"></div>
+  </section>
+</main>
+
+<script src="books/books.js"></script>
+<script src="assets/kit.js"></script>
+<script>
+(function () {
+  const { h, s } = K;
+  const LIB = window.LIBRARY || [];
+  K.$("#book-count").textContent = String(LIB.length);
+  const shelf = K.$("#shelf");
+
+  const progress = (slug) => {
+    try { return JSON.parse(localStorage.getItem(`datatown-progress-v1:${slug}`) || "{}"); }
+    catch (e) { return {}; }
+  };
+
+  K.$("#brand").prepend(s("svg", { class: "brand-mark", viewBox: "0 0 26 26", "aria-hidden": "true" },
+    s("rect", { x: 2, y: 4, width: 7, height: 18, rx: 2, class: "sv-fill-blue" }),
+    s("rect", { x: 10, y: 4, width: 7, height: 18, rx: 2, class: "sv-fill-lilac" }),
+    s("rect", { x: 18, y: 7, width: 6, height: 15, rx: 2, class: "sv-fill-sun" })));
+
+  LIB.forEach((b) => {
+    const done = Object.keys(progress(b.slug)).length;
+    shelf.appendChild(h("a", { class: `bookcard ${b.accent || "blue"}`, href: b.path },
+      h("span", { class: "spine" }, h("span", {}, b.spine || b.book)),
+      h("span", {},
+        h("h3", {}, b.title),
+        h("div", { class: "by" }, `${b.book} · ${b.author}`),
+        h("p", {}, b.blurb),
+        h("div", { class: "meter" },
+          h("span", { class: "bar", style: { width: "140px", height: "10px", borderRadius: "99px", background: "var(--line)", overflow: "hidden", display: "block" } },
+            h("i", { style: { display: "block", height: "100%", width: `${(b.built / b.chapters) * 100}%`, background: "var(--mint)" } })),
+          h("span", { class: "score" }, `${b.built} of ${b.chapters} chapters built`),
+          done ? h("span", { class: "pill good" }, h("i"), `${done} explored`) : null))));
+  });
+
+})();
+</script>
+</body>
+</html>

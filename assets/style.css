@@ -124,6 +124,7 @@ b, strong { font-weight: 700; }
 .dots .soon { width: 9px; height: 9px; border-radius: 3px; background: var(--line); opacity: .4; display: block; }
 .dots a.here { background: var(--blue); transform: scale(1.25); }
 .navbtn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); color: var(--ink); text-decoration: none; background: var(--surface); font-size: 18px; }
+.navbtn.wide { width: auto; padding-inline: 12px; font-size: 13px; font-weight: 700; font-family: var(--f-body); }
 .navbtn[aria-disabled="true"] { opacity: .35; pointer-events: none; }
 @media (max-width: 760px) { .dots { display: none; } .topbar .where { font-size: 13px; } }
 
@@ -312,3 +313,21 @@ input[type="range"] { accent-color: var(--blue); width: 160px; max-width: 100%; 
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- library (root page) ---------- */
+.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; padding-block: 20px 70px; }
+.bookcard { display: grid; grid-template-columns: 72px 1fr; gap: 16px; text-decoration: none; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 18px; box-shadow: var(--shadow); transition: border-color .15s, transform .15s; }
+.bookcard:hover { border-color: var(--blue); transform: translateY(-2px); }
+.bookcard .spine { border-radius: 6px 10px 10px 6px; background: var(--blue); position: relative; overflow: hidden; min-height: 104px; }
+.bookcard .spine::after { content: ""; position: absolute; inset: 0 0 0 8px; border-left: 2px solid var(--surface); opacity: .35; }
+.bookcard .spine span { position: absolute; inset: 0; display: grid; place-items: center; writing-mode: vertical-rl; rotate: 180deg; color: var(--on-accent); font-family: var(--f-display); font-weight: 800; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; padding-block: 8px; }
+.bookcard.lilac .spine { background: var(--lilac); } .bookcard.mint .spine { background: var(--mint); }
+.bookcard.coral .spine { background: var(--coral); } .bookcard.sun .spine { background: var(--sun); }
+.bookcard h3 { font-size: 20px; font-weight: 750; }
+.bookcard .by { font-size: 13.5px; color: var(--ink-3); font-family: var(--f-mono); margin-top: 2px; }
+.bookcard p { font-size: 15px; color: var(--ink-2); margin-top: 8px; }
+.bookcard .meter { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.addcard { display: flex; flex-direction: column; gap: 10px; justify-content: center; border: 2px dashed var(--line-strong); border-radius: var(--r-l); padding: 20px; background: transparent; color: var(--ink-2); }
+.addcard h3 { font-size: 18px; color: var(--ink); }
+.addcard ol { margin: 0; padding-left: 20px; font-size: 14.5px; display: flex; flex-direction: column; gap: 6px; }
+.addcard code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }

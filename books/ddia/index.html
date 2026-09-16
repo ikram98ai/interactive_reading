@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="../../assets/style.css">
 <style>
   .home-hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 40px; align-items: end; padding-block: 56px 28px; }
   .home-hero h1 { font-size: clamp(52px, 9vw, 112px); font-weight: 800; letter-spacing: -0.045em; line-height: .92; }
@@ -38,7 +38,7 @@
   .bar i { display: block; height: 100%; background: var(--mint); border-radius: 99px; }
 </style>
 
-<header class="topbar"><div class="wrap"><a class="brand" href="index.html" id="brand">Data Town</a><span class="where">Designing Data-Intensive Applications, 2nd edition</span></div></header>
+<header class="topbar"><div class="wrap"><a class="navbtn wide" href="../../index.html" title="All books">Books</a><a class="brand" href="index.html" id="brand">Data Town</a><span class="where">Designing Data-Intensive Applications, 2nd edition</span></div></header>
 
 <main class="wrap">
   <section class="home-hero">
@@ -62,11 +62,11 @@
   <div class="grid-ch" id="cards"></div>
 </main>
 
-<script src="kit.js"></script>
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
 <script>
 (function () {
   const { h, s, draw, CHAPTERS, BUILT, getProgress, file, fly, sleep, whenVisible } = K;
-  const short = ["Trade-offs", "Requirements", "Data models", "Storage", "Encoding", "Replication", "Sharding", "Transactions", "Distributed trouble", "Consensus", "Batch", "Streams", "Streaming philosophy", "Doing right"];
   const p = getProgress();
   const ready = (c) => c.n <= BUILT;
   const done = CHAPTERS.filter((c) => ready(c) && p[c.n]).length;
@@ -91,7 +91,7 @@
     const kids = [
       s("circle", { cx: x, cy: y, r: 26, class: "ring" }),
       s("text", { x, y: y + 7, class: "n", "text-anchor": "middle" }, String(c.n)),
-      s("text", { x, y: i < 7 ? y - 40 : y + 50, class: "t", "text-anchor": "middle" }, short[i]),
+      s("text", { x, y: i < 7 ? y - 40 : y + 50, class: "t", "text-anchor": "middle" }, c.short),
     ];
     svg.appendChild(ready(c)
       ? s("a", { href: file(c.n), class: "stop" + (p[c.n] ? " done" : ""), "aria-label": `Chapter ${c.n}: ${c.title}` }, ...kids)

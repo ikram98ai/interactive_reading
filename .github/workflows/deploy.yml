@@ -1,0 +1,73 @@
+name: Deploy site
+
+# Publishes the site to GitHub Pages on every push to the default branch —
+# so adding a new chapter simulation and pushing is all it takes to go live.
+on:
+  push:
+    branches: [main, master]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish; queue at most one more.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp -R assets books _site/
+          # GitHub Pages must not run Jekyll over these files.
+          touch _site/.nojekyll
+          # Never ship book PDFs or OS cruft.
+          find _site -name '*.pdf' -delete
+          find _site -name '.DS_Store' -delete
+
+      - name: Check every page parses and links resolve
+        run: |
+          fail=0
+          for f in $(find _site -name '*.html'); do
+            node -e "
+              const fs=require('fs'), path=require('path');
+              const file='$f', html=fs.readFileSync(file,'utf8');
+              // inline scripts must be syntactically valid
+              const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]).join('\n;\n');
+              new Function(scripts);
+              // local hrefs/srcs must exist
+              for (const m of html.matchAll(/(?:href|src)=\"([^\"]+)\"/g)) {
+                const u=m[1];
+                if (/^(https?:|#|mailto:|data:)/.test(u)) continue;
+                const p=path.resolve(path.dirname(file), u.split('#')[0]);
+                if (!fs.existsSync(p)) { console.error('missing: '+u+' (in '+file+')'); process.exit(1); }
+              }
+            " || fail=1
+          done
+          exit $fail
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
