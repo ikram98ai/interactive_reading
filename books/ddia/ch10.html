@@ -1,0 +1,1408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 10 · Consensus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box,
+  .clickable:hover .sv-server, .clickable:focus-visible .sv-server { stroke: var(--sun); }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .rowwrap { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .rowwrap .lbl { font-family: var(--f-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .fade { transition: opacity .35s; }
+  #hero-svg { max-width: 560px; margin: 0 auto; }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">10</span> Chapter ten</span>
+      <h1>Consistency and Consensus</h1>
+      <p class="lede">Many computers keep copies of your data. This chapter is about making them behave like <i>one</i> honest computer — and about the vote they hold when one of them disappears.</p>
+      <p class="quote">“Never go to sea with two chronometers; take one or three.” — Frederick P. Brooks Jr., quoted at the start of the chapter</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#linear">One score, two phones</a>
+        <a href="#timeline">When did it flip?</a>
+        <a href="#uses">Claiming a name</a>
+        <a href="#quorum">The vote that lies</a>
+        <a href="#cost">Cut the cable</a>
+        <a href="#ids">Numbering messages</a>
+        <a href="#lamport">Lamport's counter</a>
+        <a href="#consensus">Electing a captain</a>
+        <a href="#log">One shared notebook</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · the single-copy illusion</span><span class="pill info"><i></i>tap the writer</span></div>
+      <svg id="hero-svg" viewBox="0 0 520 372" role="img" aria-label="A writer changes one value; three replicas catch up so the app sees a single copy"></svg>
+    </div>
+  </section>
+
+  <!-- ============ 1. LINEARIZABILITY ============ -->
+  <section class="scene" id="linear">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 1 · linearizability</span>
+        <h2>One final score, two phones, two answers</h2>
+        <p class="story">Aaliyah and Bryce sit in the same room watching a game. The moment it ends, Aaliyah refreshes and shouts the score. Bryce hits reload one second later — and his phone still says the game is going.</p>
+        <p class="story">Bryce's request went to a copy of the database that hadn't caught up yet. Nothing crashed; nothing broke. The system simply let a <b>later</b> question get an <b>older</b> answer.</p>
+        <p class="story">A system is <b>linearizable</b> when that can't happen: once anybody has seen the new value, nobody may see the old one again. It pretends there is only one copy of the data, and every operation touches it in one instant.</p>
+        <p class="imagine"><b>Try it:</b> play the story with the lagging replica. Then switch to “reads go to the leader” and watch the confusion disappear — at the price of a longer trip for every read.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><b>Linearizability</b> (also called atomic consistency, strong consistency, immediate consistency, or external consistency) makes a replicated system behave as if there were only one copy of the data and all operations on it were atomic.</p>
+            <p>It is a <b>recency guarantee</b>: as soon as one client's write completes, every client that reads must see the new value. A read may not return a value older than one another client already saw.</p>
+            <p>The violation is only noticeable here because of an extra <b>communication channel</b>: Aaliyah's voice. The same race appears in computers — a web server that stores a video in file storage and then puts a job on a message queue, or a push notification that arrives before the data does.</p>
+            <p>Linearizability is the strongest consistency model in common use; read-after-write consistency, monotonic reads, and consistent prefix reads are weaker guarantees it includes.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">The sports website</span><span id="s1-seg"></span></div>
+        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 660 320" role="img" aria-label="A leader database, two replicas and two friends reading the score"></svg></div>
+        <div class="controls" id="s1-controls"></div>
+        <div class="caption" id="s1-cap" aria-live="polite">The game is still going: the score everywhere is “2–1, playing”.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. TIMELINE ============ -->
+  <section class="scene" id="timeline">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 2 · what makes it linearizable</span>
+        <h2>When exactly did the number flip?</h2>
+        <p class="story">Draw every request as a bar: it starts when the client sends it and ends when the answer comes back. In between, nobody knows exactly when the database did the work.</p>
+        <p class="story">Linearizability says: imagine there is one instant inside the write's bar where the value <b>flips</b>, once and for all. A read that takes effect before that instant returns the old value; a read after it returns the new one. Reads that overlap the write may go either way — but once one read has seen the new value, every later read must see it too.</p>
+        <p class="imagine"><b>Slide the flip point</b> and watch the answers change. Then press “Break it” to see the one answer the system is <i>not</i> allowed to give.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>In distributed systems theory the object being read and written is a <b>register</b> — one key in a key-value store, one row, one document. Operations are <code>read(x) ⇒ v</code>, <code>write(x, v) ⇒ r</code> and <code>cas(x, v_old, v_new) ⇒ r</code>.</p>
+            <p>Every operation is marked with the point in time at which it appears to take effect. That marker must lie inside the operation's own bar, and joining the markers must produce a valid sequence for a register where each read returns the most recent write. The line joining the markers must always move <b>forward</b> in time, never backward.</p>
+            <p>Linearizability is not the same as <b>serializability</b>. Serializability is a transaction isolation level over many objects and permits stale reads; linearizability is a recency guarantee on a single object. A system with both is called <b>strictly serializable</b> (strong-1SR) — Spanner and FoundationDB offer it; CockroachDB offers serializability with some recency guarantees but not strict serializability.</p>
+            <p>Checking a recorded history for linearizability is possible but computationally expensive.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Three clients, one register · toy seconds</span><span class="pill good" id="s2-verdict"><i></i>linearizable</span></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 660 330" role="img" aria-label="Timeline bars for a write and three reads, with a movable flip point"></svg></div>
+        <div class="controls" id="s2-controls"></div>
+        <div class="caption" id="s2-cap" aria-live="polite">Slide the flip point to decide when the write takes effect.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. RELYING ON LINEARIZABILITY ============ -->
+  <section class="scene" id="uses">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 3 · who needs it</span>
+        <h2>Two people claim the same name at once</h2>
+        <p class="story">Picking a username is like grabbing a coat hook: only one person can have it. If two people press “Register” in the same second, exactly one must win and one must be told “sorry, taken”.</p>
+        <p class="story">That decision needs a single up-to-date value that everybody agrees on. Same for the last seat on a plane, the last item in the warehouse, and a bank balance that must never go negative. Same, too, for deciding which server is the <b>leader</b> — that's a lock, called a <b>lease</b>.</p>
+        <p class="imagine"><b>Try it:</b> let both people press Register at the same moment, first with one shared registry, then with two replicas that don't talk to each other.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A hard <b>uniqueness constraint</b> requires linearizability. Claiming a username is very similar to an atomic <b>compare-and-set</b>: set the name to this user's ID, provided it isn't already taken.</p>
+            <p>Single-leader replication must ensure there is really only one leader, not several (<b>split brain</b>). One way to elect a leader is a <b>lease</b> that every node tries to acquire; the mechanism must be linearizable so two nodes can't hold it at once.</p>
+            <p>Coordination services like <b>Apache ZooKeeper</b> and <b>etcd</b> implement linearizable operations in a fault-tolerant way, and libraries like Apache Curator provide higher-level recipes on top. ZooKeeper provides linearizable writes, but its reads may be stale; etcd has provided linearizable reads by default since version 3.</p>
+            <p>Some constraints can be treated loosely — an overbooked flight can be fixed with compensation — and then linearizability isn't needed. Foreign-key and attribute constraints don't need it either.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Registering the name @mango</span><span id="s3-seg"></span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 660 300" role="img" aria-label="Two people registering the same username against one or two registries"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <div class="caption" id="s3-cap" aria-live="polite">Nobody owns @mango yet.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. QUORUM ============ -->
+  <section class="scene" id="quorum">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 4 · implementing it</span>
+        <h2>The majority vote that still gets it wrong</h2>
+        <p class="story">In a leaderless database you write to lots of copies and read from lots of copies, and you make sure the two groups overlap: <b>w + r &gt; n</b>. It <i>feels</i> like that must give you the freshest answer.</p>
+        <p class="story">It doesn't. The network delivers the write to one replica quickly and dawdles on the others. A reader who catches the fast replica returns the new value; a reader who starts <i>later</i> and catches two slow ones returns the old value. The overlap rule held, and the recency guarantee still broke.</p>
+        <p class="imagine"><b>Step through it</b> once as a plain quorum, then turn on synchronous <b>read repair</b> and step through again.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Reviewing the replication methods: <b>single-leader</b> replication is potentially linearizable (if you really know who the leader is, and replication is not asynchronous); <b>consensus algorithms</b> are likely linearizable; <b>multi-leader</b> replication is not; <b>leaderless</b> Dynamo-style replication probably isn't, even with quorums.</p>
+            <p>Dynamo-style quorums can be made linearizable at the cost of performance: a reader must perform <b>read repair synchronously</b> before returning, and a writer must read the latest state of a quorum before writing to ensure its write gets a greater timestamp. Riak skips synchronous read repair for performance; Cassandra waits for it but loses linearizability anyway because it uses time-of-day clocks for timestamps (as do ScyllaDB's last-write-wins rules).</p>
+            <p>Even then, only reads and writes can be made linearizable this way. A linearizable <b>CAS</b> operation cannot — it requires a consensus algorithm.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Leaderless quorum</span><span id="s4-seg"></span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 660 320" role="img" aria-label="Three replicas, one writer and two clients reading overlapping quorums"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <div class="controls"><div class="stats" id="s4-stats"></div></div>
+        <div class="caption" id="s4-cap" aria-live="polite">Everything starts at x = 0.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. THE COST ============ -->
+  <section class="scene" id="cost">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 5 · what it costs</span>
+        <h2>Somebody cuts the cable between the cities</h2>
+        <p class="story">Two offices, one in the west and one in the east, share a database. A digger cuts the cable between them. Each office can still talk to itself, but not to the other. That's a <b>network partition</b>.</p>
+        <p class="story">If there's one <b>leader</b> and it lives in the west, the east can't write anything and can't do an up-to-date read: it is stuck until the cable is fixed. If both offices are leaders, everybody keeps working — but they may write conflicting things that have to be untangled later.</p>
+        <p class="story">You don't get to choose whether cables break. You only choose what to do when they do: stay correct, or stay open. And linearizability is slow even when nothing is broken, because every operation has to wait for the far side.</p>
+        <p class="imagine"><b>Try it:</b> cut the cable in each mode and keep pressing the write buttons.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>This trade-off is popularly known as the <b>CAP theorem</b>, named by Eric Brewer in 2000: a linearizable system must become unavailable to disconnected replicas (<b>CP</b>), while a system that doesn't need linearizability can keep serving them (<b>AP</b>).</p>
+            <p>“Pick two out of three” is misleading — partitions are a fault, not a choice. A better phrasing is <b>either consistent or available when partitioned</b>. CAP is formally very narrow: one consistency model, one kind of fault (network partitions cause under 8% of incidents according to Google data), and an odd definition of availability. It is of mostly historical interest today, though it helped trigger the NoSQL movement. <b>PACELC</b> extends it: during a partition (P) choose availability (A) or consistency (C); else (E) choose low latency (L) or consistency (C).</p>
+            <p>Most systems that drop linearizability do it for <b>performance</b>, not fault tolerance. Even RAM on a multi-core CPU isn't linearizable, because each core has its own cache. Attiya and Welch proved that the response time of linearizable reads and writes is at least proportional to the uncertainty of network delays — no faster algorithm exists.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Two regions, one cable</span><span id="s5-seg"></span></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 660 300" role="img" aria-label="Two regions connected by a cable that can be cut"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="controls"><div class="stats" id="s5-stats"></div></div>
+        <div class="caption" id="s5-cap" aria-live="polite">The cable is fine. Both offices can work.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. ID GENERATORS ============ -->
+  <section class="scene" id="ids">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 6 · ID generators</span>
+        <h2>Numbering the messages in a group chat</h2>
+        <p class="story">Every message needs an ID. On one computer that's easy: keep a counter, add one, hand it out. The numbers also tell you the order things happened — Aaliyah's question gets a smaller number than Bryce's answer, so the chat reads correctly.</p>
+        <p class="story">But one counting computer is a single point of failure, a bottleneck, and a round trip to the other side of the planet. So people split it up — and the moment they do, the numbers stop telling the truth about order.</p>
+        <p class="imagine"><b>Post the messages</b> and then switch schemes. The right-hand column sorts by ID. Red lines are messages that jumped out of order.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A single-node autoincrementing ID generator is a <b>fetch-and-add</b> operation and is linearizable, but it isn't fault-tolerant, is slow from other regions, and can become a bottleneck.</p>
+            <p>The alternatives all weaken ordering: <b>sharded ID assignment</b> (reserve bits for a shard number — one node hands out even numbers, another odd), <b>preallocated blocks</b> of IDs, <b>random UUIDs</b> (version 4 is essentially a 128-bit random number, orderable only by luck), and <b>wall-clock timestamps made unique</b> — version 7 UUIDs, X's Snowflake, ULIDs, Hazelcast's Flake IDs, MongoDB ObjectIDs.</p>
+            <p>Clock-based IDs can be misordered whenever one machine's clock runs slightly fast or slow, or jumps because of an NTP adjustment, so they are unlikely to be linearizable. High-precision clock synchronization with atomic clocks or GPS reduces, but doesn't remove, the problem.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Chat IDs</span><span id="s6-seg"></span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 660 340" role="img" aria-label="Messages in the order they were sent, next to the same messages sorted by ID"></svg></div>
+        <div class="controls" id="s6-controls"></div>
+        <div class="controls"><div class="stats" id="s6-stats"></div></div>
+        <div class="caption" id="s6-cap" aria-live="polite">Post some messages to hand out IDs.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7. LAMPORT CLOCKS ============ -->
+  <section class="scene" id="lamport">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 7 · logical clocks</span>
+        <h2>Lamport's counting game</h2>
+        <p class="story">A <b>logical clock</b> doesn't tell you what time it is. It just counts events — and it has one beautiful rule that keeps causes in front of their effects.</p>
+        <p class="story">Every person keeps a counter. <b>Rule 1:</b> when you do something, add one to your counter and stamp it on. <b>Rule 2:</b> when you receive a message stamped with a bigger number than yours, jump your counter up to match. A stamp is the pair <b>(counter, your name)</b>, so two people who reach the same number are still told apart by name.</p>
+        <p class="story">Because an answer always comes after reading the question, the answer's number is always bigger. Causes stay in front of effects. But it is <i>not</i> linearizability: two people who never talk can both be at 1 while one of them really happened much later.</p>
+        <p class="imagine"><b>Step through the chat</b> and watch the three counters. At the end, sort by stamp and see the question land before the answer.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A <b>Lamport clock</b> (Leslie Lamport, 1978) gives timestamps that are compact and unique, totally ordered, and <b>consistent with causality</b>: if A happened before B, then A's timestamp is less than B's. Compare the counters first; break ties with the node ID.</p>
+            <p>A <b>hybrid logical clock</b> counts real seconds like a physical clock, but pulls itself forward like a Lamport clock when it sees a larger timestamp, and always increments, so it moves forward even if the underlying clock jumps backward. CockroachDB uses them.</p>
+            <p>These clocks order concurrent events arbitrarily, so you usually can't tell whether two timestamps were concurrent. A <b>vector clock</b> can — it keeps a counter per node — but its timestamps are much bigger, potentially one integer per node.</p>
+            <p>Lamport and hybrid logical clocks are good for generating <b>transaction IDs</b> for MVCC snapshot isolation, because the snapshot is then consistent with causality. But they are not linearizable: if you set your account to private on a laptop and then upload a photo from a phone, a lower timestamp on the photo can let a stranger see it.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Three chatters, three counters</span><span class="pill info"><i></i>stamp = (counter, name)</span></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 660 370" role="img" aria-label="Three lifelines exchanging messages with Lamport counters"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="controls"><div class="rowwrap"><span class="lbl">Total order</span><span id="s7-order" class="rowwrap"></span></div></div>
+        <div class="caption" id="s7-cap" aria-live="polite">Everyone starts at counter 0.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8. CONSENSUS / ELECTION ============ -->
+  <section class="scene" id="consensus">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 8 · consensus</span>
+        <h2>Electing a captain when the old one vanishes</h2>
+        <p class="story">One node is the captain. When it stops answering, somebody else has to take over — but if two nodes both decide they're captain, they'll give contradictory orders. That's <b>split brain</b>.</p>
+        <p class="story">The trick is a numbered round, called an <b>epoch</b> (a term in Raft, a ballot in Paxos, a view in Viewstamped Replication). A node that suspects the captain is gone starts a new, higher-numbered round and asks the others to vote. You only become captain by collecting votes from a <b>majority</b>, and if two captains ever meet, the higher epoch wins.</p>
+        <p class="story">Majority is the whole reason this is safe — and the whole reason it has a limit. Five nodes tolerate two failures. Three nodes tolerate one. Lose the majority and the survivors must stop, because somewhere out there the other half might still be deciding.</p>
+        <p class="imagine"><b>Click nodes to crash them</b>, then run an election. Crash three out of five and watch the cluster refuse to move.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A consensus algorithm must satisfy <b>uniform agreement</b> (no two nodes decide differently), <b>integrity</b> (no changing your mind), <b>validity</b> (the decided value was proposed by some node) and <b>termination</b> (every node that doesn't crash eventually decides). Termination is a liveness property; it requires that fewer than half the nodes are unreachable. The safety properties hold even if a majority fails.</p>
+            <p>Best-known algorithms: <b>Viewstamped Replication</b>, <b>Paxos</b>, <b>Raft</b>, and <b>Zab</b>. All assume a non-Byzantine model: nodes may crash, restart and be disconnected, but they follow the protocol. Byzantine-fault-tolerant algorithms usually assume fewer than one-third of nodes are faulty.</p>
+            <p>There are two rounds of voting — one to elect a leader, one for each entry the leader wants to append — and the quorums must overlap. This looks superficially like 2PC but is different: any node can start an election and only a quorum must respond, whereas in 2PC only the coordinator requests votes and <i>every</i> participant must say yes.</p>
+            <p>The <b>FLP result</b> proves consensus is unsolvable by a deterministic algorithm in the asynchronous model, but that model forbids clocks and timeouts; with timeouts (or randomness) consensus becomes solvable in practice.</p>
+            <p>Costs: a strict majority is always required, adding nodes makes it slower rather than faster, and timeouts are hard to tune. Raft has edge cases where one consistently unreliable link makes leadership bounce forever; a pre-vote phase was added to fix this. EPaxos avoids a leader entirely.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Five nodes · click one to crash it</span><div class="stats" id="s8-stats"></div></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 660 300" role="img" aria-label="Five nodes electing a leader by majority vote"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="caption" id="s8-cap" aria-live="polite">Node 1 is the leader of epoch 1. Everyone else follows it.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9. SHARED LOG ============ -->
+  <section class="scene" id="log">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 9 · shared logs</span>
+        <h2>One notebook that everybody copies</h2>
+        <p class="story">Here's the surprise of the chapter: agreeing on a single value, grabbing a lock, keeping usernames unique, counting, and committing a distributed transaction are all the <b>same problem</b>. Solve one and you've solved them all.</p>
+        <p class="story">In practice the most useful shape is an append-only notebook — a <b>shared log</b>. The leader decides the order of entries; every entry is copied to a majority before it counts as done; and every replica replays the same entries in the same order, so they all end up with exactly the same state.</p>
+        <p class="story">That's what a consensus system really is: single-leader replication done right, with the election built in.</p>
+        <p class="imagine"><b>Add entries</b> and watch them commit. Then crash one follower (still fine — two of three is a majority) and crash a second one to see everything stop.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Single-value consensus, linearizable <b>CAS</b>, locks and leases, uniqueness constraints, <b>shared logs</b> (implemented with <b>total order broadcast</b>, also called atomic broadcast), atomic transaction commit, and linearizable <b>fetch-and-add</b> are all equivalent — except that fetch-and-add solves consensus only between two nodes, giving it a “consensus number” of 2, while CAS and shared logs have a consensus number of ∞.</p>
+            <p>Raft, Viewstamped Replication and Zab provide shared logs directly; Paxos gives single-value consensus, and Multi-Paxos adds the log. Replaying a log of deterministic writes on every replica is <b>state machine replication</b>, the principle behind event sourcing; a counter over log entries makes good <b>fencing tokens</b> (ZooKeeper's zxid, etcd's revision number).</p>
+            <p>A new leader must be at least as up to date as a majority before it may append (Raft) or must first bring its log up to date (Paxos). Weakening that — Kafka's <b>unclean leader election</b>, or asynchronous replication — trades safety for availability, and the theory no longer applies. Linearizable reads must also go through a quorum vote, as they do in etcd.</p>
+            <p><b>Coordination services</b> — ZooKeeper, etcd, Consul, modeled on Google's Chubby — package this up with locks and leases, fencing tokens, failure detection via heartbeats and sessions (ZooKeeper's ephemeral nodes), and change notifications. Kubernetes relies on etcd; Spark and Flink in HA mode rely on ZooKeeper. They hold small, slow-changing data on a fixed set of three or five nodes, so thousands of application nodes can outsource their agreement to them. ZooKeeper's <b>observers</b> receive the log without voting, giving fast but possibly stale reads.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Shared log · state machine replication</span><div class="stats" id="s9-stats"></div></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 660 320" role="img" aria-label="A shared log of entries replicated to a leader and two followers"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="caption" id="s9-cap" aria-live="polite">The log is empty and every replica has x = 0.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SUMMARY ============ -->
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The seesaws from this chapter</h2><p>Strong consistency is bought, not found. Here is the price list.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>Strong consistency</h4><p>Acts like one honest computer; the app developer stops worrying</p></div><span class="vs">vs</span><div class="side"><h4>Eventual consistency</h4><p>Faster and survives partitions, but the app must handle conflicts</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Linearizable reads</h4><p>Never stale — every read waits for the leader or a quorum</p></div><span class="vs">vs</span><div class="side"><h4>Read any replica</h4><p>Fast and local, but a later question can get an older answer</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>CP: stay correct</h4><p>Disconnected replicas refuse service until the network heals</p></div><span class="vs">vs</span><div class="side"><h4>AP: stay open</h4><p>Everyone keeps writing; conflicts get sorted out afterwards</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>One counter node</h4><p>IDs in perfect order, but a bottleneck and a single point of failure</p></div><span class="vs">vs</span><div class="side"><h4>UUIDs, shards, clocks</h4><p>Generated anywhere with no coordination, but the order is a guess</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Logical clocks</h4><p>Cheap, and causes always precede effects</p></div><span class="vs">vs</span><div class="side"><h4>Linearizable ID generator</h4><p>Also orders events that never met — at the cost of a round trip</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Consensus</h4><p>Automatic failover, no split brain, no lost committed writes</p></div><span class="vs">vs</span><div class="side"><h4>No coordination</h4><p>More throughput and fewer moving parts, with no safety net</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>More nodes</h4><p>Tolerates more failures: 5 nodes survive 2</p></div><span class="vs">vs</span><div class="side"><h4>Fewer nodes</h4><p>Every extra voter makes each decision slower, not faster</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>Grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>linearizability</dt><dd>Pretending all the copies are one copy: once someone sees the new value, nobody sees the old one again.</dd></div>
+        <div class="word"><dt>recency guarantee</dt><dd>A promise that what you read is the latest value, not an old one.</dd></div>
+        <div class="word"><dt>register</dt><dd>The theory word for one value you can read and write: a key, a row, a document.</dd></div>
+        <div class="word"><dt>stale read</dt><dd>An answer that was true a moment ago but isn't any more.</dd></div>
+        <div class="word"><dt>compare-and-set (CAS)</dt><dd>“Change it to this, but only if it's still that.” The move behind locks and unique names.</dd></div>
+        <div class="word"><dt>serializability</dt><dd>Transactions behave as if run one after another. It's about grouping, not about freshness.</dd></div>
+        <div class="word"><dt>strict serializability</dt><dd>Both at once: serializable transactions <i>and</i> no stale reads.</dd></div>
+        <div class="word"><dt>split brain</dt><dd>Two nodes both think they're the leader and give contradictory orders.</dd></div>
+        <div class="word"><dt>lease</dt><dd>A lock that expires by itself, so a crashed holder doesn't block everyone forever.</dd></div>
+        <div class="word"><dt>fencing token</dt><dd>An ever-increasing number handed out with a lock, so a sleepy old holder gets rejected.</dd></div>
+        <div class="word"><dt>network partition</dt><dd>The network splits into groups that can't reach each other.</dd></div>
+        <div class="word"><dt>CAP theorem</dt><dd>When the network splits, you must pick: stay consistent, or stay available.</dd></div>
+        <div class="word"><dt>quorum</dt><dd>Enough nodes to speak for the whole group — usually a majority.</dd></div>
+        <div class="word"><dt>read repair</dt><dd>Noticing a replica is behind while reading, and fixing it on the spot.</dd></div>
+        <div class="word"><dt>logical clock</dt><dd>A counter of events instead of a clock of seconds. It tells order, not time.</dd></div>
+        <div class="word"><dt>Lamport timestamp</dt><dd>A stamp of (counter, node name) that always puts a cause before its effect.</dd></div>
+        <div class="word"><dt>hybrid logical clock</dt><dd>Real seconds that also jump forward when they meet a bigger stamp.</dd></div>
+        <div class="word"><dt>vector clock</dt><dd>One counter per node, so you can also tell when two writes were truly at the same time.</dd></div>
+        <div class="word"><dt>causality</dt><dd>“This happened because of that.” Effects must never be ordered before their causes.</dd></div>
+        <div class="word"><dt>consensus</dt><dd>Getting a group of computers to agree on one value and never take it back.</dd></div>
+        <div class="word"><dt>epoch number</dt><dd>The round number of an election. A higher round beats a lower one.</dd></div>
+        <div class="word"><dt>total order broadcast</dt><dd>Delivering messages to everyone in exactly the same order — how a shared log is built.</dd></div>
+        <div class="word"><dt>state machine replication</dt><dd>Every replica replays the same log of changes, so they all end up identical.</dd></div>
+        <div class="word"><dt>coordination service</dt><dd>A small, careful cluster (ZooKeeper, etcd) that other systems use to agree on things.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width: 820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Six quick questions. Finish all six to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible, ease, lerp } = K;
+K.page(10);
+const setCap = (id, html) => { const el = K.$(id); if (el) el.innerHTML = html; };
+const txt = (x, y, str, cls, anchor, style) => s("text", { x, y, class: cls || "sv-label", "text-anchor": anchor || "middle", style: style || null }, str);
+const BOLD = { fill: "var(--ink)", fontWeight: 700 };
+
+/** Shared Step / Play / Reset control strip. */
+function makeFlow(ctrSel, steps, reset, label) {
+  const ctr = K.$(ctrSel);
+  let i = 0, busy = false;
+  const playB = h("button", { class: "btn primary", type: "button" }, label || "Play the story");
+  const stepB = h("button", { class: "btn", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  function sync() {
+    const done = i >= steps.length;
+    stepB.disabled = busy || done; playB.disabled = busy || done; resetB.disabled = busy;
+    stepB.textContent = done ? "Done" : (i === 0 ? "Step" : "Step " + (i + 1) + " of " + steps.length);
+  }
+  async function one() {
+    if (busy || i >= steps.length) return;
+    busy = true; sync();
+    await steps[i](); i++;
+    busy = false; sync();
+  }
+  async function all() { if (busy) return; while (i < steps.length) { await one(); await sleep(320); } }
+  stepB.addEventListener("click", one);
+  playB.addEventListener("click", all);
+  resetB.addEventListener("click", () => { if (busy) return; i = 0; reset(); sync(); });
+  ctr.append(playB, stepB, resetB);
+  sync();
+  return { ctr, sync, restart() { if (busy) return false; i = 0; reset(); sync(); return true; }, get busy() { return busy; } };
+}
+
+/* ================= HERO: the single-copy illusion ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  svg.appendChild(txt(260, 26, "WHAT THE APP SEES"));
+  svg.appendChild(s("rect", { x: 120, y: 44, width: 280, height: 104, rx: 20, class: "sv-box" }));
+  svg.appendChild(txt(260, 74, "one copy of x"));
+  const big = txt(260, 120, "x = 0", "sv-big");
+  svg.appendChild(big);
+  svg.appendChild(txt(260, 186, "…really three replicas"));
+  const cols = [150, 260, 370], vals = [];
+  cols.forEach((cx, i) => {
+    svg.appendChild(s("line", { x1: cx, y1: 148, x2: cx, y2: 238, class: "sv-wire" }));
+    svg.appendChild(draw.db(cx, 284, 68, 84, "replica " + "ABC"[i]));
+    const t = txt(cx, 288, "0", "sv-label", "middle", BOLD);
+    svg.appendChild(t); vals.push(t);
+  });
+  const writer = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Write a new value" },
+    s("rect", { x: 24, y: 62, width: 68, height: 72, rx: 14, class: "sv-box" }),
+    draw.person(58, 100, "sv-fill-blue", 0.85));
+  svg.appendChild(writer);
+  svg.appendChild(txt(58, 152, "writer"));
+  svg.appendChild(txt(58, 168, "tap me"));
+  const counter = txt(260, 364, "0 writes");
+  svg.appendChild(counter);
+  const layer = s("g"); svg.appendChild(layer);
+
+  let v = 0, busy = false, visible = false, n = 0;
+  async function write() {
+    if (busy) return; busy = true; v++;
+    const p = draw.parcel("sv-data", 18, String(v)); layer.appendChild(p);
+    await fly(p, [96, 100], [250, 100], 620);
+    p.remove();
+    big.textContent = "x = " + v;
+    big.classList.remove("sv-pop"); void big.getBBox(); big.classList.add("sv-pop");
+    await Promise.all(cols.map(async (cx, i) => {
+      const q = draw.parcel("sv-data", 14); layer.appendChild(q);
+      await fly(q, [260, 152], [cx, 242], 420 + i * 200);
+      q.remove(); vals[i].textContent = String(v);
+    }));
+    n++; counter.textContent = n + (n === 1 ? " write" : " writes");
+    busy = false;
+  }
+  writer.addEventListener("click", write);
+  writer.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); write(); } });
+  whenVisible(svg, () => (visible = true), () => (visible = false));
+  (async function auto() {
+    await sleep(900);
+    for (;;) { if (visible && !K.reduced && !document.hidden && !busy) await write(); await sleep(2600); }
+  })();
+})();
+
+/* ================= 1. THE SPORTS WEBSITE ================= */
+(function sports() {
+  const svg = K.$("#s1-svg");
+  const OLD = "2–1", NEW = "3–1", SAY = { "2–1": "still playing: 2–1", "3–1": "FINAL: 3–1" };
+  svg.appendChild(s("path", { d: "M134,150 C200,150 200,85 258,85", class: "sv-wire" }));
+  const lagWire = s("path", { d: "M134,150 C200,150 200,230 258,230", class: "sv-wire" });
+  svg.appendChild(lagWire);
+  svg.appendChild(draw.db(96, 150, 76, 104, "leader"));
+  const leadV = txt(96, 155, OLD, "sv-label", "middle", BOLD); svg.appendChild(leadV);
+  const reps = [];
+  [[85, "replica 1"], [230, "replica 2 (lagging)"]].forEach(([cy, label], i) => {
+    svg.appendChild(draw.db(300, cy, 72, 86, label));
+    const t = txt(300, cy + 5, OLD, "sv-label", "middle", BOLD);
+    svg.appendChild(t); reps.push(t);
+  });
+  svg.appendChild(s("line", { x1: 340, y1: 85, x2: 512, y2: 85, class: "sv-wire" }));
+  svg.appendChild(s("line", { x1: 340, y1: 230, x2: 512, y2: 230, class: "sv-wire" }));
+  svg.appendChild(draw.person(540, 85, "sv-fill-lilac"));
+  svg.appendChild(txt(540, 124, "Aaliyah"));
+  svg.appendChild(draw.person(540, 230, "sv-fill-blue"));
+  svg.appendChild(txt(540, 269, "Bryce"));
+  const voice = s("path", { d: "M556,104 C596,120 596,180 556,208", class: "sv-wire", style: { opacity: 0.25 } });
+  svg.appendChild(voice);
+  const voiceLbl = txt(612, 160, "voice", "sv-label", "middle", { opacity: 0.35 });
+  svg.appendChild(voiceLbl);
+  const aB = draw.bubble(540, 60, 70, [4, 656]), bB = draw.bubble(540, 205, 70, [4, 656]);
+  svg.append(aB, bB);
+  const layer = s("g"); svg.appendChild(layer);
+
+  let mode = 0; // 0 = read any replica, 1 = linearizable reads from the leader
+  function reset() {
+    leadV.textContent = OLD; reps[0].textContent = OLD; reps[1].textContent = OLD;
+    [leadV, reps[0], reps[1]].forEach((t) => (t.style.fill = "var(--ink)"));
+    aB.say(""); bB.say("");
+    voice.style.opacity = 0.25; voiceLbl.style.opacity = 0.35;
+    lagWire.setAttribute("class", "sv-wire");
+    setCap("#s1-cap", "The game is still going: the score everywhere is “2–1, playing”.");
+  }
+  async function readFrom(y, bubble, who) {
+    const src = mode === 1 ? [134, 150] : [298, y];
+    const q = draw.tag("reload", "sv-data-soft"); layer.appendChild(q);
+    await fly(q, [514, y], [src[0] + 20, src[1]], 520);
+    q.remove();
+    const value = mode === 1 ? leadV.textContent : reps[y === 85 ? 0 : 1].textContent;
+    const a = draw.tag(value, value === NEW ? "sv-good" : "sv-bad"); layer.appendChild(a);
+    await fly(a, [src[0] + 20, src[1]], [514, y], 520);
+    a.remove();
+    bubble.say(SAY[value] || value);
+    return value;
+  }
+  const steps = [
+    async () => {
+      setCap("#s1-cap", "The game ends. The <b>leader</b> records the final score <b>3–1</b>.");
+      const p = draw.parcel("sv-data", 16); layer.appendChild(p);
+      await fly(p, [40, 150], [96, 150], 420); p.remove();
+      leadV.textContent = NEW; leadV.style.fill = "var(--mint)";
+    },
+    async () => {
+      setCap("#s1-cap", "Replication starts. <b>Replica 1</b> catches up at once. <b>Replica 2</b> is behind — its copy of the message is still crawling through the network.");
+      const p = draw.parcel("sv-data", 14); layer.appendChild(p);
+      await fly(p, [134, 150], [262, 85], 620); p.remove();
+      reps[0].textContent = NEW; reps[0].style.fill = "var(--mint)";
+      const q = draw.parcel("sv-data", 14); layer.appendChild(q);
+      lagWire.setAttribute("class", "sv-wire-live");
+      await fly(q, [134, 150], [190, 196], 900); q.remove();
+      lagWire.setAttribute("class", "sv-wire");
+    },
+    async () => {
+      const v = await readFrom(85, aB, "Aaliyah");
+      setCap("#s1-cap", "Aaliyah refreshes " + (mode === 1 ? "and her read goes all the way to the <b>leader</b>. " : "and lands on replica 1. ") + "She sees the final score, <b>" + v + "</b>.");
+    },
+    async () => {
+      voice.style.opacity = 1; voiceLbl.style.opacity = 1;
+      voice.setAttribute("class", "sv-wire-live");
+      bB.say("Really? Let me check…");
+      setCap("#s1-cap", "Aaliyah shouts the score across the room. That's a <b>second communication channel</b> — one the database knows nothing about.");
+      await sleep(900);
+      voice.setAttribute("class", "sv-wire");
+    },
+    async () => {
+      const v = await readFrom(230, bB, "Bryce");
+      if (v === NEW) {
+        setCap("#s1-cap", "Bryce's read went to the <b>leader</b> too, so he sees <b>3–1</b>. This run is <b>linearizable</b>: a later question never gets an older answer. The price is that every read crosses the network to one node.");
+      } else {
+        setCap("#s1-cap", "Bryce reloads <i>after</i> Aaliyah's read finished, but replica 2 is still behind, so his phone says the game is <b>still playing, 2–1</b>. A later operation returned an older value: this is a <b>violation of linearizability</b>.");
+        reps[1].style.fill = "var(--coral)";
+      }
+    },
+  ];
+  const flow = makeFlow("#s1-controls", steps, reset);
+  K.$("#s1-seg").appendChild(seg(["Read any replica", "Linearizable: read the leader"], 0, (i) => {
+    if (!flow.restart()) return;
+    mode = i;
+    setCap("#s1-cap", i === 1
+      ? "Now <b>every read is sent to the leader</b>. Slower, but never stale. Play the story again."
+      : "Reads are load-balanced across the replicas — fast, but replica 2 lags. Play the story again.");
+  }, "s1-mode"));
+  reset();
+})();
+
+/* ================= 2. THE FLIP POINT ================= */
+(function flip() {
+  const svg = K.$("#s2-svg");
+  const X = (t) => 118 + t * 41;
+  const rows = { c: 80, a: 145, b: 205, x: 265 };
+  // axis
+  svg.appendChild(s("line", { x1: X(0), y1: 300, x2: X(12), y2: 300, class: "sv-wire-solid" }));
+  for (let t = 0; t <= 12; t += 2) {
+    svg.appendChild(s("line", { x1: X(t), y1: 300, x2: X(t), y2: 306, class: "sv-wire-solid" }));
+    svg.appendChild(txt(X(t), 320, t + "s"));
+  }
+  svg.appendChild(txt(X(12) + 26, 304, "time", "sv-label", "middle"));
+  ["client C", "client A", "client B", "one copy"].forEach((l, i) => {
+    svg.appendChild(txt(110, [rows.c, rows.a, rows.b, rows.x][i] + 5, l, "sv-label", "end"));
+  });
+  // write bar
+  svg.appendChild(s("rect", { x: X(2), y: rows.c - 16, width: X(8) - X(2), height: 32, rx: 9, class: "sv-server" }));
+  svg.appendChild(txt(X(2) + 14, rows.c + 5, "write x = 1", "sv-text", "start", BOLD));
+  // reads: [row, from, to, fixed value or null, id]
+  const reads = [
+    { row: "a", t0: 0, t1: 1.5, fixed: 0 },
+    { row: "a", t0: 2.5, t1: 4.5, fixed: null, key: "A2" },
+    { row: "b", t0: 5.5, t1: 7.5, fixed: null, key: "B" },
+    { row: "a", t0: 9, t1: 11, fixed: null, key: "A3" },
+  ];
+  reads.forEach((r) => {
+    const y = rows[r.row];
+    r.mid = (r.t0 + r.t1) / 2;
+    r.rect = s("rect", { x: X(r.t0), y: y - 15, width: X(r.t1) - X(r.t0), height: 30, rx: 9, class: "sv-panel" });
+    r.txt = txt((X(r.t0) + X(r.t1)) / 2, y + 5, "read ⇒ 0", "sv-text", "middle", BOLD);
+    r.dot = s("circle", { cx: X(r.mid), cy: y - 24, r: 4.5, class: "sv-fill-ink" });
+    r.tick = s("line", { x1: X(r.mid), y1: y - 20, x2: X(r.mid), y2: y - 15, class: "sv-wire-solid", style: { strokeWidth: 1.5 } });
+    svg.append(r.rect, r.txt, r.tick, r.dot);
+  });
+  svg.appendChild(txt(110, rows.a - 24 + 4, "takes effect", "sv-label", "end", { opacity: 0.7 }));
+  // the single copy strip
+  const strip0 = s("rect", { x: X(0), y: rows.x - 14, width: 10, height: 28, rx: 8, class: "sv-panel" });
+  const strip1 = s("rect", { x: X(0), y: rows.x - 14, width: 10, height: 28, rx: 8, class: "sv-data-soft" });
+  const strip0t = txt(0, rows.x + 5, "x = 0", "sv-label", "middle", BOLD);
+  const strip1t = txt(0, rows.x + 5, "x = 1", "sv-label", "middle", BOLD);
+  svg.append(strip0, strip1, strip0t, strip1t);
+  // flip line
+  const line = s("line", { x1: 0, y1: 52, x2: 0, y2: 296, class: "sv-wire-solid", style: { stroke: "var(--coral)", strokeDasharray: "6 5" } });
+  const lineLbl = txt(0, 44, "the value flips here", "sv-label", "middle", { fill: "var(--coral)" });
+  svg.append(line, lineLbl);
+  // violation marker
+  const bad = s("g", { style: { opacity: 0 } });
+  const badArrow = draw.arrow(X(5.5) - 4, rows.b - 24, X(2.9), rows.b - 24, "sv-wire-solid");
+  badArrow.setAttribute("style", "stroke: var(--coral)");
+  bad.append(badArrow, txt(X(4.2), rows.b - 34, "outside its own bar — impossible", "sv-label", "middle", { fill: "var(--coral)" }));
+  svg.appendChild(bad);
+
+  const verdict = K.$("#s2-verdict");
+  let flipT = 5, broken = false;
+  function render() {
+    const fx = X(flipT);
+    line.setAttribute("x1", fx); line.setAttribute("x2", fx);
+    lineLbl.setAttribute("x", Math.min(Math.max(fx, 96), 564));
+    strip0.setAttribute("width", Math.max(2, fx - X(0)));
+    strip1.setAttribute("x", fx); strip1.setAttribute("width", Math.max(2, X(12) - fx));
+    strip0t.setAttribute("x", (X(0) + fx) / 2); strip0t.style.opacity = fx - X(0) > 46 ? 1 : 0;
+    strip1t.setAttribute("x", (fx + X(12)) / 2); strip1t.style.opacity = X(12) - fx > 46 ? 1 : 0;
+    reads.forEach((r) => {
+      let v = r.fixed !== null ? r.fixed : (r.mid >= flipT ? 1 : 0);
+      if (broken && r.key === "B") v = 0;
+      r.value = v;
+      r.txt.textContent = "read ⇒ " + v;
+      const badRead = broken && r.key === "B";
+      r.rect.setAttribute("class", badRead ? "sv-bad" : (v === 1 ? "sv-data-soft" : "sv-panel"));
+      r.dot.setAttribute("cx", badRead ? X(2.7) : X(r.mid));
+      r.dot.setAttribute("class", badRead ? "sv-fill-coral" : "sv-fill-ink");
+      r.tick.style.opacity = badRead ? 0 : 1;
+    });
+    bad.style.opacity = broken ? 1 : 0;
+    verdict.className = "pill " + (broken ? "bad" : "good");
+    verdict.innerHTML = "<i></i>" + (broken ? "not linearizable" : "linearizable");
+  }
+  K.$("#s2-controls").appendChild(slider({
+    id: "s2-flip", label: "Flip point", min: 22, max: 80, step: 1, value: 50,
+    format: (v) => (v / 10).toFixed(1) + "s",
+    onInput: (v) => {
+      flipT = v / 10; broken = false; render();
+      const a2 = reads[1].value, b = reads[2].value;
+      setCap("#s2-cap", a2 === 1 && b === 1
+        ? "Both overlapping reads land <b>after</b> the flip, so both return 1. Fine."
+        : a2 === 0 && b === 0
+        ? "Both overlapping reads land <b>before</b> the flip, so both return 0. Also fine — the write hadn't taken effect yet."
+        : "Client A reads the new value and client B, starting later, reads it too. Once one read has returned 1, <b>every later read must return 1</b>.");
+    },
+  }));
+  const breakB = h("button", { class: "btn danger", type: "button" }, "Break it");
+  breakB.addEventListener("click", () => {
+    flipT = 3; broken = true;
+    const inp = K.$("#s2-flip"); if (inp) { inp.value = 30; inp.dispatchEvent(new Event("input")); }
+    flipT = 3; broken = true; render();
+    setCap("#s2-cap", "Client A already read <b>1</b>, so client B — who started afterwards — may not read <b>0</b>. For that answer to be legal, B's read would have had to take effect back <i>there</i>, before it was even sent. The line joining the markers would run <b>backwards in time</b>, which linearizability forbids.");
+  });
+  K.$("#s2-controls").appendChild(breakB);
+  render();
+})();
+
+/* ================= 3. CLAIMING A USERNAME ================= */
+(function claim() {
+  const svg = K.$("#s3-svg");
+  const people = [{ name: "Ana", y: 90, cls: "sv-fill-lilac" }, { name: "Ben", y: 215, cls: "sv-fill-blue" }];
+  people.forEach((p) => {
+    svg.appendChild(draw.person(70, p.y, p.cls));
+    svg.appendChild(txt(70, p.y + 38, p.name));
+  });
+  const wires = s("g"); svg.appendChild(wires);
+  const boxes = s("g"); svg.appendChild(boxes);
+  const results = s("g"); svg.appendChild(results);
+  const layer = s("g"); svg.appendChild(layer);
+  let mode = 0, busy = false;
+  let owner = [null, null];
+  const resCards = [];
+
+  function build() {
+    K.clear(wires); K.clear(boxes); K.clear(results); K.clear(layer);
+    resCards.length = 0;
+    people.forEach((p, i) => {
+      resCards.push({ rect: null, label: null, y: p.y });
+    });
+    if (mode === 0) {
+      boxes.appendChild(s("rect", { x: 248, y: 96, width: 172, height: 110, rx: 16, class: "sv-box" }));
+      boxes.appendChild(txt(334, 88, "one registry · linearizable"));
+      boxes.appendChild(txt(334, 134, "@mango", "sv-text", "middle", BOLD));
+      boxes.appendChild(reg(334, 172, 0));
+      wires.appendChild(s("path", { d: "M92,90 C170,90 180,140 244,148", class: "sv-wire" }));
+      wires.appendChild(s("path", { d: "M92,215 C170,215 180,164 244,156", class: "sv-wire" }));
+      wires.appendChild(s("path", { d: "M424,142 C480,132 490,98 520,92", class: "sv-wire" }));
+      wires.appendChild(s("path", { d: "M424,162 C480,172 490,208 520,212", class: "sv-wire" }));
+    } else {
+      [55, 165].forEach((y, i) => {
+        boxes.appendChild(s("rect", { x: 248, y: y, width: 172, height: 82, rx: 16, class: "sv-box" }));
+        boxes.appendChild(txt(334, y + 26, "replica " + (i + 1), "sv-label", "middle", BOLD));
+        boxes.appendChild(reg(334, y + 58, i));
+      });
+      wires.appendChild(s("path", { d: "M92,90 C170,90 180,96 244,96", class: "sv-wire" }));
+      wires.appendChild(s("path", { d: "M92,215 C170,215 180,206 244,206", class: "sv-wire" }));
+      wires.appendChild(s("path", { d: "M424,96 C470,96 490,92 520,92", class: "sv-wire" }));
+      wires.appendChild(s("path", { d: "M424,206 C470,206 490,212 520,212", class: "sv-wire" }));
+      wires.appendChild(s("line", { x1: 334, y1: 137, x2: 334, y2: 165, class: "sv-wire" }));
+    }
+    people.forEach((p, i) => {
+      const g = s("g");
+      const r = s("rect", { x: 522, y: p.y - 20, width: 120, height: 40, rx: 12, class: "sv-panel" });
+      const t = txt(582, p.y + 5, "waiting…", "sv-label", "middle");
+      g.append(r, t); results.appendChild(g);
+      resCards[i] = { rect: r, label: t, y: p.y };
+    });
+  }
+  const ownerTexts = [];
+  function reg(x, y, idx) {
+    const t = txt(x, y, "owner: nobody", "sv-label", "middle");
+    ownerTexts[idx] = t;
+    return t;
+  }
+  function reset() {
+    owner = [null, null]; busy = false;
+    build();
+    setCap("#s3-cap", mode === 0
+      ? "One registry that everybody must go through. Nobody owns @mango yet."
+      : "Two replicas that accept writes independently and sync later. Nobody owns @mango yet.");
+  }
+  function setOwner(i, name) {
+    owner[i] = name;
+    if (ownerTexts[i]) { ownerTexts[i].textContent = "owner: " + name; ownerTexts[i].style.fill = "var(--ink)"; }
+  }
+  function say(i, text, tone) {
+    resCards[i].label.textContent = text;
+    resCards[i].rect.setAttribute("class", tone === "good" ? "sv-good" : tone === "bad" ? "sv-bad" : "sv-panel");
+  }
+  async function race() {
+    if (busy) return; busy = true;
+    reset();
+    setCap("#s3-cap", "Both press <b>Register @mango</b> in the same instant…");
+    const targets = mode === 0 ? [[248, 148], [248, 156]] : [[248, 96], [248, 206]];
+    const tags = people.map((p, i) => { const t = draw.tag("@mango", "sv-data-soft"); layer.appendChild(t); return t; });
+    await Promise.all(tags.map((t, i) => fly(t, [92, people[i].y], targets[i], 520 + i * 120)));
+    tags.forEach((t) => t.remove());
+    if (mode === 0) {
+      setOwner(0, "Ana");
+      say(0, "OK — it's yours", "good");
+      await sleep(500);
+      say(1, "sorry, taken", "bad");
+      setCap("#s3-cap", "The registry ran an atomic <b>compare-and-set</b>: “set the owner to Ana, <i>if</i> it is still nobody.” Ana's arrived first, so Ben's fails. Exactly one account exists.");
+    } else {
+      setOwner(0, "Ana"); setOwner(1, "Ben");
+      say(0, "OK — it's yours", "good"); say(1, "OK — it's yours", "good");
+      setCap("#s3-cap", "Each replica saw only one request, and each happily said yes…");
+      await sleep(1100);
+      const a = draw.tag("Ana", "sv-bad"), b = draw.tag("Ben", "sv-bad");
+      layer.append(a, b);
+      await Promise.all([fly(a, [334, 120], [334, 180], 620), fly(b, [334, 182], [334, 122], 620)]);
+      a.remove(); b.remove();
+      ownerTexts.forEach((t) => { t.textContent = "owner: Ana?! Ben?!"; t.style.fill = "var(--coral)"; });
+      say(0, "conflict", "bad"); say(1, "conflict", "bad");
+      setCap("#s3-cap", "When the replicas finally talk, there are <b>two accounts with the same name</b>. Without linearizability there is no single up-to-date value to compare against, so a hard <b>uniqueness constraint</b> is impossible.");
+    }
+    busy = false;
+  }
+  const ctr = K.$("#s3-controls");
+  const go = h("button", { class: "btn primary", type: "button" }, "Both press Register");
+  const rst = h("button", { class: "btn", type: "button" }, "Reset");
+  go.addEventListener("click", race);
+  rst.addEventListener("click", () => { if (!busy) reset(); });
+  ctr.append(go, rst);
+  K.$("#s3-seg").appendChild(seg(["One linearizable registry", "Two replicas, no coordination"], 0, (i) => {
+    if (busy) return; mode = i; reset();
+  }, "s3-mode"));
+  reset();
+})();
+
+/* ================= 4. THE QUORUM THAT LIES ================= */
+(function quorum() {
+  const svg = K.$("#s4-svg");
+  svg.appendChild(s("line", { x1: 92, y1: 100, x2: 470, y2: 100, class: "sv-wire" }));
+  const cxs = [190, 330, 470], vals = [];
+  cxs.forEach((cx, i) => {
+    svg.appendChild(draw.db(cx, 100, 74, 90, "replica " + (i + 1)));
+    const t = txt(cx, 105, "x = 0", "sv-label", "middle", BOLD);
+    svg.appendChild(t); vals.push(t);
+  });
+  svg.appendChild(draw.person(70, 100, "sv-fill-ink"));
+  svg.appendChild(txt(70, 140, "writer"));
+  const wires = [
+    s("path", { d: "M200,244 C196,210 192,180 190,148", class: "sv-wire" }),
+    s("path", { d: "M224,246 C266,222 300,180 322,148", class: "sv-wire" }),
+    s("path", { d: "M456,246 C414,222 366,180 342,148", class: "sv-wire" }),
+    s("path", { d: "M470,244 C470,210 470,180 470,148", class: "sv-wire" }),
+  ];
+  wires.forEach((w) => svg.appendChild(w));
+  svg.appendChild(draw.person(210, 264, "sv-fill-lilac"));
+  svg.appendChild(txt(210, 302, "client A"));
+  svg.appendChild(draw.person(462, 264, "sv-fill-blue"));
+  svg.appendChild(txt(462, 302, "client B"));
+  const aB = draw.bubble(210, 240, 70, [4, 656]), bB = draw.bubble(462, 240, 70, [4, 656]);
+  svg.append(aB, bB);
+  const layer = s("g"); svg.appendChild(layer);
+  const st = { a: stat("client A reads", "—"), b: stat("client B reads", "—"), q: stat("w + r", "5 > 3", "good") };
+  K.$("#s4-stats").append(st.a, st.b, st.q);
+
+  let repair = 0;
+  function setVal(i, v) {
+    vals[i].textContent = "x = " + v;
+    vals[i].style.fill = v === 1 ? "var(--mint)" : "var(--ink)";
+  }
+  function reset() {
+    [0, 1, 2].forEach((i) => setVal(i, 0));
+    aB.say(""); bB.say("");
+    st.a.set("—"); st.b.set("—");
+    K.clear(layer);
+    setCap("#s4-cap", "Everything starts at x = 0. n = 3 replicas, the writer writes to all 3 (w = 3), each reader reads 2 (r = 2).");
+  }
+  async function readOne(from, to, ms) {
+    const p = draw.parcel("sv-data-soft", 13); layer.appendChild(p);
+    await fly(p, from, to, ms); p.remove();
+  }
+  const steps = [
+    async () => {
+      setCap("#s4-cap", "The writer sends <b>x = 1</b> to all three replicas (<b>w = 3</b>). The message to replica 1 arrives at once; the other two are stuck in a slow part of the network.");
+      const p = draw.parcel("sv-data", 16, "1"); layer.appendChild(p);
+      await fly(p, [92, 100], [190, 100], 520); p.remove(); setVal(0, 1);
+      const q1 = draw.parcel("sv-data", 14, "1"), q2 = draw.parcel("sv-data", 14, "1");
+      layer.append(q1, q2);
+      await Promise.all([fly(q1, [190, 100], [262, 100], 700), fly(q2, [190, 100], [262, 100], 700)]);
+      q1.setAttribute("class", "sv-shake"); q2.setAttribute("transform", "translate(262,74)");
+      q1.setAttribute("transform", "translate(262,126)");
+    },
+    async () => {
+      setCap("#s4-cap", "Client A reads a <b>quorum of two</b>: replicas 1 and 2.");
+      await Promise.all([readOne([210, 240], [190, 146], 480), readOne([210, 240], [322, 146], 520)]);
+      await sleep(200);
+      await Promise.all([readOne([190, 146], [210, 240], 480), readOne([322, 146], [210, 240], 520)]);
+      aB.say("got 1 and 0 → 1");
+      st.a.set("x = 1", "good");
+      if (repair) {
+        setCap("#s4-cap", "Client A saw <b>1</b> on replica 1 and <b>0</b> on replica 2, so it returns the newer value, 1 — and, because <b>synchronous read repair</b> is on, it first writes 1 back to replica 2 and waits for the acknowledgement.");
+        const p = draw.parcel("sv-data", 14, "1"); layer.appendChild(p);
+        await fly(p, [210, 240], [322, 146], 560); p.remove(); setVal(1, 1);
+      } else {
+        setCap("#s4-cap", "Client A saw <b>1</b> on replica 1 and <b>0</b> on replica 2, so it returns the newer value: <b>x = 1</b>. It does not bother to fix replica 2.");
+      }
+    },
+    async () => {
+      setCap("#s4-cap", "Client A's answer has arrived. <b>Only now</b> does client B press reload — strictly after A finished.");
+      await sleep(500);
+    },
+    async () => {
+      setCap("#s4-cap", "Client B reads its own quorum of two: replicas 2 and 3.");
+      await Promise.all([readOne([462, 240], [342, 146], 520), readOne([462, 240], [470, 146], 480)]);
+      await sleep(200);
+      await Promise.all([readOne([342, 146], [462, 240], 520), readOne([470, 146], [462, 240], 480)]);
+      const v = repair ? 1 : 0;
+      bB.say(repair ? "got 1 and 0 → 1" : "got 0 and 0 → 0");
+      st.b.set("x = " + v, repair ? "good" : "bad");
+    },
+    async () => {
+      if (repair) {
+        setCap("#s4-cap", "Because A repaired replica 2 <i>before</i> answering, B finds the new value too. Order is preserved — but every read now costs an extra write and an extra round trip. Riak skips this for speed; <b>Cassandra</b> does wait for read repair, yet still loses linearizability because it orders writes by <b>time-of-day clocks</b>.");
+      } else {
+        setCap("#s4-cap", "<b>w + r = 5 &gt; 3</b> was satisfied, and still B — who started after A finished — read an <b>older</b> value than A. The quorum rule guarantees overlap, not recency. A leaderless Dynamo-style system is safest assumed to be <b>not linearizable</b>.");
+        st.q.set("5 > 3", "warn");
+      }
+    },
+  ];
+  const flow = makeFlow("#s4-controls", steps, reset, "Play");
+  K.$("#s4-seg").appendChild(seg(["Plain quorum", "+ synchronous read repair"], 0, (i) => {
+    if (!flow.restart()) return;
+    repair = i; st.q.set("5 > 3", "good");
+    setCap("#s4-cap", i ? "Read repair is on: a reader fixes stale replicas <i>before</i> it returns. Step through again." : "Plain Dynamo-style quorum. Step through again.");
+  }, "s4-mode"));
+  reset();
+})();
+
+/* ================= 5. CUT THE CABLE ================= */
+(function cap() {
+  const svg = K.$("#s5-svg");
+  const regions = [
+    { name: "region West", x: 30, dbx: 112, px: 228 },
+    { name: "region East", x: 380, dbx: 462, px: 578 },
+  ];
+  const roleTexts = [], pillRects = [], pillTexts = [];
+  regions.forEach((r, i) => {
+    svg.appendChild(s("rect", { x: r.x, y: 56, width: 250, height: 200, rx: 18, class: "sv-panel" }));
+    svg.appendChild(txt(r.x + 125, 44, r.name, "sv-label", "middle", BOLD));
+    svg.appendChild(draw.db(r.dbx, 140, 72, 92));
+    const role = txt(r.dbx, 204, "leader", "sv-label", "middle", BOLD);
+    svg.appendChild(role); roleTexts.push(role);
+    svg.appendChild(draw.person(r.px, 150, i ? "sv-fill-blue" : "sv-fill-lilac"));
+    svg.appendChild(txt(r.px, 192, "a user"));
+    const pr = s("rect", { x: r.px - 60, y: 206, width: 120, height: 28, rx: 10, class: "sv-good" });
+    const pt = txt(r.px, 224, "all good", "sv-label", "middle");
+    svg.append(pr, pt); pillRects.push(pr); pillTexts.push(pt);
+    svg.appendChild(s("line", { x1: r.dbx + 40, y1: 150, x2: r.px - 26, y2: 150, class: "sv-wire" }));
+  });
+  const cable = s("line", { x1: 280, y1: 150, x2: 380, y2: 150, class: "sv-wire-solid" });
+  svg.appendChild(cable);
+  svg.appendChild(txt(330, 132, "cable"));
+  const cut = s("g", { style: { opacity: 0 } },
+    s("line", { x1: 318, y1: 138, x2: 342, y2: 162, class: "sv-wire-solid", style: { stroke: "var(--coral)", strokeWidth: 3 } }),
+    s("line", { x1: 342, y1: 138, x2: 318, y2: 162, class: "sv-wire-solid", style: { stroke: "var(--coral)", strokeWidth: 3 } }));
+  svg.appendChild(cut);
+  const queued = txt(330, 190, "", "sv-label", "middle", { fill: "var(--sun)" });
+  svg.appendChild(queued);
+  const layer = s("g"); svg.appendChild(layer);
+  const st = { w: stat("West writes", 0), e: stat("East writes", 0), c: stat("Conflicts", 0) };
+  K.$("#s5-stats").append(st.w, st.e, st.c);
+
+  let mode = 0, broken = false, busy = false, nw = 0, ne = 0, nc = 0, pending = 0;
+  function setPill(i, text, tone) {
+    pillTexts[i].textContent = text;
+    pillRects[i].setAttribute("class", tone === "bad" ? "sv-bad" : tone === "warn" ? "sv-data-soft" : "sv-good");
+  }
+  function render() {
+    roleTexts[0].textContent = "leader";
+    roleTexts[1].textContent = mode === 0 ? "follower" : "leader";
+    cut.style.opacity = broken ? 1 : 0;
+    cable.setAttribute("class", broken ? "sv-wire" : "sv-wire-solid");
+    cable.style.stroke = broken ? "var(--coral)" : "";
+    setPill(0, "reads + writes OK", "good");
+    if (!broken) setPill(1, mode === 0 ? "OK (long trip)" : "reads + writes OK", "good");
+    else setPill(1, mode === 0 ? "stale reads only" : "writing locally", mode === 0 ? "bad" : "warn");
+    queued.textContent = pending ? pending + " write" + (pending === 1 ? "" : "s") + " waiting to sync" : "";
+    st.w.set(nw); st.e.set(ne); st.c.set(nc, nc ? "bad" : "");
+    cutB.textContent = broken ? "Repair the cable" : "Cut the cable";
+    cutB.className = "btn " + (broken ? "good" : "danger");
+  }
+  async function write(side) {
+    if (busy) return; busy = true;
+    const r = regions[side];
+    const p = draw.parcel("sv-data", 15); layer.appendChild(p);
+    if (side === 0 || mode === 1) {
+      await fly(p, [r.px - 26, 150], [r.dbx + 36, 150], 420); p.remove();
+      if (side === 0) nw++; else ne++;
+      if (mode === 0) {
+        if (!broken) {
+          const q = draw.parcel("sv-data", 13); layer.appendChild(q);
+          await fly(q, [148, 150], [426, 150], 600); q.remove();
+          setCap("#s5-cap", "The write went to the <b>leader</b> in the west and was replicated east. Everyone sees the same thing.");
+        } else {
+          setCap("#s5-cap", "The west can still write: the leader lives here. The east is cut off and gets nothing.");
+        }
+      } else {
+        if (broken) { pending++; setCap("#s5-cap", "Both regions are leaders, so this write is accepted <b>locally</b> and queued up to be exchanged when the cable is repaired. The system stays <b>available</b> — this is the AP choice."); }
+        else setCap("#s5-cap", "Accepted locally and replicated asynchronously to the other region.");
+      }
+    } else if (!broken) {
+      await fly(p, [r.px - 26, 150], [380, 150], 320);
+      await fly(p, [380, 150], [148, 150], 520);
+      p.remove(); ne++;
+      setCap("#s5-cap", "The east has no leader, so its write had to travel <b>all the way across the ocean</b> and back. It works, but every write pays the round trip — that latency is there even when nothing is broken.");
+    } else {
+      await fly(p, [r.px - 26, 150], [384, 150], 380);
+      p.firstChild.setAttribute("class", "sv-fill-coral");
+      p.setAttribute("class", "sv-shake");
+      await sleep(500);
+      await fly(p, [384, 150], [r.px - 26, 150], 380); p.remove();
+      setCap("#s5-cap", "The east can't reach the leader, so it must <b>refuse the write</b> (and any linearizable read). It could still serve a stale read from its follower. This is the <b>CP</b> choice: consistent, but unavailable to the cut-off side.");
+    }
+    render(); busy = false;
+  }
+  const ctr = K.$("#s5-controls");
+  const wB = h("button", { class: "btn primary", type: "button" }, "West user writes");
+  const eB = h("button", { class: "btn primary", type: "button" }, "East user writes");
+  const cutB = h("button", { class: "btn danger", type: "button" }, "Cut the cable");
+  const rstB = h("button", { class: "btn", type: "button" }, "Reset");
+  wB.addEventListener("click", () => write(0));
+  eB.addEventListener("click", () => write(1));
+  cutB.addEventListener("click", async () => {
+    if (busy) return;
+    broken = !broken;
+    if (!broken && pending) {
+      busy = true; render();
+      setCap("#s5-cap", "The cable is back. The queued writes are exchanged…");
+      const q = draw.parcel("sv-data", 13); layer.appendChild(q);
+      await fly(q, [426, 150], [148, 150], 700); q.remove();
+      if (pending > 1 || (nw > 0 && ne > 0)) { nc++; setCap("#s5-cap", "The queued writes arrive — and both regions had changed the <b>same</b> value while apart. That's a <b>conflict</b> somebody now has to resolve. Availability was not free; it just moved the cost to the application."); }
+      else setCap("#s5-cap", "The queued writes arrive and everything lines up again.");
+      pending = 0; busy = false;
+    } else {
+      setCap("#s5-cap", broken ? "A digger cuts the cable. Each region can still talk to itself — that's a <b>network partition</b>. Try writing from both sides." : "The cable is repaired.");
+    }
+    render();
+  });
+  rstB.addEventListener("click", () => { if (busy) return; broken = false; nw = ne = nc = pending = 0; K.clear(layer); render(); setCap("#s5-cap", "The cable is fine. Both offices can work."); });
+  ctr.append(wB, eB, cutB, rstB);
+  K.$("#s5-seg").appendChild(seg(["Single-leader (CP)", "Multi-leader (AP)"], 0, (i) => {
+    if (busy) return; mode = i; nw = ne = nc = pending = 0; K.clear(layer); render();
+    setCap("#s5-cap", i === 0
+      ? "One leader, in the west. Every write and every up-to-date read must reach it."
+      : "Both regions are leaders and replicate to each other asynchronously.");
+  }, "s5-mode"));
+  render();
+})();
+
+/* ================= 6. ID GENERATORS ================= */
+(function ids() {
+  const svg = K.$("#s6-svg");
+  const body = s("g"); svg.appendChild(body);
+  const SCRIPT = [
+    { who: "Aaliyah", node: 0, text: "anyone know X?", ms: 0 },
+    { who: "Caleb", node: 2, text: "me too!", ms: 400 },
+    { who: "Bryce", node: 1, text: "yes — it's 42", ms: 900 },
+    { who: "Aaliyah", node: 0, text: "thanks!", ms: 1500 },
+    { who: "Caleb", node: 2, text: "great", ms: 2100 },
+  ];
+  const SKEW = [0, -700, 300]; // each node's clock error, in ms (toy numbers)
+  const HEX = "0123456789abcdef";
+  const posted = [];
+  let scheme = 0;
+  const st = { n: stat("Posted", 0), bad: stat("Out of order", 0, "good") };
+  K.$("#s6-stats").append(st.n, st.bad);
+
+  function assign() {
+    let ctr = 0; const shard = [0, 0];
+    posted.forEach((m, i) => {
+      if (scheme === 0) { ctr++; m.id = "#" + ctr; m.key = ctr; }
+      else if (scheme === 1) { const sh = m.node % 2; shard[sh] += 2; const v = shard[sh] - (sh === 0 ? 0 : 1); m.id = "#" + v; m.key = v; }
+      else if (scheme === 2) { m.id = m.uuid.slice(0, 6) + "…"; m.key = m.uuid; }
+      else { const t = 30000 + m.ms + SKEW[m.node]; m.id = (t / 1000).toFixed(3) + "s"; m.key = t; }
+    });
+  }
+  function render() {
+    K.clear(body);
+    assign();
+    body.appendChild(txt(174, 44, "the real order", "sv-label", "middle", BOLD));
+    body.appendChild(txt(518, 44, "sorted by ID", "sv-label", "middle", BOLD));
+    const sorted = posted.map((m, i) => ({ m, i })).sort((a, b) => (a.m.key > b.m.key ? 1 : a.m.key < b.m.key ? -1 : 0));
+    let inversions = 0;
+    for (let a = 0; a < posted.length; a++) for (let b = a + 1; b < posted.length; b++) if (posted[a].key > posted[b].key) inversions++;
+    const rowY = (i) => 84 + i * 52;
+    const row = (x, m, y, tone) => {
+      const g = s("g");
+      g.appendChild(s("rect", { x, y: y - 20, width: 252, height: 40, rx: 12, class: tone === "bad" ? "sv-bad" : "sv-panel" }));
+      g.appendChild(txt(x + 12, y + 5, m.who + ": " + m.text, "sv-text", "start", { fontSize: "13px" }));
+      g.appendChild(txt(x + 242, y + 5, m.id, "sv-label", "end", BOLD));
+      return g;
+    };
+    posted.forEach((m, i) => {
+      const dest = sorted.findIndex((o) => o.i === i);
+      const moved = dest !== i;
+      body.appendChild(row(48, m, rowY(i)));
+      body.appendChild(s("path", {
+        d: "M302," + rowY(i) + " C348," + rowY(i) + " 344," + rowY(dest) + " 390," + rowY(dest),
+        class: "sv-wire-solid",
+        style: { stroke: moved ? "var(--coral)" : "var(--line-strong)", opacity: moved ? 1 : 0.5 },
+      }));
+    });
+    sorted.forEach((o, i) => body.appendChild(row(392, o.m, rowY(i), o.i !== i ? "bad" : "")));
+    if (!posted.length) body.appendChild(txt(330, 180, "press “Post next message”", "sv-label"));
+    st.n.set(posted.length);
+    st.bad.set(inversions, inversions ? "bad" : "good");
+    return inversions;
+  }
+  const NOTES = [
+    "One node keeps the counter and hands out 1, 2, 3, … Perfect order — but that node is a <b>single point of failure</b>, a bottleneck, and a round trip away if you're on another continent.",
+    "Two nodes hand out IDs: one only even numbers, one only odd. No coordination needed, IDs stay small — but a smaller number no longer means “earlier”.",
+    "<b>Random UUIDs (version 4)</b> are 128 bits of luck. Any node can make one with no communication at all, and the order is pure chance.",
+    "IDs built from a <b>wall-clock timestamp</b> (UUIDv7, Snowflake, ULID, MongoDB ObjectID). Order is <i>almost</i> right — until one machine's clock is a little fast and another's a little slow.",
+  ];
+  function post() {
+    if (posted.length >= SCRIPT.length) return;
+    const m = Object.assign({}, SCRIPT[posted.length]);
+    m.uuid = Array.from({ length: 8 }, () => HEX[Math.floor(Math.random() * 16)]).join("");
+    posted.push(m);
+    const inv = render();
+    setCap("#s6-cap", NOTES[scheme] + (inv ? " <b>" + inv + "</b> pair" + (inv === 1 ? "" : "s") + " now sorts the wrong way round." : ""));
+  }
+  const ctr = K.$("#s6-controls");
+  const oneB = h("button", { class: "btn primary", type: "button" }, "Post next message");
+  const allB = h("button", { class: "btn", type: "button" }, "Post all");
+  const rstB = h("button", { class: "btn", type: "button" }, "Reset");
+  oneB.addEventListener("click", post);
+  allB.addEventListener("click", () => { while (posted.length < SCRIPT.length) post(); });
+  rstB.addEventListener("click", () => { posted.length = 0; render(); setCap("#s6-cap", "Post some messages to hand out IDs."); });
+  ctr.append(oneB, allB, rstB);
+  K.$("#s6-seg").appendChild(seg(["One counter node", "Two shards (even/odd)", "Random UUID", "Wall clock"], 0, (i) => {
+    scheme = i; const inv = render();
+    setCap("#s6-cap", NOTES[i] + (posted.length && inv ? " <b>" + inv + "</b> pair" + (inv === 1 ? "" : "s") + " sorts the wrong way round." : ""));
+  }, "s6-scheme"));
+  while (posted.length < SCRIPT.length) post();
+})();
+
+/* ================= 7. LAMPORT CLOCKS ================= */
+(function lamport() {
+  const svg = K.$("#s7-svg");
+  const nodes = [
+    { name: "Aaliyah", y: 90, cls: "sv-fill-lilac" },
+    { name: "Bryce", y: 190, cls: "sv-fill-blue" },
+    { name: "Caleb", y: 290, cls: "sv-fill-mint" },
+  ];
+  const counterTexts = [];
+  nodes.forEach((n, i) => {
+    svg.appendChild(s("rect", { x: 14, y: n.y - 28, width: 122, height: 56, rx: 14, class: "sv-panel" }));
+    svg.appendChild(txt(75, n.y - 6, n.name, "sv-text", "middle", BOLD));
+    const c = txt(75, n.y + 16, "counter 0", "sv-label", "middle");
+    svg.appendChild(c); counterTexts.push(c);
+    svg.appendChild(s("line", { x1: 144, y1: n.y, x2: 646, y2: n.y, class: "sv-wire" }));
+  });
+  const layer = s("g"); svg.appendChild(layer);
+  const orderBox = K.$("#s7-order");
+  let counters = [0, 0, 0], stamps = [];
+
+  function setCounter(i, v) {
+    counters[i] = v;
+    counterTexts[i].textContent = "counter " + v;
+    counterTexts[i].style.fill = "var(--ink)";
+    counterTexts[i].style.fontWeight = 700;
+  }
+  function dot(x, y, cls) {
+    const g = s("circle", { cx: x, cy: y, r: 6, class: cls || "sv-fill-sun" });
+    g.classList.add("sv-pop"); layer.appendChild(g); return g;
+  }
+  function tag(x, y, label, tone) {
+    const t = txt(x, y, label, "sv-label", "middle", { fill: tone || "var(--ink)", fontWeight: 700 });
+    t.classList.add("sv-pop"); layer.appendChild(t); return t;
+  }
+  async function msg(x1, y1, x2, y2) {
+    const p = draw.parcel("sv-data", 13); layer.appendChild(p);
+    layer.appendChild(draw.arrow(x1, y1, x2, y2, "sv-wire-solid"));
+    await fly(p, [x1, y1], [x2, y2], 700); p.remove();
+  }
+  function reset() {
+    counters = [0, 0, 0]; stamps = [];
+    K.clear(layer); K.clear(orderBox);
+    counterTexts.forEach((c) => { c.textContent = "counter 0"; c.style.fill = ""; c.style.fontWeight = ""; });
+    setCap("#s7-cap", "Everyone starts at counter 0.");
+  }
+  function renderOrder() {
+    K.clear(orderBox);
+    const sorted = stamps.slice().sort((a, b) => a.c - b.c || (a.name < b.name ? -1 : 1));
+    sorted.forEach((s2, i) => {
+      orderBox.appendChild(h("span", { class: "pill info" }, "(" + s2.c + ", " + s2.name + ") " + s2.what));
+      if (i < sorted.length - 1) orderBox.appendChild(h("span", { class: "lbl" }, "<"));
+    });
+  }
+  const steps = [
+    async () => {
+      setCap("#s7-cap", "<b>Aaliyah posts a question.</b> Rule 1: doing something means adding one to your own counter, so 0 → 1. Her stamp is <b>(1, Aaliyah)</b>.");
+      setCounter(0, 1); dot(210, 90);
+      tag(210, 66, "(1, Aaliyah)"); stamps.push({ c: 1, name: "Aaliyah", what: "question" }); renderOrder();
+    },
+    async () => {
+      setCap("#s7-cap", "<b>Caleb posts too</b>, without having seen Aaliyah's message. He also goes 0 → 1, so his stamp is <b>(1, Caleb)</b>. Same counter — the name breaks the tie.");
+      setCounter(2, 1); dot(265, 290);
+      tag(265, 320, "(1, Caleb)"); stamps.push({ c: 1, name: "Caleb", what: "me too" }); renderOrder();
+    },
+    async () => {
+      setCap("#s7-cap", "Aaliyah's message reaches <b>Bryce</b>. Rule 2: the stamp it carries (1) is bigger than his counter (0), so he <b>jumps up to 1</b>.");
+      await msg(210, 90, 330, 190);
+      setCounter(1, 1); dot(330, 190); tag(330, 216, "counter → 1", "var(--ink-2)");
+    },
+    async () => {
+      setCap("#s7-cap", "Caleb's message reaches Bryce too. Its stamp (1) is <b>not</b> bigger than his counter, so nothing changes. He stays at 1.");
+      await msg(265, 290, 430, 190);
+      dot(430, 190, "sv-fill-line"); tag(430, 216, "stays 1", "var(--ink-3)");
+    },
+    async () => {
+      setCap("#s7-cap", "<b>Bryce answers Aaliyah.</b> He adds one: 1 → 2, stamp <b>(2, Bryce)</b>. Because he read the question before writing the answer, the answer is guaranteed a bigger number. Causes stay in front of effects.");
+      setCounter(1, 2); dot(500, 190); tag(500, 216, "(2, Bryce)");
+      stamps.push({ c: 2, name: "Bryce", what: "answer" }); renderOrder();
+    },
+    async () => {
+      setCap("#s7-cap", "The answer travels back and pulls Aaliyah's counter up to 2 as well. Sorted by stamp: <b>(1, Aaliyah) &lt; (1, Caleb) &lt; (2, Bryce)</b> — the question lands before the answer, every time. But this is <i>not</i> linearizability: Aaliyah and Caleb both sit at 1 even though one of them may really have posted much later.");
+      await msg(500, 190, 575, 90);
+      setCounter(0, 2); dot(575, 90); tag(575, 66, "counter → 2", "var(--ink-2)");
+    },
+  ];
+  makeFlow("#s7-controls", steps, reset, "Play the chat");
+  reset();
+})();
+
+/* ================= 8. ELECTING A CAPTAIN ================= */
+(function election() {
+  const svg = K.$("#s8-svg");
+  const CX = [90, 220, 350, 480, 610];
+  const nodes = CX.map((cx, i) => ({ cx, i, alive: true, role: i === 0 ? "leader" : "follower" }));
+  const gs = [], roleTexts = [], badges = [], badgeTexts = [];
+  const layer = s("g");
+  nodes.forEach((n) => {
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Crash or heal node " + (n.i + 1) });
+    const box = draw.server(n.cx, 100, 84, 92);
+    g.appendChild(box);
+    n.box = box;
+    svg.appendChild(g); gs.push(g);
+    svg.appendChild(txt(n.cx, 164, "node " + (n.i + 1), "sv-label", "middle", BOLD));
+    const rt = txt(n.cx, 182, "follower");
+    svg.appendChild(rt); roleTexts.push(rt);
+    const b = s("circle", { cx: n.cx, cy: 40, r: 13, class: "sv-fill-line", style: { opacity: 0 } });
+    const bt = txt(n.cx, 45, "", "sv-label", "middle", { fill: "var(--on-accent)", fontWeight: 700 });
+    svg.append(b, bt); badges.push(b); badgeTexts.push(bt);
+    g.addEventListener("click", () => toggle(n.i));
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(n.i); } });
+  });
+  svg.appendChild(layer);
+  const line1 = txt(330, 226, "", "sv-title");
+  const line2 = txt(330, 252, "", "sv-label");
+  const line3 = txt(330, 276, "", "sv-label");
+  svg.append(line1, line2, line3);
+  const st = { alive: stat("Alive", 5, "good"), maj: stat("Majority", 3), votes: stat("Votes", "—"), ep: stat("Epoch", 1) };
+  K.$("#s8-stats").append(st.alive, st.maj, st.votes, st.ep);
+
+  let epoch = 1, busy = false, phase = 0, candidate = -1, votes = 0;
+  const alive = () => nodes.filter((n) => n.alive).length;
+  const majority = () => Math.floor(5 / 2) + 1;
+  function render() {
+    nodes.forEach((n, i) => {
+      const cls = !n.alive ? "sv-bad" : n.role === "leader" ? "sv-good" : n.role === "candidate" ? "sv-data-soft" : "sv-server";
+      n.box.firstChild.setAttribute("class", cls);
+      n.box.light.setAttribute("class", !n.alive ? "sv-fill-coral" : n.role === "leader" ? "sv-fill-mint" : "sv-fill-line");
+      gs[i].style.opacity = n.alive ? 1 : 0.55;
+      roleTexts[i].textContent = !n.alive ? "crashed" : n.role === "leader" ? "leader · epoch " + epoch : n.role === "candidate" ? "candidate · ep " + epoch : "follower";
+      roleTexts[i].style.fill = !n.alive ? "var(--coral)" : n.role === "leader" ? "var(--mint)" : "";
+    });
+    st.alive.set(alive(), alive() >= majority() ? "good" : "bad");
+    st.maj.set(majority());
+    st.ep.set(epoch);
+    line2.textContent = alive() + " of 5 nodes alive · a majority is " + majority();
+    line3.textContent = alive() >= majority() ? "the cluster can still decide" : "no majority: the survivors must stop and wait";
+    line3.style.fill = alive() >= majority() ? "var(--mint)" : "var(--coral)";
+  }
+  function clearBadges() { badges.forEach((b) => (b.style.opacity = 0)); badgeTexts.forEach((t) => (t.textContent = "")); }
+  function toggle(i) {
+    if (busy) return;
+    nodes[i].alive = !nodes[i].alive;
+    if (!nodes[i].alive && nodes[i].role !== "follower") nodes[i].role = "follower";
+    clearBadges(); K.clear(layer); votes = 0; st.votes.set("—"); phase = 0;
+    line1.textContent = "";
+    setCap("#s8-cap", nodes[i].alive
+      ? "Node " + (i + 1) + " is back. Click “Run the election” to start a new round."
+      : "Node " + (i + 1) + " has crashed — buried under thirty feet of mud, as the book puts it. It may never come back.");
+    render();
+  }
+  function reset() {
+    nodes.forEach((n, i) => { n.alive = true; n.role = i === 0 ? "leader" : "follower"; });
+    epoch = 1; votes = 0; phase = 0; candidate = -1;
+    clearBadges(); K.clear(layer);
+    line1.textContent = ""; line1.style.fill = ""; st.votes.set("—");
+    setCap("#s8-cap", "Node 1 is the leader of epoch 1. Everyone else follows it.");
+    render();
+  }
+  const steps = [
+    async () => {
+      const leader = nodes.find((n) => n.role === "leader" && n.alive);
+      if (leader) { leader.alive = false; leader.role = "follower"; }
+      render();
+      setCap("#s8-cap", leader
+        ? "The leader stops answering. The followers hear nothing for longer than their <b>timeout</b>, so they begin to suspect it is dead. (They can't <i>know</i> — it might just be slow.)"
+        : "There is no live leader. The followers time out and start suspecting.");
+      await sleep(300);
+    },
+    async () => {
+      candidate = nodes.findIndex((n) => n.alive);
+      if (candidate < 0) { setCap("#s8-cap", "Every node is down. Nothing can be decided at all."); return; }
+      epoch++; nodes[candidate].role = "candidate"; render();
+      line1.textContent = "node " + (candidate + 1) + " starts epoch " + epoch;
+      setCap("#s8-cap", "Node " + (candidate + 1) + " puts itself forward for a <b>new, higher epoch</b> (" + epoch + ") and asks everyone to vote. A higher epoch always beats a lower one, so even if the old leader wakes up it can no longer give orders.");
+      await sleep(300);
+    },
+    async () => {
+      votes = 0;
+      setCap("#s8-cap", "Vote requests go out. Each node says yes only if it doesn't know of a leader with a <b>higher</b> epoch — and a crashed node says nothing at all.");
+      for (const n of nodes) {
+        if (!n.alive) { badges[n.i].style.opacity = 1; badges[n.i].setAttribute("class", "sv-fill-coral"); badgeTexts[n.i].textContent = "–"; continue; }
+        const p = draw.parcel("sv-data", 13); layer.appendChild(p);
+        await fly(p, [n.cx, 60], [nodes[candidate].cx, 60], 380);
+        p.remove();
+        votes++;
+        badges[n.i].style.opacity = 1; badges[n.i].setAttribute("class", "sv-fill-mint"); badgeTexts[n.i].textContent = "Y";
+        st.votes.set(votes + " / 5", votes >= majority() ? "good" : "warn");
+      }
+    },
+    async () => {
+      if (votes >= majority()) {
+        nodes[candidate].role = "leader"; render();
+        line1.textContent = "node " + (candidate + 1) + " is the leader of epoch " + epoch;
+        line1.style.fill = "var(--mint)";
+        st.votes.set(votes + " / 5", "good");
+        setCap("#s8-cap", "<b>" + votes + " votes — that's a majority</b>, so node " + (candidate + 1) + " becomes the leader of epoch " + epoch + ". Because any two majorities must share at least one node, no second leader can be elected in this epoch. No split brain. Five nodes tolerate two failures; three tolerate one.");
+      } else {
+        nodes[candidate].role = "follower"; render();
+        line1.textContent = "election failed";
+        line1.style.fill = "var(--coral)";
+        st.votes.set(votes + " / 5", "bad");
+        setCap("#s8-cap", "Only <b>" + votes + "</b> votes — not a majority. The election fails and the cluster makes <i>no progress at all</i>. That's deliberate: on the other side of the break, the nodes we can't reach might still be deciding things, and two half-clusters deciding separately would corrupt the data.");
+      }
+      await sleep(200);
+    },
+  ];
+  const flow = makeFlow("#s8-controls", steps, reset, "Run the election");
+  flow.ctr.append(h("span", { class: "grow" }), h("span", { class: "pill info" }, h("i"), "click a node to crash or heal it"));
+  reset();
+})();
+
+/* ================= 9. THE SHARED LOG ================= */
+(function sharedLog() {
+  const svg = K.$("#s9-svg");
+  svg.appendChild(txt(330, 34, "shared log · total order broadcast", "sv-label", "middle", BOLD));
+  const slots = [];
+  for (let i = 0; i < 5; i++) {
+    const x = 130 + i * 92;
+    const r = s("rect", { x, y: 50, width: 84, height: 44, rx: 10, class: "sv-panel" });
+    const t = txt(x + 42, 78, "", "sv-text", "middle", BOLD);
+    svg.append(r, t);
+    svg.appendChild(txt(x + 42, 112, String(i + 1)));
+    slots.push({ r, t, x: x + 42 });
+  }
+  const reps = [
+    { cx: 160, name: "leader", alive: true },
+    { cx: 330, name: "follower A", alive: true },
+    { cx: 500, name: "follower B", alive: true },
+  ];
+  reps.forEach((rp, i) => {
+    svg.appendChild(s("line", { x1: rp.cx, y1: 122, x2: rp.cx, y2: 168, class: "sv-wire" }));
+    const g = s("g", { class: i ? "clickable" : "", tabindex: i ? "0" : null, role: i ? "button" : null, "aria-label": i ? "Crash or heal " + rp.name : null });
+    rp.box = draw.server(rp.cx, 208, 96, 80);
+    g.appendChild(rp.box); svg.appendChild(g); rp.g = g;
+    svg.appendChild(txt(rp.cx, 266, rp.name, "sv-label", "middle", BOLD));
+    rp.state = txt(rp.cx, 290, "x = 0", "sv-text", "middle", BOLD);
+    svg.appendChild(rp.state);
+    if (i) {
+      const toggle = () => { if (busy) return; rp.alive = !rp.alive; render(); setCap("#s9-cap", rp.alive ? rp.name + " is back. It replays the log from where it left off and catches up." : rp.name + " has crashed. " + (aliveCount() >= 2 ? "Two of three is still a majority, so the log keeps committing." : "Only one replica is left — that is not a majority, so nothing more can commit.")); };
+      g.addEventListener("click", toggle);
+      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+    }
+  });
+  const layer = s("g"); svg.appendChild(layer);
+  const st = { committed: stat("Committed", 0), alive: stat("Replicas up", 3, "good"), q: stat("Quorum", "2 of 3") };
+  K.$("#s9-stats").append(st.committed, st.alive, st.q);
+
+  const ENTRIES = [
+    { label: "x = 5", apply: () => 5 },
+    { label: "x = x + 1", apply: (v) => v + 1 },
+    { label: "x = x * 2", apply: (v) => v * 2 },
+  ];
+  let log = [], busy = false, next = 0;
+  const aliveCount = () => reps.filter((r) => r.alive).length;
+  function value() { return log.reduce((v, e) => e.apply(v), 0); }
+  function render() {
+    slots.forEach((sl, i) => {
+      const e = log[i];
+      sl.t.textContent = e ? e.label : "";
+      sl.r.setAttribute("class", e ? "sv-good" : "sv-panel");
+    });
+    reps.forEach((rp, i) => {
+      rp.box.firstChild.setAttribute("class", rp.alive ? "sv-server" : "sv-bad");
+      rp.box.light.setAttribute("class", rp.alive ? "sv-fill-mint" : "sv-fill-coral");
+      rp.g.style.opacity = rp.alive ? 1 : 0.55;
+      rp.state.textContent = rp.alive ? "x = " + value() : "crashed";
+      rp.state.style.fill = rp.alive ? "var(--ink)" : "var(--coral)";
+    });
+    st.committed.set(log.length);
+    st.alive.set(aliveCount(), aliveCount() >= 2 ? "good" : "bad");
+    st.q.set("2 of 3", aliveCount() >= 2 ? "" : "bad");
+    addB.disabled = busy || log.length >= 5;
+  }
+  async function append() {
+    if (busy || log.length >= 5) return;
+    busy = true; render();
+    const e = ENTRIES[next % ENTRIES.length]; next++;
+    const slot = slots[log.length];
+    setCap("#s9-cap", "A client asks the leader to append <b>" + e.label + "</b>. Only the leader decides the order, so there is never an argument about what comes first.");
+    const p = draw.tag(e.label, "sv-data-soft"); layer.appendChild(p);
+    await fly(p, [40, 208], [160, 208], 500);
+    await fly(p, [160, 208], [slot.x, 72], 500);
+    p.remove();
+    slot.t.textContent = e.label;
+    slot.r.setAttribute("class", "sv-data-soft");
+    setCap("#s9-cap", "The entry sits in slot " + (log.length + 1) + " as a <b>proposal</b>. It doesn't count yet: it has to reach a <b>quorum</b> first.");
+    await sleep(400);
+    let acks = 0;
+    for (const rp of reps) {
+      if (!rp.alive) continue;
+      const q = draw.parcel("sv-data", 12); layer.appendChild(q);
+      await fly(q, [slot.x, 94], [rp.cx, 170], 340);
+      await fly(q, [rp.cx, 170], [slot.x, 94], 340);
+      q.remove(); acks++;
+    }
+    if (acks >= 2) {
+      log.push(e);
+      setCap("#s9-cap", "<b>" + acks + " of 3 replicas acknowledged</b> — a majority — so the entry is <b>committed</b>. Every replica now replays the log in exactly the same order, so they all compute exactly the same value. That's <b>state machine replication</b>.");
+    } else {
+      slot.t.textContent = "";
+      slot.r.setAttribute("class", "sv-bad");
+      setCap("#s9-cap", "Only <b>" + acks + "</b> replica acknowledged. That is not a majority, so the entry <b>cannot be committed</b> and the whole system stops accepting writes. This is the price of consensus: it always needs a strict majority.");
+      setTimeout(() => { slot.r.setAttribute("class", "sv-panel"); }, 1200);
+    }
+    busy = false; render();
+  }
+  const ctr = K.$("#s9-controls");
+  const addB = h("button", { class: "btn primary", type: "button" }, "Append the next entry");
+  const rstB = h("button", { class: "btn", type: "button" }, "Reset");
+  addB.addEventListener("click", append);
+  rstB.addEventListener("click", () => { if (busy) return; log = []; next = 0; reps.forEach((r) => (r.alive = true)); K.clear(layer); render(); setCap("#s9-cap", "The log is empty and every replica has x = 0."); });
+  ctr.append(addB, rstB, h("span", { class: "grow" }), h("span", { class: "pill info" }, h("i"), "click a follower to crash it"));
+  render();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "Aaliyah reads the final score, tells Bryce, and Bryce's reload shows the old score. Which guarantee was broken?", options: ["Serializability", "Linearizability (the recency guarantee)", "Durability", "Atomicity"], answer: 1, why: "A read that started after another read finished returned an older value. Linearizability forbids that: once someone sees the new value, nobody may see the old one." },
+  { q: "A leaderless database uses w + r > n. Is it linearizable?", options: ["Yes, the overlap guarantees it", "Only with synchronous read repair, and even then not for compare-and-set", "Yes, if n is odd", "Never, under any circumstances"], answer: 1, why: "Variable network delays let a later reader see an older value. Synchronous read repair (plus reading before writing) can fix reads and writes, but a linearizable CAS needs a consensus algorithm." },
+  { q: "A cable between two regions is cut. What does a single-leader, linearizable system do for clients in the follower region?", options: ["Serves them normally", "Refuses their writes and linearizable reads until the cable is fixed", "Elects a second leader there", "Silently merges the conflicts later"], answer: 1, why: "That's the CP side of the CAP trade-off: stay correct at the cost of being unavailable to whoever can't reach the leader." },
+  { q: "Bryce reads Aaliyah's message (stamp 1) and then replies. What can you say about his Lamport stamp?", options: ["It could be anything", "It is definitely greater than 1", "It equals 1", "It is a wall-clock time"], answer: 1, why: "Receiving a bigger stamp pulls your counter up, and generating a stamp always adds one. So an effect always gets a greater timestamp than its cause." },
+  { q: "How many node failures can a five-node consensus cluster survive and still make decisions?", options: ["Four", "Three", "Two", "None"], answer: 2, why: "Progress needs a majority — three of five. So two may fail. The safety properties still hold even when more fail; the cluster just stops." },
+  { q: "What is a consensus algorithm like Raft, in one sentence?", options: ["Two-phase commit with more coordinators", "Single-leader replication with automatic, safe leader election and failover", "A faster kind of random UUID", "A way to avoid keeping any logs"], answer: 1, why: "Consensus is 'single-leader replication done right': an epoch-numbered election plus a quorum vote on every log entry, so no committed write is lost and split brain is impossible." },
+], 10);
+</script>
+</body>
+</html>

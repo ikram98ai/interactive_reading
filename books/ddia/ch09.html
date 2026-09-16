@@ -1,0 +1,1521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 9 · Distributed Trouble</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .clickable { cursor: pointer; }
+  .clickable:hover rect, .clickable:focus-visible rect { stroke: var(--blue); }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .sv-dim { opacity: .45; }
+  .sv-frozen { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 2; }
+  .sv-lilac-box { fill: var(--lilac-soft); stroke: var(--lilac); stroke-width: 2; }
+  .sv-ink { fill: var(--ink); }
+  .note { font-size: 14.5px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">9</span> Chapter nine</span>
+      <h1>The Trouble with Distributed Systems</h1>
+      <p class="lede">One computer is either working or broken. A whole town of computers is always <i>partly</i> broken: messages vanish, clocks tell fibs, and machines take naps without telling anyone.</p>
+      <p class="quote">“They’re funny things, Accidents. You never have them till you’re having them.” — A.A. Milne, <i>The House at Pooh Corner</i> (1928), quoted at the start of the chapter</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#partial">Partly broken</a>
+        <a href="#network">Six fates of a message</a>
+        <a href="#queue">Traffic jams</a>
+        <a href="#timeout">How long to wait?</a>
+        <a href="#clocks">Two kinds of clock</a>
+        <a href="#skew">When clocks disagree</a>
+        <a href="#pauses">The frozen node</a>
+        <a href="#fencing">Fencing tokens</a>
+        <a href="#truth">Votes, and liars</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · five computers, one unreliable network</span><span class="pill info"><i></i>tap a node to send a message</span></div>
+      <svg id="hero-svg" viewBox="0 0 520 390" role="img" aria-label="Five nodes send messages to each other; some arrive, some are lost, some are delayed"></svg>
+    </div>
+  </section>
+
+  <!-- ============ 1. PARTIAL FAILURE ============ -->
+  <section class="scene" id="partial">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 1 · faults and partial failures</span>
+        <h2>One chef, or a whole kitchen crew?</h2>
+        <p class="story">One computer is built to be boring. Do the same thing twice and you get the same answer twice. And when it really breaks, it breaks <i>all the way</i>: a blue screen, a crash, nothing in between.</p>
+        <p class="story">A kitchen crew is different. The bread chef can be out sick while everyone else keeps cooking. Some orders come out fine, some never come out at all, and you can't predict which. That's a <b>partial failure</b>.</p>
+        <p class="imagine"><b>Try it:</b> break something in “one computer” mode, then in “many computers” mode. Run the same eight jobs twice in many-computers mode — you won't get the same answer twice.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A single computer with good software is usually <b>deterministic</b>: the same operation always gives the same result. Computers are deliberately designed to crash completely rather than return a wrong answer, so they present an “idealized system model”.</p>
+            <p>In a distributed system, parts can be broken in unpredictable ways while other parts work fine. This is a <b>partial failure</b>, and partial failures are <b>nondeterministic</b> — you may not even know whether something succeeded.</p>
+            <p>The book quotes Coda Hale's list of real faults: long-lived network partitions, PDU failures, switch failures, accidental power cycles of whole racks, whole-datacenter power failures, and a driver crashing a pickup truck into a datacenter's HVAC system.</p>
+            <p>The upside: a system that tolerates partial failures can do a <b>rolling upgrade</b>, rebooting one node at a time while the service stays up. We build a reliable system from unreliable components.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Eight jobs to do</span><span id="s1-seg"></span></div>
+        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 640 320" role="img" aria-label="Eight jobs are handed to either one computer or six nodes"></svg></div>
+        <div class="controls" id="s1-controls"></div>
+        <div class="controls"><div class="stats" id="s1-stats"></div></div>
+        <div class="caption" id="s1-cap" aria-live="polite">Run the eight jobs, then break something and run them again.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. UNRELIABLE NETWORK ============ -->
+  <section class="scene" id="network">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 2 · unreliable networks</span>
+        <h2>You posted a letter. Now what?</h2>
+        <p class="story">You drop a letter in the postbox and wait for a reply. Nothing comes. Did the letter get lost? Is it still in a sack somewhere? Did your friend move away? Did they reply and <i>their</i> letter got lost?</p>
+        <p class="story">From where you stand, all six stories look exactly the same: silence. The network gives no guarantee about <i>when</i> a packet arrives, or <i>whether</i> it arrives. All you ever learn is “no answer yet”.</p>
+        <p class="imagine"><b>Play the mystery:</b> send a request without choosing what goes wrong. Watch your own timer run out — then press Reveal and see which of the six things actually happened.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The internet and most datacenter networks are <b>asynchronous packet networks</b>. Six things can go wrong with a request: it may be lost; it may be queued and delivered later; the remote node may have failed; it may have paused (a long GC pause); the response may be lost; or the response may be delayed.</p>
+            <p>These are <b>indistinguishable</b>. The usual handling is a <b>timeout</b> — but when a timeout fires you still don't know whether the remote node got your request, and a queued request may still be delivered after you gave up.</p>
+            <p><b>TCP</b> retransmits dropped packets, reorders them and checksums them, but it can't tell whether the packet or the acknowledgment was lost, and an ack only means the remote <i>kernel</i> got the bytes. To be sure a request succeeded you need a positive response from the application itself.</p>
+            <p>Fault detection is unreliable too: an <code>RST</code>/<code>FIN</code>, a crash-notification script (HBase does this), switch management interfaces, or an <code>ICMP Destination Unreachable</code> can give you fast feedback — but you can't count on any of it.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Request &amp; reply</span><span class="pill" id="s2-know"><i></i>you know: nothing yet</span></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 660 320" role="img" aria-label="A request crosses the network to another node and a reply comes back, or does not"></svg></div>
+        <div class="controls" id="s2-controls"></div>
+        <div class="controls" id="s2-controls2"></div>
+        <div class="caption" id="s2-cap" aria-live="polite">Press “Send a request”. Your timer starts at the same moment.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. CONGESTION ============ -->
+  <section class="scene" id="queue">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 3 · congestion and queueing</span>
+        <h2>Four lanes merging into one</h2>
+        <p class="story">Most of the time a network is quick. What makes it suddenly slow is the same thing that makes roads slow: everyone wants the same lane at once.</p>
+        <p class="story">When three machines all send to the same machine, the switch has to feed them into one link, one packet at a time. The rest wait in a <b>queue</b>. If the queue fills up, the extra packets are simply <b>dropped</b> — even though nothing is broken.</p>
+        <p class="imagine"><b>Try it:</b> start with one sender, then add more. Watch the queue fill and the delay bars grow. Hit “Burst” to saturate the link and see packets fall on the floor.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Variability of packet delay is “most often due to queueing”: at the switch when several nodes send to one destination (<b>network congestion</b>); at the destination machine when all CPU cores are busy; inside a VM monitor while another VM uses the core; and at the sender, because TCP limits its own send rate.</p>
+            <p>Queueing delay has an especially wide range when a system is near its maximum capacity. In public clouds a <b>noisy neighbor</b> can saturate shared links and NICs.</p>
+            <p>Asynchronous networks have <b>unbounded delays</b>. A telephone network instead sets up a <b>circuit</b> with reserved bandwidth (ISDN: 16 bits every 250 µs) and therefore a <b>bounded delay</b>. Ethernet and IP are <b>packet-switched</b>, optimized for bursty traffic, which maximizes utilization at the cost of queueing.</p>
+            <p>So variable delay “is not a law of nature but simply the result of a cost/benefit trade-off”. Some cases use UDP instead of TCP: when delayed data is worthless (VoIP), the retry happens at the human layer — “Could you repeat that please?”</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">One switch, one busy link · toy numbers</span><span class="pill" id="s3-pill"><i></i>idle</span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 680 380" role="img" aria-label="Three ports send packets into a switch queue that drains into one link, with a delay chart"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <div class="controls"><div class="stats" id="s3-stats"></div></div>
+        <div class="caption" id="s3-cap" aria-live="polite">Press Run. Each square is a packet; the tall column is the switch's queue for the busy port.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. TIMEOUTS ============ -->
+  <section class="scene" id="timeout">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 4 · timeouts and unbounded delays</span>
+        <h2>How long do you wait for a late friend?</h2>
+        <p class="story">Wait five minutes and you'll storm off while your friend is still turning the corner. Wait an hour and you'll waste an hour when they're genuinely not coming. There's no perfect number.</p>
+        <p class="story">A computer has the same problem. A <b>short timeout</b> finds dead nodes fast but keeps declaring healthy-but-slow nodes dead. A <b>long timeout</b> is patient but leaves users staring at a spinner.</p>
+        <p class="imagine"><b>Slide the timeout</b> across a day of requests. Green bars answered in time; coral bars were <i>alive</i> but too slow, so you wrongly declared them dead. Turn on “busy day” to see the long tail grow.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>In a fictitious network with a maximum delay <i>d</i> and a maximum handling time <i>r</i>, a timeout of <b>2d + r</b> would be reasonable. Real asynchronous networks give neither guarantee, so there's no “correct” timeout value — they must be determined experimentally.</p>
+            <p>Declaring a node dead prematurely is dangerous: an action (like sending an email) may be performed twice, and moving a slow node's load onto others can trigger a <b>cascading failure</b>, in the extreme case with every node declaring every other node dead.</p>
+            <p>Better than a constant: keep measuring response times and their <b>jitter</b> and adjust automatically. The <b>Phi Accrual failure detector</b> (used in Akka and Cassandra) does this; TCP retransmission timeouts work similarly.</p>
+            <p>Measured reality: about 12 network faults per month in one medium datacenter study; round-trip times of several minutes at high percentiles across cloud regions; packet delays over a minute inside one datacenter during a switch upgrade. Cows, beavers, sharks and human misconfiguration have all cut fiber links.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">20 health checks · toy milliseconds</span><span class="pill" id="s4-pill"><i></i>—</span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 680 340" role="img" aria-label="Twenty response-time bars with a movable timeout line"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <div class="controls"><div class="stats" id="s4-stats"></div></div>
+        <div class="caption" id="s4-cap" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. TWO CLOCKS ============ -->
+  <section class="scene" id="clocks">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 5 · unreliable clocks</span>
+        <h2>The wall clock and the stopwatch</h2>
+        <p class="story">Your kitchen has two ways to tell time. The <b>wall clock</b> says what time it is — handy for “when does the cake come out?” But someone can reach up and move its hands.</p>
+        <p class="story">A <b>stopwatch</b> can't tell you the date at all. It only counts forward, steadily, and nobody ever winds it backwards. For measuring <i>how long something took</i>, the stopwatch is the only honest one.</p>
+        <p class="imagine"><b>Time a four-second job</b> while someone messes with the wall clock: an NTP reset, a leap second, or a virtual machine waking up after a nap. The stopwatch keeps its cool; the wall clock can report a negative duration.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A <b>time-of-day clock</b> (<code>CLOCK_REALTIME</code>, <code>System.currentTimeMillis</code>) returns wall-clock time since the epoch. It is synchronized with <b>NTP</b>, and it can jump backwards when forcibly reset, or on leap seconds and daylight saving — so it is unsuitable for measuring elapsed time.</p>
+            <p>A <b>monotonic clock</b> (<code>CLOCK_MONOTONIC</code>, <code>System.nanoTime</code>) always moves forward and is good for durations and timeouts. Its absolute value is meaningless, so comparing it between two computers makes no sense. NTP may <b>slew</b> its rate by up to 0.05%, but can't make it jump.</p>
+            <p>Clocks drift: Google assumes up to <b>200 ppm</b>, about 6 ms of drift if resynchronized every 30 seconds, or 17 seconds if resynchronized once a day. Over the internet, a minimum error of about <b>35 ms</b> is achievable, with spikes of around a second on congested networks.</p>
+            <p><b>Leap seconds</b> make a minute 59 or 61 seconds long and have crashed many large systems; the fix is often to <b>smear</b> the adjustment across a day. Leap seconds will no longer be used from 2035. Inside VMs, the clock can suddenly jump forward when the VM is resumed.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Timing one job with two clocks</span><span id="s5-seg"></span></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 660 330" role="img" aria-label="An analog time-of-day clock beside a monotonic stopwatch"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="caption" id="s5-cap" aria-live="polite">Pick what goes wrong halfway through, then time the job.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. CLOCK SKEW / LWW ============ -->
+  <section class="scene" id="skew">
+    <div class="wrap scene-grid full">
+      <div class="copy" style="max-width: 760px">
+        <span class="eyebrow">Big idea 6 · timestamps for ordering events</span>
+        <h2>“Whoever has the newest sticker wins”</h2>
+        <p class="story">Three friends keep copies of the same number. Whenever someone changes it, they stick a time sticker on it, and the copy with the newest sticker wins. That rule is called <b>last write wins</b>.</p>
+        <p class="story">It only works if everybody's watch agrees. Here node 1's clock is three milliseconds fast — less skew than you'd get in real life — and that tiny lie is enough to make a write silently disappear.</p>
+        <p class="imagine"><b>Step through it</b> with time-of-day stickers, then switch to <b>logical clocks</b> (plain counters that only say “this came after that”) and watch the same story end correctly.</p>
+      </div>
+      <div class="stack">
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">Three nodes, one number, two lost milliseconds</span><span id="s6-seg"></span></div>
+          <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 680 390" role="img" aria-label="Timelines of three nodes replicating two writes with timestamps"></svg></div>
+          <div class="controls" id="s6-controls"></div>
+          <div class="caption" id="s6-cap" aria-live="polite">Press Step to watch the writes travel between nodes.</div>
+        </div>
+        <div class="scene-grid" style="padding:0">
+          <div class="copy">
+            <h3 style="font-size:24px">A clock reading is a fuzzy blob, not a point</h3>
+            <p class="story">Your computer will happily tell you the time down to the nanosecond. That doesn't mean it <i>knows</i> the time that precisely. It's more honest to say “somewhere between 10.3 and 10.5 seconds past the minute”.</p>
+            <p class="story">Google's <b>TrueTime</b> hands back both ends of that blob. If two blobs don't overlap, you know for certain which happened first. If they do overlap, you simply don't know — so Spanner <i>waits</i> until they can't overlap before it commits.</p>
+            <p class="imagine"><b>Widen the uncertainty</b> until the two blobs touch, then press “commit wait” and watch the second transaction politely wait its turn.</p>
+            <details class="book">
+              <summary>What the book says</summary>
+              <div class="inner">
+                <p>Because node 1's write is tagged 42.004 and node 3's causally-later increment is tagged 42.003, a <b>LWW</b> node drops the increment. LWW also can't distinguish quick-succession writes from truly concurrent ones; <b>version vectors</b> are needed to preserve causality, and equal timestamps need a random tiebreaker.</p>
+                <p>Cassandra and ScyllaDB use the client clock plus LWW. A node with a lagging clock then can't overwrite values from a faster node until the skew has elapsed, and “arbitrary amounts of data” can be silently dropped.</p>
+                <p>NTP can't be made accurate enough to fix this, because its accuracy is limited by network round-trip time. <b>Logical clocks</b> — incrementing counters — are the safer alternative for ordering; time-of-day and monotonic clocks are <b>physical clocks</b>.</p>
+                <p>The <b>TrueTime</b> API in Spanner and <b>Amazon ClockBound</b> return <code>[earliest, latest]</code>. Spanner waits out the confidence interval before committing, and Google puts a GPS receiver or atomic clock in each datacenter to keep it near <b>7 ms</b>. YugabyteDB can use ClockBound on AWS.</p>
+              </div>
+            </details>
+          </div>
+          <div class="stage">
+            <div class="stage-head"><span class="stage-title">Confidence intervals · toy milliseconds</span><span class="pill" id="s7-pill"><i></i>—</span></div>
+            <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 660 250" role="img" aria-label="Two confidence interval bars on a millisecond axis"></svg></div>
+            <div class="controls" id="s7-controls"></div>
+            <div class="caption" id="s7-cap" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7. PROCESS PAUSES ============ -->
+  <section class="scene" id="pauses">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 7 · process pauses</span>
+        <h2>The nap you don't know you took</h2>
+        <p class="story">Imagine you're the class monitor, holding a badge that expires every ten seconds unless you say “still here”. Then, mid-sentence, you fall asleep. Not tired-sleep — <i>frozen</i>-sleep, where no time passes for you at all.</p>
+        <p class="story">The class waits, gives up, and hands the badge to someone else. You wake up two minutes later and calmly finish your sentence, still holding a badge that isn't yours. Now there are two monitors: <b>split brain</b>.</p>
+        <p class="imagine"><b>Freeze the leader</b> with a short pause and a long one. Watch its own clock stop while the world's clock keeps going, and see the moment the lease runs out.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A leader may hold a <b>lease</b> — a lock with a timeout — and renew it while it works. The naive loop is wrong twice: it compares another machine's expiry to its own clock, and it assumes almost no time passes between checking the lease and processing the request.</p>
+            <p>Causes of long pauses: <b>stop-the-world garbage collection</b> (once minutes long), VM suspend/resume and live migration, laptop lids closing, context switches and <b>steal time</b> from other VMs, slow synchronous disk I/O (even a lazy Java classloader read), page faults and <b>thrashing</b> when swapping, and <code>SIGSTOP</code> from a stray Ctrl-Z.</p>
+            <p>A node must assume it can be paused at any point, even mid-function, while the rest of the world keeps moving — and may not notice until it next checks the clock.</p>
+            <p>Escapes exist but are costly: <b>hard real-time</b> systems with an RTOS, documented worst-case execution times and restricted allocation (airbags, rockets). For servers this is “not economical or appropriate”. GC impact can be limited instead: treat a GC pause as a brief planned outage and route traffic away, or restart processes before long-lived objects pile up.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Leader with a 10-second lease · toy seconds</span><span class="pill" id="s8-pill"><i></i>one leader</span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 660 330" role="img" aria-label="A leader node with a draining lease bar and two followers losing patience"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="controls"><div class="stats" id="s8-stats"></div></div>
+        <div class="caption" id="s8-cap" aria-live="polite">Node A is the leader. It renews its lease while it works. Now freeze it.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8. FENCING ============ -->
+  <section class="scene" id="fencing">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 8 · fencing off zombies</span>
+        <h2>The ticket number at the bakery counter</h2>
+        <p class="story">You can't stop a sleepy node from waking up and acting as if it's still in charge. That's a <b>zombie</b>. Shouting at it doesn't help, and its old request might still be crawling through the network anyway.</p>
+        <p class="story">So don't try to stop it — make its message <i>useless</i>. Every time the lock service hands out the lease it also hands out a ticket number that only ever goes up: a <b>fencing token</b>. The storage service remembers the highest number it has seen and refuses anything smaller.</p>
+        <p class="imagine"><b>Step through the zombie's return</b> with fencing switched off, then switch it on and run it again. Same story, completely different ending.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Two ways one file gets corrupted: a client pauses past its lease and writes anyway (a bug HBase used to have), or a client crashes and its write is <b>delayed in the network</b> for a minute and lands after someone else took the lease.</p>
+            <p>Shutting the zombie down — “shoot the other node in the head” (STONITH) — doesn't protect against the delayed request, can make nodes shut each other down, and may come too late.</p>
+            <p>A <b>fencing token</b> is a number that increases each time the lock is granted; the storage service rejects any write with an outdated token. A client that just acquired the lease should write immediately, which fences off any zombie.</p>
+            <p>Other names: <b>sequencers</b> in Chubby, <b>epoch numbers</b> in Kafka, <b>ballot number</b> in Paxos and <b>term number</b> in Raft. ZooKeeper's <code>zxid</code> or <code>cversion</code>, etcd's revision number, or Hazelcast's FencedLock all work. Object stores offer conditional writes instead (S3 conditional writes, Azure conditional headers, GCS request preconditions). Put the token in the top digits of a timestamp and it even works for leaderless replicas.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Lock service → storage service</span><span id="s9-seg"></span></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 680 350" role="img" aria-label="Two clients take turns holding a lease and writing to a storage service with tokens"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="caption" id="s9-cap" aria-live="polite">Press Step. Client 1 is about to take the lease.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9. TRUTH / BYZANTINE ============ -->
+  <section class="scene" id="truth">
+    <div class="wrap scene-grid full">
+      <div class="copy" style="max-width: 760px">
+        <span class="eyebrow">Big idea 9 · knowledge, truth and lies</span>
+        <h2>The vote, and the general who lies</h2>
+        <p class="story">A node can't trust its own opinion of itself. If four out of five classmates say you left the game, you left the game — even if you're standing right there shouting “I'm not dead!”. Decisions belong to a <b>quorum</b>: more than half. There can only ever be one group with more than half, which is exactly why it's safe.</p>
+        <p class="story">All of that assumes the nodes are honest — slow or confused, maybe, but never lying. If a node can send two different answers to two different friends, you have a <b>Byzantine fault</b>, and the puzzle gets much harder.</p>
+      </div>
+      <div class="stack">
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">“I'm not dead!” · a majority vote</span><span class="pill" id="s10-pill"><i></i>all healthy</span></div>
+          <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 660 310" role="img" aria-label="Five nodes vote on whether node E is dead"></svg></div>
+          <div class="controls" id="s10-controls"></div>
+          <div class="caption" id="s10-cap" aria-live="polite">Break node E's outgoing messages — it can still hear everyone, but nobody can hear it.</div>
+        </div>
+        <div class="scene-grid" style="padding:0">
+          <div class="copy">
+            <h3 style="font-size:24px">Four generals, and a traitor or two</h3>
+            <p class="story">Four generals must agree: attack or retreat? Loyal generals say the same thing to everyone. A traitor whispers “attack” to one and “retreat” to another, hoping the loyal ones end up doing different things.</p>
+            <p class="story">With one traitor out of four, the loyal generals still land on the same plan. Add a second traitor and the votes tie — agreement breaks. That's the rule of thumb: you need more than two-thirds of the nodes to be good.</p>
+            <details class="book">
+              <summary>What the book says</summary>
+              <div class="inner">
+                <p>A semi-disconnected node whose outgoing messages are dropped gets declared dead by everyone else — “dragged to the graveyard, kicking and screaming ‘I'm not dead!’”. A paused node is treated the same way. So algorithms rely on a <b>quorum</b>, most commonly an absolute majority: 3 nodes tolerate 1 fault, 5 tolerate 2, and there can never be two conflicting majorities.</p>
+                <p>A node that “lies” — sending arbitrary faulty or corrupted responses, such as casting contradictory votes — has a <b>Byzantine fault</b>; agreeing anyway is the <b>Byzantine Generals Problem</b>, a generalization of the two generals problem. Most Byzantine-tolerant algorithms need a supermajority of more than two-thirds of nodes to be correct.</p>
+                <p>It matters for aerospace (radiation can corrupt memory) and for systems with mutually untrusting parties, such as blockchain consensus. In ordinary datacenters we assume nodes are “unreliable but honest”: BFT protocols are expensive and a bug deployed to all nodes defeats them anyway.</p>
+                <p>Cheap partial defenses are still worth it: application-level <b>checksums</b> (corrupt packets do slip past TCP checksums), input sanitization and range checks, and NTP clients querying several servers so a misconfigured one is spotted as an outlier.</p>
+              </div>
+            </details>
+          </div>
+          <div class="stage">
+            <div class="stage-head"><span class="stage-title">Byzantine generals</span><span class="pill" id="s11-pill"><i></i>—</span></div>
+            <div class="stage-scroll"><svg id="s11-svg" viewBox="0 0 660 280" role="img" aria-label="Four generals exchange attack or retreat messages, with optional traitors"></svg></div>
+            <div class="controls" id="s11-controls"></div>
+            <div class="caption" id="s11-cap" aria-live="polite">Everyone is loyal so far. Send the messages and see what each general decides.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SUMMARY ============ -->
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>What to carry out of this chapter</h2><p>This one is all problems. The next chapter is the solutions.</p></div>
+      <div class="cards">
+        <div class="card"><h3>Silence means nothing</h3><p>No reply could be a lost request, a dead node, a napping node, or a lost reply. A timeout never tells you which — and the work may still happen later.</p></div>
+        <div class="card"><h3>Delay has no ceiling</h3><p>Packets queue in switches, in the OS, in the VM monitor and in TCP itself. Minutes-long delays have been measured, so there is no “correct” timeout.</p></div>
+        <div class="card"><h3>Clocks are two different tools</h3><p>Use a monotonic clock to measure how long something took. Never use a wall clock to decide which of two events came first.</p></div>
+        <div class="card"><h3>A pause can happen anywhere</h3><p>GC, swapping, live migration or a stray Ctrl-Z can freeze a process mid-function. It won't even know it was gone.</p></div>
+        <div class="card"><h3>Don't trust one node — count votes</h3><p>A quorum of more than half decides, including the decision that a node is dead. Only one majority can exist at a time.</p></div>
+        <div class="card"><h3>Fence, don't argue</h3><p>Ever-increasing tokens make a zombie's write harmless, which beats trying to shoot it down in time.</p></div>
+      </div>
+      <div class="section-title" style="margin-top:34px"><h2>The seesaws</h2><p>Each side wins in a different situation.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>Short timeout</h4><p>Finds dead nodes fast, but keeps burying live ones and can cascade</p></div><span class="vs">vs</span><div class="side"><h4>Long timeout</h4><p>Few false alarms, but users wait and wait</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Circuit switching</h4><p>Reserved bandwidth and bounded delay — and wasted capacity</p></div><span class="vs">vs</span><div class="side"><h4>Packet switching</h4><p>Great utilization for bursty traffic, at the price of queueing</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Time-of-day clock</h4><p>Tells you the date; jumps backwards and forwards</p></div><span class="vs">vs</span><div class="side"><h4>Monotonic clock</h4><p>Only measures durations, but never lies about them</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Last write wins</h4><p>Cheap and simple; silently drops writes when clocks disagree</p></div><span class="vs">vs</span><div class="side"><h4>Logical clocks</h4><p>Preserve cause and effect, with counters to carry around</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Safety properties</h4><p>Must hold always — a violation can't be undone</p></div><span class="vs">vs</span><div class="side"><h4>Liveness properties</h4><p>“Eventually” — allowed to wait for the network to recover</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Assume honest nodes</h4><p>What almost every datacenter system does — cheap</p></div><span class="vs">vs</span><div class="side"><h4>Byzantine tolerance</h4><p>Survives lying nodes; expensive, and needs two-thirds honest</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>Grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>partial failure</dt><dd>Some parts broken, others fine — and you can't predict which.</dd></div>
+        <div class="word"><dt>nondeterministic</dt><dd>Do the same thing twice, get different answers.</dd></div>
+        <div class="word"><dt>asynchronous packet network</dt><dd>A network that makes no promise about when, or whether, a message arrives.</dd></div>
+        <div class="word"><dt>timeout</dt><dd>Giving up on waiting. It never tells you <i>why</i> there was no answer.</dd></div>
+        <div class="word"><dt>network partition</dt><dd>Also “netsplit”: part of the network is cut off from the rest.</dd></div>
+        <div class="word"><dt>congestion</dt><dd>Too many packets wanting the same link, so they queue up.</dd></div>
+        <div class="word"><dt>queueing</dt><dd>Waiting in line — in the switch, in the OS, in the VM, in TCP.</dd></div>
+        <div class="word"><dt>unbounded delay</dt><dd>No upper limit on how late a message can be.</dd></div>
+        <div class="word"><dt>circuit switching</dt><dd>Reserving a fixed slice of the line, like an old phone call, so delay is bounded.</dd></div>
+        <div class="word"><dt>packet switching</dt><dd>Everyone jostles for the wire; great use of the wire, variable delay.</dd></div>
+        <div class="word"><dt>Phi Accrual failure detector</dt><dd>A detector that learns normal response times and adjusts its own timeout.</dd></div>
+        <div class="word"><dt>time-of-day clock</dt><dd>The wall clock: says the date and time, but can jump.</dd></div>
+        <div class="word"><dt>monotonic clock</dt><dd>The stopwatch: only counts forward, only good for durations.</dd></div>
+        <div class="word"><dt>NTP</dt><dd>The service computers use to ask other computers what time it is.</dd></div>
+        <div class="word"><dt>clock drift</dt><dd>A clock quietly running fast or slow, often with temperature.</dd></div>
+        <div class="word"><dt>clock skew</dt><dd>How far apart two machines' clocks are right now.</dd></div>
+        <div class="word"><dt>leap second</dt><dd>A minute with 59 or 61 seconds. It has crashed real systems.</dd></div>
+        <div class="word"><dt>confidence interval</dt><dd>“The time is somewhere between here and here.” TrueTime and ClockBound report it.</dd></div>
+        <div class="word"><dt>last write wins (LWW)</dt><dd>Keep the value with the newest timestamp. Dangerous when clocks disagree.</dd></div>
+        <div class="word"><dt>logical clock</dt><dd>A counter that only says what came after what — no seconds involved.</dd></div>
+        <div class="word"><dt>process pause</dt><dd>A program frozen mid-step by GC, swapping, a VM move or a signal.</dd></div>
+        <div class="word"><dt>lease</dt><dd>A lock that expires unless you keep renewing it.</dd></div>
+        <div class="word"><dt>quorum</dt><dd>A vote among nodes; usually more than half must agree.</dd></div>
+        <div class="word"><dt>fencing token</dt><dd>An ever-increasing ticket number that makes a stale write harmless.</dd></div>
+        <div class="word"><dt>zombie / split brain</dt><dd>An old leader that hasn't heard it was replaced — and two leaders at once.</dd></div>
+        <div class="word"><dt>Byzantine fault</dt><dd>A node that lies, or sends different answers to different nodes.</dd></div>
+        <div class="word"><dt>limping node</dt><dd>Also gray failure: alive and answering health checks, but far too slow to be useful.</dd></div>
+        <div class="word"><dt>partially synchronous model</dt><dd>“Usually well behaved, occasionally terrible” — the realistic assumption.</dd></div>
+        <div class="word"><dt>safety vs liveness</dt><dd>Nothing bad ever happens, versus something good eventually happens.</dd></div>
+        <div class="word"><dt>fault injection</dt><dd>Deliberately breaking things (Chaos Monkey, Jepsen) to see what your system does.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width: 820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Six quick questions. Finish all six to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible, ease, lerp } = K;
+K.page(9);
+const rand = (n) => Math.floor(Math.random() * n);
+const setCap = (id, html) => { K.$(id).innerHTML = html; };
+const txt = (x, y, t, cls, anchor) => s("text", { x, y, class: cls || "sv-label", "text-anchor": anchor || "middle" }, t);
+const box = (x, y, w, hgt, cls, rx) => s("rect", { x, y, width: w, height: hgt, rx: rx == null ? 10 : rx, class: cls || "sv-box" });
+const setPill = (id, cls, text) => { const p = K.$(id); p.className = "pill " + cls; p.innerHTML = ""; p.append(h("i"), text); };
+const btn = (ctr, label, cls, fn) => { const b = h("button", { type: "button", class: "btn " + (cls || "") }, label); b.addEventListener("click", fn); ctr.appendChild(b); return b; };
+
+/* ================= HERO ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const C = [[260, 74], [424, 148], [358, 272], [162, 272], [96, 148]];
+  const names = ["A", "B", "C", "D", "E"];
+  for (let i = 0; i < 5; i++) for (let j = i + 1; j < 5; j++)
+    svg.appendChild(s("line", { x1: C[i][0], y1: C[i][1], x2: C[j][0], y2: C[j][1], class: "sv-wire", style: { opacity: 0.28 } }));
+  const layer = s("g");
+  const nodes = C.map(([x, y], i) => {
+    const r = box(x - 30, y - 26, 60, 52, "sv-server", 12);
+    const st = txt(x, y + 6, "ok", "sv-label");
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Send a message from node " + names[i] },
+      r, txt(x, y - 8, "node " + names[i], "sv-label"), st);
+    const fire = () => send(i, (i + 1 + rand(4)) % 5);
+    g.addEventListener("click", fire);
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fire(); } });
+    svg.appendChild(g);
+    return { r, st, frozen: false };
+  });
+  svg.appendChild(layer);
+  const counter = txt(260, 372, "sent 0 · arrived 0 · lost 0", "sv-label");
+  svg.appendChild(counter);
+  let sent = 0, got = 0, lost = 0, visible = false;
+  const tally = () => (counter.textContent = `sent ${sent} · arrived ${got} · lost ${lost}`);
+
+  async function send(a, b) {
+    if (a === b) return;
+    sent++; tally();
+    const p = draw.parcel("sv-data", 14);
+    layer.appendChild(p);
+    const roll = Math.random();
+    const mid = [(C[a][0] + C[b][0]) / 2, (C[a][1] + C[b][1]) / 2];
+    if (roll < 0.22 || nodes[b].frozen) {
+      await fly(p, C[a], mid, 520);
+      p.firstChild.setAttribute("class", "sv-fill-coral");
+      p.setAttribute("class", "sv-shake");
+      await sleep(260);
+      p.remove(); lost++; tally();
+      return;
+    }
+    await fly(p, C[a], C[b], roll < 0.45 ? 1600 : 620);
+    p.firstChild.setAttribute("class", "sv-fill-mint");
+    await sleep(160);
+    p.remove(); got++; tally();
+  }
+  async function freeze(i) {
+    nodes[i].frozen = true;
+    nodes[i].r.setAttribute("class", "sv-frozen");
+    nodes[i].st.textContent = "paused";
+    await sleep(2600);
+    nodes[i].frozen = false;
+    nodes[i].r.setAttribute("class", "sv-server");
+    nodes[i].st.textContent = "ok";
+  }
+  whenVisible(svg, () => (visible = true), () => (visible = false));
+  (async function auto() {
+    await sleep(700);
+    for (let k = 0; ; k++) {
+      if (visible && !K.reduced && !document.hidden) {
+        const a = rand(5);
+        send(a, (a + 1 + rand(4)) % 5);
+        if (k % 7 === 6) freeze(rand(5));
+      }
+      await sleep(1100);
+    }
+  })();
+})();
+
+/* ================= 1. PARTIAL FAILURE ================= */
+(function partial() {
+  const svg = K.$("#s1-svg"), ctr = K.$("#s1-controls");
+  const nodeLayer = s("g"), jobLayer = s("g");
+  svg.append(nodeLayer, jobLayer);
+  svg.appendChild(txt(186, 50, "8 jobs to do", "sv-label", "end"));
+  const POS = [[130, 134], [320, 134], [510, 134], [130, 252], [320, 252], [510, 252]];
+  const stDone = stat("Done", 0), stFail = stat("Failed", 0), stUnk = stat("No answer", 0);
+  K.$("#s1-stats").append(stDone, stFail, stUnk);
+  let mode = 1, nodes = [], busy = false;
+  const buttons = [];
+
+  function build() {
+    K.clear(nodeLayer); K.clear(jobLayer); nodes = [];
+    if (mode === 0) {
+      const r = box(160, 96, 320, 160, "sv-server", 18);
+      const st = txt(320, 186, "working perfectly", "sv-label");
+      nodeLayer.appendChild(s("g", {}, r, txt(320, 120, "your one computer", "sv-label"), st));
+      nodes = [{ r, st, state: "ok", x: 320, y: 150, slots: 0 }];
+    } else {
+      POS.forEach(([x, y], i) => {
+        const r = box(x - 56, y - 40, 112, 80, "sv-server", 12);
+        const st = txt(x, y + 30, "healthy", "sv-label");
+        nodeLayer.appendChild(s("g", {}, r, txt(x, y - 48, "node " + (i + 1), "sv-label"), st));
+        nodes.push({ r, st, state: "ok", x, y: y - 6, slots: 0 });
+      });
+    }
+  }
+  const lock = (v) => { busy = v; buttons.forEach((b) => (b.disabled = v)); };
+
+  async function run() {
+    if (busy) return;
+    lock(true);
+    K.clear(jobLayer);
+    nodes.forEach((n) => (n.slots = 0));
+    let done = 0, failed = 0, unk = 0;
+    for (let i = 0; i < 8; i++) {
+      const n = nodes[mode === 0 ? 0 : i % nodes.length];
+      const p = draw.parcel("sv-data", 15);
+      jobLayer.appendChild(p);
+      const tx = n.x - 36 + (n.slots % 4) * 24, ty = n.y - 6 + Math.floor(n.slots / 4) * 20;
+      n.slots++;
+      await fly(p, [206 + i * 30, 44], [tx, ty], 420);
+      if (n.state === "ok") { p.firstChild.setAttribute("class", "sv-fill-mint"); done++; }
+      else if (n.state === "dead") { p.firstChild.setAttribute("class", "sv-fill-coral"); failed++; }
+      else { p.firstChild.setAttribute("class", "sv-fill-sun"); p.setAttribute("class", "sv-pulse"); unk++; }
+      stDone.set(done, "good"); stFail.set(failed, failed ? "bad" : ""); stUnk.set(unk, unk ? "warn" : "");
+      await sleep(60);
+    }
+    if (mode === 0) {
+      setCap("#s1-cap", done === 8
+        ? "All eight jobs done. One healthy computer is <b>deterministic</b>: ask twice, get the same answer twice."
+        : "All eight jobs failed together. A single computer tends to be <b>fully working or entirely broken</b> — never something in between.");
+    } else {
+      setCap("#s1-cap", failed + unk === 0
+        ? "Everything worked this time. Now break something and run the jobs again."
+        : `<b>${done}</b> jobs finished, <b>${failed}</b> failed outright and <b>${unk}</b> got no answer at all. That's a <b>partial failure</b> — and running it again gives a different mix. Nondeterminism is what makes distributed systems hard.`);
+    }
+    lock(false);
+  }
+
+  function breakIt() {
+    if (busy) return;
+    if (mode === 0) {
+      nodes[0].state = "dead";
+      nodes[0].r.setAttribute("class", "sv-bad sv-shake");
+      nodes[0].st.textContent = "kernel panic — everything stops";
+      setCap("#s1-cap", "One computer usually fails <b>all the way</b>: it would rather crash than hand you a wrong answer.");
+    } else {
+      const a = rand(6);
+      let b = rand(6); while (b === a) b = rand(6);
+      nodes[a].state = "dead"; nodes[a].r.setAttribute("class", "sv-bad"); nodes[a].st.textContent = "crashed";
+      nodes[b].state = "slow"; nodes[b].r.setAttribute("class", "sv-frozen"); nodes[b].st.textContent = "alive but not answering";
+      setCap("#s1-cap", `Node <b>${a + 1}</b> crashed and node <b>${b + 1}</b> is alive but silent. The other four are perfectly fine. Run the jobs.`);
+    }
+  }
+
+  async function rolling() {
+    if (busy || mode === 0) return;
+    lock(true);
+    setCap("#s1-cap", "A <b>rolling upgrade</b>: reboot one node at a time to install new software. Because the system survives partial failures, the service never goes down.");
+    for (const n of nodes) {
+      const was = n.state, cls = n.r.getAttribute("class"), label = n.st.textContent;
+      n.state = "dead"; n.r.setAttribute("class", "sv-frozen"); n.st.textContent = "restarting…";
+      await sleep(430);
+      n.state = was === "dead" || was === "slow" ? "ok" : was;
+      n.r.setAttribute("class", was === "ok" ? "sv-server" : "sv-server");
+      n.st.textContent = "healthy · new version";
+      await sleep(120);
+    }
+    lock(false);
+  }
+
+  K.$("#s1-seg").appendChild(seg(["One computer", "Many computers"], 1, (i) => {
+    if (busy) return;
+    mode = i; build();
+    stDone.set(0, ""); stFail.set(0, ""); stUnk.set(0, "");
+    K.$("#s1-roll").hidden = mode === 0;
+    setCap("#s1-cap", mode === 0
+      ? "One machine, eight jobs. Try breaking it."
+      : "Six machines share the eight jobs. Try breaking something now.");
+  }, "s1-mode"));
+  buttons.push(btn(ctr, "Run 8 jobs", "primary", run));
+  buttons.push(btn(ctr, "Break something", "danger", breakIt));
+  buttons.push(btn(ctr, "Repair everything", "", () => { if (!busy) { build(); setCap("#s1-cap", "All repaired."); } }));
+  const roll = btn(ctr, "Rolling upgrade", "good", rolling);
+  roll.id = "s1-roll"; buttons.push(roll);
+  build();
+})();
+
+/* ================= 2. SIX FATES OF A MESSAGE ================= */
+(function fates() {
+  const svg = K.$("#s2-svg");
+  const FATES = [
+    { key: "lost", name: "Your request was lost", truth: "A switch dropped your request. The other node never even heard from you.", work: false },
+    { key: "queued", name: "Your request is stuck in a queue", truth: "Your request sat in a queue and was delivered <b>after</b> you gave up. The work happened anyway.", work: true },
+    { key: "crashed", name: "The other node has crashed", truth: "The other node was powered down. Nothing was processed.", work: false },
+    { key: "paused", name: "The other node is paused", truth: "The other node was in a long garbage-collection pause. It woke up, did the work and replied — late.", work: true },
+    { key: "replylost", name: "The reply was lost", truth: "The work was done. The reply was lost on the way back, so from the outside it looks identical to a lost request.", work: true },
+    { key: "replyslow", name: "The reply was delayed", truth: "The work was done and the reply arrived — long after your timeout fired.", work: true },
+  ];
+  svg.append(
+    s("rect", { x: 168, y: 62, width: 320, height: 150, rx: 22, class: "sv-panel" }),
+    txt(328, 52, "the network", "sv-label"),
+    s("line", { x1: 116, y1: 136, x2: 166, y2: 136, class: "sv-wire" }),
+    s("line", { x1: 490, y1: 136, x2: 534, y2: 136, class: "sv-wire" }));
+  svg.appendChild(draw.phone(80, 136, "your service"));
+  const srect = box(538, 92, 96, 88, "sv-server", 14);
+  const sstate = txt(586, 142, "waiting", "sv-label");
+  svg.append(srect, txt(586, 118, "other node", "sv-label"), sstate, txt(586, 196, "", "sv-label"));
+  const workLabel = txt(586, 216, "did the work? …", "sv-label");
+  svg.appendChild(workLabel);
+  const layer = s("g"); svg.appendChild(layer);
+  const cross = s("g", { style: { opacity: 0 } },
+    s("line", { x1: 316, y1: 124, x2: 340, y2: 148, class: "sv-wire-solid", style: { stroke: "var(--coral)", strokeWidth: 3 } }),
+    s("line", { x1: 340, y1: 124, x2: 316, y2: 148, class: "sv-wire-solid", style: { stroke: "var(--coral)", strokeWidth: 3 } }));
+  svg.appendChild(cross);
+  svg.append(txt(60, 256, "your timeout (2.4 s)", "sv-label", "start"));
+  const barBg = s("rect", { x: 60, y: 264, width: 360, height: 16, rx: 8, class: "sv-panel" });
+  const barFg = s("rect", { x: 60, y: 264, width: 0, height: 16, rx: 8, class: "sv-data" });
+  const verdict = txt(436, 277, "not sent yet", "sv-label", "start");
+  svg.append(barBg, barFg, verdict);
+
+  let pick = -1, busy = false, truth = "", revealed = false;
+  const ctr = K.$("#s2-controls"), ctr2 = K.$("#s2-controls2");
+  const sendBtn = btn(ctr, "Send a request", "primary", go);
+  const revealBtn = btn(ctr, "Reveal what really happened", "", reveal);
+  revealBtn.disabled = true;
+  ctr.appendChild(h("span", { class: "grow" }));
+  ctr2.appendChild(seg(["Surprise me", "Request lost", "Request queued", "Node crashed", "Node paused", "Reply lost", "Reply delayed"], 0, (i) => { pick = i - 1; }, "s2-pick"));
+
+  function resetScene() {
+    K.clear(layer);
+    cross.style.opacity = 0;
+    srect.setAttribute("class", "sv-server");
+    sstate.textContent = "waiting";
+    workLabel.textContent = "did the work? …";
+    workLabel.style.fill = "";
+    barFg.setAttribute("width", 0);
+    verdict.textContent = "waiting…";
+    setPill("#s2-know", "", "you know: nothing yet");
+  }
+
+  async function go() {
+    if (busy) return;
+    busy = true; sendBtn.disabled = true; revealBtn.disabled = true; revealed = false;
+    resetScene();
+    const f = FATES[pick >= 0 ? pick : rand(6)];
+    truth = f.truth;
+    setCap("#s2-cap", "Your request is on its way. Your timer is running, and that timer is <b>all you have</b>.");
+    tween(2400, (t) => barFg.setAttribute("width", 360 * t), ease.linear).then(() => {
+      if (verdict.textContent !== "reply received ✓") {
+        verdict.textContent = "TIMEOUT — no answer";
+        setPill("#s2-know", "bad", "you know: nothing at all");
+        setCap("#s2-cap", "<b>Timeout.</b> You have learned exactly one thing: no reply came back yet. Whether the other node did the work is <i>unknowable</i> from here.");
+      }
+    });
+    const p = draw.parcel("sv-data", 15); layer.appendChild(p);
+    if (f.key === "lost") {
+      await fly(p, [118, 136], [328, 136], 900);
+      p.firstChild.setAttribute("class", "sv-fill-coral"); cross.style.opacity = 1;
+      await sleep(400); p.remove();
+    } else if (f.key === "queued") {
+      await fly(p, [118, 136], [300, 136], 700);
+      p.setAttribute("class", "sv-pulse");
+      layer.appendChild(txt(300, 108, "queued…", "sv-label"));
+      await sleep(3000);
+      p.setAttribute("class", "");
+      await fly(p, [300, 136], [536, 136], 700);
+      p.remove(); await work(true, "processed it — after you gave up");
+    } else if (f.key === "crashed") {
+      srect.setAttribute("class", "sv-bad"); sstate.textContent = "crashed";
+      await fly(p, [118, 136], [536, 136], 1000);
+      p.firstChild.setAttribute("class", "sv-fill-coral"); p.setAttribute("class", "sv-shake");
+      await sleep(500); p.remove();
+    } else if (f.key === "paused") {
+      srect.setAttribute("class", "sv-frozen"); sstate.textContent = "paused (GC)";
+      await fly(p, [118, 136], [536, 136], 900);
+      p.remove(); p.setAttribute("class", "");
+      await sleep(2600);
+      srect.setAttribute("class", "sv-server"); sstate.textContent = "awake again";
+      await work(true, "processed it — very late");
+      await reply(1000);
+    } else if (f.key === "replylost") {
+      await fly(p, [118, 136], [536, 136], 900);
+      p.remove();
+      await work(true, "processed it ✓");
+      const r = draw.parcel("sv-good", 15); layer.appendChild(r);
+      await fly(r, [536, 136], [330, 136], 700);
+      r.firstChild.setAttribute("class", "sv-fill-coral"); cross.style.opacity = 1;
+      await sleep(400); r.remove();
+    } else {
+      await fly(p, [118, 136], [536, 136], 900);
+      p.remove();
+      await work(true, "processed it ✓");
+      await reply(2600);
+    }
+    busy = false; sendBtn.disabled = false; revealBtn.disabled = false;
+    if (pick >= 0) reveal();
+  }
+  async function work(did, label) {
+    sstate.textContent = label;
+    srect.setAttribute("class", did ? "sv-good" : "sv-bad");
+    await sleep(320);
+  }
+  async function reply(ms) {
+    const r = draw.parcel("sv-good", 15); layer.appendChild(r);
+    await fly(r, [536, 136], [118, 136], ms);
+    r.remove();
+    verdict.textContent = "reply received ✓";
+    setPill("#s2-know", "warn", "you know: it worked (but you already gave up)");
+  }
+  function reveal() {
+    if (revealed) return;
+    revealed = true;
+    setCap("#s2-cap", "<b>What really happened:</b> " + truth + " From your side, every one of the six stories produced the very same silence.");
+  }
+  resetScene();
+  verdict.textContent = "not sent yet";
+})();
+
+/* ================= 3. CONGESTION AND QUEUEING ================= */
+(function congestion() {
+  const svg = K.$("#s3-svg");
+  const SENDERS = [[68, 76, "port 1"], [68, 150, "port 2"], [68, 224, "port 4"]];
+  SENDERS.forEach(([x, y, label]) => {
+    svg.append(box(x - 44, y - 20, 88, 40, "sv-server", 10), txt(x, y + 5, label, "sv-label"));
+    svg.appendChild(s("line", { x1: x + 46, y1: y, x2: 176, y2: y, class: "sv-wire" }));
+  });
+  svg.append(box(180, 44, 170, 230, "sv-panel", 14), txt(265, 34, "switch queue for port 3", "sv-label"));
+  const slots = [];
+  for (let i = 0; i < 8; i++) {
+    const y = 58 + i * 26;
+    svg.appendChild(box(196, y, 138, 20, "sv-panel", 6));
+    const f = s("rect", { x: 198, y: y + 2, width: 134, height: 16, rx: 5, class: "sv-data", style: { opacity: 0 } });
+    svg.appendChild(f); slots.push({ f, x: 265, y: y + 10 });
+  }
+  svg.appendChild(draw.arrow(352, 159, 432, 159));
+  svg.append(txt(392, 148, "one lane", "sv-label"),
+    box(440, 134, 104, 50, "sv-server", 10), txt(492, 164, "port 3", "sv-label"));
+  const delivered = txt(492, 204, "delivered: 0", "sv-label");
+  const droppedT = txt(182, 306, "dropped: 0", "sv-label", "start");
+  svg.append(delivered, droppedT);
+  /* delay chart */
+  svg.append(txt(400, 272, "delay of the last 14 packets (toy)", "sv-label", "start"));
+  [[0, 350, "0"], [1000, 320, "1 s"], [2000, 290, "2 s"]].forEach(([, y, label]) => {
+    svg.append(s("line", { x1: 400, y1: y, x2: 652, y2: y, class: "sv-wire", style: { opacity: 0.6 } }), txt(394, y + 4, label, "sv-label", "end"));
+  });
+  const bars = [];
+  for (let i = 0; i < 14; i++) {
+    const b = s("rect", { x: 402 + i * 18, y: 350, width: 13, height: 0, rx: 3, class: "sv-data" });
+    svg.appendChild(b); bars.push(b);
+  }
+  const layer = s("g"); svg.appendChild(layer);
+
+  const stQ = stat("In queue", 0), stDrop = stat("Dropped", 0), stLast = stat("Delay", "0 ms"), stWorst = stat("Worst", "0 ms");
+  K.$("#s3-stats").append(stQ, stDrop, stLast, stWorst);
+
+  let queue = [], inflight = 0, dropped = 0, delivCount = 0, senders = 1, burst = 0, acc = 0, drain = 0, hist = [], worst = 0;
+  const CAP = 8, SERVICE = 330;
+
+  function render() {
+    slots.forEach((sl, i) => sl.f.style.opacity = i < queue.length ? 1 : 0);
+    stQ.set(queue.length, queue.length >= CAP ? "bad" : queue.length > 4 ? "warn" : "");
+    stDrop.set(dropped, dropped ? "bad" : "");
+    delivered.textContent = "delivered: " + delivCount;
+    droppedT.textContent = "dropped: " + dropped;
+    hist.forEach((d, i) => {
+      const hgt = Math.min(72, d * 0.03);
+      bars[i].setAttribute("height", hgt);
+      bars[i].setAttribute("y", 350 - hgt);
+      bars[i].setAttribute("class", d > 1200 ? "sv-fill-coral" : d > 500 ? "sv-data" : "sv-fill-mint");
+    });
+    for (let i = hist.length; i < 14; i++) bars[i].setAttribute("height", 0);
+    setPill("#s3-pill", queue.length >= CAP ? "bad" : queue.length > 4 ? "warn" : "good",
+      queue.length >= CAP ? "queue full — dropping packets" : queue.length > 4 ? "queue building up" : "flowing freely");
+  }
+  async function arrive(from) {
+    if (queue.length + inflight >= CAP) {
+      dropped++;
+      const p = draw.parcel("sv-data", 13); layer.appendChild(p);
+      await fly(p, [SENDERS[from][0] + 46, SENDERS[from][1]], [265, 330], 520);
+      p.firstChild.setAttribute("class", "sv-fill-coral");
+      await sleep(180); p.remove(); render();
+      return;
+    }
+    inflight++;
+    const p = draw.parcel("sv-data", 13); layer.appendChild(p);
+    const target = slots[Math.min(CAP - 1, queue.length + inflight - 1)];
+    await fly(p, [SENDERS[from][0] + 46, SENDERS[from][1]], [target.x, target.y], 380);
+    p.remove(); inflight--;
+    queue.push({ t: performance.now() });
+    render();
+  }
+  async function serve() {
+    const pkt = queue.shift();
+    const d = performance.now() - pkt.t;
+    hist.push(d); if (hist.length > 14) hist.shift();
+    worst = Math.max(worst, d);
+    stLast.set(Math.round(d) + " ms", d > 1200 ? "bad" : d > 500 ? "warn" : "good");
+    stWorst.set(Math.round(worst) + " ms", worst > 1200 ? "bad" : "");
+    delivCount++;
+    render();
+    const p = draw.parcel("sv-good", 13); layer.appendChild(p);
+    await fly(p, [265, 160], [492, 159], 340);
+    p.remove();
+  }
+  const L = loop((dt) => {
+    const rate = (senders + burst) * 1.35 / 1000;
+    acc += dt * rate;
+    while (acc >= 1) { acc -= 1; arrive(rand(senders + (burst ? 3 - senders : 0)) % 3); }
+    drain += dt;
+    if (drain >= SERVICE) { drain = 0; if (queue.length) serve(); }
+  });
+  const ctr = K.$("#s3-controls");
+  let running = false;
+  const runBtn = btn(ctr, "Run", "primary", () => {
+    running = !running;
+    runBtn.textContent = running ? "Pause" : "Run";
+    if (running) L.start(); else L.stop();
+  });
+  ctr.appendChild(slider({
+    id: "s3-senders", label: "Senders at once", min: 1, max: 3, value: 1,
+    format: (v) => v + (v === 1 ? " machine" : " machines"),
+    onInput: (v) => {
+      senders = v;
+      setCap("#s3-cap", v === 1
+        ? "One sender: the link keeps up easily and every packet sails through."
+        : v === 2
+          ? "Two senders now share one outgoing link. The queue starts to hold packets, and delays climb."
+          : "Three machines all sending to <b>port 3</b>. The switch feeds them into one link one by one. This is <b>network congestion</b> — nothing is broken, packets are just waiting.");
+    },
+  }));
+  btn(ctr, "Burst!", "danger", async () => {
+    if (!running) { running = true; runBtn.textContent = "Pause"; L.start(); }
+    burst = 4;
+    setCap("#s3-cap", "A burst of traffic. When the queue is full, the switch has nowhere to put new packets, so it <b>drops</b> them — they'll have to be sent again, even though the network is working fine.");
+    await sleep(3200); burst = 0;
+  });
+  btn(ctr, "Reset", "", () => {
+    queue = []; dropped = 0; delivCount = 0; hist = []; worst = 0;
+    stLast.set("0 ms", ""); stWorst.set("0 ms", ""); render();
+  });
+  if (!K.reduced) { running = true; runBtn.textContent = "Pause"; }
+  whenVisible(svg, () => { if (running) L.start(); }, () => L.stop());
+  render();
+})();
+
+/* ================= 4. CHOOSING A TIMEOUT ================= */
+(function timeouts() {
+  const svg = K.$("#s4-svg");
+  const X0 = 70, X1 = 630, MAXMS = 4000;
+  const fx = (ms) => X0 + Math.min(ms, MAXMS) * (X1 - X0) / MAXMS;
+  svg.appendChild(s("line", { x1: X0, y1: 302, x2: X1, y2: 302, class: "sv-wire-solid" }));
+  for (let t = 0; t <= 4; t++) {
+    svg.append(s("line", { x1: fx(t * 1000), y1: 302, x2: fx(t * 1000), y2: 309, class: "sv-wire-solid" }),
+      txt(fx(t * 1000), 324, t === 0 ? "0" : t + " s", "sv-label"));
+  }
+  svg.appendChild(txt(350, 340, "how long the other node took to answer (toy milliseconds)", "sv-label"));
+  const rowsG = s("g"); svg.appendChild(rowsG);
+  const tline = s("line", { x1: 0, y1: 36, x2: 0, y2: 300, class: "sv-wire-solid", style: { stroke: "var(--coral)", strokeWidth: 2 } });
+  const tlabel = txt(0, 28, "timeout", "sv-label");
+  svg.append(tline, tlabel);
+  const stFalse = stat("False alarms", 0), stFound = stat("Dead found", 0), stWait = stat("Wait if dead", "0 ms"), stSlow = stat("Users waiting", 0);
+  K.$("#s4-stats").append(stFalse, stFound, stWait, stSlow);
+
+  let T = 800, busyDay = false, data = [];
+  function gen() {
+    data = [];
+    for (let i = 0; i < 20; i++) {
+      const dead = Math.random() < 0.15;
+      let ms;
+      const r = Math.random();
+      if (busyDay) ms = r < 0.5 ? 30 + rand(90) : r < 0.85 ? 300 + rand(900) : 1600 + rand(2600);
+      else ms = r < 0.82 ? 25 + rand(70) : r < 0.96 ? 220 + rand(560) : 1500 + rand(2400);
+      data.push({ dead, ms });
+    }
+    draw2();
+  }
+  function draw2() {
+    K.clear(rowsG);
+    let falses = 0, found = 0, slow = 0;
+    data.forEach((d, i) => {
+      const y = 44 + i * 12.6;
+      if (d.dead) {
+        rowsG.append(s("rect", { x: X0, y: y - 4, width: fx(T) - X0, height: 8, rx: 4, class: "sv-fill-coral", style: { opacity: 0.35 } }),
+          s("line", { x1: fx(T), y1: y - 6, x2: X1, y2: y - 6, class: "sv-wire", style: { stroke: "var(--coral)" } }));
+        found++;
+      } else {
+        const late = d.ms > T;
+        if (late) falses++; else if (d.ms > 200) slow++;
+        rowsG.appendChild(s("rect", { x: X0, y: y - 4, width: Math.max(2, fx(d.ms) - X0), height: 8, rx: 4, class: late ? "sv-fill-coral" : "sv-fill-mint" }));
+      }
+    });
+    tline.setAttribute("x1", fx(T)); tline.setAttribute("x2", fx(T));
+    tlabel.setAttribute("x", Math.min(X1 - 30, Math.max(X0 + 30, fx(T))));
+    tlabel.textContent = "timeout " + (T >= 1000 ? (T / 1000).toFixed(1) + " s" : T + " ms");
+    stFalse.set(falses, falses ? "bad" : "good");
+    stFound.set(found, "");
+    stWait.set(T >= 1000 ? (T / 1000).toFixed(1) + " s" : T + " ms", T > 2500 ? "warn" : "");
+    stSlow.set(slow, slow > 3 ? "warn" : "");
+    setPill("#s4-pill", falses >= 3 ? "bad" : falses > 0 ? "warn" : "good",
+      falses >= 3 ? "cascade risk: healthy nodes being buried" : falses > 0 ? falses + " healthy node(s) wrongly declared dead" : "no false alarms");
+    setCap("#s4-cap", falses >= 3
+      ? `A <b>${T} ms</b> timeout buried <b>${falses}</b> nodes that were alive, just slow. Their work now moves to the others, which makes those slower too — that's how a <b>cascading failure</b> starts.`
+      : falses > 0
+        ? `At <b>${T} ms</b> you wrongly declared <b>${falses}</b> live node(s) dead. If one of them was halfway through sending an email, that email may now be sent twice.`
+        : `At <b>${T} ms</b> nothing healthy got buried — but every genuinely dead node costs you a <b>${T} ms</b> wait before anyone notices.`);
+  }
+  const ctr = K.$("#s4-controls");
+  ctr.appendChild(slider({
+    id: "s4-timeout", label: "Timeout", min: 100, max: 4000, step: 50, value: 800,
+    format: (v) => (v >= 1000 ? (v / 1000).toFixed(2) + " s" : v + " ms"),
+    onInput: (v) => { T = v; draw2(); },
+  }));
+  btn(ctr, "Another day of traffic", "", gen);
+  ctr.appendChild(h("span", { class: "grow" }));
+  ctr.appendChild(seg(["Normal day", "Busy day"], 0, (i) => { busyDay = i === 1; gen(); }, "s4-day"));
+  gen();
+})();
+
+/* ================= 5. TWO KINDS OF CLOCK ================= */
+(function clocks() {
+  const svg = K.$("#s5-svg");
+  svg.append(txt(170, 42, "time-of-day clock (wall clock)", "sv-label"), txt(480, 42, "monotonic clock (stopwatch)", "sv-label"));
+  svg.append(s("circle", { cx: 170, cy: 160, r: 74, class: "sv-box" }));
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 - Math.PI / 2;
+    svg.appendChild(s("line", {
+      x1: 170 + Math.cos(a) * 62, y1: 160 + Math.sin(a) * 62,
+      x2: 170 + Math.cos(a) * 68, y2: 160 + Math.sin(a) * 68, class: "sv-wire-solid",
+    }));
+  }
+  const hMin = s("line", { x1: 170, y1: 160, x2: 170, y2: 108, class: "sv-wire-solid", style: { strokeWidth: 4, stroke: "var(--ink)" } });
+  const hSec = s("line", { x1: 170, y1: 160, x2: 170, y2: 100, class: "sv-wire-solid", style: { stroke: "var(--coral)" } });
+  svg.append(hMin, hSec, s("circle", { cx: 170, cy: 160, r: 4, class: "sv-fill-ink" }));
+  const todText = s("text", { x: 170, y: 268, class: "sv-label", "text-anchor": "middle", style: { fontSize: "16px", fill: "var(--ink)" } }, "14:32:00.00");
+  svg.appendChild(todText);
+  svg.append(box(392, 112, 176, 96, "sv-panel", 16));
+  const swText = s("text", { x: 480, y: 172, class: "sv-label", "text-anchor": "middle", style: { fontSize: "30px", fill: "var(--ink)", fontWeight: 700 } }, "0.00 s");
+  svg.appendChild(swText);
+  svg.appendChild(txt(480, 268, "counts only forward", "sv-label"));
+  const rTod = s("text", { x: 170, y: 300, class: "sv-label", "text-anchor": "middle" }, "");
+  const rMono = s("text", { x: 480, y: 300, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(rTod, rMono);
+  const glitchLabel = txt(330, 320, "", "sv-label");
+  svg.appendChild(glitchLabel);
+
+  const GLITCHES = [
+    { name: "nothing goes wrong", delta: 0, note: "" },
+    { name: "NTP resets the clock back 3 s", delta: -3, note: "the local clock was too far ahead, so it was forcibly reset backwards" },
+    { name: "a leap second repeats", delta: -1, note: "a minute with 61 seconds: the same second happens twice" },
+    { name: "the VM wakes up (+5 s jump)", delta: 5, note: "the VM was paused while another VM used the CPU; the clock jumps forward" },
+  ];
+  let g = 0, busy = false;
+  const ctr = K.$("#s5-controls");
+  K.$("#s5-seg").appendChild(seg(["Nothing", "NTP reset", "Leap second", "VM jump"], 0, (i) => { g = i; }, "s5-glitch"));
+  const runBtn = btn(ctr, "Time a 4-second job", "primary", run);
+
+  function paint(tod, mono) {
+    const secs = ((tod % 60) + 60) % 60;
+    const mins = 32 + Math.floor(tod / 60);
+    const a = (secs / 60) * Math.PI * 2 - Math.PI / 2;
+    hSec.setAttribute("x2", 170 + Math.cos(a) * 60); hSec.setAttribute("y2", 160 + Math.sin(a) * 60);
+    const am = ((mins % 60) / 60) * Math.PI * 2 - Math.PI / 2;
+    hMin.setAttribute("x2", 170 + Math.cos(am) * 52); hMin.setAttribute("y2", 160 + Math.sin(am) * 52);
+    todText.textContent = "14:" + String(((mins % 60) + 60) % 60).padStart(2, "0") + ":" + secs.toFixed(2).padStart(5, "0");
+    swText.textContent = mono.toFixed(2) + " s";
+  }
+  async function run() {
+    if (busy) return;
+    busy = true; runBtn.disabled = true;
+    rTod.textContent = ""; rMono.textContent = ""; glitchLabel.textContent = "";
+    const gl = GLITCHES[g];
+    let tod = 0, mono = 0, jumped = false;
+    const start = tod;
+    setCap("#s5-cap", "The job starts. Both clocks are read at the beginning, and both will be read at the end.");
+    await tween(3000, (t) => {
+      mono = t * 4;
+      tod = t * 4;
+      if (t > 0.5) tod += gl.delta;
+      if (t > 0.5 && !jumped && gl.delta !== 0) {
+        jumped = true;
+        glitchLabel.textContent = "⚡ " + gl.note;
+        setCap("#s5-cap", "Halfway through the job, <b>" + gl.name + "</b>. The stopwatch doesn't care — it was never synchronized with anything.");
+      }
+      paint(tod, mono);
+    }, ease.linear);
+    const todDur = tod - start, monoDur = mono;
+    const bad = Math.abs(todDur - 4) > 0.2;
+    rTod.textContent = "wall clock says: " + todDur.toFixed(2) + " s" + (bad ? "  ✗" : "  ✓");
+    rTod.style.fill = bad ? "var(--coral)" : "var(--mint)";
+    rMono.textContent = "stopwatch says: " + monoDur.toFixed(2) + " s  ✓";
+    rMono.style.fill = "var(--mint)";
+    setCap("#s5-cap", bad
+      ? `The job really took <b>4.00 s</b>. Subtracting two <b>time-of-day</b> readings gives <b>${todDur.toFixed(2)} s</b>${todDur < 0 ? " — a negative duration, which is impossible" : ""}. The <b>monotonic clock</b> got it right, because nothing is allowed to move it except forward.`
+      : "Both clocks agree this time. They will keep agreeing right up until the moment somebody adjusts the wall clock — which is exactly why durations belong to the <b>monotonic clock</b>.");
+    busy = false; runBtn.disabled = false;
+  }
+  paint(0, 0);
+})();
+
+/* ================= 6. CLOCK SKEW AND LAST WRITE WINS ================= */
+(function skew() {
+  const svg = K.$("#s6-svg");
+  const COL = [{ x: 120, name: "node 1", note: "clock 3 ms FAST" }, { x: 350, name: "node 3", note: "clock correct" }, { x: 580, name: "node 2", note: "clock correct" }];
+  COL.forEach((c) => {
+    svg.append(s("text", { x: c.x, y: 34, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700 } }, c.name),
+      txt(c.x, 52, c.note, "sv-label"),
+      s("line", { x1: c.x, y1: 64, x2: c.x, y2: 330, class: "sv-wire-solid", style: { opacity: 0.6 } }));
+  });
+  svg.appendChild(txt(36, 200, "time", "sv-label"));
+  svg.appendChild(draw.arrow(36, 96, 36, 300));
+  const vals = COL.map((c) => txt(c.x, 356, "x = —", "sv-label"));
+  vals.forEach((v) => svg.appendChild(v));
+  const layer = s("g"); svg.appendChild(layer);
+
+  let mode = 0, step = 0, busy = false;
+  const dot = (x, y, cls) => s("circle", { cx: x, cy: y, r: 6, class: cls || "sv-fill-sun" });
+
+  function setVal(i, v, tone) {
+    vals[i].textContent = "x = " + v;
+    vals[i].style.fill = tone === "bad" ? "var(--coral)" : tone === "good" ? "var(--mint)" : "";
+  }
+  const STAMPS = () => (mode === 0
+    ? { a: "ts 42.004", b: "ts 42.003" }
+    : { a: "v1 (node 1)", b: "v2 (after v1)" });
+
+  const STEPS = [
+    () => {
+      const t = STAMPS();
+      layer.append(dot(120, 110), txt(132, 106, "client A writes x = 1", "sv-label", "start"), txt(132, 124, t.a, "sv-label", "start"));
+      setVal(0, "1");
+      return "Client A writes <b>x = 1</b> on node 1. Node 1 stamps it with its own clock, which happens to run 3 ms fast: <b>" + t.a + "</b>.";
+    },
+    async () => {
+      const p = draw.tag("x = 1", "sv-data-soft"); layer.appendChild(p);
+      await fly(p, [120, 110], [350, 150], 700); p.remove();
+      layer.append(dot(350, 150), txt(362, 154, "copy of x = 1 arrives", "sv-label", "start"));
+      setVal(1, "1");
+      return "The write is replicated to node 3, carrying its timestamp along with it.";
+    },
+    () => {
+      const t = STAMPS();
+      layer.append(dot(350, 200), txt(362, 196, "client B: x = x + 1 → 2", "sv-label", "start"), txt(362, 214, t.b, "sv-label", "start"));
+      setVal(1, "2");
+      return mode === 0
+        ? "Client B reads x = 1 on node 3 and increments it to <b>2</b>. Node 3's clock is correct, so it stamps the write <b>" + t.b + "</b> — a <i>smaller</i> number than the write it is built on."
+        : "Client B increments x to <b>2</b> on node 3. With a <b>logical clock</b>, node 3 doesn't ask the time at all: it saw v1, so this write is <b>v2, which came after v1</b>.";
+    },
+    async () => {
+      const t = STAMPS();
+      const p = draw.tag("x=2 · " + t.b, "sv-data-soft"); layer.appendChild(p);
+      await fly(p, [350, 200], [580, 248], 700); p.remove();
+      layer.append(dot(580, 248), txt(568, 244, "x = 2 arrives", "sv-label", "end"), txt(568, 262, t.b, "sv-label", "end"));
+      setVal(2, "2");
+      return "Node 2 receives the increment: <b>x = 2</b>.";
+    },
+    async () => {
+      const t = STAMPS();
+      const p = draw.tag("x=1 · " + t.a, "sv-data-soft"); layer.appendChild(p);
+      await fly(p, [120, 110], [580, 300], 1000); p.remove();
+      layer.append(dot(580, 300), txt(568, 296, "x = 1 arrives (late)", "sv-label", "end"), txt(568, 314, t.a, "sv-label", "end"));
+      return "The <i>older</i> write finally reaches node 2 as well. Now node 2 must decide which one to keep.";
+    },
+    () => {
+      if (mode === 0) {
+        setVal(2, "1", "bad");
+        layer.appendChild(txt(580, 376, "42.004 > 42.003 → keeps x = 1", "sv-label"));
+        return "Node 2 applies <b>last write wins</b>: 42.004 is greater than 42.003, so it keeps <b>x = 1</b> and throws away the increment. The increment is <b>silently lost</b> — no error, no warning, just a missing write. All it took was <b>3 ms</b> of clock skew.";
+      }
+      setVal(2, "2", "good");
+      layer.appendChild(txt(580, 376, "v2 came after v1 → keeps x = 2", "sv-label"));
+      return "With <b>logical clocks</b>, node 2 doesn't compare seconds — it compares <i>what happened after what</i>. v2 was built on top of v1, so <b>x = 2</b> wins. Cause and effect survive.";
+    },
+  ];
+
+  function reset() {
+    K.clear(layer); step = 0;
+    vals.forEach((v, i) => setVal(i, "—"));
+    setCap("#s6-cap", mode === 0
+      ? "Time-of-day stickers, and node 1's clock is 3 ms fast. Press Step."
+      : "Logical clocks: counters that only record what came after what. Press Step.");
+  }
+  async function next() {
+    if (busy || step >= STEPS.length) return;
+    busy = true;
+    const msg = await STEPS[step++]();
+    setCap("#s6-cap", msg);
+    busy = false;
+    return step >= STEPS.length;
+  }
+  const ctr = K.$("#s6-controls");
+  const stepBtn = btn(ctr, "Step", "primary", next);
+  btn(ctr, "Play all", "", async () => {
+    if (busy) return;
+    reset();
+    while (step < STEPS.length) { await next(); await sleep(1300); }
+  });
+  btn(ctr, "Reset", "", reset);
+  K.$("#s6-seg").appendChild(seg(["Time-of-day + LWW", "Logical clock"], 0, (i) => { mode = i; reset(); }, "s6-mode"));
+  reset();
+})();
+
+/* ================= 6b. CONFIDENCE INTERVALS ================= */
+(function truetime() {
+  const svg = K.$("#s7-svg");
+  const X0 = 70, X1 = 620, MS = 24;
+  const fx = (ms) => X0 + ms * (X1 - X0) / MS;
+  svg.appendChild(s("line", { x1: X0, y1: 190, x2: X1, y2: 190, class: "sv-wire-solid" }));
+  for (let t = 0; t <= 24; t += 4) {
+    svg.append(s("line", { x1: fx(t), y1: 190, x2: fx(t), y2: 197, class: "sv-wire-solid" }), txt(fx(t), 212, t + "", "sv-label"));
+  }
+  svg.appendChild(txt(345, 234, "milliseconds past the second (toy)", "sv-label"));
+  const barA = s("rect", { x: 0, y: 66, width: 0, height: 26, rx: 13, class: "sv-server" });
+  const barB = s("rect", { x: 0, y: 116, width: 0, height: 26, rx: 13, class: "sv-db" });
+  const labA = txt(0, 58, "transaction A", "sv-label", "start");
+  const labB = txt(0, 160, "transaction B", "sv-label", "start");
+  const midA = txt(0, 84, "", "sv-label"), midB = txt(0, 134, "", "sv-label");
+  svg.append(barA, barB, labA, labB, midA, midB);
+  let u = 1, waited = false;
+  function render() {
+    const aC = 7, bC = waited ? aC + 2 * u + 1.5 : 11;
+    const a0 = aC - u, a1 = aC + u, b0 = bC - u, b1 = bC + u;
+    barA.setAttribute("x", fx(a0)); barA.setAttribute("width", Math.max(6, fx(a1) - fx(a0)));
+    barB.setAttribute("x", fx(b0)); barB.setAttribute("width", Math.max(6, fx(b1) - fx(b0)));
+    labA.setAttribute("x", fx(a0)); labB.setAttribute("x", fx(b0));
+    midA.setAttribute("x", (fx(a0) + fx(a1)) / 2); midA.textContent = "[" + a0.toFixed(1) + ", " + a1.toFixed(1) + "]";
+    midB.setAttribute("x", (fx(b0) + fx(b1)) / 2); midB.textContent = "[" + b0.toFixed(1) + ", " + b1.toFixed(1) + "]";
+    const overlap = b0 < a1;
+    setPill("#s7-pill", overlap ? "bad" : "good", overlap ? "order unknown — blobs overlap" : "B definitely after A");
+    setCap("#s7-cap", overlap
+      ? `With ±${u.toFixed(1)} ms of uncertainty the two blobs overlap, so nobody can say which transaction really came first. A database that needs a correct order <b>must not</b> guess here.`
+      : waited
+        ? `Spanner's trick: after picking its timestamp, transaction B <b>waits out the confidence interval</b> before committing. Now the blobs can't overlap, so B is definitely after A — bought with a short wait, not a stronger promise.`
+        : `The blobs don't touch: A's latest possible time is still earlier than B's earliest possible time, so <b>B definitely happened after A</b>.`);
+  }
+  const ctr = K.$("#s7-controls");
+  ctr.appendChild(slider({
+    id: "s7-unc", label: "Clock uncertainty", min: 1, max: 8, step: 0.5, value: 1,
+    format: (v) => "±" + v + " ms",
+    onInput: (v) => { u = v; render(); },
+  }));
+  btn(ctr, "Commit wait (Spanner)", "good", () => { waited = true; render(); });
+  btn(ctr, "Reset", "", () => { waited = false; render(); });
+  render();
+})();
+
+/* ================= 7. PROCESS PAUSES ================= */
+(function pauses() {
+  const svg = K.$("#s8-svg");
+  const aRect = box(80, 74, 140, 100, "sv-server", 14);
+  const aState = txt(150, 130, "handling requests", "sv-label");
+  svg.append(aRect, txt(150, 100, "node A (leader)", "sv-label"), aState, txt(150, 192, "A's own clock", "sv-label"));
+  const aClock = s("text", { x: 150, y: 216, class: "sv-label", "text-anchor": "middle", style: { fontSize: "15px", fill: "var(--ink)" } }, "0.0 s");
+  svg.appendChild(aClock);
+  svg.append(txt(600, 40, "world clock", "sv-label", "end"));
+  const wClock = s("text", { x: 600, y: 64, class: "sv-label", "text-anchor": "end", style: { fontSize: "15px", fill: "var(--ink)" } }, "0.0 s");
+  svg.appendChild(wClock);
+  const fol = [{ y: 120, name: "node B" }, { y: 230, name: "node C" }].map((f) => {
+    const r = box(480, f.y - 34, 130, 68, "sv-server", 12);
+    const st = txt(545, f.y + 14, "hearing from A", "sv-label");
+    svg.append(r, txt(545, f.y - 10, f.name, "sv-label"), st);
+    return { r, st, y: f.y };
+  });
+  const beat = s("g"); svg.appendChild(beat);
+  svg.append(txt(60, 262, "A's lease", "sv-label", "start"));
+  const leaseBg = box(60, 270, 330, 18, "sv-panel", 9);
+  const leaseFg = s("rect", { x: 60, y: 270, width: 330, height: 18, rx: 9, class: "sv-fill-mint" });
+  const leaseTxt = txt(400, 284, "10.0 s left", "sv-label", "start");
+  svg.append(leaseBg, leaseFg, leaseTxt);
+  const patienceTxt = txt(545, 300, "followers' patience: 6.0 s", "sv-label");
+  svg.appendChild(patienceTxt);
+
+  const stW = stat("World", "0 s"), stA = stat("A thinks", "0 s"), stLease = stat("Lease", "10.0 s"), stLead = stat("Leaders", 1);
+  K.$("#s8-stats").append(stW, stA, stLease, stLead);
+
+  const LEASE = 10, PATIENCE = 6;
+  let world = 0, own = 0, lease = LEASE, silence = 0, paused = 0, holdPaused = false, leaderB = false, zombie = false;
+  function render() {
+    wClock.textContent = world.toFixed(1) + " s";
+    aClock.textContent = own.toFixed(1) + " s";
+    const frac = Math.max(0, lease) / LEASE;
+    leaseFg.setAttribute("width", 330 * frac);
+    leaseFg.setAttribute("class", lease <= 0 ? "sv-fill-coral" : frac < 0.35 ? "sv-fill-sun" : "sv-fill-mint");
+    leaseTxt.textContent = lease > 0 ? lease.toFixed(1) + " s left" : "EXPIRED";
+    patienceTxt.textContent = leaderB ? "followers: A is dead — B is the new leader" : "followers' patience: " + Math.max(0, PATIENCE - silence).toFixed(1) + " s";
+    stW.set(world.toFixed(0) + " s", ""); stA.set(own.toFixed(0) + " s", paused > 0 ? "warn" : "");
+    stLease.set(lease > 0 ? lease.toFixed(1) + " s" : "expired", lease > 0 ? "" : "bad");
+    stLead.set(zombie ? 2 : 1, zombie ? "bad" : "good");
+    setPill("#s8-pill", zombie ? "bad" : paused > 0 ? "warn" : "good",
+      zombie ? "split brain: two leaders!" : paused > 0 ? "node A is frozen" : leaderB ? "node B leads" : "one leader");
+  }
+  const L = loop((dt) => {
+    const d = dt / 500; /* 1 toy second per 500 ms */
+    world += d;
+    if (paused > 0) {
+      paused -= holdPaused ? 0 : d;
+      silence += d;
+      lease -= d;
+      if (paused <= 0 && !holdPaused) resume();
+    } else {
+      own += d;
+      silence = 0;
+      lease -= d;
+      if (lease < 4 && !leaderB) lease = LEASE;
+      if (Math.random() < dt / 600) heartbeat();
+    }
+    if (!leaderB && silence >= PATIENCE) promote();
+    render();
+  });
+  async function heartbeat() {
+    const f = fol[rand(2)];
+    const p = draw.parcel("sv-data", 10); beat.appendChild(p);
+    await fly(p, [224, 124], [474, f.y], 600); p.remove();
+  }
+  function promote() {
+    leaderB = true;
+    fol[0].r.setAttribute("class", "sv-good"); fol[0].st.textContent = "I am the leader now";
+    fol[1].st.textContent = "voted for B";
+    setCap("#s8-cap", "<b>" + PATIENCE + " toy seconds</b> of silence and the followers give up on A. They elect node <b>B</b> as the new leader. Node A has no idea any of this happened.");
+  }
+  function pause(sec, hold) {
+    paused = sec; holdPaused = !!hold;
+    aRect.setAttribute("class", "sv-frozen");
+    aState.textContent = hold ? "stopped (SIGSTOP)" : "frozen";
+    setCap("#s8-cap", hold
+      ? "Someone pressed <b>Ctrl-Z</b>. Node A gets no CPU at all until it is resumed — and its own clock is standing still."
+      : "Node A is frozen for <b>" + sec + " toy seconds</b>. Its own clock has stopped, but the world's clock and the <b>lease</b> keep running down.");
+    render();
+  }
+  function resume() {
+    paused = 0; holdPaused = false;
+    aRect.setAttribute("class", leaderB ? "sv-bad" : "sv-server");
+    aState.textContent = leaderB ? "“still my turn!”" : "handling requests";
+    if (leaderB) {
+      zombie = true;
+      setCap("#s8-cap", "Node A wakes up and carries on exactly where it left off — it never noticed the nap. It still believes it holds the lease, so now <b>two nodes think they are the leader</b>. That is <b>split brain</b>, and it is how files get corrupted. The next scene fixes it.");
+    } else {
+      setCap("#s8-cap", "A short pause: node A woke up before its lease expired and before the followers lost patience. This time, no harm done. <b>Nothing warned it</b> that it had been away.");
+    }
+    render();
+  }
+  function reset() {
+    world = 0; own = 0; lease = LEASE; silence = 0; paused = 0; holdPaused = false; leaderB = false; zombie = false;
+    aRect.setAttribute("class", "sv-server"); aState.textContent = "handling requests";
+    fol[0].r.setAttribute("class", "sv-server"); fol[0].st.textContent = "hearing from A"; fol[1].st.textContent = "hearing from A";
+    setCap("#s8-cap", "Node A is the leader again, renewing its lease as it works.");
+    render();
+  }
+  const ctr = K.$("#s8-controls");
+  btn(ctr, "GC pause · 3 s", "", () => pause(3));
+  btn(ctr, "GC pause · 12 s", "danger", () => pause(12));
+  btn(ctr, "SIGSTOP (hold)", "danger", () => pause(99, true));
+  btn(ctr, "Resume", "good", () => { if (paused > 0 || holdPaused) resume(); });
+  btn(ctr, "Step 1 s", "", () => { const d = 1; world += d; if (paused > 0) { silence += d; lease -= d; } else { own += d; lease -= d; } if (!leaderB && silence >= PATIENCE) promote(); render(); });
+  btn(ctr, "Reset", "", reset);
+  whenVisible(svg, () => { if (!K.reduced) L.start(); }, () => L.stop());
+  render();
+})();
+
+/* ================= 8. FENCING TOKENS ================= */
+(function fencing() {
+  const svg = K.$("#s9-svg");
+  svg.append(box(250, 32, 180, 56, "sv-panel", 12), txt(340, 56, "lock service", "sv-label"), txt(340, 74, "hands out lease + token", "sv-label"));
+  const c1 = box(40, 120, 150, 80, "sv-server", 12), c1s = txt(115, 176, "idle", "sv-label");
+  const c2 = box(40, 232, 150, 80, "sv-server", 12), c2s = txt(115, 288, "idle", "sv-label");
+  svg.append(c1, txt(115, 150, "client 1", "sv-label"), c1s, c2, txt(115, 262, "client 2", "sv-label"), c2s);
+  svg.append(box(470, 120, 190, 190, "sv-db", 14), txt(565, 150, "storage service", "sv-label"));
+  const fileTxt = s("text", { x: 565, y: 196, class: "sv-label", "text-anchor": "middle", style: { fontSize: "18px", fill: "var(--ink)" } }, "file: (empty)");
+  const highTxt = txt(565, 230, "highest token seen: —", "sv-label");
+  const checkTxt = txt(565, 268, "", "sv-label");
+  svg.append(fileTxt, highTxt, checkTxt);
+  const layer = s("g"); svg.appendChild(layer);
+
+  let fenced = true, step = 0, busy = false, high = null, file = "(empty)";
+  function paint() {
+    fileTxt.textContent = "file: " + file;
+    fileTxt.style.fill = file.indexOf("+") >= 0 ? "var(--coral)" : "var(--ink)";
+    highTxt.textContent = fenced ? "highest token seen: " + (high == null ? "—" : high) : "not checking tokens";
+  }
+  const STEPS = [
+    async () => {
+      const t = draw.tag("token 33", "sv-data-soft"); layer.appendChild(t);
+      await fly(t, [340, 60], [115, 160], 700); t.remove();
+      c1.setAttribute("class", "sv-good"); c1s.textContent = "holds the lease · token 33";
+      return "The lock service grants the lease to <b>client 1</b> along with a <b>fencing token</b>: the number <b>33</b>. Every lease gets a bigger number than the last.";
+    },
+    async () => {
+      c1.setAttribute("class", "sv-frozen"); c1s.textContent = "frozen (GC pause)";
+      return "Client 1 freezes in a long garbage-collection pause, right before it was going to write. It has no idea it stopped.";
+    },
+    async () => {
+      c1s.textContent = "still frozen · lease expired";
+      const t = draw.tag("token 34", "sv-data-soft"); layer.appendChild(t);
+      await fly(t, [340, 60], [115, 272], 700); t.remove();
+      c2.setAttribute("class", "sv-good"); c2s.textContent = "holds the lease · token 34";
+      return "Client 1's lease expires. The lock service hands the lease to <b>client 2</b> with token <b>34</b> — the number always goes up.";
+    },
+    async () => {
+      const t = draw.tag("write B · 34", "sv-data-soft"); layer.appendChild(t);
+      await fly(t, [190, 272], [466, 215], 800); t.remove();
+      high = 34; file = "B";
+      checkTxt.textContent = fenced ? "34 ≥ 34 → accepted ✓" : "accepted ✓";
+      checkTxt.style.fill = "var(--mint)";
+      paint();
+      return "Client 2 writes <b>B</b>, carrying token <b>34</b>. The storage service accepts it and remembers the token.";
+    },
+    async () => {
+      c1.setAttribute("class", "sv-bad"); c1s.textContent = "awake — and still thinks it's in charge";
+      return "Client 1 wakes up. From its point of view no time has passed at all: it is a <b>zombie</b>, an old leaseholder that hasn't found out it was replaced.";
+    },
+    async () => {
+      const t = draw.tag("write A · 33", "sv-data-soft"); layer.appendChild(t);
+      await fly(t, [190, 160], [466, 190], 800);
+      if (fenced) {
+        t.firstChild.setAttribute("class", "sv-bad"); t.setAttribute("class", "sv-shake");
+        checkTxt.textContent = "33 < 34 → REJECTED"; checkTxt.style.fill = "var(--coral)";
+        await sleep(500); t.remove(); paint();
+        return "The storage service compares tokens: <b>33 is smaller than 34</b>, so the zombie's write is <b>rejected</b>. The file is safe. Note that nobody had to detect the zombie or shut it down — its message was simply made harmless.";
+      }
+      t.remove(); file = "A + B (corrupted)";
+      checkTxt.textContent = "no token to check → accepted"; checkTxt.style.fill = "var(--coral)";
+      paint();
+      return "With no fencing token, the storage service has no way to know this write is stale. Both clients wrote to the same file and it is now <b>corrupted</b> — this is a real bug HBase used to have.";
+    },
+  ];
+  function reset() {
+    K.clear(layer); step = 0; high = null; file = "(empty)"; checkTxt.textContent = "";
+    c1.setAttribute("class", "sv-server"); c2.setAttribute("class", "sv-server");
+    c1s.textContent = "idle"; c2s.textContent = "idle";
+    paint();
+    setCap("#s9-cap", fenced ? "Fencing is <b>on</b>: storage only accepts an increasing token. Press Step." : "Fencing is <b>off</b>: storage accepts any write from anyone. Press Step.");
+  }
+  async function next() {
+    if (busy || step >= STEPS.length) return;
+    busy = true;
+    setCap("#s9-cap", await STEPS[step++]());
+    busy = false;
+  }
+  const ctr = K.$("#s9-controls");
+  btn(ctr, "Step", "primary", next);
+  btn(ctr, "Play all", "", async () => { if (busy) return; reset(); while (step < STEPS.length) { await next(); await sleep(1200); } });
+  btn(ctr, "Reset", "", reset);
+  K.$("#s9-seg").appendChild(seg(["Fencing on", "Fencing off"], 0, (i) => { fenced = i === 0; reset(); }, "s9-mode"));
+  reset();
+})();
+
+/* ================= 9a. THE MAJORITY RULES ================= */
+(function majority() {
+  const svg = K.$("#s10-svg");
+  const P = [[330, 58], [470, 120], [412, 228], [248, 228], [190, 120]];
+  const names = ["A", "B", "C", "D", "E"];
+  const nodes = P.map(([x, y], i) => {
+    const r = box(x - 38, y - 27, 76, 54, "sv-server", 11);
+    const st = txt(x, y + 16, "healthy", "sv-label");
+    svg.append(r, txt(x, y - 6, "node " + names[i], "sv-label"), st);
+    return { r, st, x, y };
+  });
+  svg.append(box(272, 128, 116, 46, "sv-panel", 10));
+  const tally = txt(330, 148, "votes: 0 of 5", "sv-label");
+  svg.append(tally, txt(330, 166, "majority = 3", "sv-label"));
+  const bubble = draw.bubble(190, 92, 80, [6, 654]);
+  svg.appendChild(bubble);
+  const layer = s("g"); svg.appendChild(layer);
+  const verdict = txt(330, 288, "", "sv-label");
+  svg.appendChild(verdict);
+
+  let fault = "none", busy = false;
+  function reset() {
+    fault = "none"; K.clear(layer); bubble.say(""); verdict.textContent = "";
+    tally.textContent = "votes: 0 of 5";
+    nodes.forEach((n) => { n.r.setAttribute("class", "sv-server"); n.st.textContent = "healthy"; });
+    setPill("#s10-pill", "good", "all healthy");
+    setCap("#s10-cap", "Five nodes, all fine. Break node E and then take a vote.");
+  }
+  function breakE(kind) {
+    fault = kind;
+    nodes[4].r.setAttribute("class", kind === "pause" ? "sv-frozen" : "sv-server");
+    nodes[4].st.textContent = kind === "pause" ? "frozen" : "can hear, can't shout";
+    setPill("#s10-pill", "warn", kind === "pause" ? "node E is paused" : "node E's replies are dropped");
+    setCap("#s10-cap", kind === "pause"
+      ? "Node E is paused. It isn't answering anything — but it isn't broken either, and it will wake up later."
+      : "An <b>asymmetric fault</b>: node E receives every message perfectly, but all of its outgoing replies are dropped. E is working fine and can do nothing about it.");
+  }
+  async function vote() {
+    if (busy) return;
+    if (fault === "none") { setCap("#s10-cap", "Break node E first — otherwise everyone can hear everyone and there's nothing to vote about."); return; }
+    busy = true; K.clear(layer); verdict.textContent = "";
+    let count = 0;
+    for (let i = 0; i < 4; i++) {
+      const t = draw.tag("E is dead", "sv-bad"); layer.appendChild(t);
+      await fly(t, [nodes[i].x, nodes[i].y], [330, 151], 520);
+      t.remove(); count++;
+      tally.textContent = "votes: " + count + " of 5";
+      await sleep(80);
+    }
+    if (fault === "cut") { bubble.say("I'm not dead!"); }
+    nodes[4].r.setAttribute("class", "sv-bad"); nodes[4].st.textContent = "declared dead";
+    verdict.textContent = "4 of 5 ≥ 3 → E must step down";
+    verdict.style.fill = "var(--coral)";
+    setPill("#s10-pill", "bad", "quorum has spoken: E is out");
+    setCap("#s10-cap", fault === "cut"
+      ? "Four nodes out of five voted, which is more than half — a <b>quorum</b>. Node E is perfectly healthy and is shouting “I'm not dead!”, but nobody can hear it, so it must accept the verdict and step down. <b>A node cannot trust its own judgment of itself.</b>"
+      : "The paused node gets the same treatment. When it wakes up it will discover that the world moved on. Because a majority is <i>more than half</i>, there can never be two conflicting majorities — that's what makes quorum decisions safe.");
+    busy = false;
+  }
+  const ctr = K.$("#s10-controls");
+  btn(ctr, "Cut E's outgoing messages", "danger", () => breakE("cut"));
+  btn(ctr, "Pause node E", "danger", () => breakE("pause"));
+  btn(ctr, "Take a vote", "primary", vote);
+  btn(ctr, "Reset", "", reset);
+  reset();
+})();
+
+/* ================= 9b. BYZANTINE GENERALS ================= */
+(function byzantine() {
+  const svg = K.$("#s11-svg");
+  const X = [92, 254, 416, 578];
+  const gens = X.map((x, i) => {
+    const r = box(x - 66, 58, 132, 64, "sv-server", 12);
+    const role = txt(x, 102, "loyal", "sv-label");
+    const heard = txt(x, 150, "heard: —", "sv-label");
+    const decide = txt(x, 172, "", "sv-label");
+    svg.append(r, txt(x, 82, "general " + (i + 1), "sv-label"), role, heard, decide);
+    return { r, role, heard, decide, x };
+  });
+  svg.appendChild(txt(335, 36, "everybody must agree: attack or retreat?", "sv-label"));
+  const layer = s("g"); svg.appendChild(layer);
+  const verdict = txt(335, 216, "", "sv-label");
+  svg.appendChild(verdict);
+
+  let traitors = 0, busy = false;
+  function paint() {
+    gens.forEach((g, i) => {
+      const bad = i >= 4 - traitors;
+      g.role.textContent = bad ? "TRAITOR" : "loyal";
+      g.r.setAttribute("class", bad ? "sv-bad" : "sv-server");
+      g.heard.textContent = "heard: —"; g.decide.textContent = ""; g.decide.style.fill = "";
+    });
+    verdict.textContent = "";
+    setPill("#s11-pill", traitors === 0 ? "good" : traitors === 1 ? "warn" : "bad",
+      traitors === 0 ? "4 loyal, 0 traitors" : traitors + " traitor" + (traitors > 1 ? "s" : "") + " of 4");
+  }
+  async function send() {
+    if (busy) return;
+    busy = true; K.clear(layer);
+    const votes = gens.map(() => []);
+    for (let from = 0; from < 4; from++) {
+      const traitor = from >= 4 - traitors;
+      for (let to = 0; to < 4; to++) {
+        if (to === from) continue;
+        const word = traitor ? (to % 2 === 0 ? "attack" : "retreat") : "attack";
+        votes[to].push(word);
+      }
+    }
+    for (let from = 0; from < 4; from++) {
+      const traitor = from >= 4 - traitors;
+      const flights = [];
+      for (let to = 0; to < 4; to++) {
+        if (to === from) continue;
+        const word = traitor ? (to % 2 === 0 ? "attack" : "retreat") : "attack";
+        const t = draw.tag(word, word === "attack" ? "sv-good" : "sv-bad");
+        layer.appendChild(t);
+        flights.push(fly(t, [gens[from].x, 122], [gens[to].x, 146], 560).then(() => t.remove()));
+      }
+      await Promise.all(flights);
+    }
+    const decisions = [];
+    gens.forEach((g, i) => {
+      const loyal = i < 4 - traitors;
+      const all = votes[i].concat(loyal ? ["attack"] : []);
+      const a = all.filter((v) => v === "attack").length, r = all.length - a;
+      g.heard.textContent = "heard: " + a + " attack, " + r + " retreat";
+      if (!loyal) { g.decide.textContent = "(lies to everyone)"; return; }
+      const d = a > r ? "attack" : a < r ? "retreat" : "can't tell";
+      decisions.push(d);
+      g.decide.textContent = "→ " + d;
+      g.decide.style.fill = d === "attack" ? "var(--mint)" : "var(--coral)";
+    });
+    const agreed = decisions.every((d) => d === decisions[0]) && decisions[0] !== "can't tell";
+    verdict.textContent = agreed ? "every loyal general chose the same plan ✓" : "the loyal generals disagree ✗";
+    verdict.style.fill = agreed ? "var(--mint)" : "var(--coral)";
+    setPill("#s11-pill", agreed ? "good" : "bad", agreed ? "agreement holds" : "agreement broken");
+    setCap("#s11-cap", traitors === 0
+      ? "Everyone says the same thing to everyone. Agreement is easy when nodes are <b>unreliable but honest</b> — which is what almost every datacenter system assumes."
+      : traitors === 1
+        ? "The traitor whispers “attack” to some and “retreat” to others, but the three loyal generals still outvote the lie and pick the same plan. With four nodes, <b>one</b> Byzantine fault can be tolerated."
+        : "Two traitors out of four is too many: the loyal generals' tallies tie, and they can no longer be sure of each other. Byzantine algorithms generally need a <b>supermajority of more than two-thirds</b> of nodes to be behaving correctly.");
+    busy = false;
+  }
+  const ctr = K.$("#s11-controls");
+  ctr.appendChild(seg(["All loyal", "1 traitor", "2 traitors"], 0, (i) => { traitors = i; paint(); setCap("#s11-cap", i === 0 ? "Everyone is loyal. Send the messages." : "Send the messages and watch what the traitor tells each general."); }, "s11-traitors"));
+  btn(ctr, "Send the messages", "primary", send);
+  btn(ctr, "Reset", "", paint);
+  paint();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "Your request to another node times out. What have you learned?", options: ["The node is definitely dead", "The request definitely never arrived", "Only that no reply has come back yet", "The network is definitely broken"], answer: 2, why: "A lost request, a crashed node, a paused node and a lost reply all look identical from outside. The work may even still happen after you give up." },
+  { q: "Three machines send packets to the same machine at once. What usually makes the packets slow?", options: ["The cables get tired", "They queue up in the switch waiting for the one shared link", "The clocks drift apart", "TCP encrypts them"], answer: 1, why: "Variable network delay is mostly queueing: in the switch, in the operating system, in the VM monitor, and at the sender inside TCP." },
+  { q: "You want to measure how long a request took. Which clock?", options: ["The time-of-day clock, because it knows the date", "The monotonic clock, because it only moves forward", "Whichever one is faster to read", "Neither — ask an NTP server each time"], answer: 1, why: "Time-of-day clocks can jump backwards on an NTP reset or a leap second, which can produce negative durations. Monotonic clocks are stopwatches." },
+  { q: "Node 1's clock is 3 ms fast. A later write gets a smaller timestamp than the write it was built on. Under last-write-wins, what happens?", options: ["The database raises an error", "The later write is silently dropped", "Both values are kept", "The clocks resynchronize automatically"], answer: 1, why: "LWW keeps the greatest timestamp, so the causally later write disappears with no warning. Logical clocks record what came after what instead." },
+  { q: "A paused leader wakes up and sends a write, but its lease expired and someone else took over. What makes that write harmless?", options: ["Shutting the old leader down (STONITH)", "A longer lease", "A fencing token the storage service checks", "Retrying the write"], answer: 2, why: "The storage service remembers the highest token it has seen and rejects anything smaller. Shooting the node down doesn't help against a write already delayed in the network." },
+  { q: "What is a Byzantine fault?", options: ["A node that crashes and never returns", "A node that is slow because of garbage collection", "A node that lies, for example sending contradictory votes", "A network cable chewed by a beaver"], answer: 2, why: "Byzantine faults are arbitrary or deceptive behaviour. Most datacenter systems assume nodes are unreliable but honest, because tolerating liars is expensive and needs more than two-thirds of nodes to be correct." },
+], 9);
+</script>
+</body>
+</html>

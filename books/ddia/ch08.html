@@ -1,0 +1,1568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 8 · Transactions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box { stroke: var(--blue); }
+  .sv-ghost { fill: var(--coral-soft); stroke: var(--coral); stroke-width: 2; stroke-dasharray: 6 4; }
+  .dim { opacity: .28; }
+  .fade { transition: opacity .3s; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .lvl { min-width: 620px; display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr 1fr 1fr; gap: 6px; padding: 14px; }
+  .lvl > div { font-size: 13.5px; padding: 8px 10px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--line); }
+  .lvl > div.hd { background: transparent; border: 0; font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .lvl > div.name { font-weight: 700; background: var(--surface); }
+  .lvl > div.ok { background: var(--mint-soft); border-color: transparent; }
+  .lvl > div.no { background: var(--coral-soft); border-color: transparent; }
+  .lvl > div.maybe { background: var(--sun-soft); border-color: transparent; }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">8</span> Chapter eight</span>
+      <h1>Transactions</h1>
+      <p class="lede">A transaction is a promise: “these changes all happen together, or none of them happen at all.” It is how a database keeps its word when computers crash and everybody writes at once.</p>
+      <p class="quote">“We believe it is better to have application programmers deal with performance problems due to overuse of transactions as bottlenecks arise, rather than always coding around the lack of transactions.” — James Corbett et al., “Spanner: Google’s Globally-Distributed Database” (2012)</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#allornothing">All or nothing</a>
+        <a href="#acid">ACID</a>
+        <a href="#multi">One thing or many</a>
+        <a href="#readcommitted">Read committed</a>
+        <a href="#snapshot">Snapshot isolation</a>
+        <a href="#lost">Lost updates</a>
+        <a href="#skew">Write skew</a>
+        <a href="#serial">One at a time</a>
+        <a href="#twopl">Two-phase locking</a>
+        <a href="#ssi">SSI</a>
+        <a href="#twopc">Two-phase commit</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · one transfer, two writes</span><span class="pill info"><i></i>tap CRASH to pull the plug</span></div>
+      <svg id="hero-svg" viewBox="0 0 520 390" role="img" aria-label="Money moves between two accounts inside one transaction; a crash rolls everything back"></svg>
+    </div>
+  </section>
+
+  <!-- ============ 1. ALL OR NOTHING ============ -->
+  <section class="scene" id="allornothing">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 1 · what a transaction is</span>
+        <h2>The vending machine that never eats your coin</h2>
+        <p class="story">Moving $100 from Alice to Bob is really <b>two</b> changes: take money off one line, add it to the other. If the power dies in between, the money is gone from the world.</p>
+        <p class="story">So the database lets you wrap both changes in one <b>transaction</b>. Either the whole thing <b>commits</b>, or it <b>aborts</b> and every write is thrown away — like a vending machine that gives your coin back when the snack gets stuck.</p>
+        <p class="story">That is the whole trick: because an abort changes nothing, you can safely just <b>try again</b>.</p>
+        <p class="imagine"><b>Try it:</b> crash the transfer with transactions <b>on</b>, then switch them <b>off</b> and crash it again. Watch the total.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A <b>transaction</b> groups several reads and writes into one logical unit. It either <b>commits</b>, or it <b>aborts</b> (rolls back) and the database discards every write it made.</p>
+            <p><b>ACID atomicity</b> is not about concurrency — that's the “I”. It describes what happens when a fault occurs partway through: process crash, network interruption, full disk, constraint violation. The book notes that “<b>abortability</b>” would have been a better word than atomicity.</p>
+            <p>Retrying an aborted transaction is simple and effective, but imperfect: a commit acknowledgment lost in the network causes a double-run unless you deduplicate; retrying under contention makes overload worse (use limited retries and exponential backoff); permanent errors like constraint violations should not be retried; and side effects outside the database, such as sending an email, still happen.</p>
+            <p>ORMs such as Rails ActiveRecord and Django don't retry aborted transactions — the error just bubbles up, which wastes the whole point of rollback.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Bank transfer</span><div class="stats" id="s1-stats"></div></div>
+        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 640 280" role="img" aria-label="An app writes two rows in a bank database"></svg></div>
+        <div class="controls" id="s1-ctrl"></div>
+        <div class="caption" id="s1-cap" aria-live="polite">Pick a mode, then send a transfer.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. ACID ============ -->
+  <section class="scene" id="acid">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 2 · the four letters</span>
+        <h2>Four promises on the fridge door</h2>
+        <p class="story">People say a database is <b>ACID</b>: <b>a</b>tomicity, <b>c</b>onsistency, <b>i</b>solation, <b>d</b>urability. Four promises, coined in 1983 to give fault tolerance some precise words.</p>
+        <p class="story">Three of them are the database's job. One of them — consistency — is mostly <i>yours</i>: only you know that credits must equal debits. And “ACID compliant” on a box tells you surprisingly little, because everyone implements isolation differently.</p>
+        <p class="imagine"><b>Try it:</b> tap each letter and press <b>Show me</b>. Which promise is the odd one out?</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <ul>
+              <li><b>Atomicity:</b> if a fault happens partway, the transaction aborts and its writes are discarded. The all-or-nothing guarantee.</li>
+              <li><b>Consistency:</b> application-specific <b>invariants</b> stay true. The database can enforce some as <b>constraints</b> (foreign keys, uniqueness, check constraints, triggers, materialized views) — the rest is up to your code. So the C “often depends on how the application uses the database and is not a property of the database alone.”</li>
+              <li><b>Isolation:</b> concurrent transactions don't step on each other's toes. Textbooks formalize this as <b>serializability</b>; in practice most databases use weaker levels.</li>
+              <li><b>Durability:</b> once committed, data isn't forgotten — via nonvolatile storage, <b>fsync</b>, a <b>write-ahead log</b>, checksums, and/or replication to other nodes.</li>
+            </ul>
+            <p>The term ACID was coined by Theo Härder and Andreas Reuter in 1983; the book warns it “has unfortunately become mostly a marketing term.” <b>BASE</b> (basically available, soft state, eventual consistency) is even vaguer — it mostly means “not ACID”.</p>
+            <p>Perfect durability does not exist: SSDs can violate their guarantees on power loss, fsync is hard to use correctly (PostgreSQL got it wrong for over 20 years), 30–80% of SSDs develop a bad block within four years, and correlated faults can take out every replica at once. Disk, replication and backups are risk-reduction techniques to use together.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">ACID, one letter at a time</span><span id="s2-seg"></span></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 640 250" role="img" aria-label="A small diagram for each of the four ACID properties"></svg></div>
+        <div class="controls" id="s2-ctrl"></div>
+        <div class="caption" id="s2-cap" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. SINGLE vs MULTI OBJECT ============ -->
+  <section class="scene" id="multi">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 3 · single-object vs multi-object</span>
+        <h2>The inbox and the little number on the icon</h2>
+        <p class="story">Counting unread emails every time is slow, so apps keep the count in a second place. Now a new email means <b>two</b> writes: store the email, bump the counter.</p>
+        <p class="story">If someone looks between those two writes, they see an unread email and a counter that says zero. If the second write fails, the two stay out of sync <i>forever</i>. Swap “unread counter” for “account balance” and it stops being cute.</p>
+        <p class="imagine"><b>Try it:</b> deliver an email with transactions off, then on. Then make the counter write fail.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Writes to several objects need <b>multi-object transactions</b>: foreign-key references between rows, denormalized values that must stay in sync, and <b>secondary indexes</b> (which are separate objects — without isolation a record can appear in one index but not another).</p>
+            <p>Relational databases group operations by the client's TCP connection: everything between <code>BEGIN TRANSACTION</code> and <code>COMMIT</code>. Many nonrelational stores have no such grouping — a multi-put may succeed for some keys and fail for others.</p>
+            <p>Even <b>single-object writes</b> need atomicity and isolation: a 20 kB JSON document must not be stored half-sent, spliced with its old value, or read half-updated. Storage engines provide this with a log for crash recovery and a lock per object.</p>
+            <p>Some databases offer atomic <b>increment</b> and <b>conditional write</b> (compare-and-set) operations. Aerospike's strong-consistency mode and Cassandra/ScyllaDB “lightweight transactions” give linearizable reads and conditional writes on a single object, but no guarantees across objects.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Mailbox + unread counter</span><div class="stats" id="s3-stats"></div></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 640 300" role="img" aria-label="A mailbox list and an unread counter that must stay in sync"></svg></div>
+        <div class="controls" id="s3-ctrl"></div>
+        <div class="caption" id="s3-cap" aria-live="polite">Deliver an email and watch both places change.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. READ COMMITTED ============ -->
+  <section class="scene" id="readcommitted">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 4 · the most common isolation level</span>
+        <h2>No peeking at half-finished homework</h2>
+        <p class="story"><b>Read committed</b> makes two small promises. You only ever <i>read</i> finished work (no <b>dirty reads</b>), and you only ever <i>overwrite</i> finished work (no <b>dirty writes</b>).</p>
+        <p class="story">Without the first, you can read a number that gets undone a second later. Without the second, two shoppers buying the same car can end up with the car going to one of them and the invoice to the other.</p>
+        <p class="imagine"><b>Try it:</b> run the dirty read with protection off and on. Then try the dirty write — watch who gets the car and who gets the bill.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><b>Read committed</b> is the default in Oracle Database, PostgreSQL, SQL Server and many others. A <b>dirty read</b> is reading another transaction's uncommitted write; a <b>dirty write</b> is overwriting one.</p>
+            <p>Dirty writes are prevented with <b>row-level locks</b>: a writer holds the lock until commit or abort. Dirty reads are usually prevented not by read locks (one long writer would block every reader and hurt response time) but by remembering both the old committed value and the new uncommitted one, and handing readers the old value until commit.</p>
+            <p><b>Read uncommitted</b> is weaker still: it prevents dirty writes but not dirty reads.</p>
+            <p>Read committed does <i>not</i> prevent the lost-update race between two counter increments — there the second write happens after the first transaction committed, so it isn't a dirty write.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Two transactions on a timeline</span><span id="s4-seg"></span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 640 300" role="img" aria-label="Timeline of two transactions showing dirty reads and dirty writes"></svg></div>
+        <div class="controls" id="s4-ctrl"></div>
+        <div class="caption" id="s4-cap" aria-live="polite">Press Step to move through the story.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. SNAPSHOT ISOLATION ============ -->
+  <section class="scene" id="snapshot">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 5 · snapshot isolation and MVCC</span>
+        <h2>Everybody gets their own photograph</h2>
+        <p class="story">Aaliyah has $500 in each of two accounts. While $100 is flying from one to the other, she refreshes her banking app — and sees $500 and $400. A hundred dollars has vanished into thin air. It's called <b>read skew</b>, and read committed allows it.</p>
+        <p class="story">The fix: give each transaction a <b>snapshot</b>, a photograph of the whole database taken the moment it started. The database keeps several versions of every row, each stamped with the transaction that made it, and hands you the ones that were committed when your photo was taken. That's <b>MVCC</b>.</p>
+        <p class="story">Because readers just pick older versions, <b>readers never block writers, and writers never block readers</b>.</p>
+        <p class="imagine"><b>Try it:</b> step through with read committed, then with snapshot isolation. Watch which row versions light up as visible.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><b>Read skew</b> (a <b>nonrepeatable read</b>) is acceptable under read committed. It is intolerable for <b>backups</b> (inconsistencies become permanent when restored) and for long <b>analytical queries and integrity checks</b>.</p>
+            <p><b>Multiversion concurrency control (MVCC)</b>: each transaction gets a unique, always-increasing <b>txid</b>. Each row has <code>inserted_by</code> and <code>deleted_by</code> fields; an update is internally a delete plus an insert. A <b>garbage collection</b> process removes versions nobody can see any more.</p>
+            <p><b>Visibility rules:</b> ignore writes by transactions that were in progress when the snapshot was taken (even if they later commit), ignore writes by transactions with a later txid, ignore writes by aborted transactions — everything else is visible. Equivalently: a row is visible if the inserting transaction had committed when the reader started, and the deleting transaction (if any) had not.</p>
+            <p>CouchDB, Datomic and LMDB instead use immutable, <b>copy-on-write B-trees</b>: every write creates a new root, and each root <i>is</i> a consistent snapshot.</p>
+            <p>Naming is a mess: snapshot isolation is called “repeatable read” in PostgreSQL, “serializable” in Oracle; MySQL's “repeatable read” is weaker; Db2's means serializability. The SQL standard predates snapshot isolation, so “nobody really knows what repeatable read isolation means.”</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Row versions in the database</span><span id="s5-seg"></span></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 660 360" role="img" aria-label="A reader transaction and the multiple versions of each row"></svg></div>
+        <div class="controls" id="s5-ctrl"></div>
+        <div class="caption" id="s5-cap" aria-live="polite">Press Step to follow transaction 12 and transaction 13.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. LOST UPDATES ============ -->
+  <section class="scene" id="lost">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 6 · lost updates</span>
+        <h2>Two people counting the same cookie jar</h2>
+        <p class="story">Both of you read “42 cookies”, both add one, both write “43”. Two cookies went in; the jar says one. The second write <b>clobbered</b> the first. That's a <b>lost update</b>, and it happens any time code does read → change → write back.</p>
+        <p class="story">There are four good cures, and the database can do most of the work: let it do the adding, take a lock first, only write if nothing changed, or let it catch you and make you retry.</p>
+        <p class="imagine"><b>Try it:</b> run the unsafe version first, then each fix. The jar should reach 44 every time.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <ul>
+              <li><b>Atomic write operations</b>: <code>UPDATE counters SET value = value + 1 WHERE key = 'foo'</code>. Usually the best choice; MongoDB has atomic document updates, Redis has atomic data-structure operations. ORMs make it easy to accidentally write an unsafe read-modify-write cycle instead.</li>
+              <li><b>Explicit locking</b>: <code>SELECT … FOR UPDATE</code> locks the returned rows. Easy to forget somewhere, and locking several objects risks <b>deadlock</b> (databases detect it and abort one transaction).</li>
+              <li><b>Automatic lost-update detection</b>: PostgreSQL's repeatable read, Oracle's serializable and SQL Server's snapshot isolation abort the offending transaction. MySQL/InnoDB's repeatable read does <i>not</i>.</li>
+              <li><b>Conditional write (compare-and-set)</b>: <code>UPDATE … WHERE id = 1234 AND content = 'old'</code>, or a version-number column — sometimes called <b>optimistic locking</b>.</li>
+            </ul>
+            <p>With multi-leader or leaderless replication there is no single up-to-date copy, so locks and compare-and-set don't apply. Instead concurrent writes create <b>siblings</b> that get merged afterwards — the idea behind <b>CRDTs</b>. <b>Last write wins</b> is prone to lost updates.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Counter: two increments</span><span id="s6-seg"></span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 640 300" role="img" aria-label="Two clients incrementing the same counter"></svg></div>
+        <div class="controls" id="s6-ctrl"></div>
+        <div class="caption" id="s6-cap" aria-live="polite">Press Step to watch both clients.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7. WRITE SKEW ============ -->
+  <section class="scene" id="skew">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 7 · write skew and phantoms</span>
+        <h2>Both doctors call in sick</h2>
+        <p class="story">The hospital rule: at least one doctor on call. Aaliyah and Bryce are both on call, both feel ill, both press the button at the same moment. Each app checks “are there two or more on call?” — each sees <b>2</b> — and each takes <i>themselves</i> off. Now there are none.</p>
+        <p class="story">No dirty write happened. No update was lost. They wrote to <i>different</i> rows. This is <b>write skew</b>: they read something, decided, and wrote — and the reason for the decision quietly stopped being true.</p>
+        <p class="story">Meeting rooms are worse. Both transactions search for clashing bookings, find <b>nothing</b>, and insert. You can't lock rows that don't exist yet — that's a <b>phantom</b>.</p>
+        <p class="imagine"><b>Try it:</b> both cases, all three protections. Notice that locking the rows fixes the doctors but not the room.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><b>Write skew</b> generalizes lost updates: two transactions read the same objects, then update some of them. Snapshot isolation does not prevent it, and it is <i>not</i> caught by the lost-update detection in PostgreSQL's repeatable read, MySQL/InnoDB's repeatable read, Oracle's serializable or SQL Server's snapshot isolation.</p>
+            <p>Other examples: a <b>meeting room booking</b> system, a <b>multiplayer game</b> moving two figures to the same square, <b>claiming a username</b> (a uniqueness constraint fixes this one), and <b>preventing double-spending</b>.</p>
+            <p>The pattern is always: a <code>SELECT</code> checks a condition, the application decides, then a write changes the very set of rows that condition matched. When a write in one transaction changes another's search result, that's a <b>phantom</b>.</p>
+            <p>If the rows exist, <code>SELECT … FOR UPDATE</code> can lock them. If the query matches <i>no</i> rows there's nothing to lock. You can <b>materialize conflicts</b> — pre-create a table of room/time-slot rows purely to lock — but it's ugly and error-prone, “a last resort”. Automatically preventing write skew requires true <b>serializable</b> isolation.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Two decisions at once</span><span id="s7-seg2"></span></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 660 320" role="img" aria-label="Two transactions each making a decision based on what they read"></svg></div>
+        <div class="controls" id="s7-ctrl"></div>
+        <div class="caption" id="s7-cap" aria-live="polite">Pick a case and a protection, then press Step.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8. SERIAL EXECUTION ============ -->
+  <section class="scene" id="serial">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 8 · serializability, way one</span>
+        <h2>One cash register, no waiting room</h2>
+        <p class="story">The simplest way to stop transactions interfering is to never let two run at once. One thread, one transaction at a time. Whatever happens is serial <i>by definition</i>.</p>
+        <p class="story">This only became sensible when RAM got cheap enough to hold the whole working set, and when people noticed most transactions are tiny. But a transaction that chats with the app between each statement wastes the single lane on network round trips — so you ship the whole transaction to the database ahead of time as a <b>stored procedure</b>.</p>
+        <p class="story">Want more than one lane? <b>Shard</b>, and give each core its own shard. Transactions that touch two shards need lockstep coordination and get dramatically slower.</p>
+        <p class="imagine"><b>Try it:</b> turn the arrival rate up in interactive mode until the queue explodes, then switch to stored procedures. Then add shards, then add cross-shard work.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Serial execution is used by <b>VoltDB/H-Store</b>, <b>Redis</b> and <b>Datomic</b>. Two developments made it viable: cheap RAM for in-memory datasets, and the realization that OLTP transactions are short (long analytical reads run on a snapshot outside the serial loop).</p>
+            <p>Interactive multi-statement transactions aren't allowed; the application submits a <b>stored procedure</b>. Modern ones use general-purpose languages: VoltDB uses Java or Groovy, Datomic Java or Clojure, Redis Lua, MongoDB JavaScript. VoltDB also runs the same deterministic stored procedure on each replica — <b>state machine replication</b>.</p>
+            <p>Throughput is limited to one CPU core unless you shard. Cross-shard transactions must run in lockstep across shards; VoltDB reports about <b>1,000 cross-shard writes per second</b>, orders of magnitude below single-shard throughput and not improved by adding machines.</p>
+            <p>Constraints: every transaction must be small and fast (one slow one stalls everything), the active dataset should fit in memory, and write throughput must fit on one core or shard cleanly.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Single-threaded transaction loop <span class="pill warn"><i></i>toy numbers</span></span><div class="stats" id="s8-stats"></div></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 640 300" role="img" aria-label="Transactions queueing for one or more single-threaded cores"></svg></div>
+        <div class="controls" id="s8-ctrl"></div>
+        <div class="caption" id="s8-cap" aria-live="polite">Each square is one transaction waiting its turn. All numbers here are made up for the picture.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9. TWO-PHASE LOCKING ============ -->
+  <section class="scene" id="twopl">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 9 · serializability, way two</span>
+        <h2>Everyone takes a key from the key rack</h2>
+        <p class="story"><b>Two-phase locking</b> is the old, strict way. Readers may share a key; a writer needs the key all to itself. Once you have taken a key you keep it until you commit — first you only collect keys (the <b>growing</b> phase), then you hand them all back at once (the <b>shrinking</b> phase).</p>
+        <p class="story">It works: writers block readers, readers block writers, and every race in this chapter disappears. It also hurts: waiting, unstable latency, and <b>deadlock</b> when two transactions each hold the key the other needs. The database notices and kills one.</p>
+        <p class="story">For phantoms you'd need a lock on a <i>question</i> (“any booking for room 123 at noon?”) — a <b>predicate lock</b>. Those are slow, so databases lock a <b>range of an index</b> instead: a bigger net, much cheaper.</p>
+        <p class="imagine"><b>Try it:</b> run the three scripts. In the deadlock one, watch who gets aborted.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><b>2PL is not 2PC.</b> 2PL gives serializable isolation; 2PC gives atomic commit across nodes.</p>
+            <p>Locks are <b>shared</b> or <b>exclusive</b> (multi-reader single-writer). A transaction may upgrade shared to exclusive, and must hold every lock until commit or abort — hence “two-phase”. 2PL is used by the serializable level in MySQL/InnoDB and SQL Server, and by repeatable read in Db2.</p>
+            <p>Performance is the reason it isn't the default: overhead plus much reduced concurrency. One big read takes a shared lock on the whole table and blocks all writers; latencies become unstable and very slow at high percentiles. Deadlocks are far more frequent than under read committed, and a deadlocked transaction's work is wasted.</p>
+            <p>A <b>predicate lock</b> covers all objects matching a search condition, including ones that don't exist yet. Because checking many predicate locks is slow, most databases use <b>index-range locking</b> (next-key locking), a safe approximation that locks a larger set. With no suitable index, the fallback is a shared lock on the whole table.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">The lock table</span><span id="s9-seg"></span></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 660 320" role="img" aria-label="Two transactions acquiring shared and exclusive locks on rows"></svg></div>
+        <div class="controls" id="s9-ctrl"></div>
+        <div class="caption" id="s9-cap" aria-live="polite">Press Step to hand out locks.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 10. SSI ============ -->
+  <section class="scene" id="ssi">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 10 · serializability, way three</span>
+        <h2>Run first, check at the door</h2>
+        <p class="story">2PL is <b>pessimistic</b>: assume trouble, wait. <b>Serializable snapshot isolation</b> is <b>optimistic</b>: let everyone run on their own snapshot, nobody waits — but remember what each transaction read, like a tripwire.</p>
+        <p class="story">At the door (commit time), the database asks: did anything I read change underneath me? If yes, this transaction acted on an <b>outdated premise</b>, so it is aborted and retried. Only genuinely serializable runs are let through.</p>
+        <p class="story">It's the best of both worlds when there's spare capacity and not too much fighting over the same rows — and it scales, because the checking itself can be spread across machines.</p>
+        <p class="imagine"><b>Try it:</b> run all three scripts. Notice the database waits until <b>commit</b> before deciding to abort.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><b>SSI</b> was first described in 2008 and gives full serializability with only a small penalty over snapshot isolation. It's used by PostgreSQL's serializable level, SQL Server's In-Memory OLTP (Hekaton), HyPer, CockroachDB, FoundationDB and BadgerDB.</p>
+            <p>Two things to detect: <b>stale MVCC reads</b> (the transaction ignored an uncommitted write that has since committed) and <b>writes that affect prior reads</b> (tracked on index entries, like an index-range lock that doesn't block — a <b>tripwire</b> that only notifies).</p>
+            <p>Why wait until commit? A read-only transaction never needs aborting, the writer may yet abort, and avoiding unnecessary aborts preserves long-running consistent-snapshot reads.</p>
+            <p>Trade-offs: finer tracking means more precise aborts but more bookkeeping. Optimistic control performs badly under high contention; commutative atomic operations reduce contention. Read/write transactions should be short — long read-only ones are fine. Unlike 2PL, nothing blocks, so query latency is much more predictable.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Tripwires, then a check at commit</span><span id="s10-seg"></span></div>
+        <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 660 320" role="img" aria-label="Serializable snapshot isolation detecting conflicts at commit time"></svg></div>
+        <div class="controls" id="s10-ctrl"></div>
+        <div class="caption" id="s10-cap" aria-live="polite">Press Step to run both transactions.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 11. 2PC ============ -->
+  <section class="scene" id="twopc">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 11 · distributed transactions</span>
+        <h2>The wedding where everyone must say “I do”</h2>
+        <p class="story">When one transaction touches several machines, “just commit on each” goes wrong fast: some commit, some crash, some time out — and a commit can't be taken back, because someone has already read it.</p>
+        <p class="story">So a <b>coordinator</b> asks everyone first. Phase one: “are you able to commit?” Saying <b>yes</b> is a promise you can never break. Phase two: once every answer is in, the coordinator writes its decision to its own disk — the <b>commit point</b> — and then tells everyone, retrying forever.</p>
+        <p class="story">And if the coordinator faints between the two phases? Everyone who said yes is stuck <b>in doubt</b>, holding their locks, unable to decide alone. That's why 2PC is called a blocking protocol.</p>
+        <p class="imagine"><b>Try it:</b> run all three scripts, especially the crash. Watch the locks stay locked.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><b>Two-phase commit</b> solves the <b>atomic commitment</b> problem across nodes. A <b>coordinator</b> (transaction manager — Narayana, JOTM, BTM, MSDTC) hands out a global transaction ID, sends <b>prepare</b> to each <b>participant</b>, and commits only if all vote yes.</p>
+            <p>Two points of no return: a participant that votes yes has written everything to disk and checked all constraints, surrendering its right to abort; and the coordinator's decision, once written to its log, is irrevocable and retried forever.</p>
+            <p>If the coordinator crashes after votes, participants are <b>in doubt</b> and can only wait — they must keep holding locks even across restarts, blocking other transactions. Lost coordinator logs need manual resolution; <b>heuristic decisions</b> let a participant decide alone, which the book calls “a euphemism for probably breaking atomicity”. <b>3PC</b> assumes bounded delays, so it doesn't help in practice.</p>
+            <p><b>XA</b> (1991) standardizes 2PC across heterogeneous systems as a C API; it can't detect cross-system deadlocks and doesn't work with SSI. <b>Database-internal</b> distributed transactions (CockroachDB, TiDB, Spanner, FoundationDB, YugabyteDB, Kafka) avoid the lowest-common-denominator trap by replicating the coordinator with consensus and letting shards talk directly.</p>
+            <p>You often don't need distributed transactions at all: recording a processed <b>message ID</b> in the same database transaction makes processing <b>idempotent</b>, giving exactly-once semantics without atomic commit across systems.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Coordinator and three shards</span><span id="s11-seg"></span></div>
+        <div class="stage-scroll"><svg id="s11-svg" viewBox="0 0 660 360" role="img" aria-label="A coordinator running two-phase commit with three database participants"></svg></div>
+        <div class="controls" id="s11-ctrl"></div>
+        <div class="caption" id="s11-cap" aria-live="polite">Press Step to run the protocol.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SUMMARY ============ -->
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>Which races can still bite you?</h2><p>The chapter's summary table. Green means the isolation level prevents it.</p></div>
+      <div class="stage">
+        <div class="stage-scroll">
+          <div class="lvl">
+            <div class="hd">Isolation level</div><div class="hd">Dirty reads</div><div class="hd">Read skew</div><div class="hd">Phantom reads</div><div class="hd">Lost updates</div><div class="hd">Write skew</div>
+            <div class="name">Read uncommitted</div><div class="no">possible</div><div class="no">possible</div><div class="no">possible</div><div class="no">possible</div><div class="no">possible</div>
+            <div class="name">Read committed</div><div class="ok">prevented</div><div class="no">possible</div><div class="no">possible</div><div class="no">possible</div><div class="no">possible</div>
+            <div class="name">Snapshot isolation</div><div class="ok">prevented</div><div class="ok">prevented</div><div class="ok">prevented</div><div class="maybe">depends</div><div class="no">possible</div>
+            <div class="name">Serializable</div><div class="ok">prevented</div><div class="ok">prevented</div><div class="ok">prevented</div><div class="ok">prevented</div><div class="ok">prevented</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:40px"><h2>The seesaws from this chapter</h2><p>Every guarantee costs something. Nobody gets everything.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>Weak isolation</h4><p>Fast, and full of subtle race conditions you must handle yourself</p></div><span class="vs">vs</span><div class="side"><h4>Serializable</h4><p>No races at all, paid for in throughput or aborts</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Pessimistic (2PL)</h4><p>Wait if anything might go wrong; unstable latency and deadlocks</p></div><span class="vs">vs</span><div class="side"><h4>Optimistic (SSI)</h4><p>Never block; abort at commit — bad under high contention</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Serial execution</h4><p>Dead simple, but one core and only short stored procedures</p></div><span class="vs">vs</span><div class="side"><h4>Concurrency control</h4><p>Uses every core, at the cost of a lot of machinery</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Durability by disk</h4><p>Survives a crash, but the data is stuck on one machine</p></div><span class="vs">vs</span><div class="side"><h4>Durability by replication</h4><p>Stays available, but correlated faults can take out every copy</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Distributed transactions (2PC)</h4><p>True atomic commit across systems; blocks when the coordinator dies</p></div><span class="vs">vs</span><div class="side"><h4>Idempotence</h4><p>Record the message ID and retry safely; no atomic commit needed</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Database-internal 2PC</h4><p>Replicated coordinator, direct shard talk, fast</p></div><span class="vs">vs</span><div class="side"><h4>Heterogeneous XA</h4><p>Lowest common denominator: no cross-system deadlock detection, no SSI</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ WORDS ============ -->
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>Grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>transaction</dt><dd>A bundle of reads and writes the database treats as one single move.</dd></div>
+        <div class="word"><dt>commit</dt><dd>“Done — make it real.” After this, the changes are official.</dd></div>
+        <div class="word"><dt>abort / rollback</dt><dd>“Never mind.” Every write from that transaction is thrown away.</dd></div>
+        <div class="word"><dt>atomicity</dt><dd>All of it happens, or none of it does. Really it means “abortable”.</dd></div>
+        <div class="word"><dt>consistency (ACID)</dt><dd>Your own rules about the data stay true. Mostly your job, not the database's.</dd></div>
+        <div class="word"><dt>invariant / constraint</dt><dd>A rule that must always hold, and the database's way of enforcing one.</dd></div>
+        <div class="word"><dt>isolation</dt><dd>Transactions don't step on each other's toes, even when they run at the same time.</dd></div>
+        <div class="word"><dt>durability</dt><dd>Once committed, not forgotten — written to disk and/or copied to other machines.</dd></div>
+        <div class="word"><dt>fsync</dt><dd>“Really write it to the disk now,” not just into memory.</dd></div>
+        <div class="word"><dt>write-ahead log</dt><dd>A notebook of what's about to change, so a crash can be cleaned up afterwards.</dd></div>
+        <div class="word"><dt>dirty read</dt><dd>Seeing someone's change before they've finished — it might get undone.</dd></div>
+        <div class="word"><dt>dirty write</dt><dd>Scribbling over someone's unfinished change.</dd></div>
+        <div class="word"><dt>read committed</dt><dd>Only read finished work, only overwrite finished work. The common default.</dd></div>
+        <div class="word"><dt>read skew</dt><dd>Seeing different parts of the database from different moments, so the sums look wrong.</dd></div>
+        <div class="word"><dt>snapshot isolation</dt><dd>Your transaction reads from a photograph of the database taken when it started.</dd></div>
+        <div class="word"><dt>MVCC</dt><dd>Keeping several versions of each row, each stamped with who wrote it.</dd></div>
+        <div class="word"><dt>txid</dt><dd>The ever-increasing number that names a transaction.</dd></div>
+        <div class="word"><dt>lost update</dt><dd>Two read-change-write cycles collide and one change disappears.</dd></div>
+        <div class="word"><dt>compare-and-set</dt><dd>“Only change it if it's still what I last saw.”</dd></div>
+        <div class="word"><dt>write skew</dt><dd>Two transactions each write something based on a fact that the other just made false.</dd></div>
+        <div class="word"><dt>phantom</dt><dd>A new row that changes the answer to someone else's search.</dd></div>
+        <div class="word"><dt>materializing conflicts</dt><dd>Inventing rows just so there is something to lock. A last resort.</dd></div>
+        <div class="word"><dt>serializable</dt><dd>The result is as if transactions had run one after another. The strongest level.</dd></div>
+        <div class="word"><dt>two-phase locking (2PL)</dt><dd>Collect every lock first, release them all at the end.</dd></div>
+        <div class="word"><dt>deadlock</dt><dd>Two transactions each holding what the other needs. Somebody has to be killed.</dd></div>
+        <div class="word"><dt>predicate / index-range lock</dt><dd>Locking a question instead of a row, or a chunk of an index as a cheap stand-in.</dd></div>
+        <div class="word"><dt>SSI</dt><dd>Let everyone run, remember what they read, and abort anyone whose reasons went stale.</dd></div>
+        <div class="word"><dt>two-phase commit (2PC)</dt><dd>Ask everyone “can you?”, then tell everyone “do it.”</dd></div>
+        <div class="word"><dt>in doubt</dt><dd>A participant that voted yes and lost contact: it must wait, still holding its locks.</dd></div>
+        <div class="word"><dt>idempotent</dt><dd>Safe to do twice. Doing it again changes nothing.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width: 820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Six quick questions. Finish all six to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible } = K;
+K.page(8);
+const $ = K.$;
+const setCap = (id, html) => { const e = $(id); if (e) e.innerHTML = html; };
+
+function T(x, y, str, cls, anchor, style) {
+  const a = { x, y, class: cls || "sv-text", "text-anchor": anchor || "middle" };
+  if (style) a.style = style;
+  return s("text", a, str);
+}
+function R(x, y, w, hh, cls, rx) {
+  return s("rect", { x, y, width: w, height: hh, rx: rx == null ? 10 : rx, class: cls || "sv-box" });
+}
+function btn(label, cls, fn) {
+  const b = h("button", { class: "btn" + (cls ? " " + cls : ""), type: "button" }, label);
+  b.addEventListener("click", fn);
+  return b;
+}
+/* Step / Play / Reset runner. o.steps() returns the current array of step functions. */
+function stepper(ctrlEl, o) {
+  let i = 0, timer = 0;
+  const pill = h("span", { class: "pill" }, "step 0");
+  const n = () => o.steps().length;
+  const bStep = h("button", { class: "btn primary", type: "button" }, "Step");
+  const bPlay = h("button", { class: "btn", type: "button" }, "Play");
+  const bReset = h("button", { class: "btn", type: "button" }, "Reset");
+  function upd() { pill.textContent = "step " + i + " / " + n(); bStep.disabled = i >= n(); }
+  function stop() { if (timer) clearInterval(timer); timer = 0; bPlay.textContent = "Play"; }
+  function one() { if (i >= n()) { stop(); return; } o.steps()[i](); i++; upd(); }
+  function reset() { stop(); i = 0; o.reset(); upd(); }
+  bStep.addEventListener("click", function () { stop(); one(); });
+  bPlay.addEventListener("click", function () {
+    if (timer) { stop(); return; }
+    if (i >= n()) reset();
+    bPlay.textContent = "Pause"; timer = setInterval(one, o.ms || 1200);
+  });
+  bReset.addEventListener("click", reset);
+  ctrlEl.append(bStep, bPlay, bReset, pill);
+  upd();
+  return { reset: reset, update: upd };
+}
+/* Two (or three) horizontal transaction lanes with step markers. */
+function laneRig(svg, rows, x0, dx, slots) {
+  const base = s("g");
+  svg.appendChild(base);
+  rows.forEach(function (r) {
+    if (r.name) base.appendChild(T(x0 - 16, r.y + 4, r.name, "sv-label", "end"));
+    base.appendChild(s("line", { x1: x0 - 6, y1: r.y, x2: x0 + dx * (slots - 1) + 34, y2: r.y, class: "sv-wire" }));
+  });
+  const marks = s("g");
+  svg.appendChild(marks);
+  return {
+    mark: function (rowIdx, slot, label, tone) {
+      const r = rows[rowIdx], x = x0 + slot * dx;
+      const cls = tone === "bad" ? "sv-bad" : tone === "good" ? "sv-good" : tone === "warn" ? "sv-data-soft" : "sv-box";
+      const w = Math.max(54, String(label).length * 6.7 + 14);
+      const g = s("g", { class: "sv-pop" }, R(x - w / 2, r.y - 15, w, 30, cls, 9), T(x, r.y + 4, label, "sv-label"));
+      marks.appendChild(g);
+      return g;
+    },
+    reset: function () { K.clear(marks); }
+  };
+}
+
+/* ================= HERO ================= */
+(function hero() {
+  const svg = $("#hero-svg");
+  svg.appendChild(T(260, 30, "ONE TRANSACTION, TWO WRITES", "sv-label"));
+  const cards = [];
+  [["Alice", 40], ["Bob", 300]].forEach(function (d, i) {
+    const bx = R(d[1], 56, 180, 86, "sv-box", 14);
+    const name = T(d[1] + 90, 84, d[0], "sv-title");
+    const val = T(d[1] + 90, 120, "$500", "sv-big");
+    svg.append(bx, name, val);
+    cards.push({ box: bx, val: val, committed: 500 });
+  });
+  const stamp = T(260, 186, "", "sv-title", "middle", { fontSize: "18px" });
+  svg.appendChild(stamp);
+  svg.appendChild(R(140, 208, 240, 112, "sv-panel", 16));
+  svg.appendChild(T(260, 230, "transaction", "sv-label"));
+  const w1 = R(160, 242, 200, 28, "sv-data-soft", 8), w2 = R(160, 278, 200, 28, "sv-data-soft", 8);
+  svg.append(w1, w2, T(260, 261, "Alice  −$100", "sv-label"), T(260, 297, "Bob  +$100", "sv-label"));
+  [w1, w2].forEach(function (w) { w.style.opacity = 0.25; });
+  svg.append(draw.arrow(200, 206, 150, 150), draw.arrow(320, 206, 372, 150));
+  const total = T(260, 356, "total: $1000", "sv-label");
+  svg.appendChild(total);
+
+  const crash = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Crash the database in the middle of the transfer" },
+    R(400, 242, 100, 36, "sv-bad", 10), T(450, 265, "CRASH", "sv-label", "middle", { fontWeight: 700 }));
+  svg.appendChild(crash);
+  let armed = false, busy = false, visible = false;
+  function arm() {
+    armed = !armed;
+    crash.firstChild.setAttribute("class", armed ? "sv-bad sv-pulse" : "sv-bad");
+  }
+  crash.addEventListener("click", arm);
+  crash.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); arm(); } });
+
+  function show(i, v, pending) {
+    cards[i].val.textContent = "$" + v;
+    cards[i].box.setAttribute("class", pending ? "sv-ghost" : "sv-box");
+  }
+  function refreshTotal() {
+    total.textContent = "total: $" + (cards[0].committed + cards[1].committed) + "  (never changes)";
+  }
+  async function run() {
+    if (busy) return; busy = true;
+    stamp.textContent = ""; stamp.style.fill = "var(--ink)";
+    const dir = cards[0].committed >= 500 ? 1 : -1;
+    w1.style.opacity = 1; show(0, cards[0].committed - 100 * dir, true);
+    await sleep(750);
+    if (armed) {
+      stamp.textContent = "CRASH — abort"; stamp.style.fill = "var(--coral)";
+      cards[0].box.setAttribute("class", "sv-bad sv-shake");
+      await sleep(850);
+      show(0, cards[0].committed, false); w1.style.opacity = 0.25;
+      stamp.textContent = "rolled back — nothing happened"; stamp.style.fill = "var(--mint)";
+      await sleep(1100);
+      stamp.textContent = ""; armed = false; crash.firstChild.setAttribute("class", "sv-bad");
+      busy = false; refreshTotal(); return;
+    }
+    w2.style.opacity = 1; show(1, cards[1].committed + 100 * dir, true);
+    await sleep(700);
+    stamp.textContent = "COMMIT"; stamp.style.fill = "var(--mint)";
+    cards[0].committed -= 100 * dir; cards[1].committed += 100 * dir;
+    show(0, cards[0].committed, false); show(1, cards[1].committed, false);
+    cards[0].box.setAttribute("class", "sv-good"); cards[1].box.setAttribute("class", "sv-good");
+    refreshTotal();
+    await sleep(800);
+    cards[0].box.setAttribute("class", "sv-box"); cards[1].box.setAttribute("class", "sv-box");
+    w1.style.opacity = 0.25; w2.style.opacity = 0.25; stamp.textContent = "";
+    busy = false;
+  }
+  refreshTotal();
+  whenVisible(svg, function () { visible = true; }, function () { visible = false; });
+  (async function auto() {
+    await sleep(800);
+    for (;;) { if (visible && !K.reduced && !document.hidden) await run(); await sleep(1500); }
+  })();
+})();
+
+/* ================= 1. ALL OR NOTHING ================= */
+(function allOrNothing() {
+  const svg = $("#s1-svg");
+  svg.appendChild(s("line", { x1: 122, y1: 140, x2: 216, y2: 140, class: "sv-wire" }));
+  svg.appendChild(draw.server(78, 140, 84, 96, "app"));
+  svg.appendChild(R(222, 44, 390, 196, "sv-panel", 16));
+  svg.appendChild(T(417, 68, "bank database", "sv-label"));
+  const rows = [];
+  [["Alice", 84], ["Bob", 144]].forEach(function (d) {
+    const bx = R(246, d[1], 342, 48, "sv-box", 10);
+    const val = T(566, d[1] + 30, "$500", "sv-text", "end", { fontFamily: "var(--f-mono)", fontWeight: 700 });
+    svg.append(bx, T(270, d[1] + 30, d[0], "sv-text", "start"), val);
+    rows.push({ box: bx, val: val, v: 500 });
+  });
+  const totalT = T(417, 224, "total: $1000", "sv-label");
+  const bolt = s("g", { style: { opacity: 0 } }, T(417, 128, "CRASH", "sv-title", "middle", { fill: "var(--coral)", fontSize: "22px" }));
+  svg.append(totalT, bolt);
+
+  const stats = $("#s1-stats");
+  const stTotal = stat("Total", "$1000", "good");
+  const stState = stat("Last run", "—");
+  stats.append(stTotal, stState);
+
+  let mode = 0, busy = false;
+  function paint(pendingIdx) {
+    rows.forEach(function (r, i) {
+      r.val.textContent = "$" + r.v;
+      r.box.setAttribute("class", i === pendingIdx ? "sv-ghost" : "sv-box");
+    });
+    const t = rows[0].v + rows[1].v;
+    totalT.textContent = "total: $" + t;
+    stTotal.set("$" + t, t === 1000 ? "good" : "bad");
+  }
+  function reset() { rows[0].v = 500; rows[1].v = 500; bolt.style.opacity = 0; paint(-1); stState.set("—"); setCap("#s1-cap", "Pick a mode, then send a transfer."); }
+  async function transfer(withCrash) {
+    if (busy) return; busy = true; bolt.style.opacity = 0;
+    setCap("#s1-cap", "<b>BEGIN</b> — the app starts a transfer of $100.");
+    await sleep(700);
+    rows[0].v -= 100; paint(0);
+    setCap("#s1-cap", "Write 1 of 2: <b>$100 leaves Alice</b>. The transfer is only half done.");
+    await sleep(900);
+    if (withCrash) {
+      bolt.style.opacity = 1; rows[0].box.setAttribute("class", "sv-bad sv-shake");
+      setCap("#s1-cap", "The database <b>crashes</b> right here.");
+      await sleep(1000);
+      if (mode === 0) {
+        rows[0].v += 100; paint(-1);
+        stState.set("rolled back", "good");
+        setCap("#s1-cap", "Transactions on: the write is <b>rolled back</b>. Nothing changed, the total is still $1000 — so the app can just <b>retry</b>.");
+      } else {
+        paint(-1);
+        stState.set("money lost", "bad");
+        setCap("#s1-cap", "Transactions off: the half-finished write <b>stays</b>. $100 has vanished and nobody knows which writes happened.");
+      }
+      bolt.style.opacity = 0; busy = false; return;
+    }
+    rows[1].v += 100; paint(1);
+    setCap("#s1-cap", "Write 2 of 2: <b>$100 arrives for Bob</b>.");
+    await sleep(800);
+    paint(-1);
+    rows.forEach(function (r) { r.box.setAttribute("class", "sv-good"); });
+    stState.set("committed", "good");
+    setCap("#s1-cap", "<b>COMMIT</b> — both writes are now real, together. The total never left $1000.");
+    await sleep(900);
+    paint(-1); busy = false;
+  }
+  const ctrl = $("#s1-ctrl");
+  ctrl.appendChild(seg(["Transactions ON", "Transactions OFF"], 0, function (i) { mode = i; reset(); }, "s1-mode"));
+  ctrl.appendChild(btn("Transfer $100", "primary", function () { transfer(false); }));
+  ctrl.appendChild(btn("Transfer, then crash", "danger", function () { transfer(true); }));
+  ctrl.appendChild(btn("Reset", "", reset));
+  paint(-1);
+})();
+
+/* ================= 2. ACID ================= */
+(function acid() {
+  const svg = $("#s2-svg");
+  const stage = s("g"); svg.appendChild(stage);
+  const ctrl = $("#s2-ctrl");
+  let cur = 0, busy = false;
+
+  const panels = [
+    { name: "A · atomicity", build: function () {
+        const g = s("g");
+        g.append(R(150, 46, 340, 146, "sv-panel", 16), T(320, 70, "one transaction", "sv-label"));
+        const c1 = R(180, 84, 280, 34, "sv-data-soft", 8), c2 = R(180, 134, 280, 34, "sv-data-soft", 8);
+        const err = T(320, 216, "", "sv-title", "middle", { fontSize: "16px", fill: "var(--coral)" });
+        g.append(c1, c2, T(320, 106, "write 1 · take $100 from Alice", "sv-label"), T(320, 156, "write 2 · give $100 to Bob", "sv-label"), err);
+        stage.appendChild(g);
+        return { run: async function () {
+          err.textContent = ""; c1.setAttribute("class", "sv-data-soft"); c2.setAttribute("class", "sv-data-soft");
+          setCap("#s2-cap", "Write 1 goes in…");
+          c1.setAttribute("class", "sv-good"); await sleep(800);
+          err.textContent = "ERROR — the disk is full"; c2.setAttribute("class", "sv-bad sv-shake");
+          setCap("#s2-cap", "…and write 2 fails.");
+          await sleep(900);
+          c1.setAttribute("class", "sv-bad"); c2.setAttribute("class", "sv-panel");
+          setCap("#s2-cap", "<b>Atomicity:</b> the transaction aborts and write 1 is undone too. The database is back exactly where it started, so retrying is safe.");
+        } };
+      } },
+    { name: "C · consistency", build: function () {
+        const g = s("g");
+        const beam = s("g");
+        beam.append(s("line", { x1: 170, y1: 92, x2: 470, y2: 92, class: "sv-wire-solid" }));
+        const lb = R(160, 100, 150, 52, "sv-box", 10), rb = R(330, 100, 150, 52, "sv-box", 10);
+        const lt = T(235, 132, "credits $1000", "sv-label"), rt = T(405, 132, "debits $1000", "sv-label");
+        beam.append(lb, rb, lt, rt);
+        g.append(beam, s("path", { d: "M320,92 L304,170 L336,170 Z", class: "sv-fill-line" }),
+          T(320, 200, "your rule: credits must equal debits", "sv-label"),
+          T(320, 224, "the database can enforce it only if you declare it", "sv-label", "middle", { fill: "var(--ink-3)" }));
+        stage.appendChild(g);
+        return { run: async function () {
+          lt.textContent = "credits $1000"; rt.textContent = "debits $1000";
+          [lb, rb].forEach(function (b) { b.setAttribute("class", "sv-box"); });
+          setCap("#s2-cap", "The rule holds: credits equal debits.");
+          await sleep(700);
+          beam.setAttribute("transform", "rotate(-5 320 92)"); lt.textContent = "credits $900";
+          lb.setAttribute("class", "sv-ghost");
+          setCap("#s2-cap", "Halfway through a transaction the rule is <b>temporarily broken</b> — that's allowed.");
+          await sleep(1100);
+          beam.setAttribute("transform", ""); lt.textContent = "credits $1000";
+          lb.setAttribute("class", "sv-good"); rb.setAttribute("class", "sv-good");
+          setCap("#s2-cap", "<b>Consistency:</b> at <b>COMMIT</b> the rule must be true again. But only <i>you</i> know the rule — unless you write it down as a constraint, the database can't stop you breaking it.");
+        } };
+      } },
+    { name: "I · isolation", build: function () {
+        const g = s("g");
+        const wall = s("line", { x1: 320, y1: 40, x2: 320, y2: 210, class: "sv-wire" });
+        const b1 = R(70, 52, 230, 140, "sv-server", 14), b2 = R(340, 52, 230, 140, "sv-server", 14);
+        const chip = R(110, 110, 150, 34, "sv-data-soft", 8);
+        const chipT = T(185, 132, "x = 3 (unfinished)", "sv-label");
+        const peek = T(455, 132, "reads x …", "sv-label");
+        g.append(b1, b2, T(185, 80, "transaction 1", "sv-label"), T(455, 80, "transaction 2", "sv-label"),
+          chip, chipT, peek, wall, T(320, 228, "isolation wall", "sv-label", "middle", { fill: "var(--ink-3)" }));
+        stage.appendChild(g);
+        return { run: async function () {
+          wall.style.opacity = 1; peek.textContent = "reads x …";
+          setCap("#s2-cap", "Transaction 1 changes x to 3, but hasn't committed yet.");
+          await sleep(800);
+          peek.textContent = "sees the OLD x";
+          setCap("#s2-cap", "<b>Isolation:</b> transaction 2 can't see the unfinished change. It reads the last committed value.");
+          await sleep(1200);
+          wall.style.opacity = 0.15; peek.textContent = "sees x = 3 ✗";
+          b2.setAttribute("class", "sv-bad sv-shake");
+          setCap("#s2-cap", "Take the wall away and transaction 2 reads a value that might be rolled back a second later — a <b>dirty read</b>.");
+          await sleep(1200);
+          b2.setAttribute("class", "sv-server"); wall.style.opacity = 1;
+        } };
+      } },
+    { name: "D · durability", build: function () {
+        const g = s("g");
+        g.append(draw.server(90, 120, 84, 92, "database"), draw.db(300, 118, 84, 96, "disk · fsync"),
+          draw.db(500, 78, 60, 62, ""), draw.db(500, 176, 60, 62, ""),
+          T(500, 224, "replicas", "sv-label"),
+          s("line", { x1: 136, y1: 120, x2: 254, y2: 120, class: "sv-wire" }),
+          s("line", { x1: 346, y1: 110, x2: 466, y2: 84, class: "sv-wire" }),
+          s("line", { x1: 346, y1: 130, x2: 466, y2: 172, class: "sv-wire" }));
+        const bolt = T(300, 40, "", "sv-title", "middle", { fill: "var(--coral)", fontSize: "17px" });
+        g.appendChild(bolt);
+        const layer = s("g"); g.appendChild(layer);
+        stage.appendChild(g);
+        return { run: async function () {
+          bolt.textContent = "";
+          const p = draw.parcel("sv-data", 16); layer.appendChild(p);
+          setCap("#s2-cap", "The committed write is pushed all the way to the disk with <b>fsync</b>, and logged first in the write-ahead log.");
+          await fly(p, [136, 120], [300, 118], 700);
+          await sleep(400);
+          const p2 = draw.parcel("sv-data", 14), p3 = draw.parcel("sv-data", 14);
+          layer.append(p2, p3);
+          await Promise.all([fly(p2, [300, 118], [500, 78], 600), fly(p3, [300, 118], [500, 176], 600)]);
+          setCap("#s2-cap", "…and copied to other machines.");
+          await sleep(500);
+          bolt.textContent = "POWER CUT";
+          await sleep(900);
+          bolt.textContent = "";
+          setCap("#s2-cap", "<b>Durability:</b> after the crash the data is still there. But perfect durability doesn't exist — disks lie, fsync is hard, backups rot. Disk + replicas + backups together, and a pinch of salt.");
+          [p, p2, p3].forEach(function (x) { x.remove(); });
+        } };
+      } },
+  ];
+
+  let inst = null;
+  function select(i) {
+    cur = i; K.clear(stage); inst = panels[i].build();
+    setCap("#s2-cap", "Press <b>Show me</b> to watch the promise in action.");
+  }
+  $("#s2-seg").appendChild(seg(["A", "C", "I", "D"], 0, select, "s2-letters"));
+  ctrl.appendChild(btn("Show me", "primary", async function () {
+    if (busy || !inst) return; busy = true; await inst.run(); busy = false;
+  }));
+  ctrl.appendChild(h("span", { class: "pill info" }, h("i"), "A, I and D are the database's job — C is mostly yours"));
+  select(0);
+})();
+
+/* ================= 3. SINGLE vs MULTI OBJECT ================= */
+(function multiObject() {
+  const svg = $("#s3-svg");
+  svg.append(R(30, 50, 280, 212, "sv-panel", 14), T(170, 76, "inbox", "sv-label"));
+  const mailG = s("g"); svg.appendChild(mailG);
+  svg.append(R(370, 62, 210, 92, "sv-box", 16), T(475, 88, "unread counter", "sv-label"));
+  const countT = T(475, 132, "0", "sv-big");
+  svg.appendChild(countT);
+  const readerB = draw.bubble(475, 210, 90, [330, 640]);
+  svg.append(draw.person(475, 232, "sv-fill-ink", 1), readerB, T(475, 274, "someone looking", "sv-label"));
+
+  const stats = $("#s3-stats");
+  const stSync = stat("In sync?", "yes", "good");
+  stats.appendChild(stSync);
+
+  let mode = 1, busy = false, emails = 0, counter = 0, pendingEmail = false;
+  function paint() {
+    K.clear(mailG);
+    const shown = emails + (pendingEmail ? 1 : 0);
+    for (let i = 0; i < Math.min(shown, 4); i++) {
+      const ghost = pendingEmail && i === shown - 1;
+      mailG.append(R(50, 92 + i * 42, 240, 34, ghost ? "sv-ghost" : "sv-data-soft", 8),
+        T(170, 114 + i * 42, ghost ? "new email (uncommitted)" : "email " + (i + 1), "sv-label"));
+    }
+    countT.textContent = String(counter);
+    const ok = counter === emails;
+    stSync.set(ok ? "yes" : "no", ok ? "good" : "bad");
+  }
+  function reset() { emails = 0; counter = 0; pendingEmail = false; readerB.say(""); paint(); setCap("#s3-cap", "Deliver an email and watch both places change."); }
+
+  async function deliver(fail) {
+    if (busy) return; busy = true; readerB.say("");
+    setCap("#s3-cap", mode === 1 ? "<b>BEGIN</b> — one transaction for both writes." : "No transaction: just two separate writes.");
+    await sleep(600);
+    if (mode === 1) { pendingEmail = true; paint(); } else { emails++; paint(); }
+    setCap("#s3-cap", "Write 1 of 2: the <b>email row</b> is stored.");
+    await sleep(700);
+    readerB.say(mode === 1 ? "0 unread, 0 listed" : "0 unread, 1 listed!");
+    setCap("#s3-cap", mode === 1
+      ? "Someone reads right now. Because the transaction hasn't committed, they see <b>neither</b> change — no half-finished picture."
+      : "Someone reads right now and sees an email in the list with the counter still at <b>0</b>. That's a <b>dirty read</b> of a half-done update.");
+    if (mode === 0) { stSync.set("no", "bad"); }
+    await sleep(1400);
+    if (fail) {
+      setCap("#s3-cap", "Write 2 of 2 <b>fails</b> (the counter update errors out).");
+      countT.style.fill = "var(--coral)";
+      await sleep(900);
+      countT.style.fill = "";
+      if (mode === 1) {
+        pendingEmail = false; paint(); readerB.say("nothing happened");
+        setCap("#s3-cap", "<b>Atomicity</b> saves you: the whole transaction aborts, the email row is rolled back, and the two never disagree.");
+      } else {
+        paint(); readerB.say("1 listed, 0 unread");
+        setCap("#s3-cap", "Without a transaction the email stays but the counter never catches up. They are now out of sync <b>forever</b>.");
+      }
+      busy = false; return;
+    }
+    if (mode === 1) { pendingEmail = false; emails++; }
+    counter++; paint();
+    readerB.say(counter + " unread, " + emails + " listed");
+    setCap("#s3-cap", mode === 1
+      ? "<b>COMMIT</b> — both writes become visible at the same instant."
+      : "Write 2 of 2 lands, and the two agree again. It was only wrong <i>for a moment</i> — which is fine for emails and not fine for money.");
+    busy = false;
+  }
+  const ctrl = $("#s3-ctrl");
+  ctrl.appendChild(seg(["No transaction", "One transaction"], 1, function (i) { mode = i; reset(); }, "s3-mode"));
+  ctrl.appendChild(btn("Deliver an email", "primary", function () { deliver(false); }));
+  ctrl.appendChild(btn("Counter write fails", "danger", function () { deliver(true); }));
+  ctrl.appendChild(btn("Reset", "", reset));
+  paint();
+})();
+
+/* ================= 4. READ COMMITTED ================= */
+(function readCommitted() {
+  const svg = $("#s4-svg");
+  const rows = [{ name: "", y: 84 }, { name: "", y: 154 }];
+  const nameT = [T(164, 88, "txn 1", "sv-label", "end"), T(164, 158, "txn 2", "sv-label", "end")];
+  const rig = laneRig(svg, rows, 180, 78, 6);
+  svg.append(nameT[0], nameT[1]);
+  svg.appendChild(R(150, 208, 460, 76, "sv-panel", 12));
+  const line1 = T(380, 236, "", "sv-label"), line2 = T(380, 264, "", "sv-label");
+  svg.append(line1, line2);
+
+  let kind = 0, prot = 1;
+  const state = {};
+  function paint() {
+    if (kind === 0) {
+      line1.textContent = "committed:  x = " + state.x;
+      line2.textContent = "uncommitted (txn 1):  " + (state.dirty == null ? "—" : "x = " + state.dirty);
+      line2.style.fill = state.dirty == null ? "" : "var(--coral)";
+    } else {
+      line1.textContent = "listings.buyer  =  " + state.listing;
+      line2.textContent = "invoices.to     =  " + state.invoice;
+      const bad = state.listing !== state.invoice && state.listing !== "—" && state.invoice !== "—";
+      line1.style.fill = bad ? "var(--coral)" : "";
+      line2.style.fill = bad ? "var(--coral)" : "";
+    }
+  }
+  function reset() {
+    rig.reset();
+    state.x = 2; state.dirty = null; state.listing = "—"; state.invoice = "—";
+    nameT[0].textContent = kind === 0 ? "txn 1 · writer" : "Aaliyah";
+    nameT[1].textContent = kind === 0 ? "txn 2 · reader" : "Bryce";
+    paint();
+    setCap("#s4-cap", kind === 0
+      ? "Transaction 1 changes x while transaction 2 reads it."
+      : "Two people buy the same used car at the same moment. Each purchase writes two rows.");
+  }
+  let steps = [];
+  function build() {
+    if (kind === 0) {
+      steps = [
+        function () { rig.mark(0, 0, "BEGIN"); setCap("#s4-cap", "Transaction 1 starts."); },
+        function () { rig.mark(0, 1, "set x = 3", "warn"); state.dirty = 3; paint(); setCap("#s4-cap", "It sets <b>x = 3</b>, but hasn't committed. The database now holds two values for x."); },
+        function () {
+          if (prot === 1) { rig.mark(1, 2, "get x → 2", "good"); setCap("#s4-cap", "<b>Read committed:</b> transaction 2 is handed the last <b>committed</b> value, 2. No dirty read."); }
+          else { rig.mark(1, 2, "get x → 3", "bad"); setCap("#s4-cap", "<b>Read uncommitted:</b> transaction 2 sees 3 — a <b>dirty read</b> of work that might still be undone."); }
+        },
+        function () { rig.mark(0, 3, "COMMIT", "good"); state.x = state.dirty; state.dirty = null; paint(); setCap("#s4-cap", "Transaction 1 commits. Now <b>all</b> of its writes become visible at once."); },
+        function () { rig.mark(1, 4, "get x → 3", "good"); setCap("#s4-cap", "Both isolation levels agree now. The only question was what happened <i>during</i> the write."); },
+      ];
+    } else if (prot === 0) {
+      steps = [
+        function () { rig.mark(0, 0, "listing←A", "warn"); state.listing = "Aaliyah"; paint(); setCap("#s4-cap", "Aaliyah writes herself into the <b>listings</b> table. Not committed yet."); },
+        function () { rig.mark(1, 1, "listing←B", "bad"); state.listing = "Bryce"; paint(); setCap("#s4-cap", "Bryce overwrites her unfinished write — a <b>dirty write</b>. Nobody stopped him."); },
+        function () { rig.mark(1, 2, "invoice←B", "warn"); state.invoice = "Bryce"; paint(); setCap("#s4-cap", "Bryce also writes the <b>invoice</b>."); },
+        function () { rig.mark(0, 3, "invoice←A", "bad"); state.invoice = "Aaliyah"; paint(); setCap("#s4-cap", "Then Aaliyah overwrites <i>that</i>."); },
+        function () { rig.mark(0, 4, "COMMIT"); rig.mark(1, 4, "COMMIT"); paint(); setCap("#s4-cap", "Both commit. <b>Bryce gets the car, Aaliyah gets the bill.</b> Two half-transactions mixed together."); },
+      ];
+    } else {
+      steps = [
+        function () { rig.mark(0, 0, "lock+write", "warn"); state.listing = "Aaliyah"; paint(); setCap("#s4-cap", "Aaliyah's write takes a <b>row lock</b> on the listing and keeps it until she commits."); },
+        function () { rig.mark(1, 1, "WAITING…", "bad"); setCap("#s4-cap", "Bryce wants the same row, so he simply <b>waits</b>. No dirty write is possible."); },
+        function () { rig.mark(0, 2, "invoice←A", "warn"); state.invoice = "Aaliyah"; paint(); setCap("#s4-cap", "Aaliyah finishes her second write."); },
+        function () { rig.mark(0, 3, "COMMIT", "good"); setCap("#s4-cap", "She commits and releases the lock."); },
+        function () { rig.mark(1, 4, "both rows", "good"); state.listing = "Bryce"; state.invoice = "Bryce"; paint(); setCap("#s4-cap", "Now Bryce's transaction runs, all the way through."); },
+        function () { rig.mark(1, 5, "COMMIT", "good"); paint(); setCap("#s4-cap", "<b>Read committed</b> kept the two purchases apart: the car and the invoice go to the same person."); },
+      ];
+    }
+  }
+  const ctrl = $("#s4-ctrl");
+  const st = stepper(ctrl, { steps: function () { return steps; }, reset: reset, ms: 1300 });
+  $("#s4-seg").appendChild(seg(["Dirty read", "Dirty write"], 0, function (i) { kind = i; build(); st.reset(); }, "s4-kind"));
+  ctrl.appendChild(h("span", { class: "grow" }));
+  ctrl.appendChild(seg(["Protection off", "Read committed"], 1, function (i) { prot = i; build(); st.reset(); }, "s4-prot"));
+  build(); reset(); st.reset();
+})();
+
+/* ================= 5. SNAPSHOT ISOLATION / MVCC ================= */
+(function mvcc() {
+  const svg = $("#s5-svg");
+  svg.append(R(24, 56, 210, 190, "sv-panel", 14), T(129, 80, "Aaliyah's app · txn 12", "sv-label"));
+  const a1 = T(129, 120, "account 1:  —", "sv-label"), a2 = T(129, 156, "account 2:  —", "sv-label");
+  const tot = T(129, 200, "total:  —", "sv-title", "middle", { fontSize: "16px" });
+  const snapT = T(129, 230, "", "sv-label", "middle", { fill: "var(--ink-3)" });
+  svg.append(a1, a2, tot, snapT);
+  svg.append(R(258, 44, 376, 292, "sv-panel", 14), T(300, 68, "row versions", "sv-label", "start"),
+    T(468, 68, "inserted by", "sv-label"), T(578, 68, "deleted by", "sv-label"));
+
+  const defs = [
+    { txt: "account 1 = $500", ins: "3", del: "" },
+    { txt: "account 1 = $600", ins: "13", del: "" },
+    { txt: "account 2 = $500", ins: "5", del: "" },
+    { txt: "account 2 = $400", ins: "13", del: "" },
+  ];
+  const vrows = defs.map(function (d, i) {
+    const y = 84 + i * 58;
+    const box = R(274, y, 344, 46, "sv-box", 8);
+    const insT = T(468, y + 29, d.ins, "sv-label"), delT = T(578, y + 29, "—", "sv-label");
+    const g = s("g", {}, box, T(292, y + 29, d.txt, "sv-text", "start", { fontSize: "13px" }), insT, delT);
+    svg.appendChild(g);
+    return { g: g, box: box, insT: insT, delT: delT };
+  });
+
+  let mode = 1;
+  function reset() {
+    a1.textContent = "account 1:  —"; a2.textContent = "account 2:  —";
+    tot.textContent = "total:  —"; tot.style.fill = "";
+    snapT.textContent = "";
+    vrows.forEach(function (r, i) {
+      r.box.setAttribute("class", "sv-box");
+      r.delT.textContent = "—";
+      r.g.style.opacity = (i === 1 || i === 3) ? 0 : 1;
+    });
+    setCap("#s5-cap", "Transaction 12 just wants to read two balances. Transaction 13 is moving $100 between them.");
+  }
+  function visible(list) {
+    vrows.forEach(function (r, i) {
+      if (r.g.style.opacity === "0") return;
+      const on = list.indexOf(i) >= 0;
+      r.box.setAttribute("class", on ? "sv-good" : "sv-box");
+      r.g.style.opacity = on ? 1 : 0.35;
+    });
+  }
+  const steps = [
+    function () {
+      snapT.textContent = "snapshot taken";
+      setCap("#s5-cap", "Transaction 12 begins. It writes down which transactions are <b>in progress</b> right now — their writes will be ignored, even if they commit later.");
+    },
+    function () {
+      a1.textContent = "account 1:  $500";
+      visible([0, 2]);
+      setCap("#s5-cap", "It reads <b>account 1</b> and sees $500 — the version inserted by transaction 3, which had committed before the snapshot.");
+    },
+    function () {
+      vrows[1].g.style.opacity = 1; vrows[3].g.style.opacity = 1;
+      vrows[0].delT.textContent = "13"; vrows[2].delT.textContent = "13";
+      setCap("#s5-cap", "Transaction 13 runs the transfer. An <b>update is really a delete plus an insert</b>: the old rows are marked <code>deleted_by 13</code> and two new rows appear, tagged <code>inserted_by 13</code>.");
+    },
+    function () {
+      setCap("#s5-cap", "Transaction 13 <b>commits</b>. Its new versions are now the latest committed values.");
+    },
+    function () {
+      if (mode === 1) {
+        a2.textContent = "account 2:  $500";
+        tot.textContent = "total:  $1000"; tot.style.fill = "var(--mint)";
+        visible([0, 2]);
+        setCap("#s5-cap", "<b>Snapshot isolation:</b> transaction 13 was in progress when the photo was taken, so its rows stay invisible to txn 12. Aaliyah sees a consistent $1000 — the two accounts from the <i>same moment</i>.");
+      } else {
+        a2.textContent = "account 2:  $400";
+        tot.textContent = "total:  $900"; tot.style.fill = "var(--coral)";
+        visible([1, 3]);
+        setCap("#s5-cap", "<b>Read committed:</b> the second read sees the newly committed value. Aaliyah's two reads come from two different moments, so $100 seems to have vanished. That's <b>read skew</b>.");
+      }
+    },
+  ];
+  const ctrl = $("#s5-ctrl");
+  const st = stepper(ctrl, { steps: function () { return steps; }, reset: reset, ms: 1600 });
+  $("#s5-seg").appendChild(seg(["Read committed", "Snapshot isolation"], 1, function (i) { mode = i; st.reset(); }, "s5-mode"));
+  ctrl.appendChild(h("span", { class: "pill good" }, h("i"), "green = visible to txn 12"));
+  reset();
+})();
+
+/* ================= 6. LOST UPDATES ================= */
+(function lostUpdates() {
+  const svg = $("#s6-svg");
+  const rows = [{ name: "client A", y: 84 }, { name: "client B", y: 154 }];
+  const rig = laneRig(svg, rows, 180, 78, 6);
+  svg.appendChild(R(190, 208, 380, 76, "sv-panel", 12));
+  svg.appendChild(T(380, 234, "counter in the database", "sv-label"));
+  const val = T(380, 270, "42", "sv-big");
+  svg.appendChild(val);
+  const stats = $("#s6-stats");
+
+  let mode = 0;
+  let c = 42;
+  function setVal(n, tone) {
+    c = n; val.textContent = String(n);
+    val.style.fill = tone === "bad" ? "var(--coral)" : tone === "good" ? "var(--mint)" : "";
+  }
+  function reset() { rig.reset(); setVal(42); setCap("#s6-cap", "Two clients each want to add 1. The jar should end on <b>44</b>."); }
+
+  const scripts = [
+    function () { return [
+      function () { rig.mark(0, 0, "read → 42", "warn"); setCap("#s6-cap", "Client A reads <b>42</b>."); },
+      function () { rig.mark(1, 1, "read → 42", "warn"); setCap("#s6-cap", "Client B reads <b>42</b> too. Both now hold the same stale number in their own code."); },
+      function () { rig.mark(0, 2, "write 43"); setVal(43); setCap("#s6-cap", "A adds one and writes <b>43</b>."); },
+      function () { rig.mark(1, 3, "write 43", "bad"); setVal(43, "bad"); setCap("#s6-cap", "B writes <b>43</b> as well — it <b>clobbers</b> A's write. Two increments, one counted. This is a <b>lost update</b>."); },
+    ]; },
+    function () { return [
+      function () { rig.mark(0, 0, "+1 in DB", "good"); setVal(43); setCap("#s6-cap", "<code>UPDATE counters SET value = value + 1</code> — the database does the reading and the adding itself, with the row locked."); },
+      function () { rig.mark(1, 1, "+1 in DB", "good"); setVal(44, "good"); setCap("#s6-cap", "B's increment is applied to whatever the value is <i>now</i>. <b>44.</b> Atomic write operations are usually the best fix."); },
+    ]; },
+    function () { return [
+      function () { rig.mark(0, 0, "FOR UPDATE", "warn"); setCap("#s6-cap", "A runs <code>SELECT … FOR UPDATE</code>, which <b>locks the row</b> it read."); },
+      function () { rig.mark(1, 1, "WAITING…", "bad"); setCap("#s6-cap", "B asks for the same row and is made to <b>wait</b>."); },
+      function () { rig.mark(0, 2, "write 43"); setVal(43); setCap("#s6-cap", "A writes 43 and commits, releasing the lock."); },
+      function () { rig.mark(1, 3, "read → 43", "good"); setCap("#s6-cap", "Only now does B get to read — and it reads the fresh <b>43</b>."); },
+      function () { rig.mark(1, 4, "write 44", "good"); setVal(44, "good"); setCap("#s6-cap", "<b>44.</b> Safe — but you must remember the lock everywhere, and locks can deadlock."); },
+    ]; },
+    function () { return [
+      function () { rig.mark(0, 0, "read → 42", "warn"); setCap("#s6-cap", "A reads 42."); },
+      function () { rig.mark(1, 1, "read → 42", "warn"); setCap("#s6-cap", "B reads 42."); },
+      function () { rig.mark(0, 2, "set if =42"); setVal(43); setCap("#s6-cap", "A writes with a condition: <code>… WHERE value = 42</code>. It still is, so the write lands."); },
+      function () { rig.mark(1, 3, "set if =42", "bad"); setCap("#s6-cap", "B's conditional write matches <b>zero rows</b> — the value moved. Nothing happens, and B finds out."); },
+      function () { rig.mark(1, 4, "retry → 44", "good"); setVal(44, "good"); setCap("#s6-cap", "B retries the whole read-modify-write. <b>44.</b> A version-number column works the same way — <b>optimistic locking</b>."); },
+    ]; },
+    function () { return [
+      function () { rig.mark(0, 0, "read → 42", "warn"); setCap("#s6-cap", "Both transactions run on their own snapshot."); },
+      function () { rig.mark(1, 1, "read → 42", "warn"); setCap("#s6-cap", "Neither blocks. The database quietly keeps track."); },
+      function () { rig.mark(0, 2, "COMMIT 43", "good"); setVal(43); setCap("#s6-cap", "A commits 43."); },
+      function () { rig.mark(1, 3, "ABORTED", "bad"); setCap("#s6-cap", "When B tries to commit, the database <b>detects the lost update</b> and aborts it. PostgreSQL's repeatable read, Oracle's serializable and SQL Server's snapshot isolation all do this — MySQL/InnoDB's repeatable read does not."); },
+      function () { rig.mark(1, 4, "retry → 44", "good"); setVal(44, "good"); setCap("#s6-cap", "The app retries the aborted transaction and gets <b>44</b>. You can't forget this one — but you do have to handle the retry."); },
+    ]; },
+  ];
+  let steps = scripts[0]();
+  const ctrl = $("#s6-ctrl");
+  const st = stepper(ctrl, { steps: function () { return steps; }, reset: reset, ms: 1400 });
+  $("#s6-seg").appendChild(seg(["read-modify-write", "atomic +1", "FOR UPDATE", "compare-and-set", "detect + retry"], 0,
+    function (i) { mode = i; steps = scripts[i](); st.reset(); }, "s6-mode"));
+  ctrl.appendChild(h("span", { class: "pill warn" }, h("i"), "target: 44"));
+  reset();
+})();
+
+/* ================= 7. WRITE SKEW / PHANTOMS ================= */
+(function writeSkew() {
+  const svg = $("#s7-svg");
+  const rows = [{ name: "", y: 80 }, { name: "", y: 146 }];
+  const nameT = [T(164, 84, "Aaliyah", "sv-label", "end"), T(164, 150, "Bryce", "sv-label", "end")];
+  const rig = laneRig(svg, rows, 180, 78, 6);
+  svg.append(nameT[0], nameT[1]);
+  svg.appendChild(R(30, 190, 600, 118, "sv-panel", 14));
+  const docG = s("g"), roomG = s("g");
+  svg.append(docG, roomG);
+
+  /* doctors */
+  const docCards = [], docLabels = [];
+  [["Aaliyah", 66], ["Bryce", 300]].forEach(function (d, i) {
+    const bx = R(d[1], 208, 210, 76, "sv-good", 12);
+    const st2 = T(d[1] + 105, 262, "on call", "sv-label");
+    docG.append(bx, T(d[1] + 105, 234, d[0], "sv-text"), st2);
+    docCards.push(bx); docLabels.push(st2);
+  });
+  const docCount = T(560, 250, "", "sv-title", "middle", { fontSize: "15px" });
+  docG.appendChild(docCount);
+
+  /* meeting room */
+  roomG.appendChild(T(330, 212, "room 123 · today", "sv-label"));
+  roomG.appendChild(R(66, 224, 460, 42, "sv-box", 8));
+  [0, 1, 2, 3, 4].forEach(function (i) {
+    roomG.appendChild(s("line", { x1: 66 + i * 92, y1: 224, x2: 66 + i * 92, y2: 266, class: "sv-wire" }));
+    roomG.appendChild(T(66 + i * 92 + 46, 252, ["11:00", "12:00", "13:00", "14:00", "15:00"][i], "sv-label"));
+  });
+  const bookG = s("g"); roomG.appendChild(bookG);
+  const roomCount = T(330, 292, "", "sv-label");
+  roomG.appendChild(roomCount);
+
+  let kase = 0, prot = 0, onCall = 2, bookings = 0;
+  function paintDoctors(offA, offB) {
+    docCards[0].setAttribute("class", offA ? "sv-bad" : "sv-good");
+    docCards[1].setAttribute("class", offB ? "sv-bad" : "sv-good");
+    docLabels[0].textContent = offA ? "off call" : "on call";
+    docLabels[1].textContent = offB ? "off call" : "on call";
+    onCall = (offA ? 0 : 1) + (offB ? 0 : 1);
+    docCount.textContent = "on call: " + onCall;
+    docCount.style.fill = onCall === 0 ? "var(--coral)" : "var(--mint)";
+  }
+  function paintRoom() {
+    K.clear(bookG);
+    for (let i = 0; i < bookings; i++) {
+      bookG.appendChild(R(160 + i * 6, 230 + i * 6, 88, 30 - i * 6, bookings > 1 ? "sv-bad" : "sv-good", 6));
+    }
+    roomCount.textContent = "bookings for 12:00–13:00: " + bookings;
+    roomCount.style.fill = bookings > 1 ? "var(--coral)" : "var(--ink-2)";
+  }
+  function reset() {
+    rig.reset();
+    docG.style.display = kase === 0 ? "" : "none";
+    roomG.style.display = kase === 1 ? "" : "none";
+    nameT[0].textContent = kase === 0 ? "Aaliyah" : "booker 1";
+    nameT[1].textContent = kase === 0 ? "Bryce" : "booker 2";
+    bookings = 0; paintDoctors(false, false); paintRoom();
+    setCap("#s7-cap", kase === 0
+      ? "Rule: <b>at least one doctor must stay on call</b>. Both are on call, both want to go off."
+      : "Rule: <b>no two bookings for the same room at the same time</b>. The slot is free.");
+  }
+
+  const scripts = {
+    "0-0": function () { return [
+      function () { rig.mark(0, 0, "count → 2", "warn"); setCap("#s7-cap", "Aaliyah's transaction counts the doctors on call in <b>her</b> snapshot: 2. Safe to leave."); },
+      function () { rig.mark(1, 1, "count → 2", "warn"); setCap("#s7-cap", "Bryce's transaction counts in <b>his</b> snapshot: also 2. Also safe, he thinks."); },
+      function () { rig.mark(0, 2, "Aaliyah off"); paintDoctors(true, false); setCap("#s7-cap", "Aaliyah updates <b>her own row</b> and commits."); },
+      function () { rig.mark(1, 3, "Bryce off", "bad"); paintDoctors(true, true); setCap("#s7-cap", "Bryce updates <b>his own row</b> and commits. Different rows, so no lost update and no dirty write…"); },
+      function () { rig.mark(1, 4, "0 on call!", "bad"); setCap("#s7-cap", "…and yet the hospital has <b>nobody on call</b>. This is <b>write skew</b>: each decision was based on a fact the other one destroyed."); },
+    ]; },
+    "0-1": function () { return [
+      function () { rig.mark(0, 0, "FOR UPDATE", "warn"); setCap("#s7-cap", "Aaliyah's query is <code>SELECT … WHERE on_call = true FOR UPDATE</code>, so it <b>locks both doctor rows</b>."); },
+      function () { rig.mark(1, 1, "WAITING…", "bad"); setCap("#s7-cap", "Bryce's identical query hits the locks and waits."); },
+      function () { rig.mark(0, 2, "Aaliyah off"); paintDoctors(true, false); setCap("#s7-cap", "Aaliyah goes off call and commits, releasing the locks."); },
+      function () { rig.mark(1, 3, "count → 1", "good"); setCap("#s7-cap", "Now Bryce's query runs and sees <b>1</b>."); },
+      function () { rig.mark(1, 4, "refused", "good"); setCap("#s7-cap", "The app refuses: he's the last one on call. Locking the rows works here <i>because the rows exist</i>."); },
+    ]; },
+    "0-2": function () { return [
+      function () { rig.mark(0, 0, "count → 2", "warn"); setCap("#s7-cap", "Nothing blocks. The database just <b>remembers</b> that Aaliyah's transaction read the on-call rows."); },
+      function () { rig.mark(1, 1, "count → 2", "warn"); setCap("#s7-cap", "It remembers Bryce's read too."); },
+      function () { rig.mark(0, 2, "COMMIT", "good"); paintDoctors(true, false); setCap("#s7-cap", "Aaliyah commits first, and her write trips the wire on the data Bryce read."); },
+      function () { rig.mark(1, 3, "ABORTED", "bad"); setCap("#s7-cap", "When Bryce tries to commit, the database sees his decision rested on an <b>outdated premise</b> and aborts him."); },
+      function () { rig.mark(1, 4, "retry → 1", "good"); setCap("#s7-cap", "His app retries, now sees 1 doctor on call, and refuses. <b>Only serializable isolation prevents write skew automatically.</b>"); },
+    ]; },
+    "1-0": function () { return [
+      function () { rig.mark(0, 0, "search → 0", "warn"); setCap("#s7-cap", "Booker 1 searches for bookings that overlap 12:00–13:00. <b>None.</b>"); },
+      function () { rig.mark(1, 1, "search → 0", "warn"); setCap("#s7-cap", "Booker 2 searches at the same moment. Also none."); },
+      function () { rig.mark(0, 2, "INSERT"); bookings = 1; paintRoom(); setCap("#s7-cap", "Booker 1 inserts the meeting and commits."); },
+      function () { rig.mark(1, 3, "INSERT", "bad"); bookings = 2; paintRoom(); setCap("#s7-cap", "Booker 2 inserts too. <b>Double-booked.</b>"); },
+      function () { rig.mark(1, 4, "2 bookings", "bad"); setCap("#s7-cap", "Same shape as the doctors, but the rows they checked <i>didn't exist yet</i>. The write created the very row the other search was looking for — a <b>phantom</b>."); },
+    ]; },
+    "1-1": function () { return [
+      function () { rig.mark(0, 0, "FOR UPDATE", "warn"); setCap("#s7-cap", "Booker 1 tries <code>SELECT … FOR UPDATE</code> for that room and time."); },
+      function () { rig.mark(0, 1, "0 rows!", "bad"); setCap("#s7-cap", "The query matches <b>zero rows</b> — so there is nothing to attach a lock to."); },
+      function () { rig.mark(1, 2, "0 rows too", "bad"); setCap("#s7-cap", "Booker 2 gets the same empty result and the same absence of locks."); },
+      function () { rig.mark(0, 3, "INSERT"); bookings = 1; paintRoom(); setCap("#s7-cap", "Booker 1 inserts."); },
+      function () { rig.mark(1, 4, "INSERT", "bad"); bookings = 2; paintRoom(); setCap("#s7-cap", "So does booker 2. <b>Locking rows cannot stop a phantom.</b>"); },
+      function () { rig.mark(1, 5, "double-booked", "bad"); setCap("#s7-cap", "One workaround is <b>materializing conflicts</b>: pre-create a row for every room and 15-minute slot purely so there's something to lock. The book calls that a last resort."); },
+    ]; },
+    "1-2": function () { return [
+      function () { rig.mark(0, 0, "search → 0", "warn"); setCap("#s7-cap", "Booker 1 searches. The database records the <b>range of the index</b> that was searched — even though it's empty."); },
+      function () { rig.mark(1, 1, "search → 0", "warn"); setCap("#s7-cap", "Booker 2's search is recorded the same way."); },
+      function () { rig.mark(0, 2, "COMMIT"); bookings = 1; paintRoom(); setCap("#s7-cap", "Booker 1 inserts and commits. The new row falls inside the range booker 2 searched."); },
+      function () { rig.mark(1, 3, "ABORTED", "bad"); setCap("#s7-cap", "Booker 2 is aborted. With 2PL this is an <b>index-range lock</b> (blocking); with SSI it's a tripwire checked at commit."); },
+      function () { rig.mark(1, 4, "retry → 1", "good"); setCap("#s7-cap", "On retry the search finds the meeting and the app says the room is taken. <b>One booking.</b>"); },
+    ]; },
+  };
+  let steps = scripts["0-0"]();
+  const ctrl = $("#s7-ctrl");
+  const st = stepper(ctrl, { steps: function () { return steps; }, reset: reset, ms: 1500 });
+  function rebuild() { steps = scripts[kase + "-" + prot](); st.reset(); }
+  $("#s7-seg2").appendChild(seg(["On-call doctors", "Meeting room"], 0, function (i) { kase = i; rebuild(); }, "s7-case"));
+  ctrl.appendChild(h("span", { class: "grow" }));
+  ctrl.appendChild(seg(["Snapshot isolation", "Lock the rows", "Serializable"], 0, function (i) { prot = i; rebuild(); }, "s7-prot"));
+  reset();
+})();
+
+/* ================= 8. SERIAL EXECUTION ================= */
+(function serial() {
+  const svg = $("#s8-svg");
+  svg.append(T(140, 22, "waiting", "sv-label"), T(330, 22, "single-threaded core", "sv-label"), T(556, 22, "committed", "sv-label"));
+  const laneG = s("g"); svg.appendChild(laneG);
+  const crossBar = s("g", { style: { opacity: 0 } });
+  svg.appendChild(crossBar);
+  crossBar.append(R(266, 34, 128, 246, "sv-bad", 12), T(330, 160, "cross-shard", "sv-label", "middle", { fontWeight: 700 }));
+
+  let shards = 1, fast = 0, cross = false, rate = 6;
+  let lanes = [], crossQ = 0, crossTimer = 0, doneWindow = [], dropped = 0;
+
+  function build() {
+    K.clear(laneG); lanes = [];
+    const n = shards, hh = [0, 90, 74, 62, 54][n], gap = 12;
+    const totalH = n * hh + (n - 1) * gap, top = 36 + (248 - totalH) / 2;
+    for (let i = 0; i < n; i++) {
+      const y = top + i * (hh + gap);
+      const fill = R(268, y, 0, hh, "sv-data", 12); fill.style.opacity = 0.5;
+      const core = R(268, y, 124, hh, "sv-server", 12);
+      const q = s("g");
+      const doneT = T(556, y + hh / 2 + 6, "0", "sv-text", "middle", { fontFamily: "var(--f-mono)", fontWeight: 700 });
+      laneG.append(fill, core, q, doneT, T(330, y + hh / 2 + 5, n === 1 ? "one thread" : "shard " + (i + 1), "sv-label"));
+      lanes.push({ y: y, hh: hh, q: q, fill: fill, doneT: doneT, queue: 0, busy: 0, dur: 1, done: 0 });
+    }
+  }
+  function renderQueues() {
+    lanes.forEach(function (l) {
+      K.clear(l.q);
+      const show = Math.min(l.queue, 9);
+      for (let k = 0; k < show; k++) {
+        l.q.appendChild(R(232 - k * 20, l.y + l.hh / 2 - 8, 16, 16, "sv-data", 4));
+      }
+      if (l.queue > 9) l.q.appendChild(T(42, l.y + l.hh / 2 + 4, "+" + (l.queue - 9), "sv-label", "start"));
+      l.fill.setAttribute("width", l.busy > 0 ? Math.max(4, 124 * (1 - l.busy / l.dur)) : 0);
+      l.doneT.textContent = String(l.done);
+    });
+    crossBar.style.opacity = crossTimer > 0 ? 1 : 0;
+  }
+  const stats = $("#s8-stats");
+  const stThru = stat("Done / sec", "0"), stQueue = stat("Waiting", "0"), stMode = stat("Status", "idle");
+  stats.append(stThru, stQueue, stMode);
+
+  const svc = function () { return fast === 1 ? 45 : 300; };
+  let acc = 0, secAcc = 0;
+  const L = loop(function (dt) {
+    dt = Math.min(dt, 80);
+    acc += rate * dt / 1000;
+    while (acc >= 1) {
+      acc -= 1;
+      if (cross && Math.random() < 0.12) crossQ++;
+      else {
+        let best = 0;
+        for (let i = 1; i < lanes.length; i++) if (lanes[i].queue < lanes[best].queue) best = i;
+        if (lanes[best].queue < 40) lanes[best].queue++; else dropped++;
+      }
+    }
+    if (crossTimer > 0) {
+      crossTimer -= dt;
+      if (crossTimer <= 0) { crossTimer = 0; lanes[0].done++; doneWindow.push(performance.now()); }
+    } else {
+      const allIdle = lanes.every(function (l) { return l.busy <= 0; });
+      if (crossQ > 0 && allIdle) { crossQ--; crossTimer = svc() * 3 + 250; }
+      else {
+        lanes.forEach(function (l) {
+          if (l.busy > 0) {
+            l.busy -= dt;
+            if (l.busy <= 0) { l.busy = 0; l.done++; doneWindow.push(performance.now()); }
+          }
+          if (l.busy <= 0 && l.queue > 0 && crossTimer === 0) { l.queue--; l.dur = svc(); l.busy = l.dur; }
+        });
+      }
+    }
+    const now = performance.now();
+    while (doneWindow.length && now - doneWindow[0] > 2000) doneWindow.shift();
+    secAcc += dt;
+    if (secAcc > 120) {
+      secAcc = 0;
+      const q = lanes.reduce(function (a, l) { return a + l.queue; }, 0) + crossQ;
+      const thru = Math.round(doneWindow.length / 2);
+      stThru.set(thru, thru >= rate - 1 ? "good" : "warn");
+      stQueue.set(q, q > 12 ? "bad" : q > 4 ? "warn" : "good");
+      stMode.set(q > 12 ? "falling behind" : "keeping up", q > 12 ? "bad" : "good");
+      renderQueues();
+    }
+  });
+
+  function resetSim() {
+    build(); crossQ = 0; crossTimer = 0; doneWindow = []; dropped = 0; renderQueues();
+  }
+  const ctrl = $("#s8-ctrl");
+  ctrl.appendChild(seg(["Interactive", "Stored procedure"], 0, function (i) { fast = i; setCap("#s8-cap", i === 1
+    ? "A <b>stored procedure</b> is sent to the database in one go, so the single thread never waits for the network. Toy numbers, but the shape is real."
+    : "An <b>interactive</b> transaction chats with the app between statements, and the one lane sits idle during every round trip."); }, "s8-mode"));
+  ctrl.appendChild(slider({ id: "s8-rate", label: "Arriving / sec", min: 1, max: 30, value: 6, onInput: function (v) { rate = v; } }));
+  ctrl.appendChild(seg(["1 shard", "2", "3", "4"], 0, function (i) { shards = i + 1; resetSim(); }, "s8-shards"));
+  const crossBtn = btn("Add cross-shard work", "", function () {
+    cross = !cross;
+    crossBtn.textContent = cross ? "Cross-shard: on" : "Add cross-shard work";
+    crossBtn.className = "btn" + (cross ? " danger" : "");
+    setCap("#s8-cap", cross
+      ? "A <b>cross-shard</b> transaction must run in lockstep across every shard, so all the lanes stop for it. VoltDB reports about 1,000 cross-shard writes per second — orders of magnitude below single-shard throughput."
+      : "Back to single-shard transactions only.");
+  });
+  ctrl.appendChild(crossBtn);
+  const runBtn = btn(K.reduced ? "Start" : "Pause", "primary", function () {
+    if (L.running) { L.stop(); runBtn.textContent = "Start"; } else { L.start(); runBtn.textContent = "Pause"; }
+  });
+  ctrl.appendChild(runBtn);
+  resetSim();
+  whenVisible(svg,
+    function () { if (!K.reduced && runBtn.textContent === "Pause") L.start(); },
+    function () { L.stop(); });
+})();
+
+/* ================= 9. TWO-PHASE LOCKING ================= */
+(function twoPL() {
+  const svg = $("#s9-svg");
+  const cards = [];
+  [["txn 1", 66], ["txn 2", 168]].forEach(function (d) {
+    const bx = R(24, d[1], 250, 80, "sv-box", 12);
+    const stt = T(149, d[1] + 56, "not started", "sv-label");
+    svg.append(bx, T(149, d[1] + 30, d[0], "sv-text"), stt);
+    cards.push({ box: bx, st: stt });
+  });
+  const phase = T(149, 288, "phase: —", "sv-label");
+  svg.append(R(24, 268, 250, 34, "sv-panel", 10), phase);
+  svg.appendChild(T(465, 40, "the lock table", "sv-label"));
+  const objs = [];
+  [["row · Aaliyah", 58], ["row · Bryce", 122], ["index range · room 123, 12–13", 186]].forEach(function (d) {
+    const bx = R(300, d[1], 336, 50, "sv-box", 10);
+    const lk = T(620, d[1] + 30, "free", "sv-label", "end");
+    svg.append(bx, T(316, d[1] + 30, d[0], "sv-text", "start", { fontSize: "13px" }), lk);
+    objs.push({ box: bx, lk: lk });
+  });
+  const note = T(465, 282, "", "sv-label");
+  svg.appendChild(note);
+
+  function setLock(i, text, tone) {
+    objs[i].lk.textContent = text;
+    objs[i].box.setAttribute("class", tone === "x" ? "sv-bad" : tone === "s" ? "sv-good" : "sv-box");
+  }
+  function setTxn(i, text, tone) {
+    cards[i].st.textContent = text;
+    cards[i].box.setAttribute("class", tone === "bad" ? "sv-bad" : tone === "good" ? "sv-good" : tone === "warn" ? "sv-data-soft" : "sv-box");
+  }
+  let mode = 0;
+  function reset() {
+    [0, 1, 2].forEach(function (i) { setLock(i, "free"); });
+    setTxn(0, "not started"); setTxn(1, "not started");
+    phase.textContent = "phase: —"; note.textContent = "";
+    setCap("#s9-cap", "Shared locks can be held by many readers. An exclusive lock is held by one writer, until commit.");
+  }
+  const scripts = [
+    function () { return [
+      function () { setTxn(0, "reading", "warn"); setLock(0, "S · txn 1", "s"); phase.textContent = "phase: growing"; setCap("#s9-cap", "Transaction 1 reads Aaliyah's row, so it takes a <b>shared</b> lock."); },
+      function () { setTxn(1, "reading", "warn"); setLock(0, "S · txn 1, txn 2", "s"); setCap("#s9-cap", "Transaction 2 reads the same row. Shared locks <b>stack</b> — readers don't block readers."); },
+      function () { setTxn(1, "wants to write", "bad"); setCap("#s9-cap", "Now transaction 2 wants to <b>write</b> that row. It needs to upgrade to an <b>exclusive</b> lock, but txn 1 still holds a shared one — so it waits."); },
+      function () { setTxn(0, "committed", "good"); setLock(0, "S · txn 2", "s"); phase.textContent = "phase: shrinking (txn 1)"; setCap("#s9-cap", "Transaction 1 commits. Only <i>then</i> does it release its locks — that's the <b>shrinking</b> phase, and it never acquires anything new afterwards."); },
+      function () { setTxn(1, "writing", "warn"); setLock(0, "X · txn 2", "x"); setCap("#s9-cap", "Transaction 2 gets the exclusive lock and writes. Writers block readers and readers block writers — the exact opposite of snapshot isolation."); },
+      function () { setTxn(1, "committed", "good"); setLock(0, "free"); phase.textContent = "phase: done"; setCap("#s9-cap", "It commits and lets go. The result is <b>serializable</b> — at the cost of all that waiting."); },
+    ]; },
+    function () { return [
+      function () { setTxn(0, "holds Aaliyah", "warn"); setLock(0, "X · txn 1", "x"); phase.textContent = "phase: growing"; setCap("#s9-cap", "Transaction 1 locks Aaliyah's row."); },
+      function () { setTxn(1, "holds Bryce", "warn"); setLock(1, "X · txn 2", "x"); setCap("#s9-cap", "Transaction 2 locks Bryce's row. So far so good."); },
+      function () { setTxn(0, "waiting for Bryce", "bad"); setCap("#s9-cap", "Transaction 1 now needs Bryce's row… which transaction 2 is holding."); },
+      function () { setTxn(1, "waiting for Aaliyah", "bad"); note.textContent = "deadlock detected"; note.style.fill = "var(--coral)"; setCap("#s9-cap", "And transaction 2 needs Aaliyah's row. Each waits for the other, forever. <b>Deadlock.</b>"); },
+      function () { setTxn(1, "ABORTED", "bad"); setLock(1, "X · txn 1", "x"); setCap("#s9-cap", "The database detects the cycle and <b>kills one transaction</b> so the other can finish. All of the victim's work is wasted."); },
+      function () { setTxn(0, "committed", "good"); setTxn(1, "retrying", "warn"); setLock(0, "free"); setLock(1, "free"); note.textContent = ""; phase.textContent = "phase: done"; setCap("#s9-cap", "Transaction 1 commits; the app retries transaction 2. Deadlocks are far more common under 2PL than under read committed."); },
+    ]; },
+    function () { return [
+      function () { setTxn(0, "searching 12–13", "warn"); setCap("#s9-cap", "Transaction 1 searches for bookings of room 123 between 12:00 and 13:00. There are none — so what is there to lock?"); },
+      function () { setLock(2, "S · txn 1", "s"); note.textContent = "a range of the index, not a row"; note.style.fill = "var(--ink-3)"; setCap("#s9-cap", "The lock goes on a <b>range of the index</b> on room_id (or on start_time). It covers rows that <b>don't exist yet</b>."); },
+      function () { setTxn(1, "wants to insert", "bad"); setCap("#s9-cap", "Transaction 2 tries to insert a booking for that room and time. To do so it must touch the same part of the index — where it meets the lock and waits."); },
+      function () { setTxn(0, "inserted + commit", "good"); setLock(2, "free"); setCap("#s9-cap", "Transaction 1 inserts its meeting and commits, releasing the range."); },
+      function () { setTxn(1, "sees the clash", "good"); setLock(2, "S · txn 2", "s"); setCap("#s9-cap", "Transaction 2 runs its search again, finds the meeting, and refuses to double-book. <b>Index-range locks</b> are a coarse but cheap stand-in for a true <b>predicate lock</b>."); },
+    ]; },
+  ];
+  let steps = scripts[0]();
+  const ctrl = $("#s9-ctrl");
+  const st = stepper(ctrl, { steps: function () { return steps; }, reset: reset, ms: 1500 });
+  $("#s9-seg").appendChild(seg(["Readers + a writer", "Deadlock", "Index-range lock"], 0, function (i) { mode = i; steps = scripts[i](); st.reset(); }, "s9-mode"));
+  reset();
+})();
+
+/* ================= 10. SSI ================= */
+(function ssi() {
+  const svg = $("#s10-svg");
+  const rows = [{ name: "txn 42", y: 76 }, { name: "txn 43", y: 146 }];
+  const rig = laneRig(svg, rows, 190, 74, 6);
+  svg.appendChild(R(150, 196, 490, 108, "sv-panel", 12));
+  svg.appendChild(T(395, 220, "what the database quietly remembers", "sv-label"));
+  const readsT = T(395, 250, "", "sv-label");
+  const writesT = T(395, 278, "", "sv-label");
+  svg.append(readsT, writesT);
+
+  let mode = 1;
+  function reset() {
+    rig.reset();
+    readsT.textContent = "reads on index shift=1234:  —";
+    writesT.textContent = "writes:  —";
+    readsT.style.fill = ""; writesT.style.fill = "";
+    setCap("#s10-cap", "Nothing ever blocks here. Both transactions run at full speed on their own snapshots.");
+  }
+  const scripts = [
+    function () { return [
+      function () { rig.mark(0, 0, "read A", "warn"); readsT.textContent = "reads on index shift=1234:  txn 42"; setCap("#s10-cap", "Transaction 42 reads. The database notes it, like a tripwire on that index entry — but nobody is blocked."); },
+      function () { rig.mark(1, 1, "read B", "warn"); readsT.textContent = "reads on index shift=1234:  txn 42, txn 43"; setCap("#s10-cap", "Transaction 43 reads a different row. Noted too."); },
+      function () { rig.mark(0, 2, "write A"); writesT.textContent = "writes:  txn 42 → row A"; setCap("#s10-cap", "Transaction 42 writes row A. Did anyone read row A? No."); },
+      function () { rig.mark(0, 3, "COMMIT", "good"); setCap("#s10-cap", "At commit the database checks its notes and finds no conflict. <b>Committed.</b>"); },
+      function () { rig.mark(1, 4, "COMMIT", "good"); setCap("#s10-cap", "Transaction 43 commits too. When transactions don't actually collide, optimistic control costs almost nothing."); },
+    ]; },
+    function () { return [
+      function () { rig.mark(0, 0, "count → 2", "warn"); readsT.textContent = "reads on index shift=1234:  txn 42"; setCap("#s10-cap", "Transaction 42 asks how many doctors are on call. The read is recorded against the index entry for shift 1234."); },
+      function () { rig.mark(1, 1, "count → 2", "warn"); readsT.textContent = "reads on index shift=1234:  txn 42, txn 43"; setCap("#s10-cap", "Transaction 43 asks the same question and gets the same answer. Still nothing blocks."); },
+      function () { rig.mark(0, 2, "Aaliyah off"); writesT.textContent = "writes:  txn 42 → on_call = false"; setCap("#s10-cap", "Transaction 42 writes. The database looks in the index for anyone who <b>recently read</b> this data, and taps them on the shoulder: your premise may be stale."); },
+      function () { rig.mark(1, 3, "Bryce off"); writesT.textContent = "writes:  txn 42, txn 43 → on_call = false"; writesT.style.fill = "var(--sun)"; setCap("#s10-cap", "Transaction 43 writes too, and taps 42 in return. Notifications, not blocks — nobody has committed yet, so nothing is decided."); },
+      function () { rig.mark(0, 4, "COMMIT", "good"); setCap("#s10-cap", "Transaction 42 commits first. The conflicting write from 43 hasn't committed, so 42's premise is still fine. <b>Let through.</b>"); },
+      function () { rig.mark(1, 5, "ABORTED", "bad"); readsT.style.fill = "var(--coral)"; setCap("#s10-cap", "When transaction 43 tries to commit, the write it was warned about <b>has</b> committed. Its decision rested on an outdated premise, so it is aborted and retried. Write skew prevented."); },
+    ]; },
+    function () { return [
+      function () { rig.mark(0, 0, "write (uncomm.)", "warn"); writesT.textContent = "writes:  txn 42 → on_call = false (uncommitted)"; setCap("#s10-cap", "Transaction 42 makes a write but hasn't committed yet."); },
+      function () { rig.mark(1, 1, "reads snapshot", "warn"); readsT.textContent = "txn 43 ignored an uncommitted write by txn 42"; setCap("#s10-cap", "Transaction 43 reads from its snapshot, which correctly <b>ignores</b> 42's uncommitted write. The database writes that fact down."); },
+      function () { rig.mark(0, 2, "COMMIT", "good"); setCap("#s10-cap", "Now transaction 42 commits. The write that 43 ignored has just become real."); },
+      function () { rig.mark(1, 3, "writes", "warn"); writesT.textContent = "writes:  txn 43 → on_call = false"; setCap("#s10-cap", "Transaction 43 goes ahead and writes, still believing what it read."); },
+      function () { rig.mark(1, 4, "ABORTED", "bad"); readsT.style.fill = "var(--coral)"; setCap("#s10-cap", "At commit the database checks: did any of the writes I ignored get committed? Yes — so this is a <b>stale MVCC read</b> and 43 must abort. Waiting until commit matters: a read-only transaction would have been fine, and 42 might have aborted instead."); },
+    ]; },
+  ];
+  let steps = scripts[1]();
+  const ctrl = $("#s10-ctrl");
+  const st = stepper(ctrl, { steps: function () { return steps; }, reset: reset, ms: 1600 });
+  $("#s10-seg").appendChild(seg(["No conflict", "Write skew", "Stale read"], 1, function (i) { mode = i; steps = scripts[i](); st.reset(); }, "s10-mode"));
+  reset();
+})();
+
+/* ================= 11. TWO-PHASE COMMIT ================= */
+(function twoPC() {
+  const svg = $("#s11-svg");
+  svg.appendChild(R(240, 24, 180, 64, "sv-server", 14));
+  const coordT = T(330, 62, "coordinator", "sv-text");
+  svg.appendChild(coordT);
+  const logBox = R(240, 100, 180, 36, "sv-panel", 8);
+  const logT = T(330, 124, "log:  —", "sv-label");
+  svg.append(logBox, logT);
+  const xs = [110, 330, 550];
+  const parts = [];
+  xs.forEach(function (x, i) {
+    svg.appendChild(s("path", { d: "M330,140 C330,170 " + x + ",170 " + x + ",202", class: "sv-wire" }));
+    svg.appendChild(draw.db(x, 258, 84, 92, "shard " + (i + 1)));
+    const chip = R(x - 62, 176, 124, 30, "sv-box", 9);
+    const chipT = T(x, 196, "idle", "sv-label");
+    svg.append(chip, chipT);
+    parts.push({ chip: chip, t: chipT, x: x });
+  });
+  const layer = s("g"); svg.appendChild(layer);
+  const banner = T(330, 340, "", "sv-title", "middle", { fontSize: "15px" });
+  svg.appendChild(banner);
+
+  function setPart(i, text, tone) {
+    parts[i].t.textContent = text;
+    parts[i].chip.setAttribute("class", tone === "bad" ? "sv-bad" : tone === "good" ? "sv-good" : tone === "warn" ? "sv-data-soft" : "sv-box");
+  }
+  function flyTag(i, text, cls) {
+    const tag = draw.tag(text, cls || "sv-data-soft");
+    layer.appendChild(tag);
+    fly(tag, [330, 150], [parts[i].x, 172], 550).then(function () { setTimeout(function () { tag.remove(); }, 400); });
+  }
+  let mode = 0;
+  function reset() {
+    K.clear(layer);
+    [0, 1, 2].forEach(function (i) { setPart(i, "idle"); });
+    logT.textContent = "log:  —"; logT.style.fill = "";
+    coordT.textContent = "coordinator"; coordT.style.fill = "";
+    banner.textContent = "";
+    setCap("#s11-cap", "One transaction has written data on all three shards. Now it wants to commit — everywhere or nowhere.");
+  }
+  const scripts = [
+    function () { return [
+      function () { [0, 1, 2].forEach(function (i) { setPart(i, "prepare?", "warn"); flyTag(i, "prepare"); }); setCap("#s11-cap", "<b>Phase 1.</b> The coordinator sends <b>prepare</b> to every participant, tagged with the global transaction ID."); },
+      function () { [0, 1, 2].forEach(function (i) { setPart(i, "YES · locks held", "good"); }); setCap("#s11-cap", "Each participant writes all its data to disk and checks every constraint, then votes <b>yes</b>. Voting yes means giving up the right to abort — it must be able to commit no matter what happens next."); },
+      function () { logT.textContent = "log:  COMMIT (txn 7)"; logT.style.fill = "var(--mint)"; setCap("#s11-cap", "All yes, so the coordinator writes <b>COMMIT</b> to its own log on disk. This is the <b>commit point</b> — the moment the transaction is definitely committed, and it comes down to one ordinary single-node write."); },
+      function () { [0, 1, 2].forEach(function (i) { setPart(i, "committed", "good"); flyTag(i, "commit", "sv-good"); }); banner.textContent = "all three committed together"; banner.style.fill = "var(--mint)"; setCap("#s11-cap", "<b>Phase 2.</b> The decision goes out. If a message is lost or a node is down, the coordinator <b>retries forever</b> — there is no going back. Locks are released only now."); },
+    ]; },
+    function () { return [
+      function () { [0, 1, 2].forEach(function (i) { setPart(i, "prepare?", "warn"); flyTag(i, "prepare"); }); setCap("#s11-cap", "<b>Phase 1</b> again: can everybody commit?"); },
+      function () { setPart(0, "YES", "good"); setPart(1, "NO · constraint", "bad"); setPart(2, "YES", "good"); setCap("#s11-cap", "Shard 2 finds a constraint violation and votes <b>no</b>. One no is enough."); },
+      function () { logT.textContent = "log:  ABORT (txn 7)"; logT.style.fill = "var(--coral)"; setCap("#s11-cap", "The coordinator records <b>abort</b> in its log."); },
+      function () { [0, 1, 2].forEach(function (i) { setPart(i, "rolled back", "warn"); flyTag(i, "abort", "sv-bad"); }); banner.textContent = "nobody committed"; banner.style.fill = "var(--sun)"; setCap("#s11-cap", "Everyone rolls back and releases their locks. Atomic: all or nothing, across three machines."); },
+    ]; },
+    function () { return [
+      function () { [0, 1, 2].forEach(function (i) { setPart(i, "prepare?", "warn"); flyTag(i, "prepare"); }); setCap("#s11-cap", "<b>Phase 1</b>: prepare goes out."); },
+      function () { [0, 1, 2].forEach(function (i) { setPart(i, "YES · locks held", "good"); }); setCap("#s11-cap", "All three vote yes. Each is now holding row locks and cannot change its mind."); },
+      function () { logT.textContent = "log:  COMMIT (txn 7)"; logT.style.fill = "var(--mint)"; setPart(1, "committed", "good"); flyTag(1, "commit", "sv-good"); setCap("#s11-cap", "The coordinator decides commit, logs it, and gets one message out — shard 2 commits."); },
+      function () {
+        coordT.textContent = "coordinator — CRASHED"; coordT.style.fill = "var(--coral)";
+        setPart(0, "IN DOUBT · locked", "bad"); setPart(2, "IN DOUBT · locked", "bad");
+        banner.textContent = "blocked"; banner.style.fill = "var(--coral)";
+        setCap("#s11-cap", "Then the coordinator crashes. Shards 1 and 3 are <b>in doubt</b>: they can't abort (shard 2 already committed) and can't commit (someone might have voted no). They can only wait.");
+      },
+      function () { setCap("#s11-cap", "And while they wait they <b>keep holding their locks</b>, even across restarts — so other transactions touching those rows are blocked too. This is why 2PC is called a <b>blocking</b> protocol."); },
+      function () {
+        coordT.textContent = "coordinator — recovered"; coordT.style.fill = "var(--mint)";
+        setPart(0, "committed", "good"); setPart(2, "committed", "good");
+        flyTag(0, "commit", "sv-good"); flyTag(2, "commit", "sv-good");
+        banner.textContent = "resolved from the log"; banner.style.fill = "var(--mint)";
+        setCap("#s11-cap", "When it comes back it reads its log and finishes the job. If that log were lost, an administrator would have to decide by hand. The real fix: replicate the coordinator with a <b>consensus</b> protocol.");
+      },
+    ]; },
+  ];
+  let steps = scripts[0]();
+  const ctrl = $("#s11-ctrl");
+  const st = stepper(ctrl, { steps: function () { return steps; }, reset: reset, ms: 1800 });
+  $("#s11-seg").appendChild(seg(["All vote yes", "One votes no", "Coordinator crashes"], 0, function (i) { mode = i; steps = scripts[i](); st.reset(); }, "s11-mode"));
+  reset();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz($("#quiz-root"), [
+  {
+    q: "A transaction fails halfway through. What does atomicity promise?",
+    options: ["The half that worked is kept", "Every write it made is undone, so you can safely retry", "The database shuts down", "Other transactions are also cancelled"],
+    answer: 1,
+    why: "Atomicity is really abortability: on failure the database discards all the transaction's writes, so retrying can't double-apply anything.",
+  },
+  {
+    q: "Which of these can still happen under read-committed isolation?",
+    options: ["Dirty reads", "Dirty writes", "Lost updates and read skew", "Nothing — it's the strongest level"],
+    answer: 2,
+    why: "Read committed only stops dirty reads and dirty writes. Two clients can still both read 42 and both write 43, and a reader can still see two parts of the database from different moments.",
+  },
+  {
+    q: "What does MVCC actually keep in the database?",
+    options: ["One copy of each row plus a lock", "Several versions of each row, tagged with the transaction that wrote them", "A photograph of the disk", "Only the newest value, and a log of the rest"],
+    answer: 1,
+    why: "Each row version records inserted_by and deleted_by transaction IDs. Visibility rules then decide which versions each transaction's snapshot can see; garbage collection removes versions nobody can see.",
+  },
+  {
+    q: "Two doctors both go off call at once and the hospital ends up with nobody on call. What is that?",
+    options: ["A dirty write", "A lost update", "Write skew", "A deadlock"],
+    answer: 2,
+    why: "They wrote different rows, so it's neither a dirty write nor a lost update. Each read the same data, decided, and wrote — and the other's write made the premise false. Only serializable isolation prevents it automatically.",
+  },
+  {
+    q: "Why can't SELECT … FOR UPDATE stop two people double-booking an empty meeting room?",
+    options: ["Because the lock expires too fast", "Because the search matches no rows, so there is nothing to lock", "Because bookings aren't indexed", "Because FOR UPDATE only works on one table"],
+    answer: 1,
+    why: "That's a phantom: the write creates the very row the other search was looking for. The answers are a predicate or index-range lock, true serializable isolation, or — as a last resort — materializing conflicts.",
+  },
+  {
+    q: "In two-phase commit, what happens once a participant has voted yes?",
+    options: ["It commits immediately", "It can still abort if it times out", "It must wait for the coordinator's decision, holding its locks", "It tells the other participants what to do"],
+    answer: 2,
+    why: "Voting yes surrenders the right to abort. If the coordinator then crashes, the participant is in doubt: it can neither commit nor abort alone, and must keep its locks until the coordinator recovers.",
+  },
+], 8);
+</script>
+</body>
+</html>
