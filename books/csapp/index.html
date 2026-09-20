@@ -80,6 +80,10 @@
   const ready = (c) => c.n <= BUILT;
   const done = CHAPTERS.filter((c) => ready(c) && p[c.n]).length;
   K.$("#ready-count").textContent = String(BUILT);
+  const readyWord = K.$("#ready-count").nextSibling;
+  if (readyWord && readyWord.nodeType === 3) {
+    readyWord.textContent = BUILT === 1 ? " chapter ready to explore" : " chapters ready to explore";
+  }
   K.$("#bar-fill").style.width = `${(done / BUILT) * 100}%`;
   K.$("#progress-text").textContent = `${done} of ${BUILT} explored`;
   K.$("#soon-note").textContent = BUILT < CHAPTERS.length ? `chapters ${BUILT + 1}–${CHAPTERS.length} not built yet` : "every chapter built";

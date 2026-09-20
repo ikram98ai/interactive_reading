@@ -22,6 +22,6 @@ window.LIBRARY = [
     accent: "mint",
     blurb: "What really happens between your program and the machine that runs it — bits, instructions, caches and processes.",
     chapters: 12,
-    built: 1,
+    built: 2,
   },
 ];

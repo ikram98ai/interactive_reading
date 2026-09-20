@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 2 · Representing and Manipulating Information</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .eyebrow { color: var(--mint); }
+  .toc a:hover { border-color: var(--mint); color: var(--mint); }
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box { stroke: var(--mint); }
+  .fade { transition: opacity .3s; }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .first { font-size: 15.5px; color: var(--ink-2); background: var(--mint-soft); border-radius: var(--r-m); padding: 12px 14px; }
+  .first b { color: var(--ink); }
+  .hero-stage { aspect-ratio: auto; }
+  .hero-stage svg { width: 100%; height: auto; display: block; }
+  .hero-readings { grid-template-columns: 1fr 1fr; }
+  .readings { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); }
+  .reading { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-s); padding: 10px 12px; }
+  .reading .k { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .reading .v { font-family: var(--f-mono); font-size: 16px; font-weight: 700; color: var(--ink); margin-top: 4px; word-break: break-all; }
+  .hexchart { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; padding: 12px 14px; border-top: 1px solid var(--line); }
+  .hexcell { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 4px; text-align: center; font-family: var(--f-mono); }
+  .hexcell .h { font-weight: 800; font-size: 15px; color: var(--ink); }
+  .hexcell .b { font-size: 11px; color: var(--ink-3); margin-top: 3px; }
+  .hexcell .d { font-size: 11px; color: var(--ink-2); margin-top: 2px; }
+  .cmp { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .cmp th, .cmp td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; font-family: var(--f-mono); }
+  .cmp th { color: var(--ink-3); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; }
+  .cmp td.ok { color: var(--mint); font-weight: 700; }
+  .cmp td.bad { color: var(--coral); font-weight: 700; }
+  .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  pre.code { margin: 0; padding: 12px 14px; background: var(--surface-2); border-top: 1px solid var(--line);
+             font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+             overflow-x: auto; white-space: pre-wrap; min-height: 72px; }
+  pre.code b { color: var(--ink); font-weight: 700; }
+  pre.code i { color: var(--ink-3); font-style: normal; }
+  @media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">2</span> Chapter two · Bitville</span>
+      <h1>Representing and Manipulating Information</h1>
+      <p class="lede">The same eight switches can be a hex digit, a counting number, a negative number, or a fraction. Computers do not know which story you meant — and that is why <span class="mono">200 * 300 * 400 * 500</span> can print a negative answer.</p>
+      <p class="quote">“Computer representations use a limited number of bits to encode a number, and hence some operations can overflow when the results are too large to be represented.”</p>
+      <p class="first"><b>New here?</b> Flip the switches. Each picture is a tiny machine. You cannot break it. The book’s formulas and figure numbers live under “What the book says.”</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#hex">Hex</a>
+        <a href="#sizes">Data sizes</a>
+        <a href="#endian">Byte order</a>
+        <a href="#bitops">Bit operations</a>
+        <a href="#integers">Unsigned vs two’s</a>
+        <a href="#convert">Same bits, new type</a>
+        <a href="#expand">Widen / shrink</a>
+        <a href="#add">Integer add</a>
+        <a href="#shift">Shifts</a>
+        <a href="#float">Floating point</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · one byte, four stories</span><span class="pill info" id="hero-pill"><i></i>tap a switch</span></div>
+      <svg id="hero-svg" viewBox="0 0 680 148" role="img" aria-label="Eight bits interpreted as hex, unsigned, two's complement, and ASCII"></svg>
+      <div class="readings hero-readings" id="hero-read"></div>
+    </div>
+  </section>
+
+  <section class="scene" id="hex">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">2.1.1 · hexadecimal notation</span>
+        <h2>Four bits, one letter</h2>
+        <p class="story">A byte is eight switches. Writing all eight as <code>11010100</code> is noisy. Writing 212 is tidy but hides the bits. So we group the switches in fours and give each group a <b>hexadecimal</b> digit: 0–9 then A–F.</p>
+        <p class="story">One hex digit = exactly 4 bits = a number from 0 to 15. Two hex digits = one byte = <code>00</code>…<code>FF</code>. In C we write that as <code>0xD4</code>.</p>
+        <p class="imagine"><b>Flip any switch.</b> Watch the two nibbles change. Binary ↔ hex is a lookup, not a calculation.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 2.2: hex digits 0–F encode 0000–1111. “Converting between binary and hexadecimal is straightforward, since it can be performed one hexadecimal digit at a time.”</p>
+            <p>C constants starting with <code>0x</code> or <code>0X</code> are hexadecimal. <code>0xFA1D37B</code>, <code>0xfa1d37b</code>, and mixed case are the same number.</p>
+            <p>Practice 2.1 trains the grouping: split binary into 4-bit chunks, pad the left with zeros if needed, then replace each chunk by its hex digit.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stack">
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">Two nibbles make a byte</span><span class="pill" id="s1-pill">0x00</span></div>
+          <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 680 232" role="img" aria-label="Eight bits grouped into two hexadecimal digits"></svg></div>
+          <div class="controls" id="s1-controls"></div>
+          <div class="caption" id="s1-cap">Each block of four bits is one hex digit. Press a bit to flip it.</div>
+        </div>
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">Figure 2.2 · the sixteen digits</span></div>
+          <div class="hexchart" id="s1-chart"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="sizes">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">2.1.2 · data sizes</span>
+        <h2>A word is however wide the program is</h2>
+        <p class="story">Memory is a row of bytes. A <b>word</b> is the natural chunk the machine likes: 4 bytes on a 32-bit program, 8 bytes on a 64-bit one. C types are just “this many bytes, please.”</p>
+        <p class="story"><code>int</code> stays 4 bytes even on 64-bit machines. <code>long</code> and pointers grow from 4 to 8. <code>int32_t</code> / <code>int64_t</code> (C99) lock the size so you are not guessing.</p>
+        <p class="imagine"><b>Switch 32-bit / 64-bit.</b> Watch which bars grow. Historically many programs stuffed a pointer into an <code>int</code> — that breaks when pointers become 8 bytes.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 2.3 (typical sizes): <code>char</code> 1, <code>short</code> 2, <code>int</code> 4, <code>long</code> 4 or 8, <code>char *</code> 4 or 8, <code>float</code> 4, <code>double</code> 8. Fixed-size <code>int32_t</code> / <code>int64_t</code> are always 4 and 8.</p>
+            <p>“Most 64-bit machines can also run programs compiled for use on 32-bit machines” with <code>gcc -m32</code>.</p>
+            <p>“Many programmers historically assumed that an object declared as type <code>int</code> could be used to store a pointer. This works fine for most 32-bit programs, but it leads to problems for 64-bit programs.”</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 2.3 · typical C sizes</span><span id="s2-seg"></span></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 680 320" role="img" aria-label="Byte widths of C types on 32-bit versus 64-bit programs"></svg></div>
+        <div class="caption" id="s2-cap"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="endian">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">2.1.3 · addressing and byte ordering</span>
+        <h2>Which end of the egg?</h2>
+        <p class="story">A 4-byte <code>int</code> at address <code>0x100</code> occupies <code>0x100</code>, <code>0x101</code>, <code>0x102</code>, <code>0x103</code>. The fight is only about <i>which byte sits at the smallest address</i>.</p>
+        <p class="story"><b>Big endian</b> stores the most significant byte first (01 23 45 67). <b>Little endian</b> stores the least significant byte first (67 45 23 01). Intel and almost every phone OS you use are little-endian. The names come from Swift’s <i>Gulliver’s Travels</i> — Lilliput arguing about which end of an egg to crack (Aside, p. 79).</p>
+        <p class="imagine"><b>Drop 0x01234567 into memory</b> both ways. Then run the book’s <code>show_bytes(12345)</code>.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure on p. 78: variable <code>x = 0x01234567</code> at <code>0x100</code>. Big endian: 01,23,45,67. Little endian: 67,45,23,01.</p>
+            <p>Figure 2.6: <code>12345 = 0x00003039</code>. Linux/Windows/x86-64 print <code>39 30 00 00</code> (little). Sun SPARC prints <code>00 00 30 39</code> (big). The <code>float</code> bytes of <code>12345.0</code> are the same bits in reverse order. Pointers differ completely — they are addresses, not the number 12345.</p>
+            <p>Byte order matters for networks (Chapter 11), for reading disassembly, and when a cast peeks at the raw bytes (Figure 2.4 <code>show_bytes</code>).</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">x = 0x01234567 at 0x100</span><span id="s3-seg"></span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 680 280" role="img" aria-label="The same word stored big-endian and little-endian"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <pre class="code" id="s3-code"></pre>
+        <div class="caption" id="s3-cap">Both machines stored the same number. Only the street numbers of the four bytes changed.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="bitops">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">2.1.6–2.1.9 · Boolean, C bits, logic, shifts</span>
+        <h2>A mask, a question, a shove</h2>
+        <p class="story">Boolean algebra gives four bit-by-bit jobs: <b>AND</b> <code>&amp;</code>, <b>OR</code> <code>|</code>, <b>XOR</code> <code>^</code>, <b>NOT</code> <code>~</code>. A mask keeps the bits you care about and throws the rest away.</p>
+        <p class="story">C also has <b>logical</b> <code>&amp;&amp;</code> <code>||</code> <code>!</code>. Those do not walk the bits. They ask “is this zero?” and answer 0 or 1. And there are <b>shifts</b>: <code>&lt;&lt;</code> invents zeros on the right. Right shift is either <b>logical</b> (fill with 0) or <b>arithmetic</b> (copy the sign bit) — C uses arithmetic for signed values.</p>
+        <p class="imagine"><b>Pick an operation.</b> Flip bits in A and B. Compare a bitwise <code>&amp;</code> with a logical <code>&amp;&amp;</code> on the same numbers.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>§2.1.7: C uses <code>| &amp; ~ ^</code> on any integral type. A common trick: <code>x ^ y</code> then swap without a temp (Practice 2.10).</p>
+            <p>§2.1.8: logical operators treat nonzero as true and always yield 0 or 1. They short-circuit.</p>
+            <p>§2.1.9: logical right shift fills with zeros; arithmetic right shift fills with the most significant bit “useful for operating on signed integer data.” Shift amounts should stay <code>&lt; w</code> — C does not define <code>x &lt;&lt; 32</code> on a 32-bit <code>int</code>. And <code>1&lt;&lt;2+3&lt;&lt;4</code> is not 52, because <code>+</code> binds tighter than <code>&lt;&lt;</code>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">A ⊙ B</span></div>
+        <div class="controls" id="s4-seg"></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 680 260" role="img" aria-label="Two bytes and the result of a bitwise or logical operation"></svg></div>
+        <div class="caption" id="s4-cap"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="integers">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">2.2.2–2.2.3 · B2U and B2T</span>
+        <h2>The left-hand switch can be +8 or −8</h2>
+        <p class="story"><b>Unsigned</b> is ordinary binary: bit <i>i</i> is worth <code>2<sup>i</sup></code>. Four bits count 0…15. The biggest value is <b>UMax</b> = 2<sup>w</sup> − 1.</p>
+        <p class="story"><b>Two’s complement</b> uses the same bits, but the top bit is worth <code>−2<sup>w−1</sup></code>. That is the <b>sign bit</b>. Four bits now mean −8…+7. The most negative pattern <code>1000</code> is <b>TMin</b> = −8. The most positive <code>0111</code> is <b>TMax</b> = 7. There is no +8 — the range is lopsided because 0 sits on the positive side.</p>
+        <p class="imagine"><b>Flip the four bits.</b> Both readings update. When the sign bit turns on, unsigned jumps up and signed falls through the floor.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Equation 2.1: <code>B2U<sub>w</sub>(x) = Σ x<sub>i</sub> 2<sup>i</sup></code>. Equation 2.3: <code>B2T<sub>w</sub>(x) = −x<sub>w−1</sub> 2<sup>w−1</sup> + Σ x<sub>i</sub> 2<sup>i</sup></code>. Both mappings are bijections.</p>
+            <p>Figure 2.12 / 2.13 (w = 4): [1011] is 11 unsigned and −5 two’s complement — same bits, sign bit weight +8 vs −8.</p>
+            <p>Figure 2.14: <code>|TMin| = |TMax| + 1</code>. <code>UMax = 2 TMax + 1</code>. Pattern <code>111…1</code> is −1 in two’s complement and UMax unsigned. Pattern <code>100…0</code> is TMin.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">w = 4 · Figures 2.12 and 2.13</span><div class="stats" id="s5-stats"></div></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 680 300" role="img" aria-label="Four bits with unsigned weights and two's-complement weights"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="caption" id="s5-cap">The four switches never change. Only the weight of the leftmost one changes.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="convert">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">2.2.4–2.2.5 · conversions and C promotions</span>
+        <h2>−1 is also 15. Context decides.</h2>
+        <p class="story">Casting signed ↔ unsigned on almost every machine <b>keeps the bits</b> and changes the glasses. Two’s-complement −1 (all ones) becomes unsigned UMax. Unsigned 8 on four bits becomes signed −8 (TMin).</p>
+        <p class="story">C has a trap. If <i>either</i> side of <code>&lt;</code> is unsigned, the other side is quietly turned unsigned too. So <code>-1 &lt; 0</code> is true, but <code>-1 &lt; 0U</code> is false — because −1 became 4,294,967,295.</p>
+        <p class="imagine"><b>Step the conversion</b> on the four-bit word, then open the book’s comparison table (Figure 2.19).</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Principle (2.5): <code>T2U<sub>w</sub>(x) = x + 2<sup>w</sup></code> if x &lt; 0, else x. Principle (2.6): <code>U2T<sub>w</sub>(u) = u − 2<sup>w</sup></code> if u &gt; TMax, else u.</p>
+            <p>“Most systems follow the rule that the underlying bit representation does not change.”</p>
+            <p>Figure 2.19: <code>-1 &lt; 0U</code> evaluates to 0. “When either operand of a comparison is unsigned, the other operand is implicitly cast to unsigned.” Printing <code>int x = -1</code> with <code>%u</code> yields 4294967295.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stack">
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">Keep the bits · change the story</span></div>
+          <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 680 200" role="img" aria-label="The same four bits read as signed and as unsigned"></svg></div>
+          <div class="controls" id="s6-controls"></div>
+          <div class="caption" id="s6-cap"></div>
+        </div>
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">Figure 2.19 · C promotion</span></div>
+          <table class="cmp" id="s6-table"></table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="expand">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">2.2.6–2.2.7 · expanding and truncating</span>
+        <h2>New bits on the left, or bits thrown away</h2>
+        <p class="story">Growing a number: <b>zero-extend</b> unsigned values (fill new high bits with 0). <b>Sign-extend</b> two’s-complement values (copy the sign bit leftward) so −5 stays −5 when it moves from 4 bits to 8.</p>
+        <p class="story">Shrinking is rougher. Truncation keeps the low bits and drops the rest — which is “mod 2<sup>k</sup>” and then re-read. A number that fitted can become a different number, even a different sign.</p>
+        <p class="imagine"><b>Widen 4 → 8, then truncate 8 → 4.</b> Try −5 and 13.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>§2.2.6: converting to a larger size “should always be possible.” Unsigned → zero extension. Two’s complement → sign extension (repeat x<sub>w−1</sub>).</p>
+            <p>§2.2.7: truncating to k bits is x mod 2<sup>k</sup>, then interpret with U2T<sub>k</sub> or B2U<sub>k</sub>. Relative order of size-change and signed/unsigned conversion can change the result (the <code>short sx = -12345; unsigned uy = sx;</code> mystery).</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">4 bits ⟷ 8 bits</span><span id="s7-seg"></span></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 680 240" role="img" aria-label="Sign extension and truncation of a small integer"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="caption" id="s7-cap"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="add">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">2.3.1–2.3.3 · integer arithmetic</span>
+        <h2>The clock face has only sixteen hours</h2>
+        <p class="story">Four-bit unsigned add is <b>mod 16</b> (Figure 2.23). 9 + 12 = 21, which is 5 on the clock, and 5 &lt; 9 so you <i>know</i> it overflowed. C does not raise a flag. The book’s infamous <code>200 * 300 * 400 * 500</code> wraps to <b>−884,901,888</b> on a 32-bit <code>int</code> — a product of positives that is negative.</p>
+        <p class="story">Two’s-complement add uses the <i>same adder</i>. Overflow is now “the true sum is outside TMin…TMax.” And TMin is its own negation: <code>-TMin</code> cannot be represented, so <code>-(-8)</code> stays −8 on four bits.</p>
+        <p class="imagine"><b>Add two 4-bit numbers.</b> Watch unsigned wrap and signed overflow independently — same bits, two verdicts.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Opening example (p. 68): <code>200 * 300 * 400 * 500</code> yields −884,901,888. Multiplication is still associative: every parenthesization gives that same wrong number.</p>
+            <p>Unsigned overflow iff <code>s &lt; x</code> (or <code>s &lt; y</code>). Two’s-complement overflow: negative overflow when x+y &lt; TMin, positive when x+y &gt; TMax (Figure 2.25).</p>
+            <p>Principle: <code>-<sup>t</sup> TMin<sub>w</sub> = TMin<sub>w</sub></code>. “TMin is its own additive inverse.”</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">x + y on four bits</span><div class="stats" id="s8-stats"></div></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 680 280" role="img" aria-label="Unsigned wrap-around addition versus two's-complement overflow"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="caption" id="s8-cap"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="shift">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">2.3.6–2.3.7 · multiply and divide by powers of two</span>
+        <h2>Shifting is multiplying, with a catch</h2>
+        <p class="story">A left shift by k is multiply by 2<sup>k</sup> — until bits fall off the left. Compilers love this: <code>x * 20</code> can become <code>(x &lt;&lt; 4) + (x &lt;&lt; 2)</code>.</p>
+        <p class="story">Right shift by k is divide by 2<sup>k</sup>, rounded toward −∞ for arithmetic shifts. For a negative number the book first adds a <b>bias</b> of 2<sup>k</sup>−1 so the hardware shift matches C’s “round toward zero” division (Figure 2.30).</p>
+        <p class="imagine"><b>Shift a signed byte.</b> Compare logical fill-with-zeros to arithmetic copy-the-sign.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>§2.3.6: <code>x &lt;&lt; k</code> equals <code>x * 2<sup>k</sup></code> modulo 2<sup>w</sup>. Compilers generate shifts and adds instead of <code>imul</code>.</p>
+            <p>§2.3.7 / Figure 2.30: dividing a negative two’s-complement number by 2<sup>k</sup> needs a bias of 2<sup>k</sup>−1 before an arithmetic right shift so the result matches rounding toward zero.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Logical vs arithmetic &gt;&gt;</span><span id="s9-seg"></span></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 680 240" role="img" aria-label="An 8-bit value shifted logically or arithmetically"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="caption" id="s9-cap"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="float">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">2.4 · IEEE floating point</span>
+        <h2>Scientific notation, with a budget of bits</h2>
+        <p class="story">Integers are exact but short-ranged. Floats are the opposite: a huge range, but most numbers are only nearby. IEEE 754 writes <code>V = (−1)<sup>s</sup> × M × 2<sup>E</sup></code> packed as <b>sign</b>, <b>exp</b>, <b>frac</b>.</p>
+        <p class="story">If exp is all zeros, the number is <b>denormalized</b> (including ±0, and the tiny values that fill the gap around zero). If exp is all ones: <b>±∞</b> or <b>NaN</b>. Otherwise it is <b>normalized</b>: an implied leading 1, exponent = e − bias.</p>
+        <p class="story">That is why <code>(3.14 + 1e20) - 1e20</code> becomes 0.0, while <code>3.14 + (1e20 - 1e20)</code> stays 3.14. Addition is not associative.</p>
+        <p class="imagine"><b>Edit a toy 8-bit float</b> (1 + 4 + 3 bits, bias 7 — Figure 2.35). Then run the book’s 1e20 experiment.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>p. 69: “<code>(3.14+1e20)-1e20</code> will evaluate to 0.0 on most machines, while <code>3.14+(1e20-1e20)</code> will evaluate to 3.14.” Integers overflow to a wrap; floats overflow to +∞ and stay positive.</p>
+            <p>Figure 2.32: single = 1+8+23 (bias 127), double = 1+11+52 (bias 1023). Figure 2.33: exp all 0 → denorm; all 1 → inf/NaN; else normalized with E = e − Bias, M = 1 + f.</p>
+            <p>Figure 2.35 (k=4, n=3, bias 7): largest denorm 7/64 and smallest norm 8/64 meet smoothly because denorms use E = 1 − Bias, not −Bias.</p>
+            <p>Default rounding is <b>round-to-even</b> (Figure 2.37).</p>
+          </div>
+        </details>
+      </div>
+      <div class="stack">
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">Figure 2.35 · 8-bit IEEE-style</span><span class="pill" id="s10-pill">normalized</span></div>
+          <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 680 220" role="img" aria-label="Sign, exponent and fraction fields of a tiny floating-point number"></svg></div>
+          <div class="controls" id="s10-controls"></div>
+          <div class="readings" id="s10-read"></div>
+          <div class="caption" id="s10-cap"></div>
+        </div>
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">The 1e20 experiment</span></div>
+          <div class="controls" id="s10b-controls"></div>
+          <pre class="code" id="s10b-code"></pre>
+          <div class="caption" id="s10b-cap">Floats keep a wide range by forgetting the small stuff when a giant number is in the room.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>Hold on to these</h2><p>Chapter 2 in six pockets. Chapter 3 will assume you can read a hex dump and a two’s-complement immediate.</p></div>
+      <div class="themes">
+        <div class="card"><h3>Bits + hex</h3><p>Group bits in fours. <code>0xD4</code> is 1101 0100. Figure 2.2 is the whole language.</p></div>
+        <div class="card"><h3>Endian</h3><p>The number is the same. Only the address of the least-significant byte changes. Networks must agree (Chapter 11).</p></div>
+        <div class="card"><h3>Two’s complement</h3><p>Top bit weighs −2<sup>w−1</sup>. TMin has no positive twin. −1 is all ones, which is also UMax.</p></div>
+        <div class="card"><h3>C conversions</h3><p>Bits stay. Glasses change. One unsigned operand poisons a comparison (Figure 2.19).</p></div>
+        <div class="card"><h3>Wrap-around add</h3><p>Unsigned: mod 2<sup>w</sup>, overflow iff s &lt; x. Signed: same adder, overflow if the true sum leaves the TMin…TMax window.</p></div>
+        <div class="card"><h3>IEEE float</h3><p>sign × significand × 2<sup>E</sup>. Tiny, normal, ∞, NaN. Precise integers; approximate reals. Not associative.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>The chapter’s grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>hexadecimal</dt><dd>Base 16. One digit (0–F) names four bits. C writes it <code>0x…</code>.</dd></div>
+        <div class="word"><dt>word</dt><dd>The machine’s natural chunk: 4 bytes (32-bit program) or 8 bytes (64-bit).</dd></div>
+        <div class="word"><dt>little / big endian</dt><dd>Least-significant byte at the lowest address, or most-significant byte first.</dd></div>
+        <div class="word"><dt>mask</dt><dd>A bit pattern used with <code>&amp;</code> or <code>|</code> to keep, clear, or set chosen bits.</dd></div>
+        <div class="word"><dt>logical vs bitwise</dt><dd><code>&amp;&amp; || !</code> ask “zero or not?” and yield 0/1. <code>&amp; | ~ ^</code> walk every bit.</dd></div>
+        <div class="word"><dt>arithmetic right shift</dt><dd>Fill vacated left bits with copies of the sign bit. C does this for signed types.</dd></div>
+        <div class="word"><dt>unsigned / B2U</dt><dd>Ordinary binary. Range 0 … 2<sup>w</sup>−1 (UMax).</dd></div>
+        <div class="word"><dt>two’s complement / B2T</dt><dd>Sign bit weighs −2<sup>w−1</sup>. Range TMin = −2<sup>w−1</sup> … TMax = 2<sup>w−1</sup>−1.</dd></div>
+        <div class="word"><dt>TMin / TMax / UMax</dt><dd>Most-negative signed, most-positive signed, most-positive unsigned. Figure 2.14.</dd></div>
+        <div class="word"><dt>T2U / U2T</dt><dd>Re-read the same bits as the other type. Negative x maps to x+2<sup>w</sup>.</dd></div>
+        <div class="word"><dt>sign extension</dt><dd>When widening a signed value, copy the sign bit into the new high bits.</dd></div>
+        <div class="word"><dt>overflow</dt><dd>The true mathematical result does not fit. Unsigned wraps. Signed wraps to a different sign. Floats become ∞.</dd></div>
+        <div class="word"><dt>IEEE 754</dt><dd>The 1985 standard: V = (−1)<sup>s</sup> M 2<sup>E</sup>, with normalized, denormalized, ∞, and NaN.</dd></div>
+        <div class="word"><dt>denormalized / NaN</dt><dd>Exp all 0: no implied 1, including ±0. Exp all 1 and frac ≠ 0: not-a-number.</dd></div>
+        <div class="word"><dt>round-to-even</dt><dd>IEEE default: ties go to the even last bit, so rounding error does not always drift the same way.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width:820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Eight questions. Finish all eight to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible } = K;
+K.page(2);
+const cap = (id, html) => { K.$(id).innerHTML = html; };
+
+function box(parent, x, y, w, h, cls, title, sub) {
+  const r = s("rect", { x, y, width: w, height: h, rx: 10, class: cls });
+  parent.appendChild(r);
+  let t = null, u = null;
+  if (title) {
+    const ty = sub ? y + h / 2 - 4 : y + h / 2 + 5;
+    t = s("text", { x: x + w / 2, y: ty, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700, fontSize: "13px" } }, title);
+    parent.appendChild(t);
+  }
+  if (sub) {
+    u = s("text", { x: x + w / 2, y: y + h / 2 + 14, class: "sv-label", "text-anchor": "middle" }, sub);
+    parent.appendChild(u);
+  }
+  return { r, t, u, x, y, w, h, cx: x + w / 2, cy: y + h / 2 };
+}
+
+function bitRow(svg, bits, x0, y, w, h, onFlip) {
+  return bits.map((v, i) => {
+    const x = x0 + i * (w + 8);
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": `bit ${bits.length - 1 - i}` },
+      s("rect", { x, y, width: w, height: h, rx: 8, class: v ? "sv-good" : "sv-panel" }),
+      s("text", { x: x + w / 2, y: y + h / 2 + 5, class: "sv-text", "text-anchor": "middle", style: { fontFamily: "var(--f-mono)", fontWeight: 800, fontSize: "16px" } }, String(v)));
+    const flip = () => { bits[i] = bits[i] ? 0 : 1; onFlip(); };
+    g.addEventListener("click", flip);
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } });
+    svg.appendChild(g);
+    return g;
+  });
+}
+
+function paintBits(els, bits) {
+  els.forEach((g, i) => {
+    g.firstChild.setAttribute("class", bits[i] ? "sv-good" : "sv-panel");
+    g.lastChild.textContent = String(bits[i]);
+  });
+}
+
+const HEX = "0123456789ABCDEF";
+const bitsToInt = (bits) => bits.reduce((n, b) => (n << 1) | b, 0);
+const intToBits = (n, w) => Array.from({ length: w }, (_, i) => (n >> (w - 1 - i)) & 1);
+const signed = (n, w) => (n >= (1 << (w - 1)) ? n - (1 << w) : n);
+
+/* ================= HERO ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  let bits = intToBits(0xd4, 8);
+  svg.appendChild(draw.label(340, 20, "THE SAME EIGHT SWITCHES", "sv-label"));
+  svg.append(...Array.from({ length: 8 }, (_, i) =>
+    s("text", { x: 36 + i * 80 + 28, y: 40, class: "sv-label", "text-anchor": "middle" }, String(7 - i))));
+  const els = [];
+  const vals = {};
+  [
+    ["hex", "hex"],
+    ["u", "unsigned · B2U₈"],
+    ["t", "two’s · B2T₈"],
+    ["a", "ASCII-ish"],
+  ].forEach(([id, k]) => {
+    const v = h("div", { class: "v" }, "—");
+    K.$("#hero-read").appendChild(h("div", { class: "reading" }, h("div", { class: "k" }, k), v));
+    vals[id] = v;
+  });
+  function paint() {
+    els.length ? paintBits(els, bits) : els.push(...bitRow(svg, bits, 36, 50, 56, 80, paint));
+    paintBits(els, bits);
+    const u = bitsToInt(bits), t = signed(u, 8);
+    vals.hex.textContent = "0x" + u.toString(16).toUpperCase().padStart(2, "0");
+    vals.u.textContent = String(u);
+    vals.t.textContent = String(t);
+    vals.a.textContent = u >= 32 && u < 127 ? `'${String.fromCharCode(u)}'` : "not a letter";
+    K.$("#hero-pill").innerHTML = `<i></i>${bits.join("")}`;
+  }
+  paint();
+  const presets = [0xd4, 0x00, 0x7f, 0x80, 0xff, 0x41];
+  let pi = 0, vis = false;
+  whenVisible(svg, () => (vis = true), () => (vis = false));
+  (async function auto() {
+    await sleep(900);
+    for (;;) {
+      if (vis && !K.reduced && !document.hidden) {
+        pi = (pi + 1) % presets.length;
+        bits.splice(0, 8, ...intToBits(presets[pi], 8));
+        paint();
+      }
+      await sleep(2200);
+    }
+  })();
+})();
+
+/* ================= 1. HEX ================= */
+(function hex() {
+  const svg = K.$("#s1-svg");
+  let bits = intToBits(0xd4, 8);
+  svg.append(
+    draw.label(168, 22, "HIGH NIBBLE", "sv-label"),
+    draw.label(512, 22, "LOW NIBBLE", "sv-label"),
+    s("rect", { x: 24, y: 36, width: 292, height: 114, rx: 12, class: "sv-panel" }),
+    s("rect", { x: 364, y: 36, width: 292, height: 114, rx: 12, class: "sv-panel" }));
+  const hiT = s("text", { x: 170, y: 196, class: "sv-title", "text-anchor": "middle" }, "D");
+  const loT = s("text", { x: 510, y: 196, class: "sv-title", "text-anchor": "middle" }, "4");
+  svg.append(hiT, loT, draw.label(170, 216, "hex digit", "sv-label"), draw.label(510, 216, "hex digit", "sv-label"));
+  const high = bits.slice(0, 4);
+  const low = bits.slice(4);
+  const sync = () => { bits.splice(0, 8, ...high, ...low); apply(); };
+  const elsH = bitRow(svg, high, 44, 56, 58, 72, sync);
+  const elsL = bitRow(svg, low, 384, 56, 58, 72, sync);
+  function apply() {
+    bits.splice(0, 8, ...high, ...low);
+    paintBits(elsH, high); paintBits(elsL, low);
+    const u = bitsToInt(bits);
+    hiT.textContent = HEX[bitsToInt(high)];
+    loT.textContent = HEX[bitsToInt(low)];
+    K.$("#s1-pill").textContent = "0x" + u.toString(16).toUpperCase().padStart(2, "0");
+    cap("#s1-cap", `Binary <span class="mono">${high.join("")} ${low.join("")}</span> is hex <b>0x${HEX[bitsToInt(high)]}${HEX[bitsToInt(low)]}</b> = decimal <b>${u}</b>. Figure 2.2 is just this lookup, twice.`);
+  }
+  const ctr = K.$("#s1-controls");
+  [["0xD4 · book shift example", 0xd4], ["0x41 · 'A'", 0x41], ["0xFF", 0xff], ["0x17", 0x17]].forEach(([lab, n]) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => {
+      const b = intToBits(n, 8); high.splice(0, 4, ...b.slice(0, 4)); low.splice(0, 4, ...b.slice(4)); apply();
+    } }, lab));
+  });
+  const chart = K.$("#s1-chart");
+  for (let i = 0; i < 16; i++) {
+    chart.appendChild(h("div", { class: "hexcell" },
+      h("div", { class: "h" }, HEX[i]),
+      h("div", { class: "b" }, i.toString(2).padStart(4, "0")),
+      h("div", { class: "d" }, String(i))));
+  }
+  apply();
+})();
+
+/* ================= 2. SIZES ================= */
+(function sizes() {
+  const svg = K.$("#s2-svg");
+  const TYPES = [
+    { k: "char / unsigned char", b32: 1, b64: 1 },
+    { k: "short", b32: 2, b64: 2 },
+    { k: "int", b32: 4, b64: 4 },
+    { k: "long", b32: 4, b64: 8 },
+    { k: "char *  (pointer)", b32: 4, b64: 8 },
+    { k: "float", b32: 4, b64: 4 },
+    { k: "double", b32: 8, b64: 8 },
+  ];
+  let mode = 1;
+  const X0 = 220, UNIT = 48, Y0 = 36;
+  svg.append(draw.label(20, 22, "C TYPE", "sv-label", "start"), draw.label(X0, 22, "BYTES →", "sv-label", "start"));
+  const bars = TYPES.map((t, i) => {
+    const y = Y0 + i * 38;
+    svg.appendChild(draw.label(200, y + 18, t.k, "sv-label", "end"));
+    const r = s("rect", { x: X0, y: y + 4, width: 8, height: 22, rx: 5, class: "sv-good" });
+    const lab = s("text", { x: X0 + 16, y: y + 20, class: "sv-text", style: { fontFamily: "var(--f-mono)", fontWeight: 700 } }, "");
+    svg.append(r, lab);
+    return { t, r, lab, y };
+  });
+  function paint() {
+    bars.forEach((b) => {
+      const n = mode ? b.t.b64 : b.t.b32;
+      const grew = mode && b.t.b64 !== b.t.b32;
+      b.r.setAttribute("width", n * UNIT);
+      b.r.setAttribute("class", grew ? "sv-server" : "sv-good");
+      b.lab.setAttribute("x", X0 + n * UNIT + 12);
+      b.lab.textContent = String(n);
+    });
+    cap("#s2-cap", mode
+      ? "A <b>64-bit program</b>: <code>long</code> and pointers become 8 bytes. <code>int</code> stays 4 — so you must not store a pointer in an <code>int</code>."
+      : "A <b>32-bit program</b> (or <code>gcc -m32</code>): <code>int</code>, <code>long</code> and pointers are all 4 bytes. That coincidence hid a generation of bugs.");
+  }
+  K.$("#s2-seg").appendChild(seg(["32-bit program", "64-bit program"], 1, (i) => { mode = i; paint(); }, "s2-mode"));
+  paint();
+})();
+
+/* ================= 3. ENDIAN ================= */
+(function endian() {
+  const svg = K.$("#s3-svg");
+  svg.append(
+    s("rect", { x: 20, y: 16, width: 300, height: 200, rx: 14, class: "sv-panel" }),
+    s("rect", { x: 360, y: 16, width: 300, height: 200, rx: 14, class: "sv-panel" }),
+    draw.label(170, 40, "BIG ENDIAN"),
+    draw.label(510, 40, "LITTLE ENDIAN"));
+  const big = ["01", "23", "45", "67"];
+  const lit = ["67", "45", "23", "01"];
+  const cells = [];
+  function col(bytes, x0) {
+    bytes.forEach((b, i) => {
+      const x = x0 + i * 68;
+      const r = s("rect", { x, y: 64, width: 56, height: 64, rx: 8, class: "sv-data-soft" });
+      const t = s("text", { x: x + 28, y: 104, class: "sv-title", "text-anchor": "middle" }, b);
+      const a = s("text", { x: x + 28, y: 154, class: "sv-label", "text-anchor": "middle" }, `0x${(0x100 + i).toString(16)}`);
+      svg.append(r, t, a);
+      cells.push({ r, t });
+    });
+  }
+  col(big, 36); col(lit, 376);
+  svg.appendChild(draw.label(340, 236, "same word · opposite streets", "sv-label"));
+  const code = K.$("#s3-code");
+  function show(kind) {
+    cells.forEach((c, i) => {
+      const left = i < 4;
+      const on = (kind === "word") || (kind === "int" && true);
+      c.r.setAttribute("class", kind === "int" ? (left ? "sv-good" : "sv-server") : "sv-data-soft");
+    });
+    if (kind === "word") {
+      code.innerHTML = `<b>int x = 0x01234567;</b>  at address 0x100\n\nbig endian     0x100: 01 23 45 67\nlittle endian  0x100: 67 45 23 01\n\n<i>high-order byte is 0x01 · low-order byte is 0x67</i>`;
+      cap("#s3-cap", "The word is <span class='mono'>0x01234567</span>. Big endian walks from the big end; little endian parks <span class='mono'>0x67</span> at the smallest address.");
+    } else {
+      code.innerHTML = `<b>show_bytes(12345)</b>   /* 12345 = 0x00003039 */\n\nLinux / Windows / x86-64   39 30 00 00    <i>little</i>\nSun SPARC                  00 00 30 39    <i>big</i>\n\nfloat 12345.0  is the same four bytes, reversed on SPARC.\nA pointer is a different bit pattern on every machine.`;
+      cap("#s3-cap", "Figure 2.6: the integer and the float share a <b>byte-order</b> difference only. Pointers are addresses, so they do not match at all.");
+    }
+  }
+  const ctr = K.$("#s3-controls");
+  ctr.append(
+    h("button", { class: "btn primary", type: "button", onclick: () => show("word") }, "Place 0x01234567"),
+    h("button", { class: "btn", type: "button", onclick: () => show("int") }, "show_bytes(12345)"));
+  show("word");
+})();
+
+/* ================= 4. BIT OPS ================= */
+(function bitops() {
+  const svg = K.$("#s4-svg");
+  let A = intToBits(0x66, 8), B = intToBits(0x39, 8);
+  svg.append(draw.label(20, 22, "A", "sv-label", "start"), draw.label(20, 92, "B", "sv-label", "start"), draw.label(20, 176, "RESULT", "sv-label", "start"));
+  const resBits = [0, 0, 0, 0, 0, 0, 0, 0];
+  const resEls = [];
+  const paintRes = () => {
+    if (!resEls.length) {
+      resBits.forEach((v, i) => {
+        const x = 70 + i * 72;
+        const r = s("rect", { x, y: 154, width: 56, height: 56, rx: 8, class: "sv-box" });
+        const t = s("text", { x: x + 28, y: 190, class: "sv-text", "text-anchor": "middle", style: { fontFamily: "var(--f-mono)", fontWeight: 800, fontSize: "16px" } }, "0");
+        svg.append(r, t); resEls.push({ r, t });
+      });
+    }
+    resEls.forEach((e, i) => {
+      e.r.setAttribute("class", resBits[i] ? "sv-good" : "sv-box");
+      e.t.textContent = String(resBits[i]);
+    });
+  };
+  let op = 0;
+  const apply = () => {
+    const a = bitsToInt(A), b = bitsToInt(B);
+    let r, why;
+    if (op === 0) { r = a & b; why = `<b>Bitwise AND</b>. A bit survives only when both A and B have a 1 there. That is a <b>mask</b>. 0x${a.toString(16)} &amp; 0x${b.toString(16)} = 0x${(a & b).toString(16)}.`; }
+    else if (op === 1) { r = a | b; why = `<b>Bitwise OR</b>. A bit is 1 if either side has a 1. Useful for turning flags on.`; }
+    else if (op === 2) { r = a ^ b; why = `<b>XOR</b>. 1 where the bits differ. <code>x ^ y ^ y</code> is x again — the book’s swap-without-a-temp (Practice 2.10).`; }
+    else if (op === 3) { r = (~a) & 0xff; why = `<b>NOT</b> flips every bit of A. In two’s complement, <code>~x</code> equals <code>-x - 1</code>.`; }
+    else if (op === 4) { r = (a && b) ? 1 : 0; why = `<b>Logical AND</b>. C asks “are both nonzero?” and answers <b>0 or 1</b> — not a bit pattern. ${a} &amp;&amp; ${b} → ${a && b ? 1 : 0}.`; }
+    else { r = a ? 0 : 1; why = `<b>Logical NOT</b>. <code>!x</code> is 1 when x is 0, else 0. Compare with <code>~x</code>, which flips bits.`; }
+    const rb = intToBits(r, 8);
+    resBits.splice(0, 8, ...rb);
+    paintRes();
+    cap("#s4-cap", why);
+  };
+  bitRow(svg, A, 70, 36, 56, 48, apply);
+  bitRow(svg, B, 70, 106, 56, 48, apply);
+  paintRes();
+  K.$("#s4-seg").appendChild(seg(["A & B", "A | B", "A ^ B", "~ A", "A && B", "! A"], 0, (i) => { op = i; apply(); }, "s4-op"));
+  apply();
+})();
+
+/* ================= 5. INTEGERS ================= */
+(function integers() {
+  const svg = K.$("#s5-svg");
+  let bits = [1, 0, 1, 1];
+  svg.append(
+    draw.label(20, 28, "UNSIGNED WEIGHTS  +8 +4 +2 +1", "sv-label", "start"),
+    draw.label(20, 158, "TWO’S-COMPLEMENT WEIGHTS  −8 +4 +2 +1", "sv-label", "start"));
+  const UW = [8, 4, 2, 1], TW = [-8, 4, 2, 1];
+  const uBars = [], tBars = [];
+  UW.forEach((w, i) => {
+    const x = 40 + i * 160;
+    svg.appendChild(draw.label(x + 60, 48, `+${w}`, "sv-label"));
+    const r = s("rect", { x, y: 58, width: 120, height: 28, rx: 6, class: "sv-panel" });
+    svg.appendChild(r); uBars.push(r);
+  });
+  TW.forEach((w, i) => {
+    const x = 40 + i * 160;
+    svg.appendChild(draw.label(x + 60, 178, String(w), "sv-label"));
+    const r = s("rect", { x, y: 188, width: 120, height: 28, rx: 6, class: "sv-panel" });
+    svg.appendChild(r); tBars.push(r);
+  });
+  const st = { u: stat("Unsigned", "11"), t: stat("Two’s", "−5"), hex: stat("Hex", "0xB") };
+  Object.values(st).forEach((x) => K.$("#s5-stats").appendChild(x));
+  const apply = () => {
+    paintBits(els, bits);
+    const u = bitsToInt(bits), t = signed(u, 4);
+    uBars.forEach((r, i) => r.setAttribute("class", bits[i] ? "sv-good" : "sv-panel"));
+    tBars.forEach((r, i) => r.setAttribute("class", bits[i] ? (i === 0 ? "sv-bad" : "sv-good") : "sv-panel"));
+    st.u.set(u); st.t.set(t, t < 0 ? "warn" : "good"); st.hex.set("0x" + HEX[u]);
+    cap("#s5-cap", `[${bits.join("")}] is <b>${u}</b> unsigned (B2U<sub>4</sub>) and <b>${t}</b> two’s complement (B2T<sub>4</sub>). TMin₄ = −8 = [1000], TMax₄ = 7 = [0111], UMax₄ = 15 = [1111].`);
+  };
+  const els = [];
+  bits.forEach((_, i) => {
+    const x = 40 + i * 160 + 32;
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": `bit ${3 - i}` },
+      s("rect", { x, y: 100, width: 56, height: 40, rx: 8, class: "sv-panel" }),
+      s("text", { x: x + 28, y: 127, class: "sv-text", "text-anchor": "middle", style: { fontFamily: "var(--f-mono)", fontWeight: 800, fontSize: "16px" } }, "0"));
+    const flip = () => { bits[i] = bits[i] ? 0 : 1; apply(); };
+    g.addEventListener("click", flip);
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } });
+    svg.appendChild(g);
+    els.push(g);
+  });
+  const ctr = K.$("#s5-controls");
+  [["[0001] = 1 / 1", [0, 0, 0, 1]], ["[0101] = 5 / 5", [0, 1, 0, 1]], ["[1011] = 11 / −5", [1, 0, 1, 1]], ["[1111] = 15 / −1", [1, 1, 1, 1]], ["[1000] TMin", [1, 0, 0, 0]]].forEach(([lab, b]) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => { bits.splice(0, 4, ...b); apply(); } }, lab));
+  });
+  apply();
+})();
+
+/* ================= 6. CONVERT ================= */
+(function convert() {
+  const svg = K.$("#s6-svg");
+  let bits = [1, 1, 1, 1];
+  const left = box(svg, 30, 50, 200, 90, "sv-server", "", "");
+  const right = box(svg, 450, 50, 200, 90, "sv-db", "", "");
+  const lt = s("text", { x: 130, y: 88, class: "sv-label", "text-anchor": "middle" }, "two’s complement");
+  const lv = s("text", { x: 130, y: 118, class: "sv-title", "text-anchor": "middle" }, "−1");
+  const rt = s("text", { x: 550, y: 88, class: "sv-label", "text-anchor": "middle" }, "unsigned");
+  const rv = s("text", { x: 550, y: 118, class: "sv-title", "text-anchor": "middle" }, "15");
+  const mid = s("text", { x: 340, y: 108, class: "sv-text", "text-anchor": "middle" }, "T2U: add 16");
+  svg.append(lt, lv, rt, rv, mid, draw.label(340, 36, "identical bits", "sv-label"));
+  const apply = () => {
+    paintBits(els, bits);
+    const u = bitsToInt(bits), t = signed(u, 4);
+    lv.textContent = String(t);
+    rv.textContent = String(u);
+    mid.textContent = t < 0 ? `T2U: ${t} + 16 = ${u}` : `T2U: already ≥ 0, so ${u}`;
+    cap("#s6-cap", `Bits <span class="mono">[${bits.join("")}]</span> are <b>${t}</b> signed and <b>${u}</b> unsigned. ${t < 0 ? "Because it is negative, T2U adds 2<sup>w</sup> = 16." : "Nonnegative values look the same in both encodings."} −1 and UMax share the all-ones pattern (Figure 2.14).`);
+  };
+  const els = bitRow(svg, bits, 196, 160, 56, 32, apply);
+  const ctr = K.$("#s6-controls");
+  [["−1 → 15", [1, 1, 1, 1]], ["−5 → 11", [1, 0, 1, 1]], ["TMin −8 → 8", [1, 0, 0, 0]], ["5 → 5", [0, 1, 0, 1]]].forEach(([lab, b]) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => { bits.splice(0, 4, ...b); apply(); } }, lab));
+  });
+  const ROWS = [
+    ["-1 < 0", "signed", "1", false],
+    ["-1 < 0U", "unsigned", "0", true],
+    ["2147483647U > -2147483647-1", "unsigned", "0", true],
+    ["-1 > -2", "signed", "1", false],
+    ["(unsigned)-1 > -2", "unsigned", "1", false],
+  ];
+  const tb = K.$("#s6-table");
+  tb.appendChild(h("tr", {}, h("th", {}, "Expression"), h("th", {}, "Type"), h("th", {}, "Value"), h("th", {}, "")));
+  ROWS.forEach((row) => {
+    tb.appendChild(h("tr", {},
+      h("td", {}, row[0]),
+      h("td", {}, row[1]),
+      h("td", { class: row[2] === "0" && row[3] ? "bad" : "ok" }, row[2]),
+      h("td", {}, row[3] ? "★" : "")));
+  });
+  apply();
+})();
+
+/* ================= 7. EXPAND / TRUNCATE ================= */
+(function expand() {
+  const svg = K.$("#s7-svg");
+  let nibble = [1, 0, 1, 1];
+  let mode = 1;
+  const row4 = [], row8 = [];
+  svg.append(draw.label(20, 28, "4-BIT SOURCE", "sv-label", "start"), draw.label(20, 140, "8-BIT RESULT", "sv-label", "start"));
+  function mk(arr, x0, y, w) {
+    return arr.map((v, i) => {
+      const x = x0 + i * 56;
+      const r = s("rect", { x, y, width: 48, height: 48, rx: 8, class: "sv-panel" });
+      const t = s("text", { x: x + 24, y: y + 31, class: "sv-text", "text-anchor": "middle", style: { fontFamily: "var(--f-mono)", fontWeight: 800 } }, String(v));
+      svg.append(r, t);
+      return { r, t };
+    });
+  }
+  const src = bitRow(svg, nibble, 200, 40, 48, 48, () => paint());
+  const dest = mk([0, 0, 0, 0, 0, 0, 0, 0], 120, 152, 48);
+  const note = s("text", { x: 340, y: 226, class: "sv-text", "text-anchor": "middle" }, "");
+  svg.appendChild(note);
+  function paint() {
+    paintBits(src, nibble);
+    const t = signed(bitsToInt(nibble), 4);
+    let wide;
+    if (mode === 0) {
+      wide = [0, 0, 0, 0, ...nibble];
+      note.textContent = `zero-extend ${t} → ${bitsToInt(wide)}   (unsigned rule)`;
+      cap("#s7-cap", `Zero-extension copies the 4 bits and writes <b>0</b> in the new high half. Unsigned 11 stays 11. Signed −5 would become +11 — the wrong number — which is why signed values must sign-extend.`);
+    } else if (mode === 1) {
+      const fill = nibble[0];
+      wide = [fill, fill, fill, fill, ...nibble];
+      note.textContent = `sign-extend ${t} → ${signed(bitsToInt(wide), 8)}   (repeat the sign bit)`;
+      cap("#s7-cap", `Sign-extension copies bit 3 into the new positions. <b>${t}</b> stays <b>${signed(bitsToInt(wide), 8)}</b> when the word grows. That is how <code>char c = -5; int x = c;</code> still holds −5.`);
+    } else {
+      const eight = nibble[0] ? [1, 1, 1, 1, ...nibble] : [0, 0, 0, 0, ...nibble];
+      const kept = eight.slice(4);
+      wide = eight;
+      note.textContent = `truncate 8 → 4 keeps [${kept.join("")}] = ${signed(bitsToInt(kept), 4)}`;
+      cap("#s7-cap", `Truncation throws away the high bits (value mod 16, then re-read). Growing and then shrinking can still lose information if you first changed signedness.`);
+    }
+    dest.forEach((d, i) => {
+      const v = wide[i];
+      d.r.setAttribute("class", i < 4 && mode !== 2 ? (wide[i] ? "sv-server" : "sv-box") : (v ? "sv-good" : "sv-panel"));
+      d.t.textContent = String(v);
+    });
+  }
+  K.$("#s7-seg").appendChild(seg(["Zero-extend", "Sign-extend", "Truncate"], 1, (i) => { mode = i; paint(); }, "s7-mode"));
+  const ctr = K.$("#s7-controls");
+  [["−5  [1011]", [1, 0, 1, 1]], ["−1  [1111]", [1, 1, 1, 1]], ["5  [0101]", [0, 1, 0, 1]], ["TMin [1000]", [1, 0, 0, 0]]].forEach(([lab, b]) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => { nibble.splice(0, 4, ...b); paint(); } }, lab));
+  });
+  paint();
+})();
+
+/* ================= 8. ADD ================= */
+(function add() {
+  const svg = K.$("#s8-svg");
+  let x = 9, y = 12;
+  const X0 = 40;
+  svg.append(draw.label(X0, 24, "TRUE SUM", "sv-label", "start"), draw.label(X0, 120, "WHAT THE MACHINE KEEPS", "sv-label", "start"));
+  const trueBar = s("rect", { x: X0, y: 36, width: 4, height: 28, rx: 6, class: "sv-data-soft" });
+  const wrapBar = s("rect", { x: X0, y: 132, width: 4, height: 28, rx: 6, class: "sv-good" });
+  svg.append(trueBar, wrapBar);
+  const trueL = s("text", { x: X0, y: 84, class: "sv-text" }, "");
+  const wrapL = s("text", { x: X0, y: 180, class: "sv-text" }, "");
+  const clock = s("text", { x: 340, y: 230, class: "sv-label", "text-anchor": "middle" }, "unsigned clock face: 16 hours  ·  signed window: −8 … +7");
+  svg.append(trueL, wrapL, clock);
+  const st = { u: stat("Unsigned", "—"), s: stat("Two’s", "—") };
+  Object.values(st).forEach((v) => K.$("#s8-stats").appendChild(v));
+  function paint() {
+    const sum = x + y;
+    const u = sum & 15;
+    const xs = signed(x, 4), ys = signed(y, 4), ts = xs + ys, ss = signed(u, 4);
+    const uov = sum >= 16;
+    const sov = ts < -8 || ts > 7;
+    trueBar.setAttribute("width", Math.min(600, 18 * sum + 8));
+    wrapBar.setAttribute("width", Math.min(600, 18 * u + 8));
+    wrapBar.setAttribute("class", uov || sov ? "sv-bad" : "sv-good");
+    trueL.textContent = `${x} + ${y} = ${sum}     (as signed: ${xs} + ${ys} = ${ts})`;
+    wrapL.textContent = `stored bits [${intToBits(u, 4).join("")}] = unsigned ${u},  signed ${ss}`;
+    st.u.set(uov ? `${u}  overflow` : `${u}  ok`, uov ? "bad" : "good");
+    st.s.set(sov ? `${ss}  overflow` : `${ss}  ok`, sov ? "bad" : "good");
+    cap("#s8-cap", uov
+      ? `<b>Unsigned overflow.</b> ${x} + ${y} = ${sum} ≥ 16, so the machine keeps ${u} = ${sum} − 16. Detect it with the book’s test: <code>s &lt; x</code> (${u} &lt; ${x} is ${u < x}).`
+      : sov
+        ? `<b>Two’s-complement overflow.</b> The true signed sum ${ts} is outside [−8, 7]. The bits still land on ${ss}. TMin is its own negation: −(−8) cannot be +8.`
+        : `No overflow. Unsigned and signed both read the stored bits as ${u === ss ? u : `${u} / ${ss}`}.`);
+  }
+  const ctr = K.$("#s8-controls");
+  ctr.append(
+    slider({ id: "s8-x", label: "x (0–15)", min: 0, max: 15, value: x, onInput: (v) => { x = v; paint(); } }),
+    slider({ id: "s8-y", label: "y (0–15)", min: 0, max: 15, value: y, onInput: (v) => { y = v; paint(); } }));
+  [["9 + 12  (book)", 9, 12], ["7 + 7  (+ov)", 7, 7], ["8 + 8  TMin+TMin", 8, 8], ["1 + 2  safe", 1, 2]].forEach(([lab, a, b]) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => {
+      x = a; y = b;
+      const sx = K.$("#s8-x"), sy = K.$("#s8-y");
+      sx.value = a; sy.value = b;
+      sx.dispatchEvent(new Event("input")); sy.dispatchEvent(new Event("input"));
+    } }, lab));
+  });
+  paint();
+})();
+
+/* ================= 9. SHIFT ================= */
+(function shift() {
+  const svg = K.$("#s9-svg");
+  let bits = intToBits(0xd4, 8), k = 2, arith = 0;
+  svg.append(draw.label(20, 24, "ORIGINAL", "sv-label", "start"), draw.label(20, 124, "AFTER SHIFT", "sv-label", "start"));
+  const src = [], dst = [];
+  for (let i = 0; i < 8; i++) {
+    const x = 80 + i * 70;
+    const r1 = s("rect", { x, y: 36, width: 56, height: 44, rx: 8, class: "sv-panel" });
+    const t1 = s("text", { x: x + 28, y: 64, class: "sv-text", "text-anchor": "middle", style: { fontFamily: "var(--f-mono)", fontWeight: 800 } }, "0");
+    const r2 = s("rect", { x, y: 136, width: 56, height: 44, rx: 8, class: "sv-box" });
+    const t2 = s("text", { x: x + 28, y: 164, class: "sv-text", "text-anchor": "middle", style: { fontFamily: "var(--f-mono)", fontWeight: 800 } }, "0");
+    svg.append(r1, t1, r2, t2);
+    src.push({ r: r1, t: t1 }); dst.push({ r: r2, t: t2 });
+  }
+  const note = s("text", { x: 340, y: 214, class: "sv-text", "text-anchor": "middle" }, "");
+  svg.appendChild(note);
+  function paint() {
+    src.forEach((c, i) => { c.r.setAttribute("class", bits[i] ? "sv-good" : "sv-panel"); c.t.textContent = String(bits[i]); });
+    const u = bitsToInt(bits), t = signed(u, 8);
+    let r;
+    if (arith === 0) r = (u << k) & 0xff;
+    else if (arith === 1) r = u >> k;
+    else r = t >> k;
+    const out = intToBits(r & 0xff, 8);
+    dst.forEach((c, i) => { c.r.setAttribute("class", out[i] ? "sv-server" : "sv-box"); c.t.textContent = String(out[i]); });
+    if (arith === 0) {
+      note.textContent = `x << ${k}  =  ${u} × ${1 << k}  =  ${r}   (mod 256)`;
+      cap("#s9-cap", `<b>Left shift</b> is multiply by 2<sup>k</sup>, then keep 8 bits. Compilers turn <code>x * 20</code> into <code>(x &lt;&lt; 4) + (x &lt;&lt; 2)</code> — Section 2.3.6.`);
+    } else if (arith === 1) {
+      note.textContent = `logical  ${u} >> ${k}  =  ${r}`;
+      cap("#s9-cap", `<b>Logical right shift</b> fills the left with zeros. C does this for <code>unsigned</code>. ${u} / ${1 << k} ≈ ${r}.`);
+    } else {
+      note.textContent = `arithmetic  ${t} >> ${k}  =  ${r}     (sign bit ${bits[0]} is copied left)`;
+      cap("#s9-cap", `<b>Arithmetic right shift</b> copies the sign bit. C does this for signed types. For a negative x the book first adds a bias of 2<sup>k</sup>−1 so the shift matches C’s divide (Figure 2.30).`);
+    }
+  }
+  K.$("#s9-seg").appendChild(seg(["x << k", "logical >>", "arithmetic >>"], 0, (i) => { arith = i; paint(); }, "s9-mode"));
+  const ctr = K.$("#s9-controls");
+  ctr.appendChild(slider({ id: "s9-k", label: "k  shift amount", min: 0, max: 7, value: k, onInput: (v) => { k = v; paint(); } }));
+  [["0xD4", 0xd4], ["−12  (0xF4)", 0xf4], ["0x7F", 0x7f], ["0x80  TMin₈", 0x80]].forEach(([lab, n]) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => { bits = intToBits(n, 8); paint(); } }, lab));
+  });
+  paint();
+})();
+
+/* ================= 10. FLOAT ================= */
+(function floaty() {
+  const svg = K.$("#s10-svg");
+  let sBit = 0, exp = intToBits(8, 4), frac = intToBits(0, 3); // 1.0 * 2^(8-7) = 2
+  svg.append(
+    draw.label(56, 22, "SIGN", "sv-label"),
+    draw.label(230, 22, "EXP  (4 bits, bias 7)", "sv-label"),
+    draw.label(520, 22, "FRAC  (3 bits)", "sv-label"));
+  const sBox = box(svg, 20, 36, 72, 70, "sv-panel", "");
+  const sTxt = s("text", { x: 56, y: 80, class: "sv-title", "text-anchor": "middle" }, "0");
+  svg.appendChild(sTxt);
+  sBox.r.classList.add("clickable");
+  const hit = s("rect", { x: 20, y: 36, width: 72, height: 70, rx: 10, fill: "transparent", class: "clickable" });
+  hit.setAttribute("tabindex", "0");
+  svg.appendChild(hit);
+  const flipS = () => { sBit ^= 1; paint(); };
+  hit.addEventListener("click", flipS);
+  hit.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flipS(); } });
+  const apply = () => paint();
+  const expEls = bitRow(svg, exp, 120, 48, 48, 48, apply);
+  const fracEls = bitRow(svg, frac, 430, 48, 48, 48, apply);
+  const formula = s("text", { x: 340, y: 160, class: "sv-text", "text-anchor": "middle" }, "");
+  const cat = s("text", { x: 340, y: 190, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(formula, cat);
+  const vals = {};
+  ["category", "E", "M", "V"].forEach((k) => {
+    const v = h("div", { class: "v" }, "—");
+    K.$("#s10-read").appendChild(h("div", { class: "reading" }, h("div", { class: "k" }, k), v));
+    vals[k] = v;
+  });
+  function paint() {
+    paintBits(expEls, exp); paintBits(fracEls, frac);
+    sTxt.textContent = String(sBit);
+    sBox.r.setAttribute("class", sBit ? "sv-bad" : "sv-good");
+    const e = bitsToInt(exp), f = bitsToInt(frac) / 8;
+    let kind, E, M, V;
+    if (e === 0) {
+      kind = f === 0 ? (sBit ? "−0" : "+0") : "denormalized";
+      E = 1 - 7;
+      M = f;
+      V = (sBit ? -1 : 1) * M * Math.pow(2, E);
+    } else if (e === 15) {
+      kind = f === 0 ? (sBit ? "−∞" : "+∞") : "NaN";
+      E = "—"; M = "—"; V = kind;
+    } else {
+      kind = "normalized";
+      E = e - 7;
+      M = 1 + f;
+      V = (sBit ? -1 : 1) * M * Math.pow(2, E);
+    }
+    formula.textContent = kind === "NaN" || String(kind).includes("∞") || kind.includes("0")
+      ? `V = ${kind}`
+      : `V = (−1)^${sBit}  ×  ${M}  ×  2^(${E})`;
+    cat.textContent = "Figure 2.35 · k = 4, n = 3, Bias = 7";
+    vals.category.textContent = kind;
+    vals.E.textContent = String(E);
+    vals.M.textContent = typeof M === "number" ? String(M) : String(M);
+    vals.V.textContent = typeof V === "number" ? (Math.abs(V) < 1e-3 || Math.abs(V) >= 100 ? V.toExponential(3) : String(V)) : String(V);
+    K.$("#s10-pill").textContent = kind;
+    cap("#s10-cap", e === 0
+      ? `<b>Denormalized</b> (exp all 0). E = 1 − Bias = −6, and M is just the fraction — no implied 1. That is how IEEE encodes 0 and the tiny numbers around it.`
+      : e === 15
+        ? (f === 0 ? `<b>Infinity.</b> Exp all ones and a zero fraction. Overflow of two huge floats, or divide by zero, lands here — and the sign is kept, so the product of positives stays positive.`
+          : `<b>NaN</b> — not a number. Exp all ones and a nonzero fraction. 0/0 and ∞−∞ produce this.`)
+        : `<b>Normalized.</b> E = ${e} − 7 = ${E}, M = 1 + ${f} = ${M}. The implied leading 1 is why the smallest normalized and largest denorm meet smoothly.`);
+  }
+  const ctr = K.$("#s10-controls");
+  [["+1.0", 0, 8, 0], ["+0", 0, 0, 0], ["tiny denorm", 0, 0, 1], ["+∞", 0, 15, 0], ["NaN", 0, 15, 5], ["largest norm", 0, 14, 7]].forEach(([lab, sb, ev, fv]) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => {
+      sBit = sb; exp.splice(0, 4, ...intToBits(ev, 4)); frac.splice(0, 3, ...intToBits(fv, 3)); paint();
+    } }, lab));
+  });
+  paint();
+
+  const code = K.$("#s10b-code");
+  const show = (which) => {
+    const a = (3.14 + 1e20) - 1e20;
+    const b = 3.14 + (1e20 - 1e20);
+    if (which === 0) {
+      code.innerHTML = `<b>(3.14 + 1e20) - 1e20</b>\n\n3.14 is invisible next to 1e20, so the sum is just 1e20.\nSubtract 1e20 and you get <b>${a}</b>.`;
+      cap("#s10b-cap", "The book’s example (p. 69). Adding a giant number first <b>rounds 3.14 away</b>. Floating-point addition is not associative.");
+    } else {
+      code.innerHTML = `<b>3.14 + (1e20 - 1e20)</b>\n\nThe two giants cancel exactly, leaving 0.\nThen 3.14 + 0 is <b>${b}</b>.`;
+      cap("#s10b-cap", "Same three numbers, different parentheses, different answer. Integers would have overflowed to a wrap; floats overflow to <b>+∞</b> and stay positive.");
+    }
+  };
+  K.$("#s10b-controls").append(
+    h("button", { class: "btn primary", type: "button", onclick: () => show(0) }, "(3.14 + 1e20) − 1e20"),
+    h("button", { class: "btn", type: "button", onclick: () => show(1) }, "3.14 + (1e20 − 1e20)"));
+  show(0);
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "One hexadecimal digit names how many bits?", options: ["2", "4", "8", "16"], answer: 1, why: "Figure 2.2: each hex digit encodes one of 16 values, which is exactly 4 bits. Two hex digits make a byte (00–FF)." },
+  { q: "int x = 0x01234567 lives at address 0x100 on a little-endian machine. What byte is at 0x100?", options: ["0x01", "0x23", "0x67", "0x45"], answer: 2, why: "Little endian stores the least-significant byte first. The low-order byte of 0x01234567 is 0x67." },
+  { q: "The 4-bit pattern [1011] is 11 unsigned. What is it in two’s complement?", options: ["11", "−5", "−4", "5"], answer: 1, why: "B2T₄: the sign bit weighs −8, so −8 + 2 + 1 = −5. Same bits as Figure 2.13." },
+  { q: "Why is −1 < 0U false in C?", options: ["−1 is not a number", "0U is bigger than 0", "The signed −1 is converted to unsigned UMax, and UMax < 0 is false", "C forbids mixing signed and unsigned"], answer: 2, why: "Figure 2.19: if either operand is unsigned, the other is cast to unsigned. T2U(−1) = UMax." },
+  { q: "How do you widen a two’s-complement number without changing its value?", options: ["Zero-extend", "Sign-extend (copy the sign bit left)", "Add 2^w", "Flip the sign bit"], answer: 1, why: "Section 2.2.6: unsigned values zero-extend; two’s-complement values sign-extend." },
+  { q: "On 4-bit unsigned add, 9 + 12 stores 5. How does the book detect that overflow?", options: ["The carry flag in C", "s < x  (5 < 9)", "The result is odd", "It cannot be detected"], answer: 1, why: "Principle: unsigned add overflowed iff s < x (or s < y). 5 < 9, so it overflowed: 21 − 16 = 5." },
+  { q: "What is special about TMin under two’s-complement negation?", options: ["−TMin = 0", "−TMin = TMax", "TMin is its own additive inverse — there is no +|TMin|", "TMin cannot be added"], answer: 2, why: "Principle: −ᵗ TMin_w = TMin_w. Half the patterns are negative, 0 is nonnegative, so the range is asymmetric." },
+  { q: "In IEEE floating point, what does an exponent field of all ones with a zero fraction mean?", options: ["Zero", "The largest denormalized number", "± infinity (sign bit chooses which)", "NaN"], answer: 2, why: "Figure 2.33: exp all 1 and frac = 0 is ±∞. A nonzero fraction with exp all 1 is NaN. All-zero exp is denormalized, including ±0." },
+], 2);
+</script>
+</body>
+</html>
