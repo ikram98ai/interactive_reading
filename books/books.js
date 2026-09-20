@@ -12,4 +12,16 @@ window.LIBRARY = [
     chapters: 14,
     built: 10,
   },
+  {
+    slug: "csapp",
+    path: "books/csapp/index.html",
+    title: "Bitville",
+    book: "Computer Systems: A Programmer's Perspective",
+    author: "Randal E. Bryant & David R. O'Hallaron",
+    spine: "CS:APP · 3rd ed.",
+    accent: "mint",
+    blurb: "What really happens between your program and the machine that runs it — bits, instructions, caches and processes.",
+    chapters: 12,
+    built: 1,
+  },
 ];
