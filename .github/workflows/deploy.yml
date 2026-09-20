@@ -1,7 +1,7 @@
 name: Deploy site
 
 # Publishes the site to GitHub Pages on every push to the default branch —
-# so adding a new chapter simulation and pushing is all it takes to go live.
+# so adding a new chapter and pushing is all it takes to go live.
 on:
   push:
     branches: [main, master]

@@ -1,4 +1,4 @@
-# Book Simulations
+# Interactive Reading
 
 Books I read, turned into interactive explainers — one page per chapter, built so the
 ideas are clear even to a ten-year-old. Every chapter page is a set of little machines
@@ -13,16 +13,16 @@ assets/kit.js           shared SVG/animation/UI helpers, chapter nav, progress
 books/books.js          the list of books shown on the shelf
 books/<slug>/book.js    one book's chapter list + how many chapters are built
 books/<slug>/index.html that book's chapter route map
-books/<slug>/chNN.html  one chapter simulation
+books/<slug>/chNN.html  one interactive chapter
 ```
 
 `book.js` sets `window.BOOK` and loads before `assets/kit.js`, so the shared kit works
 for any book. Chapters above `built` show as "coming soon" instead of broken links.
 
-## Adding a chapter simulation
+## Adding a chapter
 
 1. Read the chapter.
-2. Ask Claude Code for the simulation for that chapter — it writes `books/<slug>/chNN.html`
+2. Ask for the interactive chapter page — it writes `books/<slug>/chNN.html`
    and bumps `built` in `books/<slug>/book.js`.
 3. `git push` — the site redeploys itself.
 
