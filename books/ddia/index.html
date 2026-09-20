@@ -43,7 +43,7 @@
 <main class="wrap">
   <section class="home-hero">
     <div>
-      <span class="ch-tag"><span class="num">5</span> chapters ready to explore</span>
+      <span class="ch-tag"><span class="num" id="ready-count">14</span> chapters ready to explore</span>
       <h1 style="margin-top:18px">Data <span>Town</span></h1>
       <p class="lede">A picture-book tour of <i>Designing Data-Intensive Applications</i>. Every chapter is a set of small machines you can poke, break, and fix, so the ideas make sense even if you're ten.</p>
     </div>
@@ -55,7 +55,7 @@
   </section>
 
   <section aria-label="Route map">
-    <div class="progress-line"><h2 style="font-size:26px">The route</h2><div class="bar" aria-hidden="true"><i id="bar-fill" style="width:0%"></i></div><span class="score" id="progress-text">0 of 5 explored</span><span class="pill">chapters 6–14 not built yet</span></div>
+    <div class="progress-line"><h2 style="font-size:26px">The route</h2><div class="bar" aria-hidden="true"><i id="bar-fill" style="width:0%"></i></div><span class="score" id="progress-text">0 of 14 explored</span><span class="pill" id="soon-note">every chapter built</span></div>
     <div class="stage route"><div class="stage-scroll"><svg id="map" viewBox="0 0 1100 330" role="img" aria-label="Route map with 14 chapter stops"></svg></div></div>
   </section>
 
@@ -72,6 +72,8 @@
   const done = CHAPTERS.filter((c) => ready(c) && p[c.n]).length;
   K.$("#bar-fill").style.width = `${(done / BUILT) * 100}%`;
   K.$("#progress-text").textContent = `${done} of ${BUILT} explored`;
+  K.$("#ready-count").textContent = String(BUILT);
+  K.$("#soon-note").textContent = BUILT < CHAPTERS.length ? `chapters ${BUILT + 1}–${CHAPTERS.length} not built yet` : "every chapter built";
   const brand = K.$("#brand");
   brand.prepend(s("svg", { class: "brand-mark", viewBox: "0 0 26 26", "aria-hidden": "true" },
     s("rect", { x: 1, y: 9, width: 11, height: 16, rx: 2.5, class: "sv-fill-blue" }), s("rect", { x: 14, y: 3, width: 11, height: 22, rx: 2.5, class: "sv-fill-ink" }),

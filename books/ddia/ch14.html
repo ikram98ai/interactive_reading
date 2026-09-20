@@ -1,0 +1,1643 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 14 · Doing right</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box,
+  .clickable:hover .sv-panel, .clickable:focus-visible .sv-panel,
+  .clickable:hover .sv-server, .clickable:focus-visible .sv-server { stroke: var(--sun); }
+  .rowwrap { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .rowwrap .lbl { font-family: var(--f-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .btn.tog[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+  .btn.tog::before { content: ""; width: 9px; height: 9px; border-radius: 50%; border: 2px solid currentColor; display: inline-block; }
+  .btn.tog[aria-pressed="true"]::before { background: currentColor; }
+  .fade { transition: opacity .35s; }
+  .sentence { padding: 14px 16px; border-top: 1px solid var(--line); font-size: 16px; line-height: 1.7; color: var(--ink); background: var(--surface); }
+  .sentence .swap { display: inline-block; padding: 0 6px; border-radius: 6px; background: var(--sun-soft); font-weight: 700; transition: background .3s, color .3s; }
+  .sentence.alarm .swap { background: var(--coral-soft); color: var(--ink); box-shadow: inset 0 -2px 0 var(--coral); }
+  #hero-svg { max-width: 560px; margin: 0 auto; }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">14</span> Chapter fourteen</span>
+      <h1>Doing the Right Thing</h1>
+      <p class="lede">Every chapter so far was about machines. The last one is about the people inside the data — and how to build systems that treat them fairly and kindly.</p>
+      <p class="quote">“Feeding AI systems on the world’s beauty, ugliness, and cruelty, but expecting it to reflect only the beauty is a fantasy.” — Vinay Uday Prabhu and Abeba Birhane, “Large Datasets: A Pyrrhic Win for Computer Vision?” (2020), quoted at the start of the chapter</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#predict">One label, five doors</a>
+        <a href="#bias">The copycat learner</a>
+        <a href="#account">Who answers for it?</a>
+        <a href="#loops">The downward spiral</a>
+        <a href="#watch">Swap one word</a>
+        <a href="#consent">Agree — or else?</a>
+        <a href="#privacy">Who may know what</a>
+        <a href="#toxic">Handle with care</a>
+        <a href="#rivers">Rivers, then and now</a>
+        <a href="#journey">The whole road</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · every row is somebody</span><span class="pill info"><i></i>tap a row</span></div>
+      <svg id="hero-svg" viewBox="0 0 520 372" role="img" aria-label="A database table of five rows; each row, when touched, turns out to be a person with a name and something they love"></svg>
+    </div>
+  </section>
+
+  <!-- ============ 1. PREDICTIVE ANALYTICS ============ -->
+  <section class="scene" id="predict">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 1 · predictive analytics</span>
+        <h2>One label, five closed doors</h2>
+        <p class="story">Using data to guess tomorrow's weather hurts nobody. Using data to guess whether <i>Imani</i> will pay back a loan is another matter: that guess lands on a real person's life.</p>
+        <p class="story">Every organisation in town is only being careful. For a bank, a missed customer costs a little and a bad loan costs a lot, so its rule is simple: <b>if in doubt, say no</b>. The trouble starts when everyone leans on the same kind of guess. One “risky” label — right or wrong — and Imani hears no at the job, no at the airport, no for insurance, no for a flat, and no at the bank.</p>
+        <p class="story">A court has to prove you did something before it shuts you in. A score needs no proof, and there is almost nobody to appeal to. The book repeats the name this has been given: an <b>algorithmic prison</b>.</p>
+        <p class="imagine"><b>Try it:</b> press “Apply everywhere”. Then drag the caution slider up and down and watch the doors. Finally switch the label to “a mistake” — and notice that not one door changes its mind.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The chapter opens by stepping back: every system is built for a purpose, and every action has intended and <b>unintended consequences</b>. Many datasets are about people — their behavior, their interests, their identity — so “we must treat such data with humanity and respect”. Guidelines such as the <b>ACM Code of Ethics and Professional Conduct</b> exist but are rarely discussed, applied and enforced in practice. Ethics is not a checklist to comply with; it is “a participatory and iterative process of reflection, in dialog with the people involved, with accountability for the results”.</p>
+            <p><b>Predictive analytics</b> is a major reason people are excited about big data and AI. Predicting the weather or the spread of diseases is one thing; predicting whether a convict is likely to reoffend, a loan applicant likely to default, or an insurance customer likely to make expensive claims has a direct effect on individual lives.</p>
+            <p>Payment networks want to prevent fraud, banks want to avoid bad loans, airlines want to avoid hijackings, companies want to avoid bad hires. For them a missed business opportunity is cheap and a bad loan or problematic employee is expensive, so when in doubt they are better off saying no.</p>
+            <p>As <b>algorithmic decision making</b> spreads, someone who has (accurately or falsely) been labeled as risky may suffer many of those “no” decisions. Being systematically excluded from jobs, air travel, insurance coverage, property rental, financial services and other key aspects of society has been called <b>“algorithmic prison”</b>. Criminal justice presumes innocence until proven guilty; automated systems can exclude a person without any proof of guilt, and with little chance of appeal.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Imani applies around town</span><span id="s1-seg"></span></div>
+        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 660 340" role="img" aria-label="Imani, a risk score service, and five doors that each check her score before answering yes or no"></svg></div>
+        <div class="controls" id="s1-controls"></div>
+        <div class="controls"><div class="stats" id="s1-stats"></div></div>
+        <div class="caption" id="s1-cap" aria-live="polite">Imani hasn't applied anywhere yet. A scoring service has given her a risk score of 45 out of 100.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. BIAS ============ -->
+  <section class="scene" id="bias">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 2 · bias and discrimination</span>
+        <h2>The learner that copies yesterday's unfairness</h2>
+        <p class="story">Nobody writes the rules of a prediction machine. It is handed a pile of old decisions and works the rules out by itself: “find past people who look like this new person, and do what was done to them.”</p>
+        <p class="story">In this town the old loan officers were unfair to people in the <b>circle</b> group. Circles who paid every bill on time still heard no. Those decisions are now the machine's lesson book — so it learns the unfairness along with everything else, faithfully.</p>
+        <p class="story">“Easy,” says the bank, “we'll hide the group column.” But most circles live in the South postcode. The machine can no longer see the group, yet the postcode whispers nearly the same thing. A stand-in like that is called a <b>proxy</b>.</p>
+        <p class="imagine"><b>Try it:</b> Lars and Noor both pay on time — they differ only in group and postcode. Press “Learn and decide”. Then hide the group column. Then hide the postcode too, and look at the “agrees with history” number: to be fair, the machine has to <i>disagree</i> with the past.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Decisions made by an algorithm are not necessarily better or worse than a human's. Every person is likely to have biases, and discriminatory practices can become culturally institutionalized; there is hope that decisions based on data could be fairer to people who are often overlooked.</p>
+            <p>But with predictive analytics and AI we are not merely automating a human's rules — we leave <b>the rules themselves to be inferred from data</b>. The learned patterns are <b>opaque</b>: even if the data indicates a correlation, we may not know why. “If the input to an algorithm carries a systematic bias, the system will most likely learn and amplify that bias in its output.”</p>
+            <p>Anti-discrimination laws in many countries prohibit treating people differently depending on <b>protected traits</b> such as ethnicity, age, gender, sexuality, disability, or beliefs. Other features may be analyzed — but in racially segregated neighborhoods a person's <b>postal code or even their IP address</b> is a strong predictor of race.</p>
+            <p>Believing that an algorithm could take biased data as input and produce fair and impartial output has been satirized as <b>“machine learning is like money laundering for bias”</b>.</p>
+            <p>Predictive systems merely extrapolate from the past; if the past is discriminatory, they codify and amplify that discrimination. “If we want the future to be better than the past, <b>moral imagination</b> is required, and that's something only humans can provide. Data and models should be our tools, not our masters.”</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Pattern learner · loan history</span><span class="pill" id="s2-verdict"><i></i>not trained yet</span></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 660 350" role="img" aria-label="A table of six past loan decisions next to two new applicants whose scores are learned from the table"></svg></div>
+        <div class="controls" id="s2-controls"></div>
+        <div class="controls"><div class="stats" id="s2-stats"></div></div>
+        <div class="caption" id="s2-cap" aria-live="polite">Six old decisions made by people. Look closely: every circle who paid on time was still refused, unless they lived in the North.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. ACCOUNTABILITY ============ -->
+  <section class="scene" id="account">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 3 · responsibility and accountability</span>
+        <h2>“Computer says no” — and then what?</h2>
+        <p class="story">Mateo is turned down for a loan. If a person had decided, he could ask her why, show her the mistake, and she would have to answer for it. When a program decides, who answers?</p>
+        <p class="story">An old-fashioned credit score asks <b>“How did you behave in the past?”</b> It is built from facts about Mateo's own borrowing. If one fact is wrong it can be corrected — though the agencies don't make that easy.</p>
+        <p class="story">A prediction machine asks something else: <b>“Who is similar to you, and how did people like you behave?”</b> It drops Mateo into a bucket with his neighbours. The bucket can be right on average and still wrong about him. If people in your country live to 80 on average, nobody expects you to drop dead on your 80th birthday.</p>
+        <p class="imagine"><b>Try it:</b> in each mode press “Ask why”, then “Dispute a fact”, then “Appeal”. Count how many of the three actually get Mateo somewhere.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>If a human makes a mistake they can be held accountable, and the person affected can appeal. Algorithms make mistakes too — but who is accountable? When a self-driving car causes an accident, who is responsible? If a credit scoring algorithm systematically discriminates, is there any recourse? If your ML system comes under judicial review, can you explain to the judge how it decided? “People should not be able to evade their responsibility by blaming an algorithm.”</p>
+            <p><b>Credit rating agencies</b> are a classic example: a bad score makes life difficult, but it is normally based on relevant facts about a person's actual borrowing history, and errors can be corrected (although the agencies do not make this easy). ML-based scoring typically uses a much wider range of inputs and is much more opaque.</p>
+            <p>Drawing parallels to others' behavior implies <b>stereotyping</b> — for example by where people live, a close proxy for race and socioeconomic class. What about people put in the wrong bucket? And if a decision is wrong because of erroneous data, recourse is almost impossible.</p>
+            <p>Much data is statistical: even if the probability distribution as a whole is correct, individual cases may well be wrong. “A blind belief in the supremacy of data for making decisions is not only delusional but also positively dangerous.” We need to work out how to avoid reinforcing biases, make algorithms accountable and transparent, and fix them when they inevitably make mistakes.</p>
+            <p>The same analytics can do good or harm: it could focus aid on those who need it most, or be used by predatory businesses to find vulnerable people and sell them risky products such as high-cost loans or worthless college degrees.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Mateo's loan was refused</span><span id="s3-seg"></span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 660 340" role="img" aria-label="Mateo, the facts or the bucket his loan decision was based on, and whoever is responsible for it"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <div class="controls"><div class="stats" id="s3-stats"></div></div>
+        <div class="caption" id="s3-cap" aria-live="polite">The answer is no. Mateo would like to know why.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. FEEDBACK LOOPS ============ -->
+  <section class="scene" id="loops">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 4 · feedback loops</span>
+        <h2>The spiral that feeds itself</h2>
+        <p class="story">Rosa is a good baker with a good credit score. Then the bakery closes — nothing she did. She misses a few bills while she looks for work, and her score dips.</p>
+        <p class="story">In her town, employers look up credit scores before hiring. A lower score means no job; no job means more missed bills; more missed bills mean a lower score. The prediction “Rosa is risky” <i>makes itself come true</i>. That is a <b>feedback loop</b>.</p>
+        <p class="story">Loops hide in gentler places too. A service that is good at guessing what you like may end up showing you only opinions you already hold — an <b>echo chamber</b>. You can't always see a loop coming, but you stand a chance if you look at the whole system, people included. That habit is called <b>systems thinking</b>.</p>
+        <p class="imagine"><b>Try it:</b> press “Next month” a few times and watch the score sink. Then break one link — make employers look at Rosa's work instead of her score — and keep going.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Even recommendation systems raise hard issues. When services become good at predicting the content users want to see, they may show people only opinions they already agree with, leading to <b>echo chambers</b> in which stereotypes, misinformation and polarization can breed. The book notes we are already seeing the impact of social media echo chambers on election campaigns.</p>
+            <p>When predictive analytics affect people's lives, <b>self-reinforcing feedback loops</b> are particularly pernicious. The book's example is employers using credit scores to evaluate hires: a misfortune outside your control leads to missed payments, a worse score, less chance of work, joblessness, poverty, and a worse score again — “a downward spiral due to poisonous assumptions, hidden behind a camouflage of mathematical rigor and data”.</p>
+            <p>Another loop: economists found that when gas stations in Germany introduced algorithmic prices, competition was reduced and prices for consumers went up, because the algorithms learned to collude.</p>
+            <p><b>Systems thinking</b> means thinking about the entire system — not just the computerized parts but also the people interacting with it. Does the system reinforce and amplify existing differences (making the rich richer or the poor poorer), or does it try to combat injustice? Even with the best intentions, beware of unintended consequences.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Rosa's year</span><span id="s4-seg"></span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 660 340" role="img" aria-label="A four-step loop of missed bills, credit score, job applications and income, next to a chart of Rosa's credit score month by month"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <div class="controls"><div class="stats" id="s4-stats"></div></div>
+        <div class="caption" id="s4-cap" aria-live="polite">Month 0. Rosa has a job, pays her bills, and has a credit score of 78.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. SURVEILLANCE ============ -->
+  <section class="scene" id="watch">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 5 · privacy, tracking and surveillance</span>
+        <h2>Swap one word and read it again</h2>
+        <p class="story">When an app stores what you typed in because you asked it to, it is working for you. When it quietly logs everything you do on the side, it starts working for somebody else as well. If adverts pay for the app, the advertisers are the real customers — and you are what is being watched.</p>
+        <p class="story">The book plays a small game to make this felt. Take a proud sentence about a company's data, swap the word <b>data</b> for the word <b>surveillance</b>, and listen to whether it still sounds so good.</p>
+        <p class="story">It matters because the watching has moved indoors. We are nearly at the point where every lived-in room holds at least one internet-connected microphone: phones, smart TVs, voice assistants, baby monitors, even children's toys. The most controlling rulers of the past could only dream of a microphone in every room — and we carried them in ourselves, because the gadgets are so useful.</p>
+        <p class="imagine"><b>Try it:</b> tap the gadgets to connect them and watch what the company learns. Then flip the word at the top and read the sentence and the labels again.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Some tracking serves users: clicked search results improve ranking, “people who liked X also liked Y” helps discovery, A/B tests and user flow analysis improve a UI. But when a service is funded through advertising, the advertisers are the actual customers; tracking becomes more detailed, analyses further-reaching, and data is retained for a long time to build profiles. The book says this relationship can be appropriately described by a word with more sinister connotations: <b>surveillance</b>.</p>
+            <p>The thought experiment replaces the word <i>data</i> with <i>surveillance</i> — and jokes that this makes the book <i>Designing Surveillance-Intensive Applications</i>. In trying to make software “eat the world” we have built “the greatest mass surveillance infrastructure ever seen”: smartphones, smart TVs, voice-controlled assistants, baby monitors, and children's toys with cloud speech recognition, many with a terrible security record.</p>
+            <p>Surveillance of our location and movements, social relationships and communications, purchases and payments, and health has become almost unavoidable. A surveillance organization may know more about a person than they know themselves — for example identifying illnesses or economic problems before the person is aware of them. The difference from totalitarian regimes is “just” that the data is collected by corporations to provide services rather than by government agencies seeking control.</p>
+            <p>Not all data collection qualifies as surveillance, but examining it as such helps us understand our relationship with the collector. Feeling you have “nothing to hide” means you are in line with existing power structures and not a marginalized minority; not everyone is so fortunate.</p>
+            <p>It looks less benign once it drives decisions: driving behavior tracked by cars without drivers' consent affecting insurance premiums, health insurance that depends on wearing a fitness tracker — and the movement sensor in a smartwatch can be used to work out what you are typing, such as passwords, with fairly good accuracy.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">A home full of helpful gadgets</span><span id="s5-seg"></span></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 660 350" role="img" aria-label="A house with four rooms and six gadgets that stream to a company's warehouse, scientists and insights"></svg></div>
+        <div class="sentence" id="s5-sentence"></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="controls"><div class="stats" id="s5-stats"></div></div>
+        <div class="caption" id="s5-cap" aria-live="polite">Every gadget is switched off. Nothing leaves the house.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. CONSENT ============ -->
+  <section class="scene" id="consent">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 6 · consent and freedom of choice</span>
+        <h2>“I agree” — but did you have a choice?</h2>
+        <p class="story">“Nobody forced you,” says the app. “You pressed Agree.” True — but look at the button. The terms are long and foggy, the box is already ticked, and you can't bargain: the service writes the rules, you take them or leave them.</p>
+        <p class="story">And leaving isn't free. If your whole class plans parties, football and homework on one app, saying no means missing out. The more friends are on it, the more a “no” costs — that pull is called a <b>network effect</b>. Worse, your friends' address books and photos describe <i>you</i>, even though you never agreed to anything.</p>
+        <p class="story">Real consent looks different: plain words, nothing ticked in advance, one question per purpose — and you can say no without being punished for it.</p>
+        <p class="imagine"><b>Try it:</b> press “Decline”, then “A week goes by”, and read the three numbers. Slide the number of friends on the app up and down. Then switch to “A real choice” and untick whatever you like.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The usual defence is that users voluntarily agree to the terms of service and privacy policy and get a valuable service in return. The book finds several problems with it. First, <b>why is the tracking necessary?</b> Some directly improves features (click-through rates improve search ranking; products bought together feed suggestions); tracking to build advertising profiles is less clearly in the user's interest.</p>
+            <p>Second, most users have little knowledge of what data they feed into our databases or how it is retained and processed, and “most privacy policies do more to obscure than to illuminate”. Without understanding, users cannot give <b>meaningful consent</b>. Data from one user often also says things about other people who are not users and have agreed to nothing; derived datasets are precisely the kind of data users cannot meaningfully understand.</p>
+            <p>Data is extracted through a one-way process, not a relationship with true reciprocity: no dialogue, no negotiation. The relationship is <b>asymmetric and one-sided</b>; the terms are set by the service.</p>
+            <p>Under the EU's <b>GDPR</b>, consent must be “freely given, specific, informed, and unambiguous”, the user must be able to “refuse or withdraw consent without detriment”, requests must use “clear and plain language”, and “silence, pre-ticked boxes or inactivity” do not constitute consent. Consent is not the only lawful basis — others include complying with legislation, protecting somebody's life, and legitimate interest (e.g. fraud prevention) — but it is the most frequently used by internet services.</p>
+            <p>Opting out is not a free choice either. If a service is “regarded by most people as essential for basic social participation”, its use is effectively mandatory; the book's examples are carrying a smartphone, using social networks for socializing, and using Google to find information. With <b>network effects</b> there is a social cost to declining. Platforms are designed to engage, many using game mechanics and tactics common in gambling. Declining is realistic only for the few with the time, knowledge and privilege to afford it; for everyone else “surveillance becomes inescapable”.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Joining Plaza, the class chat app</span><span id="s6-seg"></span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 660 350" role="img" aria-label="A sign-up form on a phone beside six classmates who send messages through the app to you"></svg></div>
+        <div class="controls" id="s6-controls"></div>
+        <div class="controls"><div class="stats" id="s6-stats"></div></div>
+        <div class="caption" id="s6-cap" aria-live="polite">The sign-up screen is waiting. The “I agree to everything” box came already ticked.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7. PRIVACY ============ -->
+  <section class="scene" id="privacy">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 7 · privacy and use of data</span>
+        <h2>Privacy means <i>you</i> choose who knows what</h2>
+        <p class="story">Some people say “privacy is dead” because lots of us post our lives online. The book says that gets the word wrong. Privacy isn't keeping everything secret. It is the freedom to <b>choose</b> what to reveal, and to whom.</p>
+        <p class="story">Aiko has a rare illness. She is glad to share her medical data with researchers hunting for a treatment. She would be far more careful if the same facts could reach an insurer or an employer. Same fact, different audience, different answer — and the answer is hers to give. The book calls this a <b>decision right</b>.</p>
+        <p class="story">When a service collects her data, that right doesn't vanish. It <b>moves</b>. Her privacy settings still decide what other users see, but the service itself sees everything, and <i>it</i> now decides what is revealed — for instance by selling adverts aimed at “people with a rare illness”.</p>
+        <p class="imagine"><b>Try it:</b> tap the boxes to open or close each fact for each audience. Then switch to “Through an online service” and try to close the last column.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The claim that “privacy is dead” is false and rests on a misunderstanding. Having privacy “does not mean keeping everything secret; it means having the freedom to choose what to reveal to whom, what to make public, and what to keep secret”. The right to privacy is a <b>decision right</b>: each person decides where to be on the spectrum between secrecy and transparency in each situation. It is an important aspect of freedom and autonomy.</p>
+            <p>When data is extracted through surveillance infrastructure, privacy rights are not necessarily eroded but <b>transferred to the data collector</b>. “Trust us to do the right thing with your data” means the right to decide what to reveal moves from the individual to the company, which exercises it with the goal of maximizing profit. Companies keep most of the outcome secret, because revealing it would seem creepy; intimate information surfaces only indirectly, for example as tools for targeting ads at people suffering from a particular illness. Even if nobody can be personally reidentified from that bucket, they have lost their agency over the disclosure.</p>
+            <p>Many companies focus on managing the <i>perception</i> of creepiness rather than asking how intrusive they are. Any data may be wrong, undesirable or inappropriate — something factually correct may still trigger painful memories — so engineers must be humble and build mechanisms for handling those failures.</p>
+            <p><b>Privacy settings</b> are a starting point for handing back control, but regardless of the setting the service itself has unfettered access and may use the data in any way its privacy policy permits, often going much further than what is overtly visible to users.</p>
+            <p>This large-scale transfer of privacy rights from individuals to corporations is historically unprecedented. Trust relationships have always existed — patient and doctor, defendant and attorney — but there the use of data is strictly governed by ethical, legal and regulatory constraints.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Aiko's facts · who may know</span><span id="s7-seg"></span></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 660 340" role="img" aria-label="A grid of four facts about Aiko against the audiences who may or may not know each one"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="controls"><div class="stats" id="s7-stats"></div></div>
+        <div class="caption" id="s7-cap" aria-live="polite">Aiko tells people things herself. Every box is hers to open or close.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8. DATA AS ASSETS AND POWER ============ -->
+  <section class="scene" id="toxic">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 8 · data as assets and power</span>
+        <h2>Not the new oil — handle it like something hazardous</h2>
+        <p class="story">Some people call the trail you leave behind “data exhaust”, as if it were worthless smoke. It isn't worthless: companies trade it in secret, and a young company is often valued by how many people it can watch.</p>
+        <p class="story">Because it is valuable, many hands reach for it. Thieves break in. Someone inside leaks it. The company goes bankrupt and the data is sold with the furniture. New bosses arrive who don't share the old values. A future government demands a copy.</p>
+        <p class="story">So critics say data is less like gold or oil and more like <b>hazardous material</b>: the more you store, and the longer you keep it, the bigger the spill when something goes wrong. And there is one spill-proof kind of data — the kind you never collected.</p>
+        <p class="imagine"><b>Try it:</b> Crumb delivers bread. It only <i>needs</i> your address and your order, but it collects everything and keeps it forever. Run a year, then press “Something goes wrong” and read the spill. Reset, switch off what Crumb doesn't need, shorten the keeping time, and do it again.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Behavioral data is sometimes called <b>“data exhaust”</b>, suggesting worthless waste. The book argues the opposite view is more correct: if targeted advertising pays for a service, the user activity that generates the data could be regarded as a form of <b>labor</b>, and the application as a means to lure users into feeding ever more personal information into the surveillance infrastructure.</p>
+            <p>Personal data is a valuable asset, as shown by <b>data brokers</b> operating in secrecy — purchasing, aggregating, analyzing and reselling people's personal data, mostly for marketing. Startups are valued by their user numbers, or “eyeballs” — that is, by their surveillance capabilities.</p>
+            <p>Companies want the data; governments want it too, and may obtain it through secret deals, coercion, legal compulsion, or simply theft. When a company goes bankrupt, personal data is one of the assets sold. And because data is difficult to secure, breaches happen disconcertingly often.</p>
+            <p>Hence critics call data a <b>“toxic asset”</b>, or at least <b>“hazardous material”</b> — “maybe data is not the new gold, or the new oil, but rather the new uranium”. Systems may be compromised by criminals or hostile intelligence services, leaked by insiders, inherited by unscrupulous management, or seized by a regime with no qualms about compelling a handover. We must consider not just today's political environment but all possible future governments; as Bruce Schneier puts it, “It is poor civic hygiene to install technologies that could someday facilitate a police state.”</p>
+            <p>“Knowledge is power” — and “to scrutinize others while avoiding scrutiny oneself is one of the most important forms of power”. Technology companies may not seek political power, but the data they have accumulated, much of it surreptitiously and outside public oversight, gives them a lot of power over our lives.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Crumb's data vault · one barrel = one month of one kind</span><span class="pill good" id="s8-pill"><i></i>vault sealed</span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 660 340" role="img" aria-label="A vault grid with one row per kind of data and one column per month; barrels fill it, are purged, or spill"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="controls" id="s8-controls2"></div>
+        <div class="controls"><div class="stats" id="s8-stats"></div></div>
+        <div class="caption" id="s8-cap" aria-live="polite">The vault is empty. Choose what Crumb collects and how long it keeps it, then run a year.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9. INDUSTRIAL REVOLUTION + LEGISLATION ============ -->
+  <section class="scene" id="rivers">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 9 · the Industrial Revolution, laws and self-control</span>
+        <h2>Dirty rivers then, leaky data now</h2>
+        <p class="story">Factories once made whole countries richer — and filled the air with smoke and the rivers with waste. Owners lived in splendour while workers, children among them, laboured long hours in harsh and dangerous places.</p>
+        <p class="story">It took a long time, but safeguards came: rules for clean air and water, safety at work, no child labour, inspections for food. Doing business cost more. Society gained enormously, and hardly anyone wants to go back.</p>
+        <p class="story">The book borrows Bruce Schneier's words: <b>data is the pollution problem of the information age</b>. Laws can help — collect only what you need, only for a purpose you named — but the book's real hope is a change of heart in the people who build things: stop treating users as numbers to push up, and remember they are humans who deserve respect, dignity and a say.</p>
+        <p class="imagine"><b>Try it:</b> switch the safeguards on one by one in the 1800s, then jump to today and do the same. Watch what each one costs — and what it buys.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The <b>Industrial Revolution</b> brought sustained growth and better living standards in the long run, along with dreadful air and water pollution, cramped and unsanitary housing, long hours and child labor. Safeguards — environmental protection regulations, workplace safety protocols, laws prohibiting child labor, health inspections for food — took a long time. The cost of doing business rose, “but society as a whole benefited hugely”.</p>
+            <p>Schneier, as quoted: “Data is the pollution problem of the information age, and protecting privacy is the environmental challenge… our grandchildren will look back at us during these early decades of the information age and judge us on how we addressed the challenge of data collection and misuse. We should try to make them proud.”</p>
+            <p><b>Legislation:</b> the GDPR says personal data must be “collected for specified, explicit and legitimate purposes” and be “adequate, relevant and limited to what is necessary”. This principle of <b>data minimization</b> runs directly counter to the philosophy of big data — maximize collection, combine datasets, explore for unforeseen insights. The book judges that the regulation has had some effect on online advertising but has been weakly enforced and has not changed culture much across the wider industry.</p>
+            <p>Opposition to regulation is partly justified: sharing medical data creates privacy risks but also opportunities for better diagnostics and treatments, and overregulation may prevent such breakthroughs. Balancing is difficult.</p>
+            <p><b>Self-regulation:</b> the book calls for a culture shift — stop regarding users as metrics to be optimized; educate them about how their data is used; let each individual keep control over their own data. That control is like a national park: unprotected, it suffers the <b>tragedy of the commons</b>. “Ubiquitous surveillance is not inevitable. We are still able to stop it.” As a first step: don't retain data forever, purge it as soon as it is no longer needed, and minimize what you collect. “Data you don't have is data that can't be leaked, stolen, or compelled by governments to be handed over.”</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">One town, two centuries</span><span id="s9-seg"></span></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 660 340" role="img" aria-label="A factory or data centre upstream of a town, with a river carrying its waste, and three meters for pollution, cost and the town's health"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="caption" id="s9-cap" aria-live="polite">The 1800s. The factory makes the town richer — and pours its waste straight into the river.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 10. THE WHOLE ROAD ============ -->
+  <section class="scene" id="journey">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">The end of the road · looking back</span>
+        <h2>Fourteen stops through Data Town</h2>
+        <p class="story">This is the last page of the book, so the authors do what you do at the top of a hill: turn around and look at the road. Storage engines, copies, shards, transactions, unreliable networks, votes, batch jobs, streams — every stop was a tool.</p>
+        <p class="story">Tools don't choose what they're used for. The people holding them do. The same data that can find the families who most need help can also pick out the ones who are easiest to trick.</p>
+        <p class="story">So the book ends with a job for its readers rather than a fact: work toward the kind of world you want to live in — one that treats people with humanity and respect. “Let's work together toward that goal.”</p>
+        <p class="imagine"><b>Try it:</b> tap any stop to walk there and hear what the book says it taught — or press “Walk the whole road”.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The closing summary runs through all fourteen chapters — from the trade-offs of Chapter 1 to the streaming philosophy of Chapter 13 — and then describes this one: “although data can be used to do good, it can also do significant harm: making decisions that seriously affect people's lives and are difficult to appeal against, leading to discrimination and exploitation, normalizing surveillance, and exposing intimate information.” It adds the risk of data breaches, and that a well-intentioned use of data may have unintended consequences.</p>
+            <p>Its last words: “Given the large impact that software and data have on the world, we as engineers must remember that we carry a responsibility to work toward the kind of world that we want to live in: a world that treats people with humanity and respect. Let's work together toward that goal.”</p>
+            <p>Earlier in the chapter, in the same spirit: “As people working in technology, if we don't consider the societal impact of our work, we're not doing our job.”</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">The road through the book</span><div class="stats" id="s10-stats"></div></div>
+        <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 660 350" role="img" aria-label="A winding road with fourteen numbered stops, one for each chapter of the book, and a walker who visits them"></svg></div>
+        <div class="controls" id="s10-controls"></div>
+        <div class="caption" id="s10-cap" aria-live="polite">Fourteen chapters, one road. Tap a stop.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SUMMARY ============ -->
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>What to carry with you</h2><p>This chapter has no seesaws — just a handful of things worth remembering every time you build something.</p></div>
+      <div class="cards">
+        <div class="card"><h3>Data is about people</h3><p>Behind the rows are behaviour, interests and identities. Treat them with humanity and respect; human dignity comes first.</p></div>
+        <div class="card"><h3>A guess can close a door</h3><p>Careful organisations say no when in doubt. Many of them leaning on one label can lock a person out — with no proof and little chance of appeal.</p></div>
+        <div class="card"><h3>The past is an unfair teacher</h3><p>A learner copies the bias in its lesson book, even through stand-ins like a postcode. A better future needs moral imagination, and only humans have it.</p></div>
+        <div class="card"><h3>Somebody must answer</h3><p>Decisions need reasons you can see, facts you can correct and a human you can appeal to. Nobody gets to hide behind “the algorithm did it”.</p></div>
+        <div class="card"><h3>Look for the loops</h3><p>Predictions can make themselves come true. Think about the whole system — people included — and watch for consequences nobody intended.</p></div>
+        <div class="card"><h3>Tracking can become surveillance</h3><p>Ask who the real customer is. If the sentence sounds bad with “surveillance” in it, the word “data” was hiding something.</p></div>
+        <div class="card"><h3>Privacy is a choice, not a secret</h3><p>It is the right to decide who knows what. Real consent is informed, specific, never pre-ticked — and saying no must not be punished.</p></div>
+        <div class="card"><h3>Store less, keep it shorter</h3><p>Data is hazardous material. What you never collected, or already purged, can't be leaked, stolen or demanded.</p></div>
+        <div class="card"><h3>Make the grandchildren proud</h3><p>Safeguards cost something and are worth it. Laws help, but the real fix is a culture that sees users as humans who deserve respect, dignity and agency.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>Grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>ethics</dt><dd>Thinking hard about what is right and wrong to do — by reflecting and talking with the people affected, not by ticking a checklist.</dd></div>
+        <div class="word"><dt>unintended consequence</dt><dd>Something your system causes that you never meant it to.</dd></div>
+        <div class="word"><dt>predictive analytics</dt><dd>Using past data to guess what a person will do next — repay, claim, reoffend.</dd></div>
+        <div class="word"><dt>algorithmic decision making</dt><dd>Letting a program, rather than a person, say yes or no.</dd></div>
+        <div class="word"><dt>algorithmic prison</dt><dd>Being shut out of jobs, travel, insurance, housing and banking because programs labelled you risky.</dd></div>
+        <div class="word"><dt>bias</dt><dd>A steady tilt against some people. If it is in the training data, the learner picks it up and can amplify it.</dd></div>
+        <div class="word"><dt>protected trait</dt><dd>Something the law says you may not be treated differently for: ethnicity, age, gender, sexuality, disability, beliefs.</dd></div>
+        <div class="word"><dt>proxy</dt><dd>A harmless-looking fact, such as a postcode, that secretly stands in for a protected trait.</dd></div>
+        <div class="word"><dt>opaque</dt><dd>You can see the answer but not the reason. Learned patterns are often like this.</dd></div>
+        <div class="word"><dt>moral imagination</dt><dd>Picturing a future that is fairer than the past. Only humans can supply it.</dd></div>
+        <div class="word"><dt>accountability</dt><dd>Someone has to answer for a decision, explain it, and put it right when it is wrong.</dd></div>
+        <div class="word"><dt>recourse</dt><dd>A real way to challenge a decision and have a mistake corrected.</dd></div>
+        <div class="word"><dt>stereotyping</dt><dd>Judging one person by what others “like them” did — putting them in a bucket.</dd></div>
+        <div class="word"><dt>feedback loop</dt><dd>The result of a system flows back in as its next input, so an effect keeps strengthening itself.</dd></div>
+        <div class="word"><dt>echo chamber</dt><dd>A place where you are shown only opinions you already agree with.</dd></div>
+        <div class="word"><dt>systems thinking</dt><dd>Looking at the whole system — computers and people together — to spot consequences early.</dd></div>
+        <div class="word"><dt>tracking</dt><dd>Logging what you do as a side effect of using a service, rather than what you chose to type in.</dd></div>
+        <div class="word"><dt>surveillance</dt><dd>Watching people. The book's test: swap this word in for “data” and see how the sentence sounds.</dd></div>
+        <div class="word"><dt>meaningful consent</dt><dd>A yes from someone who understands what they agree to and could freely have said no.</dd></div>
+        <div class="word"><dt>network effect</dt><dd>A service gets more useful as more people join — which also makes it costly to stay out.</dd></div>
+        <div class="word"><dt>privacy</dt><dd>Not secrecy: the freedom to choose what to reveal, to whom, and what to keep to yourself.</dd></div>
+        <div class="word"><dt>decision right</dt><dd>The right to make that choice. Surveillance moves it from the person to the company.</dd></div>
+        <div class="word"><dt>data broker</dt><dd>A company that quietly buys, combines and resells personal data, mostly for marketing.</dd></div>
+        <div class="word"><dt>hazardous material</dt><dd>The critics' picture of stored personal data: useful, but dangerous when it leaks or changes hands.</dd></div>
+        <div class="word"><dt>data minimization</dt><dd>Collect only what you need for a purpose you named — and purge it when you no longer need it.</dd></div>
+        <div class="word"><dt>tragedy of the commons</dt><dd>A shared treasure that gets ruined because nobody protects it. The book says control over our data could go that way.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width: 820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Six quick questions. Finish all six to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible, ease, lerp } = K;
+K.page(14);
+const setCap = (id, html) => { const el = K.$(id); if (el) el.innerHTML = html; };
+const txt = (x, y, str, cls, anchor, style) => s("text", { x, y, class: cls || "sv-label", "text-anchor": anchor || "middle", style: style || null }, str);
+const BOLD = { fill: "var(--ink)", fontWeight: 700 };
+const btn = (label, cls, fn) => { const b = h("button", { class: "btn" + (cls ? " " + cls : ""), type: "button" }, label); b.addEventListener("click", fn); return b; };
+const onTap = (g, fn) => {
+  g.addEventListener("click", fn);
+  g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } });
+};
+const pop = (el) => { el.classList.remove("sv-pop"); void el.getBoundingClientRect(); el.classList.add("sv-pop"); };
+/** Put a K.seg back to option i (used when a click arrives while a sim is busy). */
+const segSync = (wrap, i) => K.$$("button", wrap).forEach((b, j) => b.setAttribute("aria-pressed", String(j === i)));
+const shake = (el) => { el.classList.remove("sv-shake"); void el.getBoundingClientRect(); el.classList.add("sv-shake"); };
+/** On/off button: tog('label', on, (on) => boolean|void). Return false from fn to refuse the change. */
+const tog = (label, on, fn) => {
+  const b = h("button", { class: "btn small tog", type: "button", "aria-pressed": String(!!on) }, label);
+  b.addEventListener("click", () => {
+    const next = b.getAttribute("aria-pressed") !== "true";
+    if (fn(next) === false) return;
+    b.setAttribute("aria-pressed", String(next));
+  });
+  b.set = (v) => b.setAttribute("aria-pressed", String(!!v));
+  return b;
+};
+
+/* ================= HERO: every row is somebody ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const PEOPLE = [
+    { id: "4417", city: "Lagos", likes: "chess", name: "Tunde", cls: "sv-fill-blue" },
+    { id: "4418", city: "Osaka", likes: "drawing", name: "Mei", cls: "sv-fill-lilac" },
+    { id: "4419", city: "Lima", likes: "football", name: "Sofía", cls: "sv-fill-mint" },
+    { id: "4420", city: "Pune", likes: "robots", name: "Arjun", cls: "sv-fill-sun" },
+    { id: "4421", city: "Oslo", likes: "skiing", name: "Lena", cls: "sv-fill-lilac" },
+  ];
+  svg.appendChild(txt(24, 26, "TABLE users", "sv-label", "start"));
+  svg.appendChild(txt(506, 26, "WHO IT REALLY IS", "sv-label", "end"));
+  [["id", 40], ["city", 106], ["likes", 186]].forEach(([l, x]) => svg.appendChild(txt(x, 52, l, "sv-label", "start", { fill: "var(--ink-3)" })));
+  const layer = s("g");
+  const rows = PEOPLE.map((p, i) => {
+    const cy = 84 + i * 54;
+    const rect = s("rect", { x: 24, y: cy - 20, width: 276, height: 40, rx: 10, class: "sv-box" });
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Row " + p.id + ": show or hide the person" },
+      rect,
+      txt(40, cy + 4, p.id, "sv-label", "start", BOLD),
+      txt(106, cy + 4, p.city, "sv-label", "start"),
+      txt(186, cy + 4, p.likes, "sv-label", "start"));
+    svg.appendChild(g);
+    svg.appendChild(s("line", { x1: 304, y1: cy, x2: 356, y2: cy, class: "sv-wire" }));
+    const ghost = s("circle", { cx: 384, cy, r: 5, class: "sv-fill-line" });
+    svg.appendChild(ghost);
+    const person = s("g", { style: { opacity: 0 } },
+      draw.person(384, cy + 2, p.cls, 0.75),
+      txt(408, cy - 1, p.name, "sv-text", "start", { fontWeight: 700 }),
+      txt(408, cy + 15, "loves " + p.likes, "sv-label", "start"));
+    svg.appendChild(person);
+    const row = { cy, rect, person, ghost, awake: false, busy: false };
+    onTap(g, () => (row.awake ? rest(row) : wake(row)));
+    return row;
+  });
+  const counter = txt(260, 358, "0 of 5 rows seen as people");
+  svg.appendChild(counter);
+  svg.appendChild(layer);
+
+  function count() {
+    const n = rows.filter((r) => r.awake).length;
+    counter.textContent = n + " of 5 rows seen as people";
+  }
+  async function wake(r) {
+    if (r.busy || r.awake) return;
+    r.busy = true;
+    r.rect.setAttribute("class", "sv-data-soft");
+    const p = draw.parcel("sv-data", 12); layer.appendChild(p);
+    await fly(p, [300, r.cy], [384, r.cy], 520);
+    p.remove();
+    r.awake = true; r.ghost.style.opacity = 0;
+    r.person.style.opacity = 1; pop(r.person);
+    r.busy = false; count();
+  }
+  function rest(r) {
+    if (r.busy) return;
+    r.awake = false; r.person.style.opacity = 0; r.ghost.style.opacity = 1;
+    r.rect.setAttribute("class", "sv-box"); count();
+  }
+  let visible = false;
+  whenVisible(svg, () => (visible = true), () => (visible = false));
+  (async function auto() {
+    await sleep(900);
+    for (;;) {
+      if (visible && !K.reduced && !document.hidden) {
+        const next = rows.find((r) => !r.awake && !r.busy);
+        if (next) await wake(next);
+        else { await sleep(2600); rows.forEach(rest); }
+      }
+      await sleep(1500);
+    }
+  })();
+})();
+
+/* ================= 1. ONE LABEL, FIVE DOORS ================= */
+(function predict() {
+  const svg = K.$("#s1-svg");
+  const SCORE = 45;
+  const DOORS = [
+    { name: "a job", off: 0 }, { name: "a flight", off: 12 }, { name: "insurance", off: -6 },
+    { name: "a flat to rent", off: 6 }, { name: "a bank loan", off: -12 },
+  ];
+  let caution = 9, mode = 0, applied = false, busy = false;
+  const cutoff = (d) => 85 - caution * 6 + d.off;
+
+  // left column: Imani and the scoring service
+  svg.appendChild(draw.person(76, 84, "sv-fill-lilac"));
+  svg.appendChild(txt(76, 130, "Imani", "sv-text", "middle", { fontWeight: 700 }));
+  const truth = txt(76, 147, "");
+  svg.appendChild(truth);
+  svg.appendChild(draw.db(76, 234, 96, 92, "risk score service"));
+  svg.appendChild(txt(76, 234, "Imani:", "sv-label"));
+  svg.appendChild(txt(76, 252, String(SCORE), "sv-title"));
+  const bars = s("g", { class: "fade", style: { opacity: 0 }, "aria-hidden": "true" });
+  for (let i = 0; i < 5; i++) bars.appendChild(s("rect", { x: 33 + i * 20, y: 46, width: 6, height: 62, rx: 3, style: { fill: "var(--ink-3)" } }));
+  [42, 106].forEach((y) => bars.appendChild(s("rect", { x: 28, y, width: 96, height: 6, rx: 3, style: { fill: "var(--ink-3)" } })));
+  svg.appendChild(bars);
+  const prison = txt(76, 164, "", "sv-label", "middle", { fill: "var(--coral)", fontWeight: 700 });
+  svg.appendChild(prison);
+
+  // doors
+  DOORS.forEach((d, i) => {
+    d.cy = 50 + i * 58;
+    svg.appendChild(s("path", { d: "M112,92 C240,92 300," + d.cy + " 426," + d.cy, class: "sv-wire", style: { opacity: 0.55 } }));
+    d.rect = s("rect", { x: 430, y: d.cy - 22, width: 214, height: 44, rx: 12, class: "sv-box" });
+    d.rule = txt(444, d.cy + 14, "", "sv-label", "start");
+    d.chipR = s("rect", { x: 578, y: d.cy - 13, width: 54, height: 26, rx: 13, class: "sv-panel" });
+    d.chipT = txt(605, d.cy + 4, "…", "sv-label", "middle", BOLD);
+    svg.append(d.rect, txt(444, d.cy - 3, d.name, "sv-text", "start", { fontWeight: 700 }), d.rule, d.chipR, d.chipT);
+  });
+  const layer = s("g"); svg.appendChild(layer);
+
+  const st = { yes: stat("Doors open", "—"), no: stat("Doors closed", "—"), proof: stat("Proof asked for", "none", "warn") };
+  K.$("#s1-stats").append(st.yes, st.no, st.proof);
+
+  function verdict(d) { return SCORE > cutoff(d) ? "NO" : "YES"; }
+  function show(d, v) {
+    d.shown = v;
+    d.chipT.textContent = v || "…";
+    d.chipR.setAttribute("class", v === "YES" ? "sv-good" : v === "NO" ? "sv-bad" : "sv-panel");
+    d.rect.setAttribute("class", v === "NO" ? "sv-bad" : "sv-box");
+  }
+  function render() {
+    DOORS.forEach((d) => { d.rule.textContent = "no if score > " + cutoff(d); if (applied) show(d, verdict(d)); });
+    truth.textContent = mode === 1 ? "always repaid" : "truth unknown";
+    truth.style.fill = mode === 1 ? "var(--mint)" : "";
+    const shown = DOORS.filter((d) => d.shown), no = shown.filter((d) => d.shown === "NO").length;
+    st.yes.set(shown.length ? shown.length - no : "—", shown.length - no ? "good" : "");
+    st.no.set(shown.length ? no : "—", no ? "bad" : "");
+    const locked = shown.length === 5 && no === 5;
+    bars.style.opacity = locked ? 0.6 : 0;
+    prison.textContent = locked ? "algorithmic prison" : "";
+  }
+  function summary() {
+    const no = DOORS.filter((d) => verdict(d) === "NO").length;
+    const tail = mode === 1
+      ? " And the label was a <b>mistake</b> — Imani has always paid on time. No door noticed, because no door asked for proof."
+      : " Whether the label is right or wrong, nobody asked for proof and nobody offers an appeal.";
+    if (no === 5) return "Five careful organisations, five times <b>no</b>. Each one alone is only playing safe; together they shut Imani out of work, travel, insurance, housing and banking." + tail;
+    if (no === 0) return "Everyone is relaxed enough that a score of 45 passes. Every door opens — but the score is still quietly deciding." + tail;
+    return "<b>" + no + " of 5</b> doors say no. The more cautious each organisation is, the lower its cut-off — and the same single score closes more and more doors." + tail;
+  }
+  async function apply() {
+    if (busy) return; busy = true; applied = false;
+    DOORS.forEach((d) => show(d, null)); render();
+    setCap("#s1-cap", "Imani sends off five applications. Each organisation looks up the same risk score before it answers…");
+    for (const d of DOORS) {
+      const a = draw.parcel("sv-data", 14); layer.appendChild(a);
+      await fly(a, [112, 92], [420, d.cy], 420); a.remove();
+      const t = draw.tag(String(SCORE), "sv-data-soft"); layer.appendChild(t);
+      await fly(t, [128, 234], [500, d.cy], 420); t.remove();
+      show(d, verdict(d)); if (d.shown === "NO") shake(d.rect);
+      render();
+      await sleep(160);
+    }
+    applied = true; busy = false; render();
+    setCap("#s1-cap", summary());
+  }
+  const ctr = K.$("#s1-controls");
+  ctr.append(
+    btn("Apply everywhere", "primary", apply),
+    btn("Reset", "", () => {
+      if (busy) return; applied = false; K.clear(layer); DOORS.forEach((d) => show(d, null)); render();
+      setCap("#s1-cap", "Imani hasn't applied anywhere yet. A scoring service has given her a risk score of 45 out of 100.");
+    }),
+    slider({ id: "s1-caution", label: "How cautious is everyone?", min: 1, max: 10, step: 1, value: caution, format: (v) => v + " / 10",
+      onInput: (v) => {
+        caution = v; render();
+        if (applied && !busy) setCap("#s1-cap", summary());
+        else if (!busy) setCap("#s1-cap", "Each organisation sets its own cut-off. More caution means a lower cut-off: “if in doubt, say no.”");
+      } }));
+  K.$("#s1-seg").appendChild(seg(["Label could be right", "Label is a mistake"], 0, (i) => {
+    mode = i; render();
+    if (busy) return;
+    setCap("#s1-cap", applied ? summary() : (i === 1
+      ? "This time we know the truth: the score is a mix-up and Imani has always repaid. Apply, and see whether any door can tell."
+      : "Nobody knows yet whether the score is right. It is only a guess about the future."));
+  }, "s1-mode"));
+  render();
+})();
+
+/* ================= 2. THE COPYCAT LEARNER ================= */
+(function bias() {
+  const svg = K.$("#s2-svg");
+  const HIST = [
+    { name: "Ada", grp: "T", post: "North", pays: true, yes: true },
+    { name: "Bram", grp: "T", post: "North", pays: true, yes: true },
+    { name: "Chidi", grp: "T", post: "South", pays: false, yes: false },
+    { name: "Dalia", grp: "C", post: "South", pays: true, yes: false },
+    { name: "Emre", grp: "C", post: "South", pays: true, yes: false },
+    { name: "Freya", grp: "C", post: "North", pays: true, yes: true },
+  ];
+  const NEW = [
+    { name: "Lars", grp: "T", post: "North", pays: true, cls: "sv-fill-blue", top: 34, dotX: 388 },
+    { name: "Noor", grp: "C", post: "South", pays: true, cls: "sv-fill-lilac", top: 176, dotX: 401 },
+  ];
+  const see = { grp: true, post: true };
+  let busy = false, trained = false;
+
+  const glyph = (grp, cx, cy, r) => grp === "T"
+    ? s("path", { d: `M${cx},${cy - r} L${cx + r},${cy + r * 0.8} L${cx - r},${cy + r * 0.8} Z`, style: { fill: "var(--ink-2)" } })
+    : s("circle", { cx, cy, r: r * 0.9, style: { fill: "var(--ink-2)" } });
+  const tick = (ok, cx, cy) => s("path", { d: ok ? `M${cx - 6},${cy} L${cx - 1.5},${cy + 5} L${cx + 7},${cy - 5}` : `M${cx - 5},${cy - 5} L${cx + 5},${cy + 5} M${cx + 5},${cy - 5} L${cx - 5},${cy + 5}`, fill: "none", "stroke-width": 3, "stroke-linecap": "round", "stroke-linejoin": "round", style: { stroke: ok ? "var(--mint)" : "var(--coral)" } });
+
+  // history table
+  const heads = {};
+  [["past person", 30, "start", "name"], ["group", 148, "middle", "grp"], ["postcode", 208, "middle", "post"], ["on time?", 270, "middle", "pays"], ["humans said", 348, "middle", "yes"]].forEach(([l, x, a, k]) => {
+    heads[k] = txt(x, 42, l, "sv-label", a); svg.appendChild(heads[k]);
+  });
+  const colG = { grp: s("g", { class: "fade" }), post: s("g", { class: "fade" }) };
+  HIST.forEach((p, i) => {
+    p.cy = 72 + i * 40;
+    p.rect = s("rect", { x: 16, y: p.cy - 16, width: 398, height: 32, rx: 9, class: "sv-box" });
+    svg.append(p.rect, txt(30, p.cy + 5, p.name, "sv-text", "start", { fontWeight: 700 }));
+    colG.grp.appendChild(glyph(p.grp, 148, p.cy, 8));
+    colG.post.appendChild(txt(208, p.cy + 4, p.post));
+    svg.appendChild(tick(p.pays, 270, p.cy));
+    svg.appendChild(s("rect", { x: 320, y: p.cy - 11, width: 56, height: 22, rx: 11, class: p.yes ? "sv-good" : "sv-bad" }));
+    svg.appendChild(txt(348, p.cy + 4, p.yes ? "YES" : "NO", "sv-label", "middle", BOLD));
+    p.dots = NEW.map((a) => { const d = s("circle", { cx: a.dotX, cy: p.cy, r: 4.5, class: a.cls, style: { opacity: 0 } }); svg.appendChild(d); return d; });
+  });
+  svg.append(colG.grp, colG.post);
+  NEW.forEach((a, i) => {
+    svg.appendChild(s("circle", { cx: 36 + i * 196, cy: 318, r: 4.5, class: a.cls }));
+    svg.appendChild(txt(48 + i * 196, 322, "= looks like " + a.name + " to it", "sv-label", "start"));
+  });
+
+  // the two new applicants
+  NEW.forEach((a) => {
+    const t = a.top;
+    svg.appendChild(s("rect", { x: 432, y: t, width: 212, height: 126, rx: 14, class: "sv-panel" }));
+    svg.appendChild(draw.person(462, t + 38, a.cls, 0.8));
+    svg.appendChild(txt(488, t + 30, a.name, "sv-text", "start", { fontWeight: 700 }));
+    a.gGrp = s("g", { class: "fade" }, glyph(a.grp, 496, t + 48, 7));
+    a.gPost = s("g", { class: "fade" }, txt(512, t + 52, a.post, "sv-label", "start"));
+    svg.append(a.gGrp, a.gPost, tick(true, 566, t + 48));
+    a.chipR = s("rect", { x: 584, y: t + 12, width: 50, height: 24, rx: 12, class: "sv-box" });
+    a.chipT = txt(609, t + 28, "?", "sv-label", "middle", BOLD);
+    svg.append(a.chipR, a.chipT);
+    svg.appendChild(s("rect", { x: 448, y: t + 72, width: 180, height: 12, rx: 6, class: "sv-box" }));
+    a.bar = s("rect", { x: 448, y: t + 72, width: 0, height: 12, rx: 6, class: "sv-fill-mint" });
+    svg.appendChild(a.bar);
+    svg.appendChild(s("line", { x1: 538, y1: t + 68, x2: 538, y2: t + 88, class: "sv-wire-solid", style: { strokeWidth: 1.5 } }));
+    a.note = txt(448, t + 108, "waiting for the learner", "sv-label", "start");
+    svg.appendChild(a.note);
+  });
+  const layer = s("g"); svg.appendChild(layer);
+
+  const st = { a: stat("Lars", "—"), b: stat("Noor", "—"), h: stat("Agrees with history", "—") };
+  K.$("#s2-stats").append(st.a, st.b, st.h);
+  const pill = K.$("#s2-verdict");
+
+  const like = (a, p) => p.pays === a.pays && (!see.grp || p.grp === a.grp) && (!see.post || p.post === a.post);
+  const score = (a) => { const m = HIST.filter((p) => like(a, p)); return { m, yes: m.filter((p) => p.yes).length }; };
+  function paintColumns() {
+    [["grp", "gGrp"], ["post", "gPost"]].forEach(([k, g]) => {
+      colG[k].style.opacity = see[k] ? 1 : 0.12;
+      heads[k].style.opacity = see[k] ? 1 : 0.45;
+      heads[k].style.textDecoration = see[k] ? "" : "line-through";
+      NEW.forEach((a) => (a[g].style.opacity = see[k] ? 1 : 0.15));
+    });
+  }
+  function clearResults() {
+    trained = false;
+    HIST.forEach((p) => { p.dots.forEach((d) => (d.style.opacity = 0)); p.rect.setAttribute("class", "sv-box"); });
+    NEW.forEach((a) => { a.bar.setAttribute("width", 0); a.chipT.textContent = "?"; a.chipR.setAttribute("class", "sv-box"); a.note.textContent = "waiting for the learner"; });
+    st.a.set("—"); st.b.set("—"); st.h.set("—");
+    pill.className = "pill"; pill.innerHTML = "<i></i>not trained yet";
+  }
+  function seesText() {
+    const cols = ["on time?"]; if (see.post) cols.unshift("postcode"); if (see.grp) cols.unshift("group");
+    return cols.join(" + ");
+  }
+  async function run() {
+    if (busy) return; busy = true; clearResults(); K.clear(layer);
+    const res = [];
+    for (let i = 0; i < NEW.length; i++) {
+      const a = NEW[i], r = score(a);
+      setCap("#s2-cap", "The learner may look at <b>" + seesText() + "</b>. It finds the past people who look just like <b>" + a.name + "</b> in those columns and copies what happened to them…");
+      for (const p of r.m) {
+        p.dots[i].style.opacity = 1; pop(p.dots[i]);
+        const t = draw.tag(p.yes ? "YES" : "NO", p.yes ? "sv-good" : "sv-bad"); layer.appendChild(t);
+        await fly(t, [348, p.cy], [538, a.top + 78], 420); t.remove();
+      }
+      const pct = Math.round((100 * r.yes) / r.m.length), ok = pct >= 50;
+      await tween(320, (k) => a.bar.setAttribute("width", 1.8 * pct * k));
+      a.bar.setAttribute("class", ok ? "sv-fill-mint" : "sv-fill-coral");
+      a.chipT.textContent = ok ? "YES" : "NO"; a.chipR.setAttribute("class", ok ? "sv-good" : "sv-bad");
+      a.note.textContent = r.yes + " of " + r.m.length + " look-alikes got yes";
+      (i ? st.b : st.a).set(pct + "% · " + (ok ? "yes" : "no"), ok ? "good" : "bad");
+      res.push(ok);
+      await sleep(260);
+    }
+    const agree = HIST.filter((p) => { const r = score(p); return (r.yes / r.m.length >= 0.5) === p.yes; }).length;
+    st.h.set(agree + " of 6", agree === 6 ? "warn" : "good");
+    const same = res[0] === res[1];
+    pill.className = "pill " + (same ? "good" : "bad"); pill.innerHTML = "<i></i>" + (same ? "treated the same" : "treated differently");
+    setCap("#s2-cap", see.grp
+      ? "Lars and Noor both pay on time, yet the learner says <b>yes to Lars and no to Noor</b>. Nobody told it to be unfair. It simply found that, in the past, circles were refused — and it repeats that faithfully. It agrees with <b>" + agree + " of 6</b> old decisions."
+      : see.post
+      ? "The group column is hidden — and <b>nothing changed</b>. Most circles live in the South, so the postcode is a <b>proxy</b>: it tells the learner nearly the same thing. It still matches <b>" + agree + " of 6</b> old decisions, so by its own measure it is doing a perfect job."
+      : "Now the learner sees only whether people pay on time. Lars and Noor get the <b>same score</b>. Notice two things: the score is only 60%, because the unfair past still drags it down — and the learner now agrees with just <b>" + agree + " of 6</b> old decisions. Being fair means <i>disagreeing</i> with an unfair past. Choosing that takes a human.");
+    trained = true; busy = false;
+  }
+  const flip = (k) => (on) => { if (busy) return false; see[k] = on; paintColumns(); if (trained) run(); else clearResults(); };
+  const tG = tog("sees group", true, flip("grp")), tP = tog("sees postcode", true, flip("post"));
+  K.$("#s2-controls").append(
+    btn("Learn and decide", "primary", run),
+    h("span", { class: "rowwrap" }, h("span", { class: "lbl" }, "The learner"), tG, tP),
+    btn("Reset", "", () => {
+      if (busy) return; see.grp = see.post = true; tG.set(true); tP.set(true); K.clear(layer); paintColumns(); clearResults();
+      setCap("#s2-cap", "Six old decisions made by people. Look closely: every circle who paid on time was still refused, unless they lived in the North.");
+    }));
+  paintColumns(); clearResults();
+})();
+
+/* ================= 3. WHO ANSWERS FOR IT? ================= */
+(function account() {
+  const svg = K.$("#s3-svg");
+  svg.appendChild(draw.person(64, 150, "sv-fill-lilac"));
+  svg.appendChild(txt(64, 190, "Mateo", "sv-text", "middle", { fontWeight: 700 }));
+  const title = txt(310, 30, "", "sv-label", "middle", BOLD);
+  svg.appendChild(title);
+  const panel = s("rect", { x: 140, y: 44, width: 340, height: 252, rx: 16, class: "sv-panel" });
+  svg.appendChild(panel);
+  const body = s("g"); svg.appendChild(body);
+  const chipR = s("rect", { x: 500, y: 48, width: 144, height: 44, rx: 14, class: "sv-bad" });
+  const chipT = txt(572, 77, "loan: NO", "sv-title");
+  svg.append(chipR, chipT);
+  const who = s("g"); svg.appendChild(who);
+  const replyR = s("rect", { x: 500, y: 256, width: 144, height: 36, rx: 12, class: "sv-box" });
+  const replyT = txt(572, 279, "", "sv-label", "middle", BOLD);
+  svg.append(replyR, replyT);
+  const layer = s("g"); svg.appendChild(layer);
+
+  const FACTS = [
+    { what: "bike loan", note: "repaid", pts: 1 },
+    { what: "credit card", note: "always on time", pts: 1 },
+    { what: "phone bill", note: "missed 3 times", pts: -3, wrong: true },
+    { what: "car loan", note: "repaid", pts: 1 },
+  ];
+  const st = { why: stat("Explained", "—"), fix: stat("Corrected", "—"), human: stat("A human answers", "—") };
+  K.$("#s3-stats").append(st.why, st.fix, st.human);
+  let mode = 0, busy = false, asked = false, fixed = false, rows = [];
+
+  function decision() {
+    if (mode === 1) return false;
+    return FACTS.reduce((n, f) => n + (f.wrong && fixed ? 0 : f.pts), 0) >= 2;
+  }
+  function render() {
+    K.clear(body); K.clear(who); rows = [];
+    title.textContent = mode === 0 ? "MATEO'S OWN BORROWING RECORD" : "A BUCKET OF PEOPLE LIKE MATEO";
+    if (mode === 0) {
+      FACTS.forEach((f, i) => {
+        const y = 60 + i * 56, gone = f.wrong && fixed;
+        const r = s("rect", { x: 156, y, width: 308, height: 40, rx: 10, class: !asked ? "sv-box" : gone ? "sv-panel" : f.pts > 0 ? "sv-good" : "sv-bad" });
+        const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Dispute the fact: " + f.what + ", " + f.note },
+          r,
+          txt(172, y + 25, f.what, "sv-text", "start", { fontWeight: 700, opacity: gone ? 0.45 : 1 }),
+          txt(450, y + 24, gone ? "not his · removed" : f.note, "sv-label", "end", gone ? { fill: "var(--mint)", fontWeight: 700 } : null));
+        onTap(g, () => dispute(i));
+        body.appendChild(g); rows.push(r);
+      });
+      who.append(draw.person(572, 156, "sv-fill-blue"), txt(572, 198, "Ms Okafor", "sv-text", "middle", { fontWeight: 700 }), txt(572, 216, "loans officer"));
+    } else {
+      body.appendChild(txt(310, 74, "sorted by where they live", "sv-label"));
+      for (let i = 0; i < 10; i++) {
+        const x = 190 + (i % 5) * 60, y = 116 + Math.floor(i / 5) * 62, good = i === 3 || i === 5 || i === 7;
+        body.appendChild(draw.person(x, y, good ? "sv-fill-mint" : "sv-fill-coral", 0.62));
+        if (i === 7) { body.appendChild(s("circle", { cx: x, cy: y - 1, r: 22, fill: "none", style: { stroke: "var(--sun)", strokeWidth: 2.5 } })); body.appendChild(txt(x, y + 40, "Mateo", "sv-label", "middle", BOLD)); }
+      }
+      body.appendChild(txt(310, 248, "7 of 10 paid late", "sv-text", "middle", { fontWeight: 700 }));
+      body.appendChild(txt(310, 270, "so the guess for Mateo is: risky"));
+      who.append(draw.server(572, 152, 72, 70), txt(572, 206, "the algorithm", "sv-text", "middle", { fontWeight: 700 }), txt(572, 224, "nobody to ask"));
+    }
+    const ok = decision();
+    chipR.setAttribute("class", ok ? "sv-good" : "sv-bad");
+    chipT.textContent = ok ? "loan: YES" : "loan: NO";
+  }
+  function reply(text, tone) {
+    replyT.textContent = text; replyR.style.opacity = text ? 1 : 0;
+    replyR.setAttribute("class", tone === "good" ? "sv-good" : tone === "bad" ? "sv-bad" : "sv-box");
+  }
+  async function send(label, to, bounce) {
+    const t = draw.tag(label, "sv-data-soft"); layer.appendChild(t);
+    await fly(t, [96, 146], to, 620);
+    if (bounce) { t.firstChild.setAttribute("class", "sv-bad"); shake(t.firstChild); await sleep(420); await fly(t, to, [96, 146], 520); }
+    t.remove();
+  }
+  async function askWhy() {
+    if (busy) return; busy = true;
+    await send("why?", [540, 150], false);
+    if (mode === 0) {
+      asked = true; render(); reply("here are the facts", "good"); st.why.set("yes", "good");
+      setCap("#s3-cap", "The score was built from <b>relevant facts about Mateo's own borrowing</b>, so it can be laid on the table: three good marks and one bad one — a phone bill, missed three times. Mateo stares at it. He has never had that phone company. Tap that row, or press “Dispute a fact”.");
+    } else {
+      reply("score 0.3 · no reasons", "bad"); st.why.set("no", "bad");
+      setCap("#s3-cap", "All that comes back is a number. The machine never looked at Mateo's own record; it asked <b>“who is similar to you?”</b> and found that most people from his streets paid late. Why that pattern holds, nobody can say — learned patterns are <b>opaque</b>, even to the people who run them.");
+    }
+    busy = false;
+  }
+  async function dispute(i) {
+    if (busy) return;
+    if (mode === 0 && i !== undefined && !FACTS[i].wrong) { setCap("#s3-cap", "That fact is true, and it counts in Mateo's favour. Nothing to dispute there."); return; }
+    if (mode === 0 && fixed) { setCap("#s3-cap", "The wrong phone bill is already gone from the record."); return; }
+    busy = true;
+    if (mode === 0) {
+      await send("not mine!", [310, 192], false);
+      fixed = true; asked = true; render(); if (rows[2]) pop(rows[2]);
+      reply("record corrected", "good"); st.fix.set("yes", "good");
+      setCap("#s3-cap", "The phone bill belonged to a <b>different Mateo</b>. Because the decision rests on plain facts, a wrong one can be found and struck out — and the answer flips to <b>yes</b>. (The book is honest: the agencies don't make this easy. But it is possible.)");
+    } else {
+      await send("that's wrong!", [310, 170], true);
+      shake(panel); reply("nothing to correct", "bad"); st.fix.set("no", "bad");
+      setCap("#s3-cap", "What should Mateo dispute? No single fact about him is wrong — his own three repaid loans were never looked at. The bucket may even be right <i>on average</i>. He is one of the three who repay, judged by the seven who didn't: the <b>wrong bucket</b>, with no way out of it.");
+    }
+    busy = false;
+  }
+  async function appeal() {
+    if (busy) return; busy = true;
+    if (mode === 0) {
+      await send("appeal", [540, 150], false);
+      const found = !fixed; fixed = true; asked = true; render();
+      reply("a person re-checks", "good"); st.human.set("yes", "good"); if (found) st.fix.set("yes", "good");
+      setCap("#s3-cap", "Ms Okafor is <b>accountable</b> for the decision, so she has to look again" + (found ? " — and she spots the phone bill that isn't Mateo's. The answer becomes <b>yes</b>." : ". She confirms the corrected record: <b>yes</b>.") + " When a human makes a mistake, the person affected can appeal.");
+    } else {
+      await send("appeal", [540, 150], true);
+      reply("no reply", "bad"); st.human.set("no", "bad");
+      setCap("#s3-cap", "The appeal bounces. The bank says “the algorithm decided”; the algorithm says nothing at all. The book is firm about this: <b>people should not be able to evade their responsibility by blaming an algorithm.</b>");
+    }
+    busy = false;
+  }
+  function reset() {
+    asked = false; fixed = false; K.clear(layer); render(); reply("", "");
+    st.why.set("—"); st.fix.set("—"); st.human.set("—");
+    setCap("#s3-cap", mode === 0
+      ? "The answer is no. This score asks “How did <b>you</b> behave in the past?” Mateo would like to know why."
+      : "The answer is no. This machine asks “How did <b>people like you</b> behave?” Mateo would like to know why.");
+  }
+  K.$("#s3-controls").append(
+    btn("Ask why", "primary", askWhy), btn("Dispute a fact", "", () => dispute()), btn("Appeal", "", appeal),
+    btn("Reset", "", () => { if (!busy) reset(); }));
+  const sg = seg(["Your own record", "People like you"], 0, (i) => { if (busy) { segSync(sg, mode); return; } mode = i; reset(); }, "s3-mode");
+  K.$("#s3-seg").appendChild(sg);
+  reset();
+})();
+
+/* ================= 4. THE DOWNWARD SPIRAL ================= */
+(function loops() {
+  const svg = K.$("#s4-svg");
+  const N = { A: [88, 84], B: [264, 84], C: [264, 250], D: [88, 250] };
+  const node = {};
+  // arrows of the loop
+  svg.append(
+    draw.arrow(158, 84, 194, 84), draw.arrow(264, 110, 264, 140), draw.arrow(264, 196, 264, 224),
+    draw.arrow(194, 250, 158, 250), draw.arrow(88, 224, 88, 110));
+  [["A", "bills"], ["B", "credit score"], ["C", "job"], ["D", "income"]].forEach(([k, title]) => {
+    const [cx, cy] = N[k];
+    const r = s("rect", { x: cx - 68, y: cy - 24, width: 136, height: 48, rx: 12, class: "sv-box" });
+    const v = txt(cx, cy + 15, "", "sv-label");
+    svg.append(r, txt(cx, cy - 3, title, "sv-text", "middle", { fontWeight: 700 }), v);
+    node[k] = { r, v };
+  });
+  // the link that can be cut
+  const chipR = s("rect", { x: 200, y: 144, width: 128, height: 48, rx: 12, class: "sv-server" });
+  const chip1 = txt(264, 164, "", "sv-label", "middle", BOLD), chip2 = txt(264, 180, "", "sv-label", "middle", BOLD);
+  const chip = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Cut or restore the link between credit score and hiring" }, chipR, chip1, chip2);
+  svg.appendChild(chip);
+  svg.appendChild(draw.person(150, 160, "sv-fill-lilac", 0.85));
+  svg.appendChild(txt(150, 196, "Rosa", "sv-text", "middle", { fontWeight: 700 }));
+  // chart
+  const X = (m) => 400 + m * 29, Y = (v) => 282 - v * 2.1;
+  svg.appendChild(txt(516, 40, "Rosa's credit score", "sv-label", "middle", BOLD));
+  svg.appendChild(s("path", { d: `M${X(0)},${Y(100)} V${Y(0)} H${X(8)}`, class: "sv-wire-solid" }));
+  [0, 50, 100].forEach((v) => svg.appendChild(txt(X(0) - 8, Y(v) + 4, String(v), "sv-label", "end")));
+  [0, 2, 4, 6, 8].forEach((m) => svg.appendChild(txt(X(m), 302, String(m))));
+  svg.appendChild(txt(516, 324, "month"));
+  const cut = s("g", { class: "fade" },
+    s("line", { x1: X(0), y1: Y(70), x2: X(8), y2: Y(70), class: "sv-wire", style: { stroke: "var(--coral)" } }),
+    txt(X(8), Y(70) - 8, "hiring cut-off: 70", "sv-label", "end", { fill: "var(--coral)" }));
+  svg.appendChild(cut);
+  const line = s("polyline", { points: "", fill: "none", class: "sv-wire-solid", style: { stroke: "var(--ink-2)" } });
+  const pts = s("g"); svg.append(line, pts);
+  const layer = s("g"); svg.appendChild(layer);
+
+  const st = { m: stat("Month", 0), sc: stat("Credit score", 78, "good"), job: stat("Job", "baker", "good") };
+  K.$("#s4-stats").append(st.m, st.sc, st.job);
+  const START = "Month 0. Rosa has a job, pays her bills, and has a credit score of 78.";
+  let link = true, busy = false, month, score, job, bills, hist, last;
+  function init() { month = 0; score = 78; job = true; bills = true; hist = [{ score: 78, job: true }]; last = "employed"; }
+  function render() {
+    const set = (k, text, tone) => { node[k].v.textContent = text; node[k].r.setAttribute("class", tone === "good" ? "sv-good" : tone === "bad" ? "sv-bad" : "sv-box"); };
+    set("A", bills ? "paid" : "missed", bills ? "good" : "bad");
+    set("B", String(score), score >= 70 ? "good" : "bad");
+    set("C", last, job ? "good" : "bad");
+    set("D", job ? "wages" : "none", job ? "good" : "bad");
+    chipR.setAttribute("class", link ? "sv-server" : "sv-panel");
+    chip1.textContent = link ? "employers" : "link cut: they";
+    chip2.textContent = link ? "check the score" : "check her work";
+    cut.style.opacity = link ? 1 : 0;
+    line.setAttribute("points", hist.map((p, m) => X(m) + "," + Y(p.score)).join(" "));
+    K.clear(pts);
+    hist.forEach((p, m) => pts.appendChild(s("circle", { cx: X(m), cy: Y(p.score), r: 5, class: p.job ? "sv-fill-mint" : "sv-fill-coral" })));
+    st.m.set(month); st.sc.set(score, score >= 70 ? "good" : "bad"); st.job.set(job ? "yes" : "no", job ? "good" : "bad");
+    nextB.disabled = playB.disabled = busy || month >= 8; resetB.disabled = busy;
+    nextB.textContent = month >= 8 ? "Year over" : "Next month";
+  }
+  async function hop(a, b) {
+    const p = draw.parcel("sv-data", 13); layer.appendChild(p);
+    await fly(p, a, b, 300); p.remove();
+  }
+  async function step() {
+    if (busy || month >= 8) return; busy = true; month++; render();
+    let note;
+    if (month === 1) {
+      const t = draw.tag("the bakery closes", "sv-bad"); layer.appendChild(t);
+      await fly(t, [150, 40], [150, 118], 520); await sleep(300); t.remove();
+      job = false; last = "lost"; render(); shake(node.C.r);
+      await hop(N.C, N.D); await hop(N.D, N.A);
+      bills = false; render();
+      await hop(N.A, N.B);
+      score -= 10;
+      note = "<b>Month 1.</b> The bakery closes — a misfortune outside Rosa's control. No wages, so bills are missed, so her score slips from 78 to <b>" + score + "</b>. So far, nothing a month or two of work wouldn't mend.";
+    } else {
+      if (!job) {
+        await hop(N.B, [264, 168]);
+        if (link) {
+          await hop([264, 168], N.C);
+          job = score >= 70; last = job ? "hired" : "rejected";
+        } else { shake(chipR); await sleep(200); job = true; last = "hired on skill"; }
+        render(); if (!job) shake(node.C.r);
+      } else last = "employed";
+      await hop(N.C, N.D); await hop(N.D, N.A);
+      bills = job; render();
+      await hop(N.A, N.B);
+      score = job ? Math.min(90, score + 7) : Math.max(12, score - 9);
+      note = "<b>Month " + month + ".</b> " + (last === "rejected"
+        ? "Rosa applies for a job. The employer looks up her score, sees it is under 70 and says no. No wages → missed bills → score down to <b>" + score + "</b> → even less chance next month. The prediction is <b>making itself come true</b>."
+        : last === "hired on skill"
+        ? "This employer never sees the score. They watch Rosa bake, and hire her. Wages → bills paid → the score starts to climb: <b>" + score + "</b>. One link was changed, and the spiral turned around."
+        : last === "hired" ? "Her score is above the cut-off, so she is hired. Wages → bills paid → score <b>" + score + "</b>."
+        : "Rosa is working, the bills are paid, and the score recovers to <b>" + score + "</b>." + (link ? "" : " Because nobody feeds the score back into hiring, a bad month can no longer snowball."));
+    }
+    hist.push({ score, job });
+    busy = false; render(); setCap("#s4-cap", note);
+    if (month === 8) setCap("#s4-cap", note + (score < 40 ? " <b>A year gone.</b> Rosa was a good worker the whole time. Try cutting the link." : " <b>A year gone</b> — and Rosa is back on her feet."));
+  }
+  async function play() { if (busy) return; while (month < 8) { await step(); await sleep(200); } }
+  function setLink(v) {
+    link = v; segSync(sg, link ? 0 : 1); render();
+    setCap("#s4-cap", link
+      ? "Employers look up credit scores before hiring, and turn away anyone under 70. The score now feeds back into the very thing that moves it."
+      : "The link is cut: employers judge Rosa by her work, not her score. The score still exists — it just can't push her down any more.");
+  }
+  const nextB = btn("Next month", "primary", step), playB = btn("Play to month 8", "", play);
+  const resetB = btn("Reset", "", () => { if (busy) return; init(); K.clear(layer); render(); setCap("#s4-cap", START); });
+  K.$("#s4-controls").append(nextB, playB, resetB, h("span", { class: "grow" }), h("span", { class: "pill info" }, h("i"), "tap the blue link to cut it"));
+  const sg = seg(["Hiring checks the score", "Hiring checks her work"], 0, (i) => { if (busy) { segSync(sg, link ? 0 : 1); return; } setLink(i === 0); }, "s4-mode");
+  K.$("#s4-seg").appendChild(sg);
+  onTap(chip, () => { if (!busy) setLink(!link); });
+  init(); render();
+})();
+
+/* ================= 5. SWAP ONE WORD ================= */
+(function watch() {
+  const svg = K.$("#s5-svg");
+  const ROOMS = [
+    { name: "living room", x: 24, y: 70 }, { name: "kitchen", x: 198, y: 70 },
+    { name: "bedroom", x: 24, y: 188 }, { name: "nursery", x: 198, y: 188 },
+  ];
+  const DEV = [
+    { name: "smart TV", room: 0, cx: 111, knows: [1], note: "The <b>smart TV</b> listens for voice commands — so it listens to the living room." },
+    { name: "assistant", room: 1, cx: 285, knows: [1, 2], note: "The <b>voice assistant</b> waits for its name all day, and hears the kitchen while it waits. It also knows what gets ordered." },
+    { name: "phone", room: 2, cx: 70, knows: [0, 1, 2], note: "The <b>smartphone</b> is a microphone and a location tracker that you carry everywhere — something even the most repressive regimes of the past could only dream of." },
+    { name: "watch", room: 2, cx: 152, knows: [0, 3], note: "The <b>fitness watch</b> reports movement and health. The book adds that its motion sensor can even be used to work out what you type — passwords included." },
+    { name: "monitor", room: 3, cx: 244, knows: [1], note: "The <b>baby monitor</b> streams the nursery over the internet. Many such gadgets have a terrible security record." },
+    { name: "toy", room: 3, cx: 326, knows: [1], note: "A <b>talking toy</b> that sends a child's voice to the cloud for speech recognition. The book lists children's toys by name." },
+  ];
+  const KNOW = ["where you go", "home talk", "what you buy", "your health"];
+  let word = 0, visible = false;
+  const W = () => (word ? "surveillance" : "data");
+
+  svg.appendChild(s("path", { d: "M14,72 L198,20 L382,72 Z", class: "sv-box" }));
+  svg.appendChild(s("rect", { x: 24, y: 70, width: 348, height: 236, class: "sv-box" }));
+  ROOMS.forEach((r) => {
+    r.rect = s("rect", { x: r.x, y: r.y, width: 174, height: 118, class: "sv-panel" });
+    r.tint = s("rect", { x: r.x, y: r.y, width: 174, height: 118, class: "fade", style: { fill: "var(--coral-soft)", opacity: 0 } });
+    r.mic = s("circle", { cx: r.x + 158, cy: r.y + 16, r: 5, class: "sv-fill-line" });
+    svg.append(r.rect, r.tint, txt(r.x + 12, r.y + 21, r.name, "sv-label", "start"), r.mic);
+  });
+  DEV.forEach((d) => {
+    d.on = false; d.cy = ROOMS[d.room].y + 72;
+    d.rect = s("rect", { x: d.cx - 38, y: d.cy - 16, width: 76, height: 32, rx: 10, class: "sv-box" });
+    d.g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Connect or unplug the " + d.name }, d.rect, txt(d.cx, d.cy + 4, d.name, "sv-label", "middle", BOLD));
+    onTap(d.g, () => { d.on = !d.on; render(); setCap("#s5-cap", d.on ? d.note : "The " + d.name + " is unplugged. It was the easy part — most of these gadgets only work while connected."); });
+    svg.appendChild(d.g);
+  });
+  const stream = s("path", { d: "M376,150 C420,150 440,96 484,92", class: "sv-wire" });
+  const lStream = txt(530, 34, ""), lHouse = txt(530, 146, ""), lSci = txt(530, 218, "");
+  svg.append(stream, lStream, draw.db(530, 88, 88, 76), lHouse, draw.arrow(530, 154, 530, 166), draw.person(530, 190, "sv-fill-blue", 0.8), lSci);
+  svg.appendChild(txt(530, 246, "new insights about you", "sv-label", "middle", BOLD));
+  const chips = KNOW.map((k, i) => {
+    const x = 426 + (i % 2) * 106, y = 256 + Math.floor(i / 2) * 30;
+    const r = s("rect", { x, y, width: 100, height: 24, rx: 12, class: "sv-panel" });
+    const t = txt(x + 50, y + 16, k, "sv-label");
+    svg.append(r, t); return { r, t };
+  });
+  const layer = s("g"); svg.appendChild(layer);
+
+  const st = { d: stat("Gadgets online", "0 / 6"), r: stat("Rooms with a live mic", "0 / 4"), k: stat("Things they know", "0 / 4") };
+  K.$("#s5-stats").append(st.d, st.r, st.k);
+  const sentence = K.$("#s5-sentence");
+  const swaps = [];
+  ["“In our ", "-driven organization we collect real-time ", " streams and store them in our ", " warehouse. Our ", " scientists use advanced analytics and ", " processing in order to derive new insights.”"].forEach((part, i, all) => {
+    sentence.appendChild(document.createTextNode(part));
+    if (i < all.length - 1) { const sp = h("span", { class: "swap" }, "data"); swaps.push(sp); sentence.appendChild(sp); }
+  });
+
+  function render() {
+    const on = DEV.filter((d) => d.on);
+    DEV.forEach((d) => d.rect.setAttribute("class", d.on ? "sv-server" : "sv-box"));
+    let live = 0;
+    ROOMS.forEach((r, i) => {
+      const hot = on.some((d) => d.room === i); if (hot) live++;
+      r.tint.style.opacity = hot ? 0.55 : 0;
+      r.mic.setAttribute("class", hot ? "sv-fill-coral sv-pulse" : "sv-fill-line");
+    });
+    let known = 0;
+    chips.forEach((c, i) => {
+      const yes = on.some((d) => d.knows.includes(i)); if (yes) known++;
+      c.r.setAttribute("class", yes ? "sv-data-soft" : "sv-panel");
+      c.t.style.fill = yes ? "var(--ink)" : "var(--ink-3)"; c.t.style.fontWeight = yes ? 700 : 400;
+    });
+    stream.setAttribute("class", on.length ? "sv-wire-live" : "sv-wire");
+    lStream.textContent = "real-time " + W() + " streams";
+    lHouse.textContent = W() + " warehouse";
+    lSci.textContent = W() + " scientists";
+    [lStream, lHouse, lSci].forEach((l) => { l.style.fill = word ? "var(--coral)" : ""; l.style.fontWeight = word ? 700 : 400; });
+    swaps.forEach((sp) => (sp.textContent = W()));
+    sentence.classList.toggle("alarm", word === 1);
+    st.d.set(on.length + " / 6", on.length ? "warn" : "");
+    st.r.set(live + " / 4", live === 4 ? "bad" : live ? "warn" : "good");
+    st.k.set(known + " / 4", known === 4 ? "bad" : known ? "warn" : "good");
+  }
+  K.$("#s5-controls").append(
+    btn("Connect everything", "primary", () => { DEV.forEach((d) => (d.on = true)); render(); setCap("#s5-cap", "Every room now holds at least one internet-connected microphone. Together the gadgets report <b>where you go, what is said at home, what you buy and how healthy you are</b> — a company may end up knowing things about you before you know them yourself."); }),
+    btn("Unplug everything", "", () => { DEV.forEach((d) => (d.on = false)); K.clear(layer); render(); setCap("#s5-cap", "Every gadget is switched off. Nothing leaves the house."); }),
+    h("span", { class: "grow" }), h("span", { class: "pill info" }, h("i"), "tap a gadget"));
+  K.$("#s5-seg").appendChild(seg(["Say “data”", "Say “surveillance”"], 0, (i) => {
+    word = i; render();
+    setCap("#s5-cap", i
+      ? "Nothing in the picture changed — only the word. Read the sentence again. If it sounds wrong now, the word “data” was doing some hiding. (Not all data collection is surveillance, the book says, but looking at it this way shows who is working for whom.)"
+      : "Back to the comfortable word. The gadgets are doing exactly what they did a moment ago.");
+  }, "s5-word"));
+  whenVisible(svg, () => (visible = true), () => (visible = false));
+  (async function pump() {
+    if (K.reduced) return;
+    for (let k = 0; ; ) {
+      await sleep(520);
+      if (!visible || document.hidden) continue;
+      const on = DEV.filter((d) => d.on); if (!on.length) continue;
+      const d = on[k++ % on.length];
+      const p = draw.parcel("sv-data", 10); layer.appendChild(p);
+      fly(p, [d.cx, d.cy - 22], [490, 90], 900).then(() => p.remove());
+    }
+  })();
+  render();
+})();
+
+/* ================= 6. AGREE — OR ELSE? ================= */
+(function consent() {
+  const svg = K.$("#s6-svg");
+  const FRIENDS = [
+    { name: "Amara", msg: "party Sat!" }, { name: "Kenji", msg: "match moved" }, { name: "Lucía", msg: "homework?" },
+    { name: "Omar", msg: "new photo" }, { name: "Priya", msg: "trip Friday" }, { name: "Tomás", msg: "quiz tips" },
+  ];
+  const OPT = ["deliver my messages", "learn from my clicks", "build an ad profile"];
+  let mode = 0, k = 6, choice = null, ticks = [true, false, false], busy = false, got = 0, missed = 0, facts = 0;
+
+  svg.appendChild(s("rect", { x: 24, y: 24, width: 216, height: 302, rx: 22, class: "sv-box" }));
+  const form = s("g"); svg.appendChild(form);
+  const wires = s("g"); svg.appendChild(wires);
+  FRIENDS.forEach((f, i) => {
+    f.x = 300 + i * 64;
+    f.g = s("g", { class: "fade" }); svg.appendChild(f.g);
+    svg.appendChild(txt(f.x, 102, f.name));
+  });
+  svg.appendChild(s("rect", { x: 390, y: 150, width: 160, height: 50, rx: 14, class: "sv-server" }));
+  svg.appendChild(txt(470, 172, "Plaza", "sv-text", "middle", { fontWeight: 700 }));
+  svg.appendChild(txt(470, 189, "class chat app"));
+  const youWire = s("line", { x1: 470, y1: 200, x2: 470, y2: 244, class: "sv-wire" });
+  svg.appendChild(youWire);
+  svg.appendChild(draw.person(470, 272, "sv-fill-lilac"));
+  svg.appendChild(txt(470, 312, "you", "sv-text", "middle", { fontWeight: 700 }));
+  svg.appendChild(s("line", { x1: 550, y1: 190, x2: 596, y2: 222, class: "sv-wire" }));
+  svg.appendChild(draw.db(606, 258, 64, 64, "facts on you"));
+  const factT = txt(606, 264, "0", "sv-title"); svg.appendChild(factT);
+  const layer = s("g"); svg.appendChild(layer);
+
+  const st = { got: stat("Messages received", 0), miss: stat("Missed", 0), facts: stat("Facts stored about you", 0) };
+  K.$("#s6-stats").append(st.got, st.miss, st.facts);
+
+  const box = (x, y, on, locked) => s("g", {},
+    s("rect", { x, y, width: 20, height: 20, rx: 5, class: on ? (locked ? "sv-panel" : "sv-good") : "sv-box" }),
+    on ? s("path", { d: `M${x + 5},${y + 10} L${x + 9},${y + 14} L${x + 15},${y + 6}`, fill: "none", "stroke-width": 2.5, "stroke-linecap": "round", "stroke-linejoin": "round", style: { stroke: locked ? "var(--ink-3)" : "var(--mint)" } }) : null);
+  function renderForm() {
+    K.clear(form);
+    form.appendChild(txt(132, 60, "Join Plaza", "sv-title"));
+    let state, tone = "";
+    if (mode === 0) {
+      [176, 168, 176, 150, 176, 160, 118].forEach((w, i) => form.appendChild(s("rect", { x: 44, y: 78 + i * 13, width: w, height: 6, rx: 3, class: "sv-fill-line" })));
+      form.appendChild(txt(132, 184, "…the terms go on and on"));
+      form.appendChild(box(44, 204, true, true));
+      form.appendChild(txt(72, 219, "I agree to everything", "sv-text", "start"));
+      form.appendChild(txt(132, 246, "(ticked before you arrived)"));
+      state = choice === "in" ? "you agreed" : choice === "out" ? "you declined" : "not decided yet";
+      tone = choice === "in" ? "sv-data-soft" : choice === "out" ? "sv-bad" : "sv-panel";
+    } else {
+      form.appendChild(txt(132, 84, "nothing ticked for you"));
+      OPT.forEach((label, i) => {
+        const y = 104 + i * 50;
+        const g = s("g", i ? { class: "clickable", tabindex: "0", role: "button", "aria-label": "Tick or untick: " + label } : {},
+          s("rect", { x: 36, y, width: 192, height: 40, rx: 10, class: "sv-panel" }),
+          box(46, y + 10, ticks[i], i === 0),
+          txt(74, y + 18, label, "sv-label", "start", BOLD),
+          txt(74, y + 32, i === 0 ? "needed for the service" : "optional · your call", "sv-label", "start", { fontSize: "10.5px" }));
+        if (i) onTap(g, () => { if (busy) return; ticks[i] = !ticks[i]; zero(); render(); setCap("#s6-cap", ticks[i] ? "You ticked “" + label + "”. That was <b>your</b> decision, about one specific purpose, in plain words." : "You unticked “" + label + "”. Plaza still works exactly the same — saying no costs you nothing."); });
+        form.appendChild(g);
+      });
+      const extras = ticks[1] + ticks[2];
+      state = choice === "in" ? "joined · " + extras + " extra" + (extras === 1 ? "" : "s") + " shared" : "not joined yet";
+      tone = choice === "in" ? "sv-good" : "sv-panel";
+    }
+    form.appendChild(s("rect", { x: 44, y: 270, width: 176, height: 36, rx: 12, class: tone }));
+    form.appendChild(txt(132, 293, state, "sv-label", "middle", BOLD));
+  }
+  function render() {
+    renderForm();
+    K.clear(wires);
+    FRIENDS.forEach((f, i) => {
+      const on = i < k; f.on = on;
+      K.clear(f.g); f.g.appendChild(draw.person(f.x, 62, on ? "sv-fill-blue" : "sv-fill-line", 0.8));
+      if (on) wires.appendChild(s("path", { d: `M${f.x},88 C${f.x},126 ${430 + i * 16},118 ${430 + i * 16},150`, class: "sv-wire", style: { opacity: 0.6 } }));
+    });
+    youWire.style.opacity = choice === "in" ? 1 : 0.25;
+    factT.textContent = String(facts);
+    st.got.set(got, got ? "good" : ""); st.miss.set(missed, missed ? "bad" : ""); st.facts.set(facts, facts > 6 ? "bad" : facts ? "warn" : "good");
+    inB.textContent = mode === 0 ? "Agree" : "Join with my ticks";
+    outB.textContent = mode === 0 ? "Decline" : "Join, no extras";
+  }
+  function zero() { got = missed = facts = 0; K.clear(layer); }
+  async function send(label, cls, a, b, ms) {
+    const t = draw.tag(label, cls); layer.appendChild(t);
+    await fly(t, a, b, ms); return t;
+  }
+  async function week() {
+    if (busy) return;
+    if (!choice) { setCap("#s6-cap", mode === 0 ? "First press <b>Agree</b> or <b>Decline</b> — those are the only two choices on offer." : "First join — with whichever boxes <b>you</b> decide to tick."); return; }
+    busy = true; zero(); render();
+    setCap("#s6-cap", "A week goes by. Each classmate has some news…");
+    const perMsg = mode === 0 ? 2 : ticks[1] + ticks[2];
+    for (const f of FRIENDS) {
+      if (!f.on) {
+        const t = await send(f.msg, "sv-data-soft", [f.x, 84], [470, 250], 520); t.remove(); got++;
+      } else {
+        const t = await send(f.msg, "sv-data-soft", [f.x, 84], [470, 150], 360);
+        if (choice === "in") {
+          await fly(t, [470, 150], [470, 250], 300); t.remove(); got++;
+          if (perMsg) { const q = draw.parcel("sv-data", 11); layer.appendChild(q); await fly(q, [550, 186], [598, 236], 240); q.remove(); facts += perMsg; }
+        } else {
+          t.firstChild.setAttribute("class", "sv-bad"); shake(t.firstChild); await sleep(260); t.remove(); missed++;
+          const q = draw.parcel("sv-data", 11); layer.appendChild(q); await fly(q, [550, 186], [598, 236], 240); q.remove(); facts++;
+        }
+      }
+      render();
+    }
+    busy = false;
+    setCap("#s6-cap", mode === 1
+      ? "You got all <b>" + got + "</b> messages, and Plaza stored <b>" + facts + "</b> extra facts — exactly what you ticked, no more. This is what the GDPR means by consent that is <b>freely given, specific, informed and unambiguous</b>: you could refuse <b>without detriment</b>."
+      : choice === "in"
+      ? "You got all <b>" + got + "</b> messages. You also handed over <b>" + facts + "</b> facts you never really looked at, because “everything” was the only flavour of yes. Without understanding what happens to the data, that isn't <b>meaningful consent</b>."
+      : "You missed <b>" + missed + "</b> of 6 pieces of news — that is what “no” costs when " + (k >= 5 ? "nearly everyone is" : k + " of your 6 friends are") + " on the app. " + (facts ? "And Plaza still holds <b>" + facts + "</b> facts about you: your number in friends' address books, your face in their photos. <b>You never agreed to anything.</b>" : "With nobody on it, saying no is free — the cost comes from the <b>network effect</b>."));
+  }
+  function choose(c) {
+    if (busy) return;
+    if (mode === 1 && c === "out") { ticks = [true, false, false]; c = "in"; }
+    choice = c; zero(); render();
+    setCap("#s6-cap", mode === 1
+      ? "You're in, sharing only what you ticked. Now let a week go by."
+      : c === "in" ? "You pressed Agree — to all of it, in one go, without a way to bargain. Now let a week go by."
+      : "You pressed Decline. Plaza shuts the door: it's all or nothing. Now let a week go by.");
+  }
+  const inB = btn("Agree", "good", () => choose("in")), outB = btn("Decline", "danger", () => choose("out"));
+  function reset() {
+    choice = null; ticks = [true, false, false]; zero(); render();
+    setCap("#s6-cap", mode === 0
+      ? "The sign-up screen is waiting. The “I agree to everything” box came already ticked."
+      : "The same app, asking properly: plain words, one question per purpose, nothing ticked in advance.");
+  }
+  K.$("#s6-controls").append(inB, outB, btn("A week goes by", "primary", week), btn("Reset", "", () => { if (!busy) reset(); }),
+    slider({ id: "s6-friends", label: "Friends on Plaza", min: 0, max: 6, step: 1, value: 6, format: (v) => v + " of 6",
+      onInput: (v) => { if (busy) { const el = K.$("#s6-friends"); el.value = k; el.parentNode.querySelector("output").textContent = k + " of 6"; return; } k = v; zero(); render(); setCap("#s6-cap", v >= 5 ? "Nearly the whole class is on Plaza. Staying out now has a real social cost." : v === 0 ? "Nobody you know uses Plaza. Staying out costs nothing." : v + " of your 6 friends use Plaza. The more of them join, the more a “no” costs you."); } }));
+  const sg = seg(["Take it or leave it", "A real choice"], 0, (i) => { if (busy) { segSync(sg, mode); return; } mode = i; reset(); }, "s6-mode");
+  K.$("#s6-seg").appendChild(sg);
+  reset();
+})();
+
+/* ================= 7. WHO MAY KNOW WHAT ================= */
+(function privacy() {
+  const svg = K.$("#s7-svg");
+  const FACTS = ["favourite band", "holiday photos", "home address", "rare illness"];
+  const AUD = ["friends", "researchers", "employer", "insurer"];
+  const CX = [236, 322, 408, 494], SX = 596, CY = [100, 152, 204, 256];
+  const START = [[1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0], [0, 1, 0, 0]];
+  let mode = 0, open = START.map((r) => r.slice());
+  const risky = (f, a) => f === 3 && a >= 2;
+
+  svg.appendChild(txt(24, 34, "AIKO'S FACTS", "sv-label", "start", BOLD));
+  AUD.forEach((a, i) => svg.appendChild(txt(CX[i], 64, a)));
+  FACTS.forEach((f, i) => svg.appendChild(txt(24, CY[i] + 5, f, "sv-text", "start", { fontWeight: 700 })));
+  const eye = (cx, cy, on, color) => s("g", { fill: "none", "stroke-width": 2.2, "stroke-linecap": "round", style: { stroke: color } },
+    on ? s("path", { d: `M${cx - 13},${cy} Q${cx},${cy - 11} ${cx + 13},${cy} Q${cx},${cy + 11} ${cx - 13},${cy} Z` }) : s("path", { d: `M${cx - 13},${cy - 2} Q${cx},${cy + 9} ${cx + 13},${cy - 2}` }),
+    on ? s("circle", { cx, cy, r: 3.6, style: { fill: color } }) : null);
+  const cells = s("g"); svg.appendChild(cells);
+  const svc = s("g", { class: "fade" }); svg.appendChild(svc);
+  const strip = s("g"); svg.appendChild(strip);
+
+  const st = { a: stat("Aiko decides", 16, "good"), c: stat("The company decides", 0, "good"), ill: stat("Her illness is known to", 1) };
+  K.$("#s7-stats").append(st.a, st.c, st.ill);
+
+  function refuse(el) {
+    shake(el);
+    setCap("#s7-cap", "That one isn't Aiko's to close. <b>Regardless of the setting, the service itself still has unfettered access</b> to the data, and may use it in any way its privacy policy permits. “Trust us to do the right thing with your data.”");
+  }
+  function render() {
+    K.clear(cells); K.clear(svc); K.clear(strip);
+    FACTS.forEach((f, fi) => AUD.forEach((a, ai) => {
+      const on = !!open[fi][ai], bad = on && risky(fi, ai);
+      const r = s("rect", { x: CX[ai] - 35, y: CY[fi] - 20, width: 70, height: 40, rx: 10, class: bad ? "sv-bad" : on ? "sv-good" : "sv-panel" });
+      const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": (on ? "Hide " : "Show ") + f + (on ? " from " : " to ") + a }, r,
+        eye(CX[ai], CY[fi], on, bad ? "var(--coral)" : on ? "var(--mint)" : "var(--ink-3)"));
+      onTap(g, () => toggle(fi, ai));
+      cells.appendChild(g);
+    }));
+    svc.style.opacity = mode ? 1 : 0; svc.style.pointerEvents = mode ? "" : "none";
+    if (mode) {
+      svc.appendChild(s("line", { x1: 545, y1: 50, x2: 545, y2: 280, class: "sv-wire" }));
+      svc.appendChild(txt(SX, 64, "the service", "sv-label", "middle", BOLD));
+      FACTS.forEach((f, fi) => {
+        const r = s("rect", { x: SX - 35, y: CY[fi] - 20, width: 70, height: 40, rx: 10, class: "sv-server" });
+        const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Try to hide " + f + " from the service itself" }, r, eye(SX, CY[fi], true, "var(--blue)"));
+        onTap(g, () => refuse(r)); svc.appendChild(g);
+      });
+      strip.appendChild(txt(24, 313, "the company's own uses", "sv-label", "start", BOLD));
+      [[196, 136, "internal analysis"], [344, 292, "ad group: “people with a rare illness”"]].forEach(([x, w, label]) => {
+        const r = s("rect", { x, y: 296, width: w, height: 28, rx: 14, class: "sv-server" });
+        const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Try to switch off: " + label }, r, txt(x + w / 2, 314, label, "sv-label", "middle", BOLD));
+        onTap(g, () => { shake(r); setCap("#s7-cap", "Aiko has no switch for this. The company exercises the privacy right now, <b>with the goal of maximizing its profit</b>. Even if nobody can pick Aiko out of the ad group by name, she has lost her say over who learns about her illness."); });
+        strip.appendChild(g);
+      });
+    } else {
+      strip.appendChild(txt(285, 314, "no go-between: Aiko tells people herself"));
+      strip.append(draw.person(596, 150, "sv-fill-lilac"), txt(596, 192, "Aiko", "sv-text", "middle", { fontWeight: 700 }), txt(596, 210, "decides all 16"));
+    }
+    const ill = open[3].reduce((n, v) => n + v, 0);
+    st.a.set(16, "good");
+    st.c.set(mode ? 6 : 0, mode ? "bad" : "good");
+    st.ill.set(mode ? ill + " + service + ads" : String(ill), mode || open[3][2] || open[3][3] ? "bad" : "");
+  }
+  function toggle(fi, ai) {
+    open[fi][ai] = open[fi][ai] ? 0 : 1;
+    const on = open[fi][ai], f = FACTS[fi], a = AUD[ai];
+    render();
+    setCap("#s7-cap", fi === 3 && ai === 1
+      ? (on ? "Aiko shares her medical data with <b>researchers</b>: it might help the development of treatments for her condition. Privacy never meant keeping it from everyone." : "Aiko keeps her illness from the researchers too. Her call — that is the whole point.")
+      : risky(fi, ai)
+      ? (on ? "Careful: if her condition is known to her <b>" + a + "</b>, it could hinder her access to " + (ai === 2 ? "employment" : "medical insurance") + ". The same fact she gladly gave to researchers can hurt her here." : "Closed again. Same fact, different audience, different answer.")
+      : (on ? "Aiko lets her " + a + " know her <b>" + f + "</b>." : "Aiko keeps her <b>" + f + "</b> from her " + a + ".") + (mode ? " This <b>privacy setting</b> really works — for what other users see. Now look at the last column." : " Having privacy means having the freedom to choose exactly this."));
+  }
+  function reset() {
+    open = START.map((r) => r.slice()); render();
+    setCap("#s7-cap", mode
+      ? "Now Aiko's facts live inside an online service. Her settings still control the first four columns — but a fifth column has appeared, and two uses below it, that she has no switch for. The decision right has <b>moved</b>."
+      : "Aiko tells people things herself. Every box is hers to open or close — that is what the book calls a <b>decision right</b>.");
+  }
+  K.$("#s7-controls").append(btn("Reset", "", reset), h("span", { class: "grow" }), h("span", { class: "pill info" }, h("i"), "tap a box to open or close it"));
+  K.$("#s7-seg").appendChild(seg(["Aiko tells people herself", "Through an online service"], 0, (i) => { mode = i; reset(); }, "s7-mode"));
+  reset();
+})();
+
+/* ================= 8. HANDLE WITH CARE ================= */
+(function toxic() {
+  const svg = K.$("#s8-svg");
+  const KINDS = [
+    { name: "delivery address", needed: true }, { name: "bread orders", needed: true },
+    { name: "location trail" }, { name: "contact list" }, { name: "health notes" },
+  ];
+  const KEEP = [1, 3, 6, 12], KEEP_LABEL = ["1 month", "3 months", "6 months", "forever"];
+  const THREATS = [
+    ["criminals break in", "Criminals break into Crumb's systems. Data is difficult to secure, and breaches happen disconcertingly often."],
+    ["an insider leaks it", "Somebody who works at Crumb copies the vault and leaks it."],
+    ["Crumb goes bankrupt", "Crumb goes bankrupt. Personal data is one of the assets that gets sold — to whoever pays."],
+    ["new bosses, new values", "Crumb is taken over by management that doesn't share the old values. The promises were theirs; the data is now someone else's."],
+    ["a government demands it", "A future government compels Crumb to hand the data over. When you collect, you must consider not just today's government but every possible future one."],
+  ];
+  const X = (m) => 214 + (m - 1) * 36, Y = (r) => 84 + r * 40;
+  let on = [true, true, true, true, true], keepI = 3, month = 0, busy = false, spilled = 0, leaked = false, threat = 0;
+
+  for (let m = 1; m <= 12; m++) svg.appendChild(txt(X(m), 52, String(m)));
+  svg.appendChild(txt(24, 52, "month →", "sv-label", "start"));
+  KINDS.forEach((k, r) => {
+    k.track = s("rect", { x: X(1) - 20, y: Y(r) - 18, width: X(12) - X(1) + 40, height: 36, rx: 10, class: "sv-panel" });
+    k.label = txt(24, Y(r) + 4, k.name, "sv-label", "start", BOLD);
+    svg.append(k.track, k.label);
+    if (k.needed) { svg.appendChild(s("rect", { x: 142, y: Y(r) - 10, width: 46, height: 20, rx: 10, class: "sv-good" })); svg.appendChild(txt(165, Y(r) + 4, "needs", "sv-label", "middle", { fontSize: "10.5px", fill: "var(--ink)" })); }
+    k.cells = [];
+    for (let m = 1; m <= 12; m++) {
+      const c = s("rect", { x: X(m) - 13, y: Y(r) - 14, width: 26, height: 28, rx: 7, class: "sv-data-soft fade", style: { opacity: 0 } });
+      svg.appendChild(c); k.cells[m] = c;
+    }
+  });
+  const now = s("g", { class: "fade", style: { opacity: 0 } }, s("line", { x1: 0, y1: 62, x2: 0, y2: 264, class: "sv-wire", style: { stroke: "var(--blue)" } }), txt(0, 282, "now", "sv-label", "middle", { fill: "var(--blue)", fontWeight: 700 }));
+  svg.appendChild(now);
+  const foot = txt(330, 316, "", "sv-text", "middle", { fontWeight: 700 });
+  svg.appendChild(foot);
+  const layer = s("g"); svg.appendChild(layer);
+
+  const st = { vault: stat("Barrels in the vault", 0), spill: stat("Barrels spilled", 0, "good"), ok: stat("Bread still delivered?", "yes", "good") };
+  K.$("#s8-stats").append(st.vault, st.spill, st.ok);
+  const pill = K.$("#s8-pill");
+
+  const held = (m) => month > 0 && m <= month && m > month - KEEP[keepI];
+  const count = () => { let n = 0; KINDS.forEach((k, r) => { if (on[r]) for (let m = 1; m <= 12; m++) if (held(m)) n++; }); return n; };
+  function render() {
+    KINDS.forEach((k, r) => {
+      k.track.style.opacity = on[r] ? 1 : 0.4; k.label.style.opacity = on[r] ? 1 : 0.45;
+      for (let m = 1; m <= 12; m++) {
+        const c = k.cells[m], has = on[r] && held(m);
+        c.style.opacity = has ? 1 : 0;
+        c.setAttribute("class", (leaked && has ? "sv-bad" : "sv-data-soft") + " fade");
+      }
+    });
+    now.style.opacity = month ? 1 : 0;
+    now.setAttribute("transform", "translate(" + X(Math.max(1, month)) + ",0)");
+    const n = count();
+    st.vault.set(n, n > 24 ? "bad" : n > 8 ? "warn" : "good");
+    st.spill.set(spilled, spilled ? "bad" : "good");
+    foot.textContent = leaked ? "spilled: " + spilled + " barrels about real people" : month ? "in the vault: " + n + " barrels" : "";
+    foot.style.fill = leaked ? "var(--coral)" : "var(--ink-2)";
+    pill.className = "pill " + (leaked ? "bad" : "good"); pill.innerHTML = "<i></i>" + (leaked ? "spilled" : "vault sealed");
+    runB.disabled = wrongB.disabled = resetB.disabled = busy;
+  }
+  async function runYear() {
+    if (busy) return; busy = true; leaked = false; month = 0; render();
+    setCap("#s8-cap", "A year of deliveries. Every month each kind of data Crumb collects adds a barrel" + (keepI < 3 ? "; barrels older than <b>" + KEEP_LABEL[keepI] + "</b> are purged." : ", and <b>nothing is ever thrown away</b>."));
+    for (let m = 1; m <= 12; m++) {
+      month = m; render();
+      KINDS.forEach((k, r) => { if (on[r]) pop(k.cells[m]); });
+      await sleep(240);
+    }
+    busy = false; render();
+    const n = count();
+    setCap("#s8-cap", "December. The vault holds <b>" + n + " barrels</b>. The bread arrived on time all year — it only ever needed this month's address and order. Everything else is sitting there, waiting for something to go wrong.");
+  }
+  async function goWrong() {
+    if (busy) return;
+    if (!month) { setCap("#s8-cap", "The vault is still empty. Run a year first."); return; }
+    busy = true; render();
+    const [short, long] = THREATS[threat % THREATS.length]; threat++;
+    const t = draw.tag(short, "sv-bad"); layer.appendChild(t);
+    await fly(t, [330, -20], [330, 172], 520); await sleep(500); t.remove();
+    leaked = true; spilled = count(); busy = false; render();
+    KINDS.forEach((k, r) => { if (on[r]) for (let m = 1; m <= 12; m++) if (held(m)) shake(k.cells[m]); });
+    setCap("#s8-cap", long + " <b>" + spilled + " barrels</b> get out — " + (spilled <= 4
+      ? "one month of addresses and orders. Bad, but small, and soon stale. <b>Data you don't have is data that can't be leaked, stolen, or compelled.</b>"
+      : spilled <= 14 ? "less than a hoarder would lose, but still more than the bread ever needed."
+      : "a year of where people went, who they know and how they feel. This is why critics call data a <b>toxic asset</b>: the harm grows with every barrel you keep."));
+  }
+  function policyNote() {
+    if (busy) return;
+    leaked = false; render();
+    const n = count();
+    setCap("#s8-cap", month ? "New policy, applied at once: the vault now holds <b>" + n + " barrels</b>. Whatever spilled earlier stays spilled — you can't un-leak data." : "Policy set. Run a year to fill the vault.");
+  }
+  const toggles = [2, 3, 4].map((r) => tog("collect " + KINDS[r].name, true, (v) => { if (busy) return false; on[r] = v; policyNote(); }));
+  K.$("#s8-controls").append(h("span", { class: "rowwrap" }, ...toggles),
+    slider({ id: "s8-keep", label: "Keep data for", min: 0, max: 3, step: 1, value: 3, format: (v) => KEEP_LABEL[v],
+      onInput: (v) => { if (busy) { const el = K.$("#s8-keep"); el.value = keepI; el.parentNode.querySelector("output").textContent = KEEP_LABEL[keepI]; return; } keepI = v; policyNote(); } }));
+  const runB = btn("Run a year", "primary", runYear), wrongB = btn("Something goes wrong", "danger", goWrong);
+  const resetB = btn("Reset", "", () => {
+    if (busy) return; on = [true, true, true, true, true]; keepI = 3; month = 0; spilled = 0; leaked = false; threat = 0;
+    toggles.forEach((b) => b.set(true)); const el = K.$("#s8-keep"); el.value = 3; el.parentNode.querySelector("output").textContent = KEEP_LABEL[3];
+    K.clear(layer); render(); setCap("#s8-cap", "The vault is empty. Choose what Crumb collects and how long it keeps it, then run a year.");
+  });
+  K.$("#s8-controls2").append(runB, wrongB, resetB);
+  render();
+})();
+
+/* ================= 9. RIVERS, THEN AND NOW ================= */
+(function rivers() {
+  const svg = K.$("#s9-svg");
+  const ERA = [
+    { label: "1800s", building: "the factory", river: "the river · factory waste", start: "The 1800s. The factory makes the town richer — and pours its waste straight into the river.",
+      guards: [
+        ["Clean air and water rules", "Factories may no longer dump their waste into rivers. Cleaner water, dearer production."],
+        ["Workplace safety", "Safety protocols for workplaces. The river looks the same, but fewer people are hurt earning their living."],
+        ["No child labour", "Laws prohibiting child labour — which had included dangerous, poorly paid work in mines."],
+        ["Food inspections", "Health inspections for food: nobody may sell tainted food any more."],
+      ],
+      done: "Every safeguard made business dearer. “But society as a whole benefited hugely from these regulations, and few of us would want to return to a time before.”" },
+    { label: "Today", building: "the data centre", river: "personal data · leaking and lingering", start: "Today. The data centre makes wonderful services — and lets personal data pile up and seep out. “It stays around, festering.”",
+      guards: [
+        ["Collect less", "<b>Data minimization</b>: keep data “adequate, relevant and limited to what is necessary”. Less goes in, so less can ever leak. It also leaves less to explore — the opposite of the big-data habit."],
+        ["Name the purpose", "Collect only “for specified, explicit and legitimate purposes”. Exploring data for <i>unforeseen</i> uses gets harder — a real cost: the book notes that medical data might yield better treatments, and overregulation may prevent such breakthroughs."],
+        ["Purge old data", "Don't retain data forever; purge it as soon as it is no longer needed. Old barrels can't spill."],
+        ["Tell users plainly", "Educate people about how their data is used “rather than keeping them in the dark”. It costs a little and earns trust."],
+      ],
+      done: "All four are in place. The book doesn't pretend it is free, and admits the law alone has been weakly enforced — what it asks for is a <b>culture shift</b>: users are humans, not metrics. “Ubiquitous surveillance is not inevitable. We are still able to stop it.”" },
+  ];
+  let era = 0, visible = false;
+  const safe = [[false, false, false, false], [false, false, false, false]];
+
+  // meters
+  const METERS = ["pollution", "cost of business", "town's health", "room to explore"];
+  const meters = METERS.map((m, i) => {
+    const y = 30 + i * 26;
+    const g = s("g", { class: "fade" }, txt(506, y + 10, m, "sv-label", "end"), s("rect", { x: 516, y, width: 126, height: 12, rx: 6, class: "sv-box" }));
+    const bar = s("rect", { x: 516, y, width: 0, height: 12, rx: 6, class: "sv-fill-mint" });
+    g.appendChild(bar); svg.appendChild(g);
+    return { g, bar };
+  });
+  // river and town
+  svg.appendChild(s("rect", { x: 16, y: 262, width: 628, height: 44, rx: 22, class: "sv-server", style: { strokeWidth: 1.5 } }));
+  const riverLbl = txt(330, 326, ""); svg.appendChild(riverLbl);
+  svg.appendChild(s("path", { d: "M170,206 H196 V270 H182 V220 H170 Z", class: "sv-box" }));
+  const building = s("g"); svg.appendChild(building);
+  const buildLbl = txt(100, 252, "", "sv-label", "middle", BOLD);
+  [430, 500, 570].forEach((x) => {
+    svg.appendChild(s("path", { d: `M${x - 4},178 L${x + 25},154 L${x + 54},178 Z`, class: "sv-box" }));
+    svg.appendChild(s("rect", { x, y: 178, width: 50, height: 40, class: "sv-box" }));
+    svg.appendChild(s("rect", { x: x + 19, y: 194, width: 12, height: 24, rx: 2, class: "sv-panel" }));
+  });
+  const folk = [455, 525, 595].map((x) => { const g = s("g"); svg.appendChild(g); return { g, x }; });
+  svg.appendChild(txt(525, 146, "the town downstream", "sv-label", "middle", BOLD));
+  const smokeG = s("g"), wasteG = s("g"); svg.append(smokeG, wasteG);
+  const blobs = Array.from({ length: 8 }, (_, i) => ({ t: i / 8 }));
+  const puffs = Array.from({ length: 4 }, (_, i) => ({ t: i / 4 }));
+
+  /* how many blobs each safeguard takes out of the river: only some safeguards are about waste */
+  const CUTS = [[8, 0, 0, 0], [3, 2, 3, 0]];
+  const waste = () => 8 - safe[era].reduce((n, on, i) => n + (on ? CUTS[era][i] : 0), 0);
+  function drawWaste() {
+    K.clear(wasteG); K.clear(smokeG);
+    const n = waste();
+    blobs.slice(0, n).forEach((b, i) => {
+      const x = 204 + b.t * 424, y = 284 + (i % 2 ? 7 : -7);
+      wasteG.appendChild(era === 0 ? s("circle", { cx: x, cy: y, r: 6.5, style: { fill: "var(--ink-3)" } }) : s("rect", { x: x - 6, y: y - 6, width: 12, height: 12, rx: 3, class: "sv-data" }));
+    });
+    if (era === 0 && n > 0) puffs.forEach((p) => smokeG.appendChild(s("circle", { cx: 157 + Math.sin(p.t * 6) * 6, cy: 96 - p.t * 60, r: 7 + p.t * 9, style: { fill: "var(--ink-3)", opacity: 0.55 * (1 - p.t) } })));
+  }
+  function render() {
+    const e = ERA[era], n = safe[era].filter(Boolean).length;
+    K.clear(building);
+    if (era === 0) {
+      building.append(
+        s("rect", { x: 146, y: 100, width: 22, height: 52, class: "sv-box" }),
+        s("path", { d: "M30,232 V152 L70,128 V152 L110,128 V152 L150,128 V152 H170 V232 Z", class: "sv-box" }),
+        s("rect", { x: 48, y: 176, width: 22, height: 22, rx: 3, class: "sv-panel" }), s("rect", { x: 88, y: 176, width: 22, height: 22, rx: 3, class: "sv-panel" }), s("rect", { x: 128, y: 176, width: 22, height: 22, rx: 3, class: "sv-panel" }));
+    } else building.appendChild(draw.server(100, 180, 140, 104));
+    building.appendChild(buildLbl); buildLbl.textContent = e.building;
+    riverLbl.textContent = e.river;
+    const explore = 4 - (safe[1][0] ? 1 : 0) - (safe[1][1] ? 1 : 0) - (safe[1][2] ? 1 : 0);
+    const vals = [waste() / 2, n, n, explore];
+    meters.forEach((m, i) => {
+      m.bar.setAttribute("width", Math.max(vals[i] ? 6 : 0, (vals[i] / 4) * 126));
+      const bad = i === 0 ? vals[i] >= 3 : i === 2 ? vals[i] <= 1 : false, mid = i === 0 ? vals[i] > 0 : i === 2 ? vals[i] < 4 : true;
+      m.bar.setAttribute("class", i === 1 || i === 3 ? "sv-fill-blue" : bad ? "sv-fill-coral" : mid ? "sv-fill-sun" : "sv-fill-mint");
+    });
+    meters[3].g.style.opacity = era === 1 ? 1 : 0;
+    folk.forEach((f) => { K.clear(f.g); f.g.appendChild(draw.person(f.x, 236, n <= 1 ? "sv-fill-coral" : n <= 3 ? "sv-fill-sun" : "sv-fill-mint", 0.62)); });
+    drawWaste();
+  }
+  function buildControls() {
+    const ctr = K.clear(K.$("#s9-controls"));
+    ERA[era].guards.forEach(([label, note], i) => ctr.appendChild(tog(label, safe[era][i], (v) => {
+      safe[era][i] = v; render();
+      const all = safe[era].every(Boolean);
+      setCap("#s9-cap", v ? (all ? ERA[era].done : note) : "Safeguard removed. Cheaper for the " + (era ? "company" : "factory owner") + " — and everyone downstream pays instead.");
+    })));
+    ctr.appendChild(btn("Reset", "", () => { safe[era] = [false, false, false, false]; buildControls(); render(); setCap("#s9-cap", ERA[era].start); }));
+  }
+  K.$("#s9-seg").appendChild(seg(["1800s · factories", "Today · data"], 0, (i) => { era = i; buildControls(); render(); setCap("#s9-cap", ERA[i].start); }, "s9-era"));
+  const L = loop((dt) => {
+    blobs.forEach((b) => { b.t = (b.t + dt / 9000) % 1; });
+    puffs.forEach((p) => { p.t = (p.t + dt / 3200) % 1; });
+    drawWaste();
+  });
+  whenVisible(svg, () => { visible = true; if (!K.reduced) L.start(); }, () => { visible = false; L.stop(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) L.stop(); else if (visible && !K.reduced) L.start(); });
+  buildControls(); render();
+})();
+
+/* ================= 10. THE WHOLE ROAD ================= */
+(function journey() {
+  const svg = K.$("#s10-svg");
+  const STOPS = [
+    ["trade-offs", "We contrasted analytical and operational systems, compared the cloud to self-hosting, weighed distributed against single-node systems, and balanced the needs of the business with the needs of its users."],
+    ["requirements", "We learned to define nonfunctional requirements: performance, reliability, scalability and maintainability."],
+    ["data models", "We explored a spectrum of data models — relational, document, graph, event sourcing, DataFrames — and query languages such as SQL, Cypher, SPARQL, Datalog and GraphQL."],
+    ["storage", "We opened up storage engines: LSM-trees and B-trees for OLTP, column-oriented storage for analytics, and indexes for full-text and vector search."],
+    ["encoding", "We encoded data as bytes, kept it evolvable as requirements change, and followed it between processes: via databases, service calls, workflow engines and events."],
+    ["replication", "We weighed single-leader, multi-leader and leaderless replication, met read-after-write consistency, and saw sync engines let clients work offline."],
+    ["sharding", "We split big datasets into shards, with strategies for rebalancing, request routing and secondary indexes."],
+    ["transactions", "We covered transactions: durability, isolation levels from read committed to snapshot isolation to serializable, and atomic commit across nodes."],
+    ["trouble", "We surveyed what goes wrong in distributed systems — network faults and delays, clock errors, process pauses, crashes — and why even a lock is hard."],
+    ["consensus", "We dived into consensus, and the consistency model it enables: linearizability."],
+    ["batch", "We built batch processing up from chains of Unix tools to distributed jobs over distributed filesystems and object stores."],
+    ["streams", "We generalised batch to stream processing: message brokers, change data capture, fault tolerance and streaming joins."],
+    ["philosophy", "We explored a philosophy of streaming systems that lets different data systems be integrated, evolved and scaled more easily."],
+    ["doing right", "And here we stepped back. Data can do good, and it can do significant harm: decisions that are hard to appeal, discrimination and exploitation, normalised surveillance, exposed secrets, breaches, and consequences nobody intended."],
+  ];
+  const pos = (i) => i < 5 ? [70 + i * 130, 70] : i < 10 ? [590 - (i - 5) * 130, 170] : [70 + (i - 10) * 130, 270];
+  const END = [590, 270];
+  svg.appendChild(s("path", { d: "M70,70 H590 C650,70 650,170 590,170 H70 C10,170 10,270 70,270 H590", fill: "none", "stroke-width": 16, "stroke-linecap": "round", style: { stroke: "var(--line)" } }));
+  svg.appendChild(s("path", { d: "M70,70 H590 C650,70 650,170 590,170 H70 C10,170 10,270 70,270 H590", class: "sv-wire" }));
+  const stops = STOPS.map(([label, note], i) => {
+    const [x, y] = pos(i);
+    const c = s("circle", { cx: x, cy: y, r: 17, class: "sv-box" });
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Chapter " + (i + 1) + ": " + label }, c, txt(x, y + 5, String(i + 1), "sv-text", "middle", { fontWeight: 700 }));
+    svg.append(g, txt(x, y + 38, label));
+    onTap(g, () => walkTo(i));
+    return { c, x, y, note, seen: false };
+  });
+  const endC = s("circle", { cx: END[0], cy: END[1], r: 19, class: "sv-data-soft" });
+  svg.append(endC, s("path", { d: "M590,279 C576,268 580,258 590,265 C600,258 604,268 590,279 Z", class: "sv-fill-coral" }), txt(590, 308, "your turn", "sv-label", "middle", BOLD));
+  const walker = s("g", {}, draw.person(0, -34, "sv-fill-sun", 0.6));
+  svg.appendChild(walker);
+  const st = stat("Stops visited", "1 / 14");
+  K.$("#s10-stats").appendChild(st);
+  let at = 0, busy = false;
+  const place = (p) => walker.setAttribute("transform", `translate(${p[0]},${p[1]})`);
+  function mark() {
+    stops.forEach((sp, i) => sp.c.setAttribute("class", i === at ? "sv-data-soft" : sp.seen ? "sv-good" : "sv-box"));
+    const n = stops.filter((sp) => sp.seen).length;
+    st.set(n + " / 14", n === 14 ? "good" : "");
+    walkB.disabled = resetB.disabled = busy;
+  }
+  function arrive(i) {
+    at = i; stops[i].seen = true; mark();
+    setCap("#s10-cap", "<b>Chapter " + (i + 1) + ".</b> " + stops[i].note);
+  }
+  async function hopTo(i) {
+    const a = at >= 0 && at < 14 ? [stops[at].x, stops[at].y] : END, b = [stops[i].x, stops[i].y];
+    await fly(walker, a, b, 300); at = i; stops[i].seen = true; mark();
+  }
+  async function walkTo(i) {
+    if (busy) return; busy = true; mark();
+    if (at === 14) { await fly(walker, END, [stops[13].x, stops[13].y], 300); at = 13; }
+    while (at !== i) await hopTo(at + (i > at ? 1 : -1));
+    busy = false; arrive(i);
+  }
+  async function walkAll() {
+    if (busy) return; busy = true; mark();
+    at = 0; place([stops[0].x, stops[0].y]);
+    for (let i = 0; i < 14; i++) { if (i) await hopTo(i); arrive(i); await sleep(900); }
+    await fly(walker, [stops[13].x, stops[13].y], END, 420); at = 14;
+    stops.forEach((sp) => (sp.seen = true)); busy = false; mark(); pop(endC);
+    setCap("#s10-cap", "The road doesn't end here — it hands over to you. “We as engineers must remember that we carry a responsibility to work toward the kind of world that we want to live in: <b>a world that treats people with humanity and respect</b>. Let's work together toward that goal.”");
+  }
+  const walkB = btn("Walk the whole road", "primary", walkAll);
+  const resetB = btn("Reset", "", () => { if (busy) return; stops.forEach((sp) => (sp.seen = false)); at = 0; stops[0].seen = true; place([stops[0].x, stops[0].y]); mark(); setCap("#s10-cap", "Fourteen chapters, one road. Tap a stop."); });
+  K.$("#s10-controls").append(walkB, resetB, h("span", { class: "grow" }), h("span", { class: "pill info" }, h("i"), "tap a stop"));
+  stops[0].seen = true; place([stops[0].x, stops[0].y]); mark();
+})();
+
+/* ==SIMS== */
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "Every organisation in town is just being careful. Why can one “risky” label still turn into an “algorithmic prison”?", options: ["Because computers are always wrong", "Because many careful organisations each say no, without proof of anything and with little chance of appeal", "Because the label deletes the person's accounts", "Because only banks are allowed to use scores"], answer: 1, why: "For each organisation, “if in doubt, say no” is sensible. Added together, a person labelled risky — accurately or falsely — can be shut out of jobs, travel, insurance, housing and banking." },
+  { q: "The bank hides the “group” column from its pattern learner but keeps the postcode. What happens to Noor and Lars, who both pay on time?", options: ["They are now treated the same", "The learner stops working", "They are still treated differently, because the postcode is a stand-in for the group", "Both are refused"], answer: 2, why: "In segregated neighbourhoods a postcode is a strong predictor of a protected trait. The learner copies the unfair past through the proxy — “money laundering for bias”." },
+  { q: "A credit score asks “How did you behave in the past?” What does predictive analytics usually ask instead?", options: ["“Who is similar to you, and how did people like you behave?”", "“What is your favourite colour?”", "“How much money do you have today?”", "“Did a human approve this?”"], answer: 0, why: "That means stereotyping: you are judged by your bucket. A bucket can be right on average and wrong about you — and if the data is wrong, recourse is almost impossible." },
+  { q: "Rosa's score drops, so she can't get a job, so her score drops further. What helps you spot a trap like this before you build it?", options: ["A faster database", "Collecting more data about Rosa", "Hiding the score from Rosa", "Systems thinking: looking at the whole system, including the people in it"], answer: 3, why: "Self-reinforcing feedback loops can't always be predicted, but many consequences can be if you think about the entire system and ask whether it amplifies existing differences or fights injustice." },
+  { q: "According to the book, what does “privacy” really mean?", options: ["Keeping everything about yourself secret", "The freedom to choose what to reveal to whom", "Never using online services", "Having a very long password"], answer: 1, why: "Privacy is a decision right. Someone may gladly share medical data with researchers and not with an insurer. Surveillance doesn't erase that right — it transfers it to the company." },
+  { q: "What does the book suggest as a first step for anyone who stores data about people?", options: ["Keep everything forever in case it becomes useful", "Sell old data to a data broker", "Collect less in the first place, and purge data as soon as it is no longer needed", "Wait for a law that forces a change"], answer: 2, why: "“Data you don't have is data that can't be leaked, stolen, or compelled by governments to be handed over.” Beyond that, the book asks for a culture that treats users as humans, not metrics." },
+], 14);
+</script>
+</body>
+</html>

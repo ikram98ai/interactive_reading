@@ -1,0 +1,1833 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 12 · Streams</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box,
+  .clickable:hover .sv-panel, .clickable:focus-visible .sv-panel,
+  .clickable:hover .sv-db, .clickable:focus-visible .sv-db,
+  .clickable:hover .sv-server, .clickable:focus-visible .sv-server { stroke: var(--sun); }
+  .rowwrap { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .rowwrap .lbl { font-family: var(--f-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1.5px solid transparent; }
+  .legend .lg-good { background: var(--mint-soft); border-color: var(--mint); }
+  .legend .lg-data { background: var(--sun-soft); border-color: var(--sun); }
+  .legend .lg-plain { background: var(--surface-2); border-color: var(--line-strong); }
+  .legend .lg-bad { background: var(--coral-soft); border-color: var(--coral); }
+  .legend .lg-mint { background: var(--mint); }
+  .legend .lg-lilac { background: var(--lilac); }
+  .fade { transition: opacity .35s; }
+  #hero-svg { max-width: 560px; margin: 0 auto; }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">12</span> Chapter twelve</span>
+      <h1>Stream Processing</h1>
+      <p class="lede">The last chapter counted a mountain of data once a night. But data never stops arriving — so this chapter handles every event the moment it happens, forever.</p>
+      <p class="quote">“A complex system that works is invariably found to have evolved from a simple system that works. The inverse proposition also appears to be true: A complex system designed from scratch never works and cannot be made to work.” — John Gall, <i>Systemantics</i> (1975), quoted at the start of the chapter</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#flow">Too fast to keep up</a>
+        <a href="#brokers">Two clerks, one pile</a>
+        <a href="#log">The notebook nobody erases</a>
+        <a href="#sync">Two boards, two lunches</a>
+        <a href="#compact">Shrinking the notebook</a>
+        <a href="#state">Your cart is a story</a>
+        <a href="#uses">Questions that wait</a>
+        <a href="#time">Whose clock?</a>
+        <a href="#joins">Matching up streams</a>
+        <a href="#faults">Crash, don't double-count</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · stream versus nightly batch</span><span class="pill info"><i></i>tap the gate</span></div>
+      <svg id="hero-svg" viewBox="0 0 520 372" role="img" aria-label="Visitors pass a gate; a stream counter updates on every visitor while a batch report only catches up when the day's pile is counted"></svg>
+    </div>
+  </section>
+
+  <!-- ============ 1. MESSAGING SYSTEMS ============ -->
+  <section class="scene" id="flow">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 1 · messaging systems</span>
+        <h2>The baker is faster than the packer</h2>
+        <p class="story">An <b>event</b> is a small note that says “this happened, at this time”: a page was viewed, a ticket was sold, a thermometer read 21°. Whoever writes the note is the <b>producer</b>. Whoever reads it is a <b>consumer</b>. Notes about the same kind of thing travel together in a <b>topic</b>.</p>
+        <p class="story">Picture a bakery. Ingrid bakes buns and puts them on a belt; Kofi packs them into boxes. As long as Kofi is at least as fast as Ingrid, all is well. But what if Ingrid is faster?</p>
+        <p class="story">There are only three things you can do. Let the extra buns fall on the floor (<b>drop</b> them). Pile them up on the belt (<b>buffer</b> them in a queue). Or make Ingrid stop baking until there is room (<b>backpressure</b>).</p>
+        <p class="imagine"><b>Try it:</b> start the belt, then drag the producer's speed above the consumer's. Try all three rules and watch what each one gives up: buns, belt space, or the baker's time.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>An event is a small, self-contained, immutable record of something that happened, usually with a time-of-day timestamp. It is generated once by a <b>producer</b> (publisher, sender) and potentially processed by several <b>consumers</b> (subscribers, recipients); related events are grouped into a <b>topic</b> or stream. Polling a datastore for new events gets expensive as you poll more often, so it is better for consumers to be <b>notified</b>; database triggers can do this only in a very limited way.</p>
+            <p>Two questions tell messaging systems apart. First: what if producers send faster than consumers can process? The options are to <b>drop</b> messages, <b>buffer</b> them in a queue, or apply <b>backpressure</b> (flow control) — Unix pipes and TCP use backpressure with a small fixed-size buffer. If you buffer: does the system crash when the queue no longer fits in memory, or spill to disk, and what does that do to performance?</p>
+            <p>Second: what if nodes crash or go offline — are messages lost? Durability needs disk writes and/or replication, which cost throughput and latency. For periodic sensor readings an occasional missing value may be fine; if you are <b>counting</b> events, every lost message means a wrong counter.</p>
+            <p><b>Direct messaging</b> skips the middleman: UDP multicast for stock market feeds, brokerless libraries such as ZeroMQ and nanomsg, StatsD metrics over UDP, and webhooks (HTTP callbacks). These generally assume producers and consumers are constantly online, and the application must cope with lost messages.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">The bun belt · when the consumer can't keep up</span><span id="s1-seg"></span></div>
+        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 660 320" role="img" aria-label="A producer sends numbered events along a belt to a consumer; extra events are dropped, queued, or the producer is blocked"></svg></div>
+        <div class="controls" id="s1-controls"></div>
+        <div class="controls"><div class="stats" id="s1-stats"></div></div>
+        <div class="caption" id="s1-cap" aria-live="polite">The belt is stopped. Press “Start the belt”.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. MESSAGE BROKERS ============ -->
+  <section class="scene" id="brokers">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 2 · message brokers</span>
+        <h2>Two clerks, one pile of parcels</h2>
+        <p class="story">A <b>message broker</b> is a post office for events. Producers drop messages off; the broker looks after them and hands them to consumers. Nobody minds if a consumer steps out for a minute — the broker keeps its mail.</p>
+        <p class="story">With two clerks behind the counter there are two ways to share. <b>Load balancing</b>: each parcel goes to <i>one</i> clerk, so they split the work. <b>Fan-out</b>: every clerk gets their own copy of <i>every</i> parcel, like two people tuned to the same radio station.</p>
+        <p class="story">Clerks can faint mid-parcel. So a clerk must send an <b>acknowledgment</b> — “done!” — before the broker forgets a message. No ack? The broker hands the message to somebody else. Nothing is lost, but that message now arrives <i>late</i>, behind messages that were sent after it.</p>
+        <p class="imagine"><b>Try it:</b> press “Deliver the next round” twice, so consumer 2 is busy with m3. Click consumer 2 to crash it, keep delivering, and read consumer 1's list. Then repeat the same crash in fan-out mode.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A <b>message broker</b> (message queue) is essentially a database optimized for message streams. Because data is centralized in the broker, clients can connect, disconnect and crash, and the question of durability moves to the broker. Faced with slow consumers, brokers generally allow unbounded queueing, so consumers are <b>asynchronous</b>: the producer waits only for the broker to confirm it has buffered the message.</p>
+            <p>Unlike databases, traditional brokers delete a message once it is delivered, assume short queues (throughput degrades when they grow), offer topic-pattern subscriptions rather than queries, and notify clients when data changes. This is the world of the <b>JMS</b> and <b>AMQP</b> standards: RabbitMQ, ActiveMQ, HornetQ, Qpid, TIBCO Enterprise Message Service, IBM MQ, Azure Service Bus, Google Cloud Pub/Sub.</p>
+            <p><b>Load balancing</b> delivers each message to one consumer (a shared subscription in JMS); <b>fan-out</b> delivers each to all (topic subscriptions in JMS, exchange bindings in AMQP). Kafka's consumer groups combine the two.</p>
+            <p>If a connection closes or times out without an <b>acknowledgment</b>, the broker redelivers. The message may in fact have been processed and only the ack lost; handling that needs atomic commit or idempotence. Load balancing plus redelivery <b>inevitably reorders</b> messages (consumer 1 sees m4, m3, m5) — which matters when messages have causal dependencies. A separate queue per consumer avoids it.</p>
+            <p>A malformed message that crashes every consumer would be redelivered forever. <b>Dead letter queues</b> (DLQs) park such messages in a separate, monitored queue so an operator can drop, fix or replay them; Apache Pulsar and Kafka Streams support them too.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Broker · click a consumer to crash it</span><span id="s2-seg"></span></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 660 340" role="img" aria-label="A broker queue with six messages and two consumers that acknowledge messages and can crash"></svg></div>
+        <div class="controls" id="s2-controls"></div>
+        <div class="controls"><div class="stats" id="s2-stats"></div></div>
+        <div class="caption" id="s2-cap" aria-live="polite">Six messages are waiting in the broker. Both consumers are idle.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. LOG-BASED BROKERS ============ -->
+  <section class="scene" id="log">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 3 · log-based message brokers</span>
+        <h2>The notebook nobody erases</h2>
+        <p class="story">A post office forgets a parcel the moment it is delivered, so a latecomer can never see yesterday's mail. What if the broker worked like a class diary instead: every event written on the next free line, and <i>never</i> erased by reading it?</p>
+        <p class="story">That is a <b>log-based message broker</b>. Each line gets a number, its <b>offset</b>. A reader only has to remember “I'm at line 5”. Two readers keep two bookmarks and never disturb each other, a new reader can start from the oldest line, and anyone can flip back and read again.</p>
+        <p class="story">To go faster, the diary is split into several notebooks called <b>partitions</b>. All of one person's events go to the same partition — chosen by a <b>key</b> — so that person's events stay in order. And because paper isn't endless, the oldest pages get torn out now and then. Bad luck for a reader who was still back there.</p>
+        <p class="imagine"><b>Try it:</b> send some events — the live board follows along by itself. The night reporter reads only when you tell it to. Let it fall behind, delete the oldest segment, and see who misses out. Then rewind it and read the same lines again.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A log is an append-only sequence of records on disk. A producer appends; a consumer reads sequentially and waits for a notification at the end, like <code>tail -f</code>. For throughput the log is <b>sharded</b>; Kafka calls a shard a <b>partition</b>. Within a partition every message gets a monotonically increasing <b>offset</b> and messages are totally ordered; there is no ordering guarantee across partitions. Apache Kafka and Amazon Kinesis Streams work this way (Google Cloud Pub/Sub is similar underneath but exposes a JMS-style API), reaching millions of messages per second by sharding and tolerating faults by replicating.</p>
+            <p>Fan-out is trivial because reading doesn't delete. Load balancing assigns <b>whole shards</b> to the nodes of a consumer group, so at most as many nodes as shards can share the work, and one slow message holds up the rest of its shard (<b>head-of-line blocking</b>). Expensive messages where order doesn't matter suit JMS/AMQP brokers; high throughput with ordering suits logs — though Kafka now also offers JMS/AMQP-style consumer groups. Events that must stay ordered need the same <b>partition key</b>, e.g. the user ID.</p>
+            <p>The broker records only <b>consumer offsets</b>, not per-message acks — just like the log sequence number in single-leader replication, with the broker as leader and the consumer as follower. After a failure a consumer resumes from its last <i>recorded</i> offset, so it may see some messages twice.</p>
+            <p>The log is cut into <b>segments</b>; old ones are deleted or archived, making the log a big on-disk ring buffer. A 20 TB drive written at 250 MB/s takes about 22 hours to fill; in practice logs hold days or weeks. Kafka and Redpanda tier old messages to object storage; WarpStream, Confluent Freight and Bufstream keep everything there, as Iceberg tables.</p>
+            <p>A consumer that falls too far behind misses messages, but only <i>it</i> is affected; you can monitor its lag and alert. And since the offset is under the consumer's control, you can <b>replay</b>: start a copy of a consumer at yesterday's offset and reprocess, as often as you like.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Topic “clicks” · two partitions</span><span class="legend"><span><i class="lg-mint"></i>live board's bookmark</span><span><i class="lg-lilac"></i>night reporter's bookmark</span></span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 660 340" role="img" aria-label="Two partitions of an append-only log with offsets, and two consumers reading at their own positions"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <div class="controls"><div class="stats" id="s3-stats"></div></div>
+        <div class="caption" id="s3-cap" aria-live="polite">Six events are already in the log. The live board has read them all; the night reporter has read one from each partition.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. KEEPING SYSTEMS IN SYNC / CDC ============ -->
+  <section class="scene" id="sync">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 4 · keeping systems in sync</span>
+        <h2>Two menu boards, two different lunches</h2>
+        <p class="story">A school keeps Friday's lunch in two places: the office computer (the <b>database</b>) and the hallway board everybody reads (think of it as the <b>search index</b>). Whenever the menu changes, the cook updates both. That is called <b>dual writes</b>.</p>
+        <p class="story">At the same moment, Mei changes Friday to pizza and Omar changes it to soup. Each sends two messages, and the four messages cross in the network. The office hears “pizza”, then “soup”. The hallway hears “soup”, then “pizza”. Nobody saw an error — and the two now disagree <i>forever</i>.</p>
+        <p class="story">The cure: only the office decides. Everyone writes to the database alone. The database notes each change in its log, in the order <i>it</i> chose, and the hallway board simply copies that log. This is <b>change data capture</b>. A follower can be behind, but it can never disagree with the leader about the order.</p>
+        <p class="imagine"><b>Try it:</b> press “Both save at once” several times in each mode and watch the “ended different” counter. Then click the hallway board to switch it off, save again, and switch it back on.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Most applications combine an OLTP database, a cache, a full-text index and a data warehouse, each holding its own copy of the data. Warehouses are usually synced by batch ETL. With <b>dual writes</b> the application writes to each system itself — and hits the <b>race condition</b> of Figure 12-4: the database ends at B, the index at A, permanently inconsistent, and without something like version vectors you won't even notice. A second problem: one write may fail while the other succeeds, which is the (expensive) atomic commit problem. The root cause is that there is no single leader.</p>
+            <p><b>Change data capture (CDC)</b> observes every change written to a database and extracts it in a form that can be replicated elsewhere, ideally as a stream. The database decides the order and writes it to its replication log; the index applies the changes in the same order; another system is just another consumer. CDC makes one database the leader and the rest followers, and a log-based broker transports the changes because it preserves their order.</p>
+            <p>Tools: <b>Debezium</b> (connectors for MySQL, PostgreSQL, Oracle, SQL Server, Db2, Cassandra and more), Kafka Connect, Maxwell (MySQL binlog), GoldenGate (Oracle), pgcapture (PostgreSQL). MySQL and PostgreSQL send changes through the same replication log they use for replicas; Google's Datastream does it for its cloud databases; Cassandra exposes raw log segments per node and leaves merging to the consumer.</p>
+            <p>CDC is usually <b>asynchronous</b>: a slow consumer doesn't hold up the system of record, but all the problems of replication lag apply. It also turns the database schema into a public API — removing a column can break downstream services. <b>Data contracts</b> and the <b>outbox pattern</b> (a separate outbox table, written in the same transaction as the real change) decouple the two, at the price of extra writes and a transformation to maintain.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Friday's lunch · click the board</span><span id="s4-seg"></span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 660 330" role="img" aria-label="Two people update a database and a search index, either directly or through the database's change log"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <div class="controls"><div class="stats" id="s4-stats"></div></div>
+        <div class="caption" id="s4-cap" aria-live="polite">Friday says “pasta” everywhere. Mei wants pizza; Omar wants soup.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. SNAPSHOTS + LOG COMPACTION ============ -->
+  <section class="scene" id="compact">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 5 · snapshots and log compaction</span>
+        <h2>Shrinking the notebook without losing anything</h2>
+        <p class="story">A cat-video site keeps a play counter for each video. Every play changes a counter, and every change becomes one line in the change log: <code>purr = 2</code>.</p>
+        <p class="story">Now you want a brand-new search index. If you still have the <i>whole</i> log, replay it from the first line and you're done. But logs get long, so old lines get thrown away — and replaying what's left misses every video that wasn't played lately. Then you need a <b>snapshot</b> first: a full copy of the database, stamped with the log position it matches.</p>
+        <p class="story">There is a smarter way to tidy up: <b>log compaction</b>. For each key, keep only the <i>newest</i> line and throw out the older ones. The log shrinks to about the size of the database — and still contains a full copy of it. Deleting a video writes a special “gone” line, a <b>tombstone</b>, so compaction knows to drop that key completely.</p>
+        <p class="imagine"><b>Try it:</b> click videos to play them and watch lines being appended. Pick a tidy-up rule, press “Tidy the log”, then “Build a new index from the log” and see which rule still gives a complete index.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>With the log of <i>all</i> changes you can rebuild the whole database by replaying it, but keeping everything forever takes too much disk and too long to replay, so logs are truncated. A new full-text index then needs a <b>consistent snapshot</b> that corresponds to a known offset in the change log, so you know where to continue. Some CDC tools integrate this; Debezium uses Netflix's DBLog watermarking algorithm for incremental snapshots.</p>
+            <p><b>Log compaction</b> (the same idea as in log-structured storage engines) runs in the background, finds records with the same key and keeps only the most recent. A null value — a <b>tombstone</b> — marks a deleted key. The disk space needed then depends only on the current contents of the database, not on how many writes ever happened. The book's example (Figure 12-6) is exactly this: cat videos mew, purr, scratch and yawn with their play counts.</p>
+            <p>To rebuild a derived system you start a new consumer at offset 0 of the compacted topic and scan it: it is guaranteed to contain the latest value of every key. Apache Kafka supports this, which lets a broker be durable storage, not just transient messaging.</p>
+            <p>This works for CDC because each event holds the entire new version of a record. With <b>event sourcing</b>, events express a user's intent and later events don't override earlier ones, so you need the full history and can't compact the same way; such systems store snapshots of derived state purely as a performance optimization.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Cat videos · tidy-up rule</span><span id="s5-seg"></span></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 660 330" role="img" aria-label="A change log of play counts, the source database, and a new index rebuilt from the log"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="controls"><div class="stats" id="s5-stats"></div></div>
+        <div class="caption" id="s5-cap" aria-live="polite">Six changes are in the log. Click a video in the database to play it.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6. STATE, STREAMS, IMMUTABILITY ============ -->
+  <section class="scene" id="state">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 6 · state, streams and immutability</span>
+        <h2>Your shopping cart is the end of a story</h2>
+        <p class="story">Priya's cart holds a ball. That is the <b>state</b>: what is true right now. But how did it get that way? She added a kite, added a ball, then took the kite out again. Those are the <b>events</b>. The cart is simply what you get when you replay the story from the start.</p>
+        <p class="story">Accountants have worked like this for centuries. They never rub out a line in the ledger; if a line was wrong, they add a new line that corrects it. The old line stays, so anyone can check what really happened.</p>
+        <p class="story">Keeping the story gives you superpowers. You can travel back in time. You can learn that Priya <i>thought about</i> a kite — a database that just deletes it would forget that. And next year you can invent a brand-new view and fill it by replaying the same old log.</p>
+        <p class="imagine"><b>Try it:</b> click things on the shelf to put them in the cart and take them out. Drag the time slider back. Press “Launch a new view”. Then switch to “Overwrite in place” and see which questions can no longer be answered.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Mutable state and an append-only log of immutable events “are two sides of the same coin”. The log of all changes, the <b>changelog</b>, represents the evolution of state over time: state is what you get when you <i>integrate</i> an event stream over time, and a change stream is what you get when you <i>differentiate</i> state by time (Figure 12-7). Jim Gray and Andreas Reuter, 1992: “There is no fundamental need to keep a database at all; the log contains all the information there is.”</p>
+            <p><b>Advantages.</b> An append-only ledger gives auditability; mistakes are fixed by a compensating transaction, not by erasing. Recovering from buggy code is far easier when it couldn't destructively overwrite data. Events also hold more than the current state — the book's own example is an item added to a cart and then removed.</p>
+            <p><b>Several views from one log.</b> Druid ingests directly from Kafka; Kafka Connect sinks export to many databases and indexes. A new feature gets its own read-optimized view, built from the log and run side by side with the old one — easier than a schema migration. This is the idea of CQRS, and it makes the normalization-versus-denormalization debate largely irrelevant.</p>
+            <p><b>Concurrency.</b> Views are usually updated asynchronously, so you may not read your own write. On the other hand a user action becomes a single self-contained event, appended atomically in one place, and a single-threaded consumer per shard needs no concurrency control.</p>
+            <p><b>Limits.</b> With high churn the history can grow prohibitively large. And sometimes data really must go (GDPR, leaked secrets): Datomic calls it <i>excision</i>, Fossil <i>shunning</i>; <b>crypto-shredding</b> stores data encrypted and later forgets the key. Truly deleting data is surprisingly hard — it is more “making it harder to retrieve” than “impossible to retrieve”.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Priya's cart · click the shelf</span><span id="s6-seg"></span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 660 330" role="img" aria-label="A shop shelf, an append-only event log, and three views derived from the log"></svg></div>
+        <div class="controls" id="s6-controls"></div>
+        <div class="caption" id="s6-cap" aria-live="polite">Three events so far: add kite, add ball, remove kite. The cart holds a ball.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7. USES OF STREAM PROCESSING ============ -->
+  <section class="scene" id="uses">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 7 · uses of stream processing</span>
+        <h2>Questions that sit and wait for their answers</h2>
+        <p class="story">A normal database keeps the <i>data</i> and lets questions come and go. A <b>stream processor</b> flips that around: it keeps the <i>questions</i> and lets the data flow past. Each new event is shown to every waiting question — “is this the one you were looking for?”</p>
+        <p class="story">Watch Lena's bank card. One stored question hunts for a suspicious <i>pattern</i>: paying in two cities just minutes apart. One keeps a running <i>average</i>. One keeps a little <i>table</i> of totals always up to date. One is a saved <i>search</i> for bike shops.</p>
+        <p class="story">Same stream, four different jobs — and each one answers the instant an event arrives, not tomorrow morning.</p>
+        <p class="imagine"><b>Try it:</b> make Lena pay in Lima a few times, then straight away in Oslo. Reset and try again, but press “Wait 10 minutes” before the Oslo payment.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>With a stream you can write events into a database, cache or index; push them to people (alerts, a real-time dashboard); or process input streams into derived output streams. Code that does the last is an <b>operator</b> or <b>job</b>. The crucial difference from batch: a stream never ends, so sorting — and sort-merge joins — make no sense, and fault tolerance can't simply mean restarting from the beginning.</p>
+            <p><b>Complex event processing (CEP)</b>, from the 1990s, searches for patterns of events the way a regular expression searches for patterns of characters. Queries (often SQL-like, or a GUI) are stored long-term; the engine keeps a state machine and emits a “complex event” on a match. Esper, Apama, TIBCO StreamBase; Flink and Spark Streaming have SQL too. Classic uses: fraud detection, trading, factory monitoring, military and intelligence systems.</p>
+            <p><b>Stream analytics</b> is about aggregations over windows: rates, rolling averages, comparisons with last week. Probabilistic algorithms (Bloom filters, HyperLogLog, percentile estimators) save memory, but they are only an optimization — there is nothing inherently approximate about stream processing. Apache Storm, Spark Streaming, Flink, Samza, Beam, Kafka Streams; Google Cloud Dataflow, Azure Stream Analytics.</p>
+            <p><b>Materialized views</b> need a window that stretches back to the beginning of time (Kafka Streams, ksqlDB). Databases often refresh views by batch (PostgreSQL's <code>REFRESH MATERIALIZED VIEW</code>); <b>incremental view maintenance</b> — Materialize, RisingWave, ClickHouse, Feldera — recomputes only what changed.</p>
+            <p><b>Search on streams</b> stores the queries and runs each document past them, e.g. the percolator feature of Elasticsearch: media monitoring, or a real estate site that notifies users when a new property matching their search criteria appears on the market. Actor frameworks also pass messages, but they manage concurrency rather than data, and usually don't guarantee delivery after a crash.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Lena's card · four standing queries</span><div class="stats" id="s7-stats"></div></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 660 330" role="img" aria-label="A stream of card payments flowing past four stored queries that each react to every event"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="caption" id="s7-cap" aria-live="polite">Four questions are stored and waiting. No payments yet.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8. REASONING ABOUT TIME ============ -->
+  <section class="scene" id="time">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 8 · reasoning about time</span>
+        <h2>Whose clock are we using, anyway?</h2>
+        <p class="story">Count the taps in a game app, minute by minute. Easy — until Tomás rides the metro through a tunnel. His phone keeps recording taps but can't send them. Five minutes later it is back online and delivers them all at once.</p>
+        <p class="story">Every event now has two times: when it <i>happened</i> (<b>event time</b>) and when the server <i>got</i> it (<b>processing time</b>). Count by arrival and you see a burst of taps after 10:07 that never really happened. Count by event time and the numbers are right — but the 10:02 window had already been announced. Latecomers like these are <b>stragglers</b>: you either ignore them or publish a correction.</p>
+        <p class="story">You also have to decide what “per minute” means. A <b>window</b> is the slice of time you add up over, and it comes in four common shapes.</p>
+        <p class="imagine"><b>Try it:</b> bring the phone back online in each clock mode. Then try the four window shapes; in “sliding”, drag the window along yourself. In “session”, watch two visits melt into one when the tunnel taps turn up.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A batch job uses the timestamps inside the events, which also makes it deterministic. Many stream frameworks window by the processing machine's clock (<b>processing time</b>) — simple, and fine while lag is negligible. But queueing, network faults, broker contention, a restart, or reprocessing old events all cause lag and can reorder events. (Think of watching Star Wars in release order: the episode number is the event time, the date you watched it is the processing time.) Figure 12-8: redeploy a processor, let it chew through the backlog, and a rate measured by processing time shows a spike that never happened.</p>
+            <p><b>Stragglers.</b> With event-time windows you can never be sure a window is complete. Either ignore stragglers — and track how many you drop — or publish a <b>correction</b>, possibly retracting the old output. A special message saying “from now on, there will be no more messages with a timestamp earlier than <i>t</i>” can close windows, but with several producers each one must be tracked separately.</p>
+            <p><b>Whose clock?</b> A phone may buffer events offline for hours or days, and its clock can't be trusted. One approach logs three timestamps: when the event occurred (device clock), when it was sent (device clock), and when it was received (server clock). The difference between the last two estimates the device clock's offset.</p>
+            <p><b>Window types.</b> <i>Tumbling</i>: fixed length, every event in exactly one window (10:03:00–10:03:59). <i>Hopping</i>: fixed length with overlap, e.g. 5 minutes hopping by 1. <i>Sliding</i>: all events within some interval of each other — 10:03:39 and 10:08:12 share a 5-minute sliding window, though no fixed-boundary window would hold both. <i>Session</i>: no fixed length; it ends after a period of inactivity, e.g. 30 minutes. A counter needs constant state, but sliding windows must buffer events.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Taps per window · place each tap by</span><span id="s8-seg"></span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 660 298" role="img" aria-label="A timeline of taps from 10:00 to 10:09 with time windows drawn underneath, and a phone holding three late taps"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="controls" id="s8-controls2"></div>
+        <div class="caption" id="s8-cap" aria-live="polite">Eight taps have arrived. Tomás's phone is in a tunnel, holding three more.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9. STREAM JOINS ============ -->
+  <section class="scene" id="joins">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 9 · stream joins</span>
+        <h2>Matching up two streams</h2>
+        <p class="story">Joining means matching things that belong together. In a batch job both piles are complete before you start. In a stream, the matching piece might turn up any second — or never. So the stream processor has to <i>remember</i> things while it waits.</p>
+        <p class="story"><b>Stream–stream:</b> match each search with the click that follows it, if one comes within the hour. <b>Stream–table:</b> stick the user's name and city onto every activity event, using a local copy of the profile table that a changelog keeps fresh. <b>Table–table:</b> keep everybody's home timeline ready to read, by combining the stream of posts with the stream of follows.</p>
+        <p class="story">All three keep some <b>state</b> from one input and look things up in it when the other input speaks. That makes <i>order</i> matter. Did the profile change arrive before the purchase, or after it?</p>
+        <p class="imagine"><b>Try it:</b> step through each kind of join. In the stream–table join, press “Swap the last two arrivals” and run it again: same events, different answer.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><b>Stream–stream (window) join.</b> To measure click-through rate you join search events with click events on the session ID. The click may never come, may come weeks later, or — thanks to network delays — may even arrive before the search. You pick a window (say, one hour), keep all recent events indexed by session ID, emit a match when both sides are present, and emit “not clicked” when a search expires. Embedding the search inside the click event is not equivalent: you would never learn about searches with no click.</p>
+            <p><b>Stream–table join (enrichment).</b> Looking up each user ID in a remote database is slow and may overload it. Instead, load a copy of the table into the stream processor — a <b>hash join</b> against a local hash table or on-disk index — and keep it fresh by subscribing to the table's CDC changelog. It is really a join of two streams, where the table side has a window reaching back to the beginning of time.</p>
+            <p><b>Table–table join (materialized view maintenance).</b> The timeline cache is the materialized result of joining <code>posts</code> with <code>follows</code>. New posts go to every follower's timeline; deleted posts are removed; a new follow pulls in recent posts; an unfollow removes them. Seen as calculus, the change stream of a join follows the product rule (u·v)′ = u′v + uv′.</p>
+            <p><b>Time dependence.</b> If state changes over time and you join with it, which point in time do you use? With no ordering guarantee across streams or shards the join becomes <b>nondeterministic</b>: rerunning the same job may interleave the inputs differently. Data warehouses call this a <b>slowly changing dimension</b> and give each version of a record (say, a tax rate) its own identifier — which makes the join deterministic but rules out log compaction. Alternatively, denormalize the rate into every sale event.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Three kinds of join</span><span id="s9-seg"></span></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 660 330" role="img" aria-label="Two input streams feed a stream processor that keeps state and writes joined results to an output"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="caption" id="s9-cap" aria-live="polite">Two streams come in on the left: searches and clicks. Press Step.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 10. FAULT TOLERANCE ============ -->
+  <section class="scene" id="faults">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 10 · fault tolerance</span>
+        <h2>Crash in the middle — without counting twice</h2>
+        <p class="story">A batch job that dies can start over and throw its half-finished output away. A stream job that has been running for two years can't go back to the beginning. So it saves its place every so often — a <b>checkpoint</b> — and after a crash it returns to the last one and replays from there.</p>
+        <p class="story">Replaying is perfectly safe <i>inside</i> the processor. But anything that already escaped — a row written to a database outside, an email sent — happens <b>again</b>. The ticket counter ends up too high.</p>
+        <p class="story">Two cures. <b>Atomic commit</b>: the outputs and the “I've read up to here” bookmark are saved together, all or nothing. Or <b>idempotence</b>: make every write safe to repeat, by stamping it with the event's offset so the database can say “already got that one”. Either way it looks as if each event was handled <b>exactly once</b> — <i>effectively</i> once, to be precise.</p>
+        <p class="imagine"><b>Try it:</b> process five sales, then click the processor to crash it, and finish the log. Compare “database says” with “really sold” in each of the three modes.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Batch frameworks get <b>exactly-once semantics</b> (better: <i>effectively-once</i>) by discarding the output of failed tasks and making output visible only when a task succeeds. A stream never finishes, so that trick doesn't carry over directly.</p>
+            <p><b>Microbatching</b> (Spark Streaming) cuts the stream into blocks of about a second and treats each as a tiny batch job — smaller batches mean more overhead, larger ones more delay. <b>Checkpointing</b> (Apache Flink) periodically writes rolling checkpoints of state to durable storage, triggered by barriers in the stream, without forcing a window size. Both give exactly-once <i>within</i> the framework; but once output leaves it — a database write, a message to an external broker, an email — a restart makes the side effect happen twice.</p>
+            <p><b>Atomic commit.</b> All outputs and side effects of processing an event — downstream messages, database writes, operator state, and moving the consumer offset forward — must happen atomically or not at all. Google Cloud Dataflow, VoltDB and Apache Kafka do this efficiently by keeping the transaction internal to the framework rather than spanning heterogeneous systems as XA does, and by handling several input messages per transaction.</p>
+            <p><b>Idempotence.</b> An operation is idempotent if doing it several times has the same effect as doing it once: deleting a key is; incrementing a counter is not. You can often add it with metadata — store the Kafka offset of the last applied message with the value (Storm's Trident does something similar). It assumes replay in the same order, deterministic processing, no other writer on the same value, and possibly <b>fencing</b> during failover.</p>
+            <p><b>Rebuilding state.</b> Keep state in a remote replicated store (slow per message), or keep it local and replicate it: Flink snapshots operator state to a distributed filesystem, Kafka Streams sends state changes to a log-compacted Kafka topic, VoltDB processes each input redundantly on several nodes. Sometimes state can simply be rebuilt by replaying the input.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Ticket counter · click the processor</span><span id="s10-seg"></span></div>
+        <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 660 330" role="img" aria-label="An input log of eight sales, a stream processor with a saved checkpoint, and an outside database that stores the running count"></svg></div>
+        <div class="controls" id="s10-controls"></div>
+        <div class="controls"><div class="stats" id="s10-stats"></div></div>
+        <div class="caption" id="s10-cap" aria-live="polite">Eight ticket sales are waiting in the log. The processor saves a checkpoint after every third event.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SUMMARY ============ -->
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The seesaws from this chapter</h2><p>A stream never ends, so every choice is about what happens “in the meantime”.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>Buffer in a queue</h4><p>The producer never waits — but the queue can outgrow memory, then disk</p></div><span class="vs">vs</span><div class="side"><h4>Drop or push back</h4><p>Bounded memory, paid for with lost messages or a blocked producer</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>May lose a message</h4><p>Higher throughput and lower latency on the same hardware; fine for sensor readings</p></div><span class="vs">vs</span><div class="side"><h4>Durable delivery</h4><p>Disk writes and replication cost speed, but counters stay correct</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>AMQP/JMS-style broker</h4><p>Shares work message by message, great for slow tasks; deletes after ack, may reorder</p></div><span class="vs">vs</span><div class="side"><h4>Log-based broker</h4><p>Ordered per partition and replayable; parallelism limited by partitions, one slow message blocks its shard</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Dual writes</h4><p>Simple application code, but races and half-failures leave systems disagreeing forever</p></div><span class="vs">vs</span><div class="side"><h4>Change data capture</h4><p>One leader fixes the order for everybody; followers lag a little behind</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Change data capture</h4><p>Bolts onto an existing database and compacts nicely; the schema becomes a public API</p></div><span class="vs">vs</span><div class="side"><h4>Event sourcing</h4><p>Events say what the user meant; needs the full history and a redesigned application</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Keep every event</h4><p>Audit trail, time travel, new views by replay</p></div><span class="vs">vs</span><div class="side"><h4>Compact or delete</h4><p>Bounded disk and the right to be forgotten — but truly deleting is hard</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Event time</h4><p>True and repeatable, but you never know whether a window is complete</p></div><span class="vs">vs</span><div class="side"><h4>Processing time</h4><p>Simple, but any lag paints spikes and dips that never happened</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Checkpoints alone</h4><p>Cheap, exactly-once inside the framework; outside effects can repeat</p></div><span class="vs">vs</span><div class="side"><h4>Atomic commit or idempotence</h4><p>Effectively-once all the way out, for some overhead and a list of assumptions</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>Grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>event</dt><dd>A small, unchangeable note that something happened, with the time it happened.</dd></div>
+        <div class="word"><dt>stream</dt><dd>Data that keeps arriving bit by bit and never counts as “finished”.</dd></div>
+        <div class="word"><dt>producer / consumer</dt><dd>The one who sends events, and the one who receives and handles them.</dd></div>
+        <div class="word"><dt>topic</dt><dd>A named group of related events, like a file name for a stream.</dd></div>
+        <div class="word"><dt>backpressure</dt><dd>Making the sender wait because the receiver is full. Also called flow control.</dd></div>
+        <div class="word"><dt>message broker</dt><dd>A server in the middle that takes messages from producers and hands them to consumers.</dd></div>
+        <div class="word"><dt>load balancing</dt><dd>Each message goes to just one of the consumers, so they share the work.</dd></div>
+        <div class="word"><dt>fan-out</dt><dd>Each message goes to every consumer, like a broadcast.</dd></div>
+        <div class="word"><dt>acknowledgment</dt><dd>The consumer's “done!” that lets the broker forget a message.</dd></div>
+        <div class="word"><dt>dead letter queue</dt><dd>A side queue for messages that keep failing, so they stop blocking the rest.</dd></div>
+        <div class="word"><dt>log-based broker</dt><dd>A broker that appends every message to a file and never erases it just because it was read.</dd></div>
+        <div class="word"><dt>partition</dt><dd>One slice of a topic's log. Order is guaranteed inside a partition, not across them.</dd></div>
+        <div class="word"><dt>offset</dt><dd>The line number of a message in its partition. A consumer's bookmark is just an offset.</dd></div>
+        <div class="word"><dt>consumer group</dt><dd>A team of consumers that split a topic's partitions between them.</dd></div>
+        <div class="word"><dt>dual writes</dt><dd>The app itself writes to two systems — and they can end up disagreeing.</dd></div>
+        <div class="word"><dt>change data capture</dt><dd>Turning every change in a database into a stream that other systems follow in order.</dd></div>
+        <div class="word"><dt>log compaction</dt><dd>Keeping only the newest line for each key, so the log holds a full copy but stays small.</dd></div>
+        <div class="word"><dt>tombstone</dt><dd>A special “this key is deleted” line in a log.</dd></div>
+        <div class="word"><dt>event sourcing</dt><dd>Storing what happened as unchangeable events and working out the current state from them.</dd></div>
+        <div class="word"><dt>materialized view</dt><dd>A ready-made answer that is kept up to date as the underlying data changes.</dd></div>
+        <div class="word"><dt>complex event processing</dt><dd>Stored rules that watch a stream for a particular pattern of events.</dd></div>
+        <div class="word"><dt>window</dt><dd>The slice of time you add up over: tumbling, hopping, sliding or session.</dd></div>
+        <div class="word"><dt>event time / processing time</dt><dd>When something really happened, versus when the computer got round to it.</dd></div>
+        <div class="word"><dt>straggler</dt><dd>An event that arrives after its window was already declared complete.</dd></div>
+        <div class="word"><dt>checkpoint</dt><dd>A saved copy of a stream processor's place and memory, to restart from after a crash.</dd></div>
+        <div class="word"><dt>idempotent</dt><dd>Safe to repeat: doing it twice has the same effect as doing it once.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width: 820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Six quick questions. Finish all six to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible, ease, lerp } = K;
+K.page(12);
+const setCap = (id, html) => { const el = K.$(id); if (el) el.innerHTML = html; };
+const txt = (x, y, str, cls, anchor, style) => s("text", { x, y, class: cls || "sv-label", "text-anchor": anchor || "middle", style: style || null }, str);
+const BOLD = { fill: "var(--ink)", fontWeight: 700 };
+const pop = (el) => { el.classList.remove("sv-pop"); try { void el.getBBox(); } catch (e) {} el.classList.add("sv-pop"); };
+/** click + Enter/Space on an SVG group */
+const onPress = (g, fn) => {
+  g.addEventListener("click", fn);
+  g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } });
+};
+/** A seg control that refuses to change (and snaps back) while the sim is busy. */
+function modeSeg(labels, active, id, canChange, onChange) {
+  let cur = active;
+  const el = seg(labels, active, (i) => {
+    if (i === cur) return;
+    if (!canChange()) { K.$$("button", el).forEach((b, j) => b.setAttribute("aria-pressed", String(j === cur))); return; }
+    cur = i; onChange(i);
+  }, id);
+  return el;
+}
+
+/** Shared Step / Play / Reset control strip. */
+function makeFlow(ctrSel, steps, reset, label) {
+  const ctr = K.$(ctrSel);
+  let i = 0, busy = false;
+  const playB = h("button", { class: "btn primary", type: "button" }, label || "Play the story");
+  const stepB = h("button", { class: "btn", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  function sync() {
+    const done = i >= steps.length;
+    stepB.disabled = busy || done; playB.disabled = busy || done; resetB.disabled = busy;
+    stepB.textContent = done ? "Done" : (i === 0 ? "Step" : "Step " + (i + 1) + " of " + steps.length);
+  }
+  async function one() {
+    if (busy || i >= steps.length) return;
+    busy = true; sync();
+    await steps[i](); i++;
+    busy = false; sync();
+  }
+  async function all() { if (busy) return; while (i < steps.length) { await one(); await sleep(320); } }
+  stepB.addEventListener("click", one);
+  playB.addEventListener("click", all);
+  resetB.addEventListener("click", () => { if (busy) return; i = 0; reset(); sync(); });
+  ctr.append(playB, stepB, resetB);
+  sync();
+  return { ctr, sync, restart() { if (busy) return false; i = 0; reset(); sync(); return true; }, get busy() { return busy; } };
+}
+
+/* ================= HERO: stream vs nightly batch ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const PILE = 6;
+  svg.appendChild(txt(260, 26, "EVENTS NEVER STOP ARRIVING"));
+  svg.appendChild(s("path", { d: "M98,178 C132,178 122,100 156,100", class: "sv-wire" }));
+  svg.appendChild(s("path", { d: "M98,198 C132,198 122,276 156,276", class: "sv-wire" }));
+  const gate = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Let one more visitor through the gate" },
+    s("rect", { x: 20, y: 150, width: 78, height: 76, rx: 14, class: "sv-box" }),
+    draw.person(59, 192, "sv-fill-blue", 0.85));
+  svg.appendChild(gate);
+  svg.appendChild(txt(59, 246, "pool gate"));
+  svg.appendChild(txt(59, 262, "tap me"));
+  // stream panel
+  svg.appendChild(s("rect", { x: 156, y: 44, width: 344, height: 112, rx: 18, class: "sv-server" }));
+  svg.appendChild(txt(328, 68, "STREAM · counts every visitor at once", "sv-label", "middle", BOLD));
+  const live = txt(328, 116, "0", "sv-big"); svg.appendChild(live);
+  svg.appendChild(txt(328, 140, "visitors on the live board"));
+  // batch panel
+  svg.appendChild(s("rect", { x: 156, y: 220, width: 344, height: 112, rx: 18, class: "sv-box" }));
+  svg.appendChild(txt(328, 244, "BATCH · counts the pile at closing time", "sv-label", "middle", BOLD));
+  const report = txt(226, 294, "0", "sv-big"); svg.appendChild(report);
+  svg.appendChild(txt(226, 318, "in the report"));
+  const slots = [];
+  for (let i = 0; i < PILE; i++) {
+    const r = s("rect", { x: 306 + i * 30, y: 274, width: 22, height: 22, rx: 6, class: "sv-panel" });
+    svg.appendChild(r); slots.push(r);
+  }
+  svg.appendChild(txt(392, 318, "today's pile, not counted yet"));
+  const foot = txt(260, 360, "live board 0 · report 0"); svg.appendChild(foot);
+  const layer = s("g"); svg.appendChild(layer);
+
+  let n = 0, rep = 0, pile = 0, busy = false, visible = false;
+  function renderFoot() {
+    const behind = n - rep;
+    foot.textContent = "live board " + n + " · report " + rep + (behind ? " — the report is " + behind + " behind" : " — both agree, for a moment");
+  }
+  async function visitor() {
+    if (busy) return; busy = true;
+    const a = draw.parcel("sv-data", 16), b = draw.parcel("sv-data", 14);
+    layer.append(a, b);
+    await Promise.all([
+      K.path(a, [[98, 178], [156, 100], [300, 106]], 330),
+      K.path(b, [[98, 198], [156, 276], [317 + pile * 30, 285]], 330),
+    ]);
+    a.remove(); b.remove();
+    n++; live.textContent = String(n); pop(live);
+    slots[pile].setAttribute("class", "sv-data"); pile++;
+    renderFoot();
+    if (pile >= PILE) {
+      await sleep(500);
+      const ps = slots.map((r, i) => { const p = draw.parcel("sv-data", 14); layer.appendChild(p); return p; });
+      await Promise.all(ps.map((p, i) => fly(p, [317 + i * 30, 285], [232, 286], 420 + i * 60)));
+      ps.forEach((p) => p.remove());
+      slots.forEach((r) => r.setAttribute("class", "sv-panel"));
+      pile = 0; rep = n; report.textContent = String(rep); pop(report);
+      renderFoot();
+    }
+    busy = false;
+  }
+  onPress(gate, visitor);
+  whenVisible(svg, () => (visible = true), () => (visible = false));
+  renderFoot();
+  (async function auto() {
+    await sleep(900);
+    for (;;) { if (visible && !K.reduced && !document.hidden && !busy) await visitor(); await sleep(1500); }
+  })();
+})();
+
+/* ================= 1. DROP / BUFFER / BACKPRESSURE ================= */
+(function flowSim() {
+  const svg = K.$("#s1-svg");
+  const SLOTS = 12, BP_CAP = 4, STOP_AT = 40, LANE_Y = 130;
+  const slotX = (i) => 486 - Math.min(i, SLOTS - 1) * 28;
+  const lane = s("rect", { x: 160, y: LANE_Y - 26, width: 346, height: 52, rx: 14, class: "sv-panel" });
+  svg.appendChild(lane);
+  const laneLbl = txt(333, 88, "", "sv-label"); svg.appendChild(laneLbl);
+  const more = txt(172, 176, "", "sv-label", "start", { fill: "var(--coral)", fontWeight: 700 }); svg.appendChild(more);
+  // bp capacity marker
+  const capLine = s("line", { x1: 0, y1: LANE_Y - 32, x2: 0, y2: LANE_Y + 32, class: "sv-wire-solid", style: { stroke: "var(--sun)", strokeDasharray: "4 4" } });
+  svg.appendChild(capLine);
+  const prod = draw.server(80, LANE_Y, 96, 84); svg.appendChild(prod);
+  svg.appendChild(txt(80, 196, "producer", "sv-label", "middle", BOLD));
+  const prodState = txt(80, 212, "Ingrid, baking"); svg.appendChild(prodState);
+  const cons = draw.server(580, LANE_Y, 96, 84); svg.appendChild(cons);
+  svg.appendChild(txt(580, 196, "consumer", "sv-label", "middle", BOLD));
+  const consState = txt(580, 212, "Kofi, packing"); svg.appendChild(consState);
+  svg.appendChild(s("line", { x1: 128, y1: LANE_Y, x2: 160, y2: LANE_Y, class: "sv-wire" }));
+  svg.appendChild(s("line", { x1: 506, y1: LANE_Y, x2: 532, y2: LANE_Y, class: "sv-wire" }));
+  // the floor
+  svg.appendChild(s("rect", { x: 160, y: 250, width: 346, height: 40, rx: 12, class: "sv-panel", style: { strokeDasharray: "5 5" } }));
+  const floorLbl = txt(333, 275, "the floor · nothing lost", "sv-label"); svg.appendChild(floorLbl);
+  const layer = s("g"); svg.appendChild(layer);
+
+  const st = { sent: stat("Sent", 0), done: stat("Processed", 0), lost: stat("Dropped", 0, "good"), wait: stat("Waiting", 0), blk: stat("Blocked for", "0.0 s") };
+  K.$("#s1-stats").append(st.sent, st.done, st.lost, st.wait, st.blk);
+
+  let mode = 1, pRate = 2, cRate = 3, running = false, visible = false;
+  let items = [], waiting = [], eating = null, eatLeft = 0, pAcc = 0, nextId = 1;
+  let sent = 0, done = 0, lost = 0, blockedMs = 0, blocked = false, capKey = "", capAcc = 0;
+
+  function mk(id) {
+    const g = s("g", {}, s("rect", { x: -11, y: -11, width: 22, height: 22, rx: 6, class: "sv-data" }),
+      s("text", { x: 0, y: 4, class: "sv-label", "text-anchor": "middle", style: { fill: "var(--ink)", fontWeight: 700, fontSize: "10.5px" } }, String(id % 100)));
+    layer.appendChild(g);
+    return { id, g, x: 140, y: LANE_Y, st: "fly", op: 1 };
+  }
+  function place(it) { it.g.setAttribute("transform", "translate(" + it.x.toFixed(1) + "," + it.y.toFixed(1) + ")"); it.g.style.opacity = it.op; }
+  function staticRender() {
+    laneLbl.textContent = mode === 0 ? "no queue · an event needs a free consumer" : mode === 1 ? "queue in the broker's memory · 12 fit" : "small fixed buffer · room for " + BP_CAP;
+    capLine.style.opacity = mode === 2 ? 1 : 0;
+    const cx = slotX(BP_CAP - 1) - 15; capLine.setAttribute("x1", cx); capLine.setAttribute("x2", cx);
+    const over = mode === 1 && waiting.length > SLOTS;
+    lane.setAttribute("class", over ? "sv-bad" : "sv-panel");
+    more.textContent = over ? "+" + (waiting.length - SLOTS) + " more, spilling over" : "";
+    floorLbl.textContent = lost ? "the floor · " + lost + " dropped" : "the floor · nothing lost";
+    floorLbl.style.fill = lost ? "var(--coral)" : "";
+    prod.firstChild.setAttribute("class", blocked ? "sv-data-soft" : "sv-server");
+    prodState.textContent = blocked ? "BLOCKED, waiting" : "Ingrid, baking";
+    prodState.style.fill = blocked ? "var(--sun)" : "";
+    consState.textContent = eating ? "packing #" + (eating.id % 100) : "Kofi, free";
+    st.sent.set(sent); st.done.set(done); st.lost.set(lost, lost ? "bad" : "good");
+    st.wait.set(waiting.length, waiting.length > SLOTS ? "bad" : waiting.length > 4 ? "warn" : "");
+    st.blk.set((blockedMs / 1000).toFixed(1) + " s", blockedMs > 0 ? "warn" : "");
+  }
+  function narrate() {
+    let key;
+    if (!running) key = "idle";
+    else if (mode === 0) key = lost ? "drop" : "ok0";
+    else if (mode === 1) key = waiting.length > SLOTS ? "mem" : pRate > cRate ? "grow" : "ok1";
+    else key = blockedMs > 0 && pRate > cRate ? "bp" : "ok2";
+    if (key === capKey) return; capKey = key;
+    const msg = {
+      idle: "The belt is stopped. Press “Start the belt”.",
+      ok0: "<b>Drop mode.</b> There is no queue: an arriving event needs a free consumer. While the consumer is at least as fast as the producer, every event finds one.",
+      drop: "The consumer is still busy when the next event arrives, and there is nowhere to wait — so the event is <b>dropped</b>. Fine for a thermometer reading that will be replaced in a second; a disaster if you are <b>counting</b> things.",
+      ok1: "<b>Buffer mode.</b> Events wait in a queue. The consumer keeps up, so the queue stays short.",
+      grow: "The producer is faster, so the <b>queue grows</b> a little more every second. Nothing is lost and the producer never has to wait… for now. Keep watching the “waiting” number.",
+      mem: "The queue no longer fits in memory. A real broker must now either <b>crash</b> or spill to <b>disk</b>, which makes everything slower — and disks fill up too. Buffering only hides a speed problem; it doesn't solve it.",
+      ok2: "<b>Backpressure mode.</b> A small fixed buffer sits between the two, the way Unix pipes and TCP work. There's room, so the producer runs freely.",
+      bp: "The small buffer is full, so the producer is <b>blocked</b> until the consumer takes something out. Nothing is lost and memory stays bounded — the cost is the producer's waiting time, which pushes the slowdown upstream.",
+    }[key];
+    setCap("#s1-cap", msg);
+  }
+  function tick(dt) {
+    const k = K.reduced ? 1 : Math.min(1, dt / 90);
+    // producer
+    pAcc += dt;
+    const period = 1000 / pRate;
+    blocked = false;
+    if (pAcc >= period) {
+      const inFlight = items.filter((it) => it.st === "fly").length;
+      if (mode === 2 && waiting.length + inFlight >= BP_CAP) { blocked = true; blockedMs += dt; pAcc = period; }
+      else { pAcc -= period; if (pAcc > period) pAcc = 0; const it = mk(nextId++); items.push(it); sent++; }
+    }
+    // consumer
+    if (eating) {
+      eatLeft -= dt;
+      if (eatLeft <= 0) { eating.st = "gone"; eating = null; done++; }
+    }
+    if (!eating && waiting.length && waiting[0].x > slotX(0) - 6) {
+      eating = waiting.shift(); eating.st = "eat"; eatLeft = (1000 / cRate) * 0.97;
+    }
+    for (const it of items) {
+      if (it.st === "fly") {
+        const target = mode === 0 ? slotX(0) : slotX(waiting.length);
+        it.x += dt * 0.9;
+        if (it.x >= target) {
+          it.x = target;
+          if (mode === 0) {
+            if (!eating && !waiting.length) { it.st = "eat"; eating = it; eatLeft = (1000 / cRate) * 0.97; }
+            else { it.st = "fall"; lost++; it.g.firstChild.setAttribute("class", "sv-fill-coral"); }
+          } else { it.st = "wait"; waiting.push(it); }
+        }
+      } else if (it.st === "wait") {
+        const i = waiting.indexOf(it), tx = slotX(i);
+        it.x += (tx - it.x) * k * 0.6; it.op = i >= SLOTS ? 0 : 1;
+      } else if (it.st === "eat") {
+        it.x += (580 - it.x) * k * 0.5; it.op = Math.max(0, it.op - dt / 260);
+      } else if (it.st === "fall") {
+        it.y += dt * 0.22; if (it.y > 262) { it.y = 262; it.op -= dt / 500; if (it.op <= 0) it.st = "gone"; }
+      }
+      if (it.st === "gone") it.g.remove(); else place(it);
+    }
+    items = items.filter((it) => it.st !== "gone");
+    staticRender();
+    capAcc += dt; if (capAcc > 400) { capAcc = 0; narrate(); }
+    if (waiting.length >= STOP_AT) {
+      setRunning(false);
+      capKey = "stop";
+      setCap("#s1-cap", "<b>" + waiting.length + " events are waiting</b> and the pile was still growing, so the belt has been stopped. This is the question the book asks about every queue: what happens when it no longer fits in memory — and then when the disk fills up?");
+    }
+  }
+  const L = loop(tick);
+  const startB = h("button", { class: "btn primary", type: "button" }, "Start the belt");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  function setRunning(on) {
+    running = on; startB.textContent = on ? "Pause" : "Start the belt";
+    if (on && visible) L.start(); else L.stop();
+  }
+  function clearAll() {
+    items.forEach((it) => it.g.remove());
+    items = []; waiting = []; eating = null; pAcc = 0; nextId = 1;
+    sent = done = lost = 0; blockedMs = 0; blocked = false; capKey = "";
+  }
+  startB.addEventListener("click", () => { setRunning(!running); capKey = ""; narrate(); });
+  resetB.addEventListener("click", () => {
+    setRunning(false); clearAll();
+    [["#s1-p", 2], ["#s1-c", 3]].forEach(([id, v]) => { const el = K.$(id); el.value = v; el.dispatchEvent(new Event("input")); });
+    staticRender(); narrate();
+  });
+  const fmt = (v) => v + " / s";
+  K.$("#s1-controls").append(startB, resetB,
+    slider({ id: "s1-p", label: "Producer", min: 1, max: 6, step: 1, value: 2, format: fmt, onInput: (v) => { pRate = v; capKey = ""; } }),
+    slider({ id: "s1-c", label: "Consumer", min: 1, max: 6, step: 1, value: 3, format: fmt, onInput: (v) => { cRate = v; capKey = ""; } }));
+  K.$("#s1-seg").appendChild(modeSeg(["Drop", "Buffer", "Backpressure"], 1, "s1-mode", () => true, (i) => {
+    mode = i; clearAll(); staticRender(); capKey = ""; narrate();
+    if (!running) setCap("#s1-cap", ["<b>Drop:</b> no queue at all. An event that arrives while the consumer is busy is thrown away.", "<b>Buffer:</b> events wait in a queue that can grow and grow.", "<b>Backpressure:</b> a small fixed buffer; when it is full the producer has to wait."][i] + " Press “Start the belt”.");
+  }));
+  whenVisible(svg, () => { visible = true; if (running) L.start(); }, () => { visible = false; L.stop(); });
+  staticRender();
+})();
+
+/* ================= 2. BROKER: LOAD BALANCING, FAN-OUT, ACKS ================= */
+(function brokerSim() {
+  const svg = K.$("#s2-svg");
+  const N = 6, rowY = (i) => 92 + i * 31;
+  svg.appendChild(s("rect", { x: 24, y: 36, width: 226, height: 252, rx: 16, class: "sv-box" }));
+  svg.appendChild(txt(137, 60, "broker · queue “orders”", "sv-label", "middle", BOLD));
+  const CY = [104, 236];
+  svg.appendChild(s("path", { d: "M250,150 C286,150 280,104 316,104", class: "sv-wire" }));
+  svg.appendChild(s("path", { d: "M250,178 C286,178 280,236 316,236", class: "sv-wire" }));
+  const rows = [];
+  for (let i = 0; i < N; i++) {
+    const chip = s("rect", { x: 36, y: rowY(i) - 12, width: 40, height: 24, rx: 8, class: "sv-data-soft" });
+    const id = txt(56, rowY(i) + 4, "m" + (i + 1), "sv-label", "middle", BOLD);
+    const stt = txt(86, rowY(i) + 4, "", "sv-label", "start");
+    const g = s("g", { class: "fade" }, chip, id, stt);
+    svg.appendChild(g); rows.push({ g, chip, stt });
+  }
+  const cons = CY.map((cy, i) => {
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Crash or restart consumer " + (i + 1) });
+    const box = draw.server(360, cy, 88, 78); g.appendChild(box); svg.appendChild(g);
+    svg.appendChild(txt(360, cy + 58, "consumer " + (i + 1) + " (C" + (i + 1) + ")", "sv-label", "middle", BOLD));
+    const state = txt(360, cy + 74, "idle"); svg.appendChild(state);
+    svg.appendChild(txt(430, cy - 26, "processed, in this order:", "sv-label", "start"));
+    const list = s("g"); svg.appendChild(list);
+    const hold = s("g"); svg.appendChild(hold);
+    const c = { i, cy, g, box, state, list, hold, alive: true, holding: null, done: [] };
+    onPress(g, () => toggle(c));
+    return c;
+  });
+  const layer = s("g"); svg.appendChild(layer);
+  const st = { del: stat("Deliveries", 0), red: stat("Redelivered", 0), ooo: stat("Out of order", 0, "good") };
+  K.$("#s2-stats").append(st.del, st.red, st.ooo);
+
+  let mode = 0, busy = false, round = 0, msgs = [], deliveries = 0, redel = 0;
+  function init() {
+    msgs = Array.from({ length: N }, (_, i) => ({ id: i + 1, st: "queued", by: -1, again: false, per: ["queued", "queued"], againPer: [false, false] }));
+    cons.forEach((c) => { c.alive = true; c.holding = null; c.done = []; });
+    round = 0; deliveries = 0; redel = 0; K.clear(layer);
+  }
+  const inversions = (a) => { let n = 0; for (let i = 0; i < a.length; i++) for (let j = i + 1; j < a.length; j++) if (a[i] > a[j]) n++; return n; };
+  function render() {
+    msgs.forEach((m, i) => {
+      const r = rows[i]; let text, cls = "sv-data-soft", op = 1;
+      if (mode === 0) {
+        if (m.st === "acked") { text = "acked → deleted"; cls = "sv-panel"; op = 0.4; }
+        else if (m.st === "held") { text = "at C" + (m.by + 1) + " · no ack yet"; }
+        else if (m.again) { text = "no ack → redeliver"; cls = "sv-bad"; }
+        else text = "waiting";
+      } else {
+        const w = { queued: "wait", held: "busy", acked: "done" };
+        text = "C1 " + w[m.per[0]] + " · C2 " + w[m.per[1]];
+        if (m.per[0] === "acked" && m.per[1] === "acked") { text = "both acked → deleted"; cls = "sv-panel"; op = 0.4; }
+        else if (m.againPer[0] || m.againPer[1]) cls = "sv-bad";
+      }
+      r.stt.textContent = text; r.chip.setAttribute("class", cls); r.g.style.opacity = op;
+    });
+    let ooo = 0;
+    cons.forEach((c) => {
+      c.box.firstChild.setAttribute("class", c.alive ? "sv-server" : "sv-bad");
+      c.box.light.setAttribute("class", c.alive ? "sv-fill-mint" : "sv-fill-coral");
+      c.g.style.opacity = c.alive ? 1 : 0.6;
+      c.state.textContent = !c.alive ? "crashed" : c.holding ? "working on m" + c.holding : "idle";
+      c.state.style.fill = c.alive ? "" : "var(--coral)";
+      K.clear(c.hold);
+      if (c.holding) { const t = draw.tag("m" + c.holding, "sv-data-soft"); t.setAttribute("transform", "translate(360," + (c.cy + 8) + ")"); c.hold.appendChild(t); }
+      K.clear(c.list);
+      let max = 0;
+      c.done.forEach((id, k) => {
+        const late = id < max; max = Math.max(max, id);
+        c.list.appendChild(s("rect", { x: 430 + k * 35, y: c.cy - 14, width: 31, height: 26, rx: 8, class: late ? "sv-bad" : "sv-good" }));
+        c.list.appendChild(txt(445.5 + k * 35, c.cy + 3, "m" + id, "sv-label", "middle", BOLD));
+      });
+      if (!c.done.length) c.list.appendChild(txt(430, c.cy + 3, "nothing yet", "sv-label", "start", { opacity: 0.6 }));
+      ooo += inversions(c.done);
+    });
+    st.del.set(deliveries); st.red.set(redel, redel ? "warn" : ""); st.ooo.set(ooo, ooo ? "bad" : "good");
+    return ooo;
+  }
+  function toggle(c) {
+    if (busy) return;
+    c.alive = !c.alive;
+    if (!c.alive) {
+      const id = c.holding; c.holding = null;
+      if (id) {
+        const m = msgs[id - 1];
+        if (mode === 0) { m.st = "queued"; m.by = -1; m.again = true; } else { m.per[c.i] = "queued"; m.againPer[c.i] = true; }
+        setCap("#s2-cap", "Consumer " + (c.i + 1) + " crashed <b>while working on m" + id + "</b>. Its connection closes and no acknowledgment ever arrives, so the broker assumes m" + id + " was not processed and marks it for <b>redelivery</b>" + (mode === 0 ? " — to whichever consumer is free next." : " — to consumer " + (c.i + 1) + " itself, because in fan-out every consumer has its own queue."));
+      } else setCap("#s2-cap", "Consumer " + (c.i + 1) + " crashed while idle. It wasn't holding a message, so nothing needs redelivering.");
+    } else setCap("#s2-cap", "Consumer " + (c.i + 1) + " is back online and asks the broker for work." + (mode === 1 ? " Its own queue kept everything it missed, in order." : ""));
+    render();
+  }
+  async function deliver() {
+    if (busy) return; busy = true;
+    // 1. consumers finish what they hold and acknowledge it
+    const acking = cons.filter((c) => c.alive && c.holding);
+    acking.forEach((c) => { c.done.push(c.holding); });
+    const ackIds = acking.map((c) => c.holding);
+    acking.forEach((c) => { c.holding = null; });
+    render();
+    await Promise.all(acking.map(async (c, k) => {
+      const a = draw.tag("ack", "sv-good"); layer.appendChild(a);
+      await fly(a, [316, c.cy], [250, rowY(ackIds[k] - 1)], 420); a.remove();
+      const m = msgs[ackIds[k] - 1];
+      if (mode === 0) m.st = "acked"; else m.per[c.i] = "acked";
+    }));
+    render();
+    // 2. hand out the next messages
+    const order = (round % 2 === 0 ? [0, 1] : [1, 0]).map((i) => cons[i]).filter((c) => c.alive);
+    const plan = [];
+    if (mode === 0) {
+      const cands = msgs.filter((m) => m.st === "queued");
+      order.forEach((c, k) => { if (cands[k]) plan.push([c, cands[k]]); });
+    } else {
+      cons.filter((c) => c.alive).forEach((c) => { const m = msgs.find((x) => x.per[c.i] === "queued"); if (m) plan.push([c, m]); });
+    }
+    let wasRedelivery = null;
+    await Promise.all(plan.map(async ([c, m]) => {
+      const again = mode === 0 ? m.again : m.againPer[c.i];
+      if (mode === 0) { m.st = "held"; m.by = c.i; m.again = false; } else { m.per[c.i] = "held"; m.againPer[c.i] = false; }
+      const t = draw.tag("m" + m.id, again ? "sv-bad" : "sv-data-soft"); layer.appendChild(t);
+      await fly(t, [250, rowY(m.id - 1)], [360, c.cy + 8], 560); t.remove();
+      c.holding = m.id; deliveries++;
+      if (again) { redel++; wasRedelivery = [c, m]; }
+    }));
+    round++;
+    const ooo = render();
+    const allDone = msgs.every((m) => (mode === 0 ? m.st === "acked" : m.per.every((p) => p === "acked")));
+    if (allDone) setCap("#s2-cap", "Every message has been acknowledged, so the broker has <b>deleted them all</b>. " + (ooo ? "Nothing was lost — but consumer 1 handled a message <b>out of order</b>, which matters whenever one message depends on another." : "A consumer that subscribes now would find nothing: this kind of broker keeps no history."));
+    else if (!cons.some((c) => c.alive)) setCap("#s2-cap", "Nobody is online. The broker simply <b>holds on to the messages</b> until a consumer connects — that is the point of having a broker in the middle.");
+    else if (wasRedelivery && mode === 0) setCap("#s2-cap", "m" + wasRedelivery[1].id + " is <b>redelivered</b> to consumer " + (wasRedelivery[0].i + 1) + " — after it already handled a later message. Look at its list: the order the producer sent is gone. Load balancing plus redelivery <b>inevitably reorders</b> messages.");
+    else if (wasRedelivery) setCap("#s2-cap", "m" + wasRedelivery[1].id + " is redelivered to the <b>same</b> consumer, from its own queue, before anything newer. With a separate queue per consumer the order survives a crash.");
+    else if (!plan.length) setCap("#s2-cap", "The last acknowledgments are in. Nothing is left to hand out" + (cons.every((c) => c.alive) ? "." : " to the consumers that are online — the crashed one's backlog sits in the broker, using up memory, until it returns."));
+    else if (mode === 0) setCap("#s2-cap", (ackIds.length ? "Finished messages are <b>acknowledged</b> and deleted from the broker. " : "") + "<b>Load balancing:</b> each message goes to <i>one</i> consumer — " + plan.map(([c, m]) => "m" + m.id + " to C" + (c.i + 1)).join(", ") + ". Until the ack comes back, the broker keeps its copy.");
+    else setCap("#s2-cap", (ackIds.length ? "Acks come back; a message is deleted once <i>both</i> have acknowledged it. " : "") + "<b>Fan-out:</b> every consumer gets its own copy of every message, in order — " + plan.map(([c, m]) => "m" + m.id + " to C" + (c.i + 1)).join(", ") + ".");
+    busy = false;
+  }
+  const goB = h("button", { class: "btn primary", type: "button" }, "Deliver the next round");
+  const rstB = h("button", { class: "btn", type: "button" }, "Reset");
+  goB.addEventListener("click", deliver);
+  function reset() { init(); render(); setCap("#s2-cap", mode === 0 ? "Six messages are waiting in the broker. Both consumers are idle and will <b>share</b> the messages." : "Six messages are waiting. Each consumer will receive <b>its own copy of all six</b>."); }
+  rstB.addEventListener("click", () => { if (!busy) reset(); });
+  K.$("#s2-controls").append(goB, rstB, h("span", { class: "grow" }), h("span", { class: "pill info" }, h("i"), "click a consumer while it is working"));
+  K.$("#s2-seg").appendChild(modeSeg(["Load balancing", "Fan-out"], 0, "s2-mode", () => !busy, (i) => { mode = i; reset(); }));
+  reset();
+})();
+
+/* ================= 3. THE PARTITIONED LOG ================= */
+(function logSim() {
+  const svg = K.$("#s3-svg");
+  const COLS = 8, SEG = 4, X0 = 124, PITCH = 56, CW = 52, ROWY = [62, 146], CH = 36;
+  const USERS = [["ana", 0], ["ben", 1], ["cy", 0], ["dee", 1]];
+  const cx = (c) => X0 + c * PITCH + CW / 2;
+  // segment backgrounds
+  const segLbl = [];
+  [0, 1].forEach((k) => {
+    svg.appendChild(s("rect", { x: X0 - 1.5 + k * SEG * PITCH, y: 38, width: SEG * PITCH - 1, height: 166, rx: 10, class: "sv-panel", style: { opacity: 0.7 } }));
+    const t = txt(X0 + k * SEG * PITCH + (SEG * PITCH - 4) / 2, 30, "", "sv-label"); svg.appendChild(t); segLbl.push(t);
+  });
+  svg.appendChild(txt(112, ROWY[0] + 16, "partition 0", "sv-label", "end", BOLD));
+  svg.appendChild(txt(112, ROWY[0] + 31, "ana · cy", "sv-label", "end"));
+  svg.appendChild(txt(112, ROWY[1] + 16, "partition 1", "sv-label", "end", BOLD));
+  svg.appendChild(txt(112, ROWY[1] + 31, "ben · dee", "sv-label", "end"));
+  svg.appendChild(txt(112, 226, "offset", "sv-label", "end"));
+  const cells = [[], []], ruler = [];
+  for (let p = 0; p < 2; p++) for (let c = 0; c < COLS; c++) {
+    const r = s("rect", { x: X0 + c * PITCH, y: ROWY[p], width: CW, height: CH, rx: 8, class: "sv-box" });
+    const t = txt(cx(c), ROWY[p] + 23, "", "sv-label", "middle", BOLD);
+    svg.append(r, t); cells[p].push({ r, t });
+  }
+  for (let c = 0; c < COLS; c++) { const t = txt(cx(c), 226, String(c)); svg.appendChild(t); ruler.push(t); }
+  // bookmarks: fast (mint, above, pointing down) and slow (lilac, below, pointing up)
+  const marks = [0, 1].map((p) => ({
+    fast: s("path", { d: "M-8,-9 L8,-9 L0,2 Z", class: "sv-fill-mint" }),
+    slow: s("path", { d: "M-8,9 L8,9 L0,-2 Z", class: "sv-fill-lilac" }),
+  }));
+  marks.forEach((m) => svg.append(m.fast, m.slow));
+  // producer
+  svg.appendChild(s("rect", { x: 580, y: 96, width: 66, height: 50, rx: 12, class: "sv-server" }));
+  svg.appendChild(txt(613, 125, "producer", "sv-label", "middle", BOLD));
+  // consumers
+  const boxes = [
+    { x: 124, name: "live board (automatic)", cls: "sv-fill-mint" },
+    { x: 354, name: "night reporter (manual)", cls: "sv-fill-lilac" },
+  ].map((b) => {
+    svg.appendChild(s("rect", { x: b.x, y: 250, width: 214, height: 62, rx: 14, class: "sv-server" }));
+    svg.appendChild(s("circle", { cx: b.x + 16, cy: 270, r: 5, class: b.cls }));
+    svg.appendChild(txt(b.x + 28, 274, b.name, "sv-label", "start", BOLD));
+    const line = txt(b.x + 16, 297, "", "sv-label", "start"); svg.appendChild(line);
+    return { line, cx: b.x + 107 };
+  });
+  const layer = s("g"); svg.appendChild(layer);
+  const st = { disk: stat("Lines on disk", 0), fl: stat("Live board lag", 0, "good"), sl: stat("Reporter lag", 0), miss: stat("Reporter missed", 0, "good") };
+  K.$("#s3-stats").append(st.disk, st.fl, st.sl, st.miss);
+
+  let P, base, fast, slow, counts, turn, busy = false, reads, missed, lastRead;
+  function init() {
+    P = [[], []]; base = 0; counts = { ana: 0, ben: 0, cy: 0, dee: 0 }; turn = 0; reads = [0, 0]; missed = 0; lastRead = ["—", "—"];
+    for (let k = 0; k < 6; k++) { const [u, p] = USERS[turn % 4]; turn++; counts[u]++; P[p].push(u + " " + counts[u]); }
+    fast = [3, 3]; slow = [1, 1]; reads = [6, 2]; lastRead = ["ben 2", "ben 1"]; K.clear(layer);
+  }
+  const lagOf = (o) => (P[0].length - o[0]) + (P[1].length - o[1]);
+  function render() {
+    for (let p = 0; p < 2; p++) for (let c = 0; c < COLS; c++) {
+      const v = P[p][base + c], cell = cells[p][c];
+      cell.t.textContent = v || ""; cell.r.setAttribute("class", v ? "sv-data-soft" : "sv-box"); cell.r.style.opacity = v ? 1 : 0.55;
+    }
+    ruler.forEach((t, c) => (t.textContent = String(base + c)));
+    segLbl.forEach((t, k) => (t.textContent = "segment · offsets " + (base + k * SEG) + "–" + (base + k * SEG + SEG - 1) + (k === 0 ? " (oldest)" : "")));
+    marks.forEach((m, p) => {
+      m.fast.setAttribute("transform", "translate(" + cx(Math.min(fast[p] - base, COLS - 1) + (fast[p] - base >= COLS ? 0.5 : 0)) + "," + (ROWY[p] - 4) + ")");
+      m.slow.setAttribute("transform", "translate(" + cx(Math.min(slow[p] - base, COLS - 1) + (slow[p] - base >= COLS ? 0.5 : 0)) + "," + (ROWY[p] + CH + 4) + ")");
+    });
+    boxes[0].line.textContent = "read " + reads[0] + " lines · last: " + lastRead[0];
+    boxes[1].line.textContent = "read " + reads[1] + " lines · last: " + lastRead[1];
+    const fl = lagOf(fast), sl = lagOf(slow);
+    st.disk.set(P[0].length + P[1].length - 2 * base);
+    st.fl.set(fl, fl ? "warn" : "good"); st.sl.set(sl, sl > 6 ? "bad" : sl ? "warn" : "good"); st.miss.set(missed, missed ? "bad" : "good");
+    delB.disabled = !canDelete();
+  }
+  const canDelete = () => P[0].length - base > SEG && P[1].length - base > SEG;
+  async function readOne(who, p) {
+    const o = who === 0 ? fast : slow;
+    const c = o[p] - base, label = P[p][o[p]];
+    const t = draw.tag(label, who === 0 ? "sv-good" : "sv-db"); layer.appendChild(t);
+    await fly(t, [cx(c), ROWY[p] + CH / 2], [boxes[who].cx, 292], 480); t.remove();
+    o[p]++; reads[who]++; lastRead[who] = label; render();
+  }
+  async function send() {
+    if (busy) return;
+    const [u, p] = USERS[turn % 4];
+    if (P[p].length - base >= COLS) { setCap("#s3-cap", "This toy page is full. In real life that is a full disk — press <b>Delete the oldest segment</b> to make room, as a real broker does from time to time."); return; }
+    busy = true; turn++; counts[u]++;
+    const label = u + " " + counts[u], c = P[p].length - base;
+    const t = draw.tag(label, "sv-data-soft"); layer.appendChild(t);
+    await fly(t, [580, 121], [cx(c), ROWY[p] + CH / 2], 520); t.remove();
+    P[p].push(label); render(); pop(cells[p][c].r);
+    setCap("#s3-cap", "The key <b>" + u + "</b> always maps to <b>partition " + p + "</b>, so all of " + u + "'s events sit in one partition, in order. The event is appended at the end and gets the next offset, <b>" + (P[p].length - 1) + "</b>. The live board is notified and reads it right away.");
+    await sleep(250);
+    while (fast[p] < P[p].length) await readOne(0, p);
+    busy = false;
+  }
+  async function slowRead() {
+    if (busy) return;
+    const todo = [0, 1].filter((p) => slow[p] < P[p].length);
+    if (!todo.length) { setCap("#s3-cap", "The night reporter has reached the end of both partitions. Now it simply waits for a notification that something new was appended."); return; }
+    busy = true;
+    for (const p of todo) await readOne(1, p);
+    setCap("#s3-cap", "The night reporter reads the next line of each partition and moves its bookmark forward. <b>Nothing was deleted</b> — reading a log is like reading a file. Its only side effect is the bookmark, and the live board's bookmark isn't touched at all.");
+    busy = false;
+  }
+  function rewind() {
+    if (busy) return;
+    slow = [base, base]; render();
+    setCap("#s3-cap", "The night reporter's bookmark jumps back to the oldest line still on disk (offset " + base + "). Now press “Reporter reads” — it will process the same events <b>again</b>, perhaps with fixed code, and the log doesn't mind. That is <b>replay</b>.");
+  }
+  async function del() {
+    if (busy || !canDelete()) return;
+    busy = true;
+    for (let p = 0; p < 2; p++) for (let c = 0; c < SEG; c++) cells[p][c].r.setAttribute("class", "sv-bad");
+    await sleep(650);
+    const newBase = base + SEG; let lost = 0;
+    [fast, slow].forEach((o, who) => o.forEach((v, p) => { if (v < newBase) { if (who === 1) lost += newBase - v; o[p] = newBase; } }));
+    missed += lost; base = newBase; render();
+    setCap("#s3-cap", "The oldest segment is deleted to free disk space, and the page scrolls on. " + (lost ? "The night reporter's bookmark pointed into that segment, so it <b>missed " + lost + " event" + (lost === 1 ? "" : "s") + "</b> for good. Notice that <b>only the slow reader was hurt</b>; the live board never noticed." : "Both readers were already past it, so nobody lost anything. The log is a big ring buffer: fine, as long as readers don't fall further behind than it can hold."));
+    busy = false;
+  }
+  const sendB = h("button", { class: "btn primary", type: "button" }, "Send an event");
+  const readB = h("button", { class: "btn", type: "button" }, "Reporter reads");
+  const rewB = h("button", { class: "btn", type: "button" }, "Rewind reporter");
+  const delB = h("button", { class: "btn danger", type: "button" }, "Delete the oldest segment");
+  const rstB = h("button", { class: "btn", type: "button" }, "Reset");
+  sendB.addEventListener("click", send); readB.addEventListener("click", slowRead);
+  rewB.addEventListener("click", rewind); delB.addEventListener("click", del);
+  rstB.addEventListener("click", () => { if (busy) return; init(); render(); setCap("#s3-cap", "Six events are already in the log. The live board has read them all; the night reporter has read one from each partition."); });
+  K.$("#s3-controls").append(sendB, readB, rewB, delB, rstB);
+  init(); render();
+})();
+
+/* ================= 4. DUAL WRITES vs CHANGE DATA CAPTURE ================= */
+(function syncSim() {
+  const svg = K.$("#s4-svg");
+  const PEOPLE = [{ name: "Mei", wants: "pizza", y: 84, cls: "sv-fill-lilac" }, { name: "Omar", wants: "soup", y: 236, cls: "sv-fill-blue" }];
+  PEOPLE.forEach((p) => {
+    svg.appendChild(draw.person(60, p.y, p.cls));
+    svg.appendChild(txt(60, p.y + 38, p.name, "sv-label", "middle", BOLD));
+    svg.appendChild(txt(60, p.y + 54, "Fri = " + p.wants));
+  });
+  const wires = s("g"), body = s("g"), layer = s("g");
+  svg.append(wires, body, layer);
+  const st = { runs: stat("Saves", 0), diff: stat("Ended different", 0, "good"), lag: stat("Board behind by", 0) };
+  K.$("#s4-stats").append(st.runs, st.diff, st.lag);
+
+  let mode = 0, busy = false, runs = 0, diffs = 0, idxUp = true;
+  let val, heard, log, idxOff, els;
+  function init() { val = { db: "pasta", idx: "pasta", cache: "pasta" }; heard = { db: [], idx: [] }; log = []; idxOff = 0; runs = 0; diffs = 0; idxUp = true; K.clear(layer); }
+  function store(cx, cy, label, key, clickable) {
+    const g = s("g", clickable ? { class: "clickable", tabindex: "0", role: "button", "aria-label": "Switch the hallway board off or on" } : {});
+    g.appendChild(draw.db(cx, cy, 104, 92, label));
+    g.appendChild(s("rect", { x: cx - 45, y: cy - 8, width: 90, height: 24, rx: 8, class: "sv-box" }));
+    const v = txt(cx, cy + 8, "", "sv-label", "middle", BOLD); g.appendChild(v);
+    body.appendChild(g);
+    if (clickable) onPress(g, toggleIdx);
+    return { g, v, cx, cy };
+  }
+  function build() {
+    K.clear(wires); K.clear(body); els = {};
+    if (mode === 0) {
+      [["M84,80 L278,80"], ["M84,92 C170,92 190,232 278,232"], ["M84,228 C170,228 190,92 278,92"], ["M84,240 L278,240"]].forEach(([d]) => wires.appendChild(s("path", { d, class: "sv-wire" })));
+      els.db = store(330, 84, "office database", "db");
+      els.idx = store(330, 236, "hallway board (search index)", "idx", true);
+      body.appendChild(txt(400, 76, "heard, in this order:", "sv-label", "start"));
+      els.hdb = txt(400, 96, "—", "sv-label", "start", BOLD); body.appendChild(els.hdb);
+      body.appendChild(txt(400, 228, "heard, in this order:", "sv-label", "start"));
+      els.hidx = txt(400, 248, "—", "sv-label", "start", BOLD); body.appendChild(els.hidx);
+      els.badgeAt = [520, 160];
+    } else {
+      [["M84,84 L196,84"], ["M84,232 C150,232 140,100 196,100"], ["M304,80 L358,80"], ["M494,122 C494,160 400,150 400,186"], ["M494,122 C494,160 570,150 570,186"]].forEach(([d]) => wires.appendChild(s("path", { d, class: "sv-wire" })));
+      els.db = store(250, 84, "office database (leader)", "db");
+      els.idx = store(400, 236, "hallway board (search index)", "idx", true);
+      els.cache = store(570, 236, "cache", "cache");
+      body.appendChild(txt(494, 48, "the database's change log", "sv-label", "middle", BOLD));
+      els.cells = [0, 1, 2, 3].map((i) => {
+        const r = s("rect", { x: 360 + i * 68, y: 60, width: 64, height: 36, rx: 8, class: "sv-box" });
+        const t = txt(392 + i * 68, 83, "", "sv-label", "middle", BOLD);
+        const o = txt(392 + i * 68, 112, "", "sv-label");
+        body.append(r, t, o); return { r, t, o };
+      });
+      els.badgeAt = [250, 176];
+    }
+    const [bx, by] = els.badgeAt;
+    els.badgeR = s("rect", { x: bx - 104, y: by - 15, width: 208, height: 30, rx: 15, class: "sv-good" });
+    els.badgeT = txt(bx, by + 4, "", "sv-label", "middle", BOLD);
+    body.append(els.badgeR, els.badgeT);
+  }
+  function render() {
+    els.db.v.textContent = "Fri = " + val.db;
+    els.idx.v.textContent = idxUp ? "Fri = " + val.idx : "switched off";
+    els.idx.g.style.opacity = idxUp ? 1 : 0.55;
+    els.idx.g.querySelectorAll(".sv-db, .sv-bad").forEach((n) => n.setAttribute("class", idxUp ? "sv-db" : "sv-bad"));
+    if (els.cache) els.cache.v.textContent = "Fri = " + val.cache;
+    if (mode === 0) { els.hdb.textContent = heard.db.join(" → ") || "—"; els.hidx.textContent = heard.idx.join(" → ") || "—"; }
+    else {
+      const first = Math.max(0, log.length - 4);
+      els.cells.forEach((c, i) => {
+        const e = log[first + i];
+        c.t.textContent = e || ""; c.o.textContent = e ? "offset " + (first + i) : "";
+        c.r.setAttribute("class", e ? (first + i < idxOff ? "sv-good" : "sv-data-soft") : "sv-box"); c.r.style.opacity = e ? 1 : 0.5;
+      });
+    }
+    const behind = mode === 1 ? log.length - idxOff : 0, same = val.db === val.idx;
+    const tone = same ? "sv-good" : behind ? "sv-data-soft" : "sv-bad";
+    els.badgeR.setAttribute("class", tone);
+    els.badgeT.textContent = same ? "office = hallway · in sync" : behind ? "hallway is behind, not wrong" : "office ≠ hallway · forever";
+    st.runs.set(runs); st.diff.set(diffs, diffs ? "bad" : "good"); st.lag.set(behind, behind ? "warn" : "");
+  }
+  function latencies() {
+    if (runs === 0) return [520, 1000, 800, 640]; // Mei→db, Mei→idx, Omar→db, Omar→idx: the book's unlucky interleaving
+    for (;;) { const l = [0, 0, 0, 0].map(() => 450 + Math.random() * 650); if (Math.abs(l[0] - l[2]) > 160 && Math.abs(l[1] - l[3]) > 160) return l; }
+  }
+  async function send(text, from, to, ms, cls) {
+    const t = draw.tag(text, cls || "sv-data-soft"); layer.appendChild(t);
+    await fly(t, from, to, ms, ease.linear); return t;
+  }
+  async function run() {
+    if (busy) return; busy = true;
+    const l = latencies();
+    heard = { db: [], idx: [] };
+    if (mode === 0) {
+      setCap("#s4-cap", "Both press save. Each of them writes to the <b>database</b> and to the <b>hallway board</b> — four messages, each taking its own time through the network…");
+      const jobs = [];
+      PEOPLE.forEach((p, i) => {
+        jobs.push((async () => { const t = await send(p.wants, [84, p.y], [278, i ? 92 : 80], l[i * 2]); t.remove(); val.db = p.wants; heard.db.push(p.wants); render(); })());
+        jobs.push((async () => {
+          const t = await send(p.wants, [84, p.y + 6], [278, i ? 240 : 232], l[i * 2 + 1]);
+          if (idxUp) { t.remove(); val.idx = p.wants; heard.idx.push(p.wants); render(); }
+          else { t.firstChild.setAttribute("class", "sv-bad"); t.setAttribute("class", "sv-shake"); await sleep(450); t.remove(); heard.idx.push("(lost)"); render(); }
+        })());
+      });
+      await Promise.all(jobs);
+      runs++; const same = val.db === val.idx; if (!same) diffs++;
+      render();
+      setCap("#s4-cap", !idxUp
+        ? "The hallway board was off, so its two writes simply <b>failed</b> while the database's succeeded. One half of a dual write worked and the other didn't — making both succeed or both fail is the <b>atomic commit</b> problem, and nothing here solves it."
+        : same
+        ? "This time the messages happened to arrive in the same order at both places, so they agree on <b>" + val.db + "</b>. Pure luck — press again."
+        : "The database heard <b>" + heard.db.join(", then ") + "</b>. The board heard <b>" + heard.idx.join(", then ") + "</b>. Each kept the <i>last</i> thing it heard, so they now disagree — <b>permanently</b>, and no error was ever shown. Neither system follows the other, so nobody is in charge of the order.");
+    } else {
+      setCap("#s4-cap", "Both press save — but now they write to the <b>database only</b>. Whatever order the two writes arrive in, the database picks <i>one</i> order and writes it into its change log.");
+      const arrive = PEOPLE.map((p, i) => (async () => {
+        const t = await send(p.wants, [84, p.y], [196, i ? 100 : 84], l[i * 2]); t.remove();
+        val.db = p.wants; log.push(p.wants); render();
+        const c = els.cells[Math.min(log.length - 1, 3)]; pop(c.r);
+      })());
+      await Promise.all(arrive);
+      await sleep(350);
+      await ship();
+      runs++; render();
+      setCap("#s4-cap", idxUp
+        ? "The followers apply the log <b>in the same order</b> the database wrote it, so everyone ends on <b>" + val.db + "</b>. The order of arrival can change from run to run; the followers can never disagree with the leader about it. Adding a data warehouse later is just one more reader of the same log."
+        : "The board is off, so its part of the log just <b>waits</b>. The cache is already up to date. The board isn't wrong, only <b>behind</b> — switch it back on and it will catch up from its saved offset.");
+    }
+    busy = false;
+  }
+  async function ship() {
+    const first = Math.max(0, log.length - 4);
+    const from = (o) => [392 + Math.max(0, o - first) * 68, 78];
+    const cacheFrom = log.length - 2;
+    for (let o = Math.min(idxUp ? idxOff : cacheFrom, cacheFrom); o < log.length; o++) {
+      const jobs = [];
+      if (o >= cacheFrom) jobs.push((async () => { const t = await send(log[o], from(o), [570, 196], 520); t.remove(); val.cache = log[o]; })());
+      if (idxUp && o >= idxOff) jobs.push((async () => { const t = await send(log[o], from(o), [400, 196], 520); t.remove(); val.idx = log[o]; idxOff = o + 1; })());
+      await Promise.all(jobs); render();
+    }
+  }
+  async function toggleIdx() {
+    if (busy) return;
+    idxUp = !idxUp; render();
+    if (!idxUp) { setCap("#s4-cap", "The hallway board is <b>switched off</b>. Now press “Both save at once”."); return; }
+    if (mode === 0) { setCap("#s4-cap", val.db === val.idx ? "The board is back on." : "The board is back on — but the writes it missed are <b>gone for good</b>. Nobody kept them, and nothing will ever send them again."); return; }
+    if (idxOff < log.length) {
+      busy = true;
+      setCap("#s4-cap", "The board is back on. It remembers its offset (<b>" + idxOff + "</b>) and replays everything after it, in order…");
+      const first = Math.max(0, log.length - 4);
+      for (let o = idxOff; o < log.length; o++) {
+        const t = await send(log[o], [392 + Math.max(0, o - first) * 68, 78], [400, 196], 460); t.remove();
+        val.idx = log[o]; idxOff = o + 1; render();
+      }
+      setCap("#s4-cap", "Caught up. Because the log kept every change in order, being offline cost the board some <b>delay</b> but no <b>correctness</b>.");
+      busy = false;
+    } else setCap("#s4-cap", "The board is back on, and it hadn't missed anything.");
+  }
+  function reset() { init(); build(); render(); setCap("#s4-cap", mode === 0 ? "Friday says “pasta” everywhere. Mei wants pizza; Omar wants soup. Each will write to <b>both</b> systems." : "Friday says “pasta” everywhere. Now only the database takes writes; the board and the cache <b>follow its change log</b>."); }
+  const goB = h("button", { class: "btn primary", type: "button" }, "Both save at once");
+  const rstB = h("button", { class: "btn", type: "button" }, "Reset");
+  goB.addEventListener("click", run);
+  rstB.addEventListener("click", () => { if (!busy) reset(); });
+  K.$("#s4-controls").append(goB, rstB);
+  K.$("#s4-seg").appendChild(modeSeg(["Dual writes", "Change data capture"], 0, "s4-mode", () => !busy, (i) => { mode = i; reset(); }));
+  reset();
+})();
+
+/* ================= 5. SNAPSHOTS AND LOG COMPACTION ================= */
+(function compactSim() {
+  const svg = K.$("#s5-svg");
+  const KEYS = ["mew", "purr", "scratch", "yawn"], CAP = 8, X0 = 35, PITCH = 74, CW = 70;
+  const cellX = (i) => X0 + i * PITCH + CW / 2;
+  svg.appendChild(txt(330, 26, "change log · every play appends one line", "sv-label", "middle", BOLD));
+  const cells = [];
+  for (let i = 0; i < CAP; i++) {
+    const r = s("rect", { x: X0 + i * PITCH, y: 38, width: CW, height: 46, rx: 9, class: "sv-box" });
+    const k = txt(cellX(i), 58, "", "sv-label", "middle", BOLD), v = txt(cellX(i), 75, "");
+    const g = s("g", { class: "fade" }, r, k, v); svg.appendChild(g); cells.push({ g, r, k, v });
+  }
+  const offLbl = txt(330, 104, ""); svg.appendChild(offLbl);
+  function panel(x, title, sub) {
+    svg.appendChild(s("rect", { x, y: 122, width: 222, height: 194, rx: 16, class: "sv-db" }));
+    svg.appendChild(txt(x + 111, 146, title, "sv-label", "middle", BOLD));
+    const subT = txt(x + 111, 162, sub); svg.appendChild(subT);
+    return subT;
+  }
+  panel(35, "source database", "click a video to play it");
+  const idxSub = panel(403, "new search index", "not built yet");
+  const rowY = (i) => 176 + i * 34;
+  const dbRows = KEYS.map((key, i) => {
+    const r = s("rect", { x: 47, y: rowY(i), width: 198, height: 28, rx: 8, class: "sv-box" });
+    const t = txt(60, rowY(i) + 18, "", "sv-label", "start", BOLD);
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Play the video " + key }, r, t);
+    svg.appendChild(g); onPress(g, () => play(key));
+    return { r, t };
+  });
+  const idxRows = KEYS.map((key, i) => {
+    const r = s("rect", { x: 415, y: rowY(i), width: 198, height: 28, rx: 8, class: "sv-box" });
+    const t = txt(428, rowY(i) + 18, "", "sv-label", "start", BOLD);
+    svg.append(r, t); return { r, t };
+  });
+  svg.appendChild(s("path", { d: "M270,218 L388,218", class: "sv-wire" }));
+  const midLbl = txt(329, 208, ""); svg.appendChild(midLbl);
+  const layer = s("g"); svg.appendChild(layer);
+  const st = { len: stat("Lines in log", 0), rep: stat("Lines replayed", "—"), miss: stat("Videos missing", "—") };
+  K.$("#s5-stats").append(st.len, st.rep, st.miss);
+
+  let policy = 2, busy = false, db, log, nextOff, idx, built, replayed;
+  function init() {
+    db = { mew: 3, purr: 2, yawn: 1 }; nextOff = 0; idx = null; built = false; replayed = null;
+    log = [["mew", 1], ["yawn", 1], ["purr", 1], ["mew", 2], ["purr", 2], ["mew", 3]].map(([k, v]) => ({ k, v, off: nextOff++ }));
+    K.clear(layer);
+  }
+  function render() {
+    cells.forEach((c, i) => {
+      const e = log[i];
+      c.k.textContent = e ? e.k : ""; c.v.textContent = e ? (e.v === null ? "deleted" : e.v + (e.v === 1 ? " play" : " plays")) : "";
+      c.v.style.fill = e && e.v === null ? "var(--coral)" : "";
+      c.r.setAttribute("class", e ? (e.v === null ? "sv-bad" : "sv-data-soft") : "sv-box"); c.g.style.opacity = e ? 1 : 0.5;
+    });
+    offLbl.textContent = log.length ? "oldest line kept: offset " + log[0].off + " · next line gets offset " + nextOff : "the log is empty · next line gets offset " + nextOff;
+    dbRows.forEach((row, i) => {
+      const key = KEYS[i], v = db[key];
+      row.t.textContent = v === undefined ? key + " · no plays yet" : "▶ " + key + " · " + v + (v === 1 ? " play" : " plays");
+      row.t.style.opacity = v === undefined ? 0.55 : 1;
+    });
+    let missing = 0;
+    idxRows.forEach((row, i) => {
+      const key = KEYS[i], want = db[key], got = idx ? idx[key] : undefined;
+      let cls = "sv-box", text = "—", op = 0.5;
+      if (built) {
+        if (want === undefined && got === undefined) { text = "—"; }
+        else if (got === want) { text = key + " · " + got + (got === 1 ? " play" : " plays"); cls = "sv-good"; op = 1; }
+        else { text = got === undefined ? key + " · MISSING" : key + " · " + got + " (stale)"; cls = "sv-bad"; op = 1; missing++; }
+      } else if (got !== undefined) { text = key + " · " + got + (got === 1 ? " play" : " plays"); cls = "sv-data-soft"; op = 1; }
+      row.t.textContent = text; row.r.setAttribute("class", cls); row.r.style.opacity = op; row.t.style.opacity = op;
+    });
+    st.len.set(log.length, log.length >= CAP ? "bad" : ""); st.rep.set(replayed === null ? "—" : replayed);
+    st.miss.set(built ? missing : "—", built ? (missing ? "bad" : "good") : "");
+    return missing;
+  }
+  const stale = () => { if (built) { built = false; idx = null; replayed = null; idxSub.textContent = "out of date — build it again"; midLbl.textContent = ""; } };
+  async function append(e, fromY) {
+    const i = log.length;
+    const t = draw.tag(e.k + " " + (e.v === null ? "deleted" : e.v), e.v === null ? "sv-bad" : "sv-data-soft"); layer.appendChild(t);
+    await fly(t, [146, fromY], [cellX(i), 61], 520); t.remove();
+    log.push(e); render(); pop(cells[i].r);
+  }
+  async function play(key) {
+    if (busy) return;
+    if (log.length >= CAP) { setCap("#s5-cap", "The log is <b>full</b> (this toy disk holds eight lines). " + (policy === 0 ? "With “keep everything” there is nothing you can do — that is why real systems can't keep every change forever. Pick another rule." : "Press <b>Tidy the log</b> to make room.")); return; }
+    busy = true; stale();
+    db[key] = (db[key] || 0) + 1; render();
+    await append({ k: key, v: db[key], off: nextOff++ }, rowY(KEYS.indexOf(key)) + 14);
+    setCap("#s5-cap", "Somebody watches <b>" + key + "</b>. The database overwrites its counter, and change data capture appends the <i>whole new value</i> to the log: <b>" + key + " = " + db[key] + "</b>. The older lines for " + key + " are now out of date, but still take up space.");
+    busy = false;
+  }
+  async function del() {
+    if (busy) return;
+    if (db.yawn === undefined) { setCap("#s5-cap", "<b>yawn</b> is already deleted. Play it again to bring it back."); return; }
+    if (log.length >= CAP) { setCap("#s5-cap", "The log is full — tidy it first."); return; }
+    busy = true; stale();
+    delete db.yawn; render();
+    await append({ k: "yawn", v: null, off: nextOff++ }, rowY(3) + 14);
+    setCap("#s5-cap", "The video <b>yawn</b> is deleted. The log can't erase old lines, so it appends a <b>tombstone</b>: “yawn = nothing”. When the log is compacted, the tombstone tells it to throw away <i>every</i> line for that key.");
+    busy = false;
+  }
+  async function tidy() {
+    if (busy) return;
+    let drop;
+    if (policy === 0) { setCap("#s5-cap", "<b>Keep everything:</b> nothing is ever removed. Replaying gives a perfect copy — but the log only grows, replay gets slower and slower, and one day the disk is full."); return; }
+    if (policy === 1) drop = log.filter((e, i) => i < Math.floor(log.length / 2));
+    else {
+      const last = {}; log.forEach((e, i) => (last[e.k] = i));
+      drop = log.filter((e, i) => last[e.k] !== i || e.v === null);
+    }
+    if (!drop.length) { setCap("#s5-cap", "Nothing to remove: the log is already as small as this rule can make it."); return; }
+    busy = true; stale();
+    log.forEach((e, i) => { if (drop.includes(e)) cells[i].r.setAttribute("class", "sv-bad"); });
+    await sleep(700);
+    const before = log.length; log = log.filter((e) => !drop.includes(e)); render();
+    setCap("#s5-cap", policy === 1
+      ? "<b>Delete old segments:</b> the oldest " + drop.length + " lines are thrown away, whatever they say. Cheap and simple — but if one of them was the <i>only</i> line for some video, the log no longer knows that video exists."
+      : "<b>Compaction:</b> for each key only the newest line survives (and deleted keys vanish). " + before + " lines became " + log.length + " — the log is now about as big as the database itself, however many plays there have been, and <b>no current value was lost</b>. Lines keep their original offsets.");
+    busy = false;
+  }
+  async function buildFromLog() {
+    if (busy) return; busy = true;
+    idx = {}; built = false; replayed = 0; idxSub.textContent = "replaying from offset " + (log.length ? log[0].off : nextOff) + "…"; midLbl.textContent = ""; render();
+    setCap("#s5-cap", "A brand-new consumer starts at the oldest line in the log and applies every line in order…");
+    for (let i = 0; i < log.length; i++) {
+      const e = log[i];
+      const t = draw.tag(e.k + " " + (e.v === null ? "deleted" : e.v), e.v === null ? "sv-bad" : "sv-data-soft"); layer.appendChild(t);
+      await fly(t, [cellX(i), 61], [514, rowY(KEYS.indexOf(e.k)) + 14], 420); t.remove();
+      if (e.v === null) delete idx[e.k]; else idx[e.k] = e.v;
+      replayed++; render();
+    }
+    built = true; const missing = render();
+    idxSub.textContent = "built from " + replayed + " log line" + (replayed === 1 ? "" : "s");
+    setCap("#s5-cap", missing
+      ? "The index is <b>wrong</b>: " + missing + " video" + (missing === 1 ? " is" : "s are") + " missing or stale, because the lines that mentioned " + (missing === 1 ? "it" : "them") + " were deleted. A log of only <i>recent</i> changes can't rebuild a full copy — you need a <b>snapshot</b> first."
+      : "The index matches the database after replaying <b>" + replayed + "</b> line" + (replayed === 1 ? "" : "s") + ". " + (policy === 2 ? "A compacted log is guaranteed to hold the latest value of every key, so it works as a full copy of the database — no snapshot needed." : "Every change ever made is still in the log, so replaying it rebuilds everything. Compare how many lines that took with a compacted log."));
+    busy = false;
+  }
+  async function buildFromSnapshot() {
+    if (busy) return; busy = true;
+    idx = {}; built = false; replayed = 0; idxSub.textContent = "loading a snapshot…"; render();
+    midLbl.textContent = "snapshot @ offset " + nextOff;
+    setCap("#s5-cap", "The database takes a <b>consistent snapshot</b> — a full copy of all its rows — and stamps it with the log position it corresponds to: offset <b>" + nextOff + "</b>.");
+    const t = draw.tag("snapshot", "sv-db"); layer.appendChild(t);
+    await fly(t, [146, 218], [514, 218], 900); t.remove();
+    idx = Object.assign({}, db); built = true; render();
+    idxSub.textContent = "snapshot, then log from offset " + nextOff;
+    setCap("#s5-cap", "The new index loads the snapshot and then follows the log from offset <b>" + nextOff + "</b> onwards. It is complete, whatever was deleted from the log. The cost: a full copy of the database every time you add a new follower.");
+    busy = false;
+  }
+  const mk = (label, cls, fn) => { const b = h("button", { class: "btn " + cls, type: "button" }, label); b.addEventListener("click", fn); return b; };
+  K.$("#s5-controls").append(
+    mk("Tidy the log", "primary", tidy), mk("Build a new index from the log", "", buildFromLog), mk("…from a snapshot", "", buildFromSnapshot),
+    mk("Delete “yawn”", "danger", del), mk("Reset", "", () => { if (busy) return; init(); idxSub.textContent = "not built yet"; midLbl.textContent = ""; render(); setCap("#s5-cap", "Six changes are in the log. Click a video in the database to play it."); }));
+  K.$("#s5-seg").appendChild(modeSeg(["Keep everything", "Delete old segments", "Compact"], 2, "s5-mode", () => !busy, (i) => {
+    policy = i;
+    setCap("#s5-cap", ["<b>Keep everything:</b> never remove a line.", "<b>Delete old segments:</b> when tidying, throw away the oldest half of the log.", "<b>Compact:</b> when tidying, keep only the newest line for each key."][i] + " Press “Tidy the log”, then build a new index.");
+  }));
+  init(); render();
+})();
+
+/* ================= 6. STATE = REPLAYED EVENTS ================= */
+(function stateSim() {
+  const svg = K.$("#s6-svg");
+  const ITEMS = [{ k: "kite", price: 8 }, { k: "ball", price: 5 }, { k: "book", price: 6 }], MAXE = 10;
+  const rowY = (i) => 64 + i * 24;
+  svg.appendChild(txt(92, 52, "the shop shelf", "sv-label", "middle", BOLD));
+  const cards = ITEMS.map((it, i) => {
+    const y = 66 + i * 60;
+    const r = s("rect", { x: 24, y, width: 136, height: 50, rx: 12, class: "sv-box" });
+    const t1 = txt(92, y + 21, it.k + " · $" + it.price, "sv-label", "middle", BOLD), t2 = txt(92, y + 39, "");
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Put the " + it.k + " in the cart or take it out" }, r, t1, t2);
+    svg.appendChild(g); onPress(g, () => click(it.k));
+    return { r, t2 };
+  });
+  svg.appendChild(txt(92, 262, "click = add / remove"));
+  const logTitle = txt(290, 52, "", "sv-label", "middle", BOLD); svg.appendChild(logTitle);
+  const rows = [];
+  for (let i = 0; i < MAXE; i++) {
+    const r = s("rect", { x: 180, y: rowY(i), width: 220, height: 20, rx: 6, class: "sv-panel" });
+    const t = txt(192, rowY(i) + 14.5, "", "sv-label", "start", BOLD);
+    const g = s("g", { class: "fade" }, r, t); svg.appendChild(g); rows.push({ g, r, t });
+  }
+  const over = s("g", { style: { opacity: 0 } },
+    s("rect", { x: 180, y: 64, width: 220, height: 56, rx: 12, class: "sv-db" }));
+  const overT = txt(290, 98, "", "sv-label", "middle", BOLD); over.appendChild(overT);
+  over.appendChild(txt(290, 150, "one row, overwritten each time"));
+  over.appendChild(txt(290, 168, "the old value is simply gone"));
+  svg.appendChild(over);
+  function view(y, hgt, title) {
+    const r = s("rect", { x: 420, y, width: 220, height: hgt, rx: 14, class: "sv-good" }); svg.appendChild(r);
+    svg.appendChild(txt(530, y + 20, title, "sv-label", "middle", BOLD));
+    const a = txt(530, y + 42, "", "sv-label"), b = txt(530, y + 60, "", "sv-label"); svg.append(a, b);
+    return { r, a, b };
+  }
+  const v1 = view(40, 72, "view 1 · the cart right now");
+  const v2 = view(122, 72, "view 2 · taken out again");
+  const v3 = view(204, 72, "view 3 · invented next year");
+  const footer = txt(530, 300, ""); svg.appendChild(footer);
+  const layer = s("g"); svg.appendChild(layer);
+
+  let mode = 0, busy = false, events, upto, v3n, silent = false;
+  const init = () => { events = [["add", "kite"], ["add", "ball"], ["remove", "kite"]]; upto = 3; v3n = -1; K.clear(layer); };
+  function fold(n) {
+    const cart = [], removed = {}, added = {};
+    events.slice(0, n).forEach(([op, k]) => {
+      if (op === "add") { cart.push(k); added[k] = (added[k] || 0) + 1; }
+      else { cart.splice(cart.indexOf(k), 1); removed[k] = (removed[k] || 0) + 1; }
+    });
+    return { cart, removed, added };
+  }
+  function render() {
+    const now = fold(events.length), S = fold(upto), log = mode === 0;
+    cards.forEach((c, i) => { const inCart = now.cart.includes(ITEMS[i].k); c.t2.textContent = inCart ? "in the cart" : "on the shelf"; c.r.setAttribute("class", inCart ? "sv-data-soft" : "sv-box"); });
+    logTitle.textContent = log ? "event log · append-only" : "database · overwrite in place";
+    rows.forEach((r, i) => {
+      const e = events[i];
+      r.g.style.opacity = !log ? 0 : !e ? 0.35 : i < upto ? 1 : 0.35;
+      r.t.textContent = e ? (i + 1) + "  " + e[0] + " " + e[1] : "";
+      r.r.setAttribute("class", e ? (e[0] === "add" ? "sv-data-soft" : "sv-bad") : "sv-panel");
+    });
+    over.style.opacity = log ? 0 : 1;
+    overT.textContent = "cart = [" + now.cart.join(", ") + "]";
+    const total = S.cart.reduce((a, k) => a + ITEMS.find((x) => x.k === k).price, 0);
+    v1.a.textContent = S.cart.length ? S.cart.join(", ") : "(empty)"; v1.b.textContent = "total $" + total;
+    const rem = Object.keys(S.removed);
+    if (log) { v2.a.textContent = rem.length ? rem.map((k) => k + " ×" + S.removed[k]).join(" · ") : "nothing yet"; v2.b.textContent = "tempted, then put back"; v2.r.setAttribute("class", "sv-good"); }
+    else { v2.a.textContent = "unknown"; v2.b.textContent = "removed items left no trace"; v2.r.setAttribute("class", "sv-bad"); }
+    if (!log) { v3.a.textContent = v3n === -2 ? "can't be built" : "not launched yet"; v3.b.textContent = v3n === -2 ? "there is no history to replay" : ""; v3.r.setAttribute("class", v3n === -2 ? "sv-bad" : "sv-panel"); }
+    else if (v3n < 0) { v3.a.textContent = "not launched yet"; v3.b.textContent = ""; v3.r.setAttribute("class", "sv-panel"); }
+    else { const A = fold(Math.min(v3n, upto)).added; v3.a.textContent = ITEMS.map((x) => x.k + " " + (A[x.k] || 0)).join(" · "); v3.b.textContent = "times each item was added"; v3.r.setAttribute("class", "sv-good"); }
+    footer.textContent = log ? (upto < events.length ? "showing the world as of event " + upto : "all three views come from one log") : "only view 1 survives";
+    const inp = K.$("#s6-t");
+    if (inp) { inp.disabled = !log; inp.max = events.length; if (Number(inp.value) !== upto) { silent = true; inp.value = upto; inp.dispatchEvent(new Event("input")); silent = false; } }
+  }
+  function click(k) {
+    if (busy) return;
+    if (events.length >= MAXE) { setCap("#s6-cap", "This toy log holds ten events. Press Reset to start a new story."); return; }
+    const inCart = fold(events.length).cart.includes(k);
+    events.push([inCart ? "remove" : "add", k]); upto = events.length; if (v3n >= 0) v3n = events.length;
+    render(); if (mode === 0) pop(rows[events.length - 1].r);
+    setCap("#s6-cap", mode === 1
+      ? "The database row is <b>overwritten</b>: the cart is now [" + fold(events.length).cart.join(", ") + "]. Whatever it said before is gone — and so is any hint that Priya " + (inCart ? "ever wanted the " + k + "." : "changed anything at all.")
+      : inCart
+      ? "Taking the " + k + " out doesn't erase “add " + k + "”. It <b>appends</b> a new event, “remove " + k + "”. For the cart the two cancel out; for view 2 they are valuable news. Deleting is just more appending."
+      : "“add " + k + "” is appended as event " + events.length + ". Every view is updated by applying that one new event to what it already had.");
+  }
+  async function launch() {
+    if (busy) return;
+    if (mode === 1) { v3n = -2; render(); setCap("#s6-cap", "A year later someone asks: “which items get added most?” The overwriting database can't say. It only ever knew the <b>current</b> cart; the events that led there were destroyed as they happened."); return; }
+    busy = true; upto = events.length; v3n = 0; render();
+    setCap("#s6-cap", "A year later someone invents view 3. No migration needed: start a new consumer at event 1 and <b>replay the same old log</b>…");
+    for (let i = 0; i < events.length; i++) {
+      const p = draw.tag(events[i][0] + " " + events[i][1], "sv-data-soft"); layer.appendChild(p);
+      await fly(p, [400, rowY(i) + 10], [530, 250], 380); p.remove();
+      v3n = i + 1; render();
+    }
+    setCap("#s6-cap", "View 3 is caught up and now runs side by side with the old views, fed by the same log. The old system didn't have to change at all — and once nobody needs it, it can simply be switched off.");
+    busy = false;
+  }
+  const lB = h("button", { class: "btn primary", type: "button" }, "Launch a new view");
+  const rB = h("button", { class: "btn", type: "button" }, "Reset");
+  lB.addEventListener("click", launch);
+  function reset() { init(); render(); setCap("#s6-cap", mode === 0 ? "Three events so far: add kite, add ball, remove kite. The cart holds a ball." : "The same story, stored the traditional way: one row that is <b>overwritten</b> on every change. Click the shelf and launch the new view."); }
+  rB.addEventListener("click", () => { if (!busy) reset(); });
+  K.$("#s6-controls").append(lB, rB, slider({
+    id: "s6-t", label: "Time travel", min: 0, max: 3, step: 1, value: 3, format: (v) => "event " + v,
+    onInput: (v) => {
+      if (silent) return; if (busy || mode === 1) { render(); return; }
+      upto = Math.min(v, events.length); render();
+      const S = fold(upto);
+      setCap("#s6-cap", upto === events.length ? "Back to the present: all " + upto + " events applied." : "Replaying only the first <b>" + upto + "</b> event" + (upto === 1 ? "" : "s") + ": the cart was [" + S.cart.join(", ") + "]. The state at <i>any</i> moment is just the log added up to that point — which is why the book says state is the <b>integral</b> of the event stream.");
+    },
+  }));
+  K.$("#s6-seg").appendChild(modeSeg(["Event log", "Overwrite in place"], 0, "s6-mode", () => !busy, (i) => { mode = i; reset(); }));
+  reset();
+})();
+
+/* ================= 7. STANDING QUERIES ================= */
+(function usesSim() {
+  const svg = K.$("#s7-svg");
+  const SHOPS = [{ shop: "Bakery", city: "Lima", amt: 4 }, { shop: "Bikes", city: "Lima", amt: 12 }, { shop: "Phones", city: "Oslo", amt: 90 }];
+  const slotX = (i) => 95 + i * 156;
+  svg.appendChild(txt(330, 24, "payments stream · newest on the right", "sv-label", "middle", BOLD));
+  const slots = [0, 1, 2, 3].map((i) => {
+    const r = s("rect", { x: slotX(i) - 75, y: 36, width: 150, height: 30, rx: 15, class: "sv-panel" });
+    const t = txt(slotX(i), 56, "", "sv-label", "middle", BOLD);
+    svg.append(r, t); return { r, t };
+  });
+  const QS = [
+    { x: 20, y: 96, title: "pattern hunt · complex event processing", q: "stored: two cities less than 10 min apart?" },
+    { x: 338, y: 96, title: "running numbers · stream analytics", q: "stored: average of the last 3 payments" },
+    { x: 20, y: 212, title: "always-fresh table · materialized view", q: "stored: total per shop, since the start" },
+    { x: 338, y: 212, title: "saved search · search on streams", q: "stored: shop name contains “bike”" },
+  ].map((b) => {
+    const r = s("rect", { x: b.x, y: b.y, width: 302, height: 100, rx: 16, class: "sv-server" });
+    svg.appendChild(r);
+    svg.appendChild(txt(b.x + 151, b.y + 24, b.title, "sv-label", "middle", BOLD));
+    svg.appendChild(txt(b.x + 151, b.y + 44, b.q));
+    const out = txt(b.x + 151, b.y + 78, "", "sv-text", "middle", { fontWeight: 700 }); svg.appendChild(out);
+    return { r, out, cx: b.x + 151, cy: b.y + 50 };
+  });
+  const layer = s("g"); svg.appendChild(layer);
+  const st = { clock: stat("Card clock", "10:00"), n: stat("Payments", 0), al: stat("Alerts", 0, "good") };
+  K.$("#s7-stats").append(st.clock, st.n, st.al);
+
+  let busy = false, clock, evs, alerts, hits, lastAlert;
+  const hhmm = (m) => "10:" + String(m).padStart(2, "0");
+  const init = () => { clock = 0; evs = []; alerts = 0; hits = 0; lastAlert = null; K.clear(layer); };
+  function render(fresh) {
+    const recent = evs.slice(-4);
+    slots.forEach((sl, i) => {
+      const e = recent[i - (4 - recent.length)];
+      sl.t.textContent = e ? hhmm(e.t) + " " + e.city + " " + e.shop + " $" + e.amt : "";
+      sl.r.setAttribute("class", e ? "sv-data-soft" : "sv-panel"); sl.r.style.opacity = e ? 1 : 0.5;
+    });
+    const last = evs[evs.length - 1];
+    QS[0].out.textContent = !last ? "no match yet" : lastAlert === last ? "ALERT · " + last.from + " → " + last.city + " in " + last.gap + " min" : "no match at " + hhmm(last.t);
+    QS[0].r.setAttribute("class", last && lastAlert === last ? "sv-bad" : "sv-server");
+    const l3 = evs.slice(-3);
+    QS[1].out.textContent = l3.length ? "$" + (l3.reduce((a, e) => a + e.amt, 0) / l3.length).toFixed(2) + " over " + l3.length + (l3.length === 1 ? " payment" : " payments") : "no data yet";
+    QS[2].out.textContent = SHOPS.map((sh) => sh.shop + " $" + evs.filter((e) => e.shop === sh.shop).reduce((a, e) => a + e.amt, 0)).join(" · ");
+    const isHit = last && /bike/i.test(last.shop);
+    QS[3].out.textContent = hits ? hits + (hits === 1 ? " match" : " matches") + " · last at " + hhmm(evs.filter((e) => /bike/i.test(e.shop)).pop().t) : "0 matches";
+    QS[3].r.setAttribute("class", isHit ? "sv-good" : "sv-server");
+    st.clock.set(hhmm(clock)); st.n.set(evs.length); st.al.set(alerts, alerts ? "bad" : "good");
+    if (fresh) QS.forEach((q) => pop(q.out));
+  }
+  async function pay(sh) {
+    if (busy) return;
+    if (clock > 50) { setCap("#s7-cap", "It is nearly eleven and this toy clock stops there. Press Reset for a new morning."); return; }
+    busy = true; clock += 2;
+    const prev = evs[evs.length - 1];
+    const e = { t: clock, city: sh.city, shop: sh.shop, amt: sh.amt };
+    evs.push(e); render(false);
+    // show the new event to every stored query
+    const ps = QS.map(() => { const p = draw.parcel("sv-data", 14); layer.appendChild(p); return p; });
+    await Promise.all(ps.map((p, i) => fly(p, [slotX(3), 66], [QS[i].cx, QS[i].cy - 40], 460)));
+    ps.forEach((p) => p.remove());
+    const alert = prev && prev.city !== e.city && e.t - prev.t < 10;
+    if (alert) { alerts++; lastAlert = e; e.from = prev.city; e.gap = e.t - prev.t; }
+    if (/bike/i.test(e.shop)) hits++;
+    render(true);
+    setCap("#s7-cap", alert
+      ? "The pattern query remembered the last payment (" + prev.city + ", " + hhmm(prev.t) + "). This one is in <b>" + e.city + "</b> only <b>" + e.gap + " minutes</b> later — nobody travels that fast, so it emits a <b>complex event</b>: a fraud alert. It fired the moment the event arrived; no one had to ask."
+      : "The payment is shown to <b>all four stored queries</b> at once. " + (/bike/i.test(e.shop) ? "The saved search matches “Bikes” and notifies its owner; " : "") + "the average and the per-shop table are <b>updated in place</b> from this one event — nothing is recomputed from scratch." + (prev && prev.city !== e.city ? " The cities differ, but " + (e.t - prev.t) + " minutes have passed, so the pattern doesn't match." : ""));
+    busy = false;
+  }
+  const mk = (label, cls, fn) => { const b = h("button", { class: "btn " + cls, type: "button" }, label); b.addEventListener("click", fn); return b; };
+  K.$("#s7-controls").append(
+    ...SHOPS.map((sh, i) => mk("Pay $" + sh.amt + " · " + sh.shop + ", " + sh.city, i === 2 ? "danger" : "primary", () => pay(sh))),
+    mk("Wait 10 minutes", "", () => { if (busy) return; if (clock > 46) return; clock += 10; render(false); setCap("#s7-cap", "Ten quiet minutes pass; the card clock says " + hhmm(clock) + ". The stored queries just sit there. They cost nothing until the next event turns up."); }),
+    mk("Reset", "", () => { if (busy) return; init(); render(false); setCap("#s7-cap", "Four questions are stored and waiting. No payments yet."); }));
+  init(); render(false);
+})();
+
+/* ================= 8. EVENT TIME, STRAGGLERS, WINDOWS ================= */
+(function timeSim() {
+  const svg = K.$("#s8-svg");
+  const X = (m) => 48 + m * 62, AXIS = 132, DOT = 108;
+  const ONTIME = [0.4, 1.1, 1.6, 3.3, 4.2, 4.7, 5.5, 6.4];
+  const LATE = [{ et: 2.2, pt: 7.2 }, { et: 2.5, pt: 7.5 }, { et: 2.8, pt: 7.8 }];
+  const rowLbl = txt(48, 34, "", "sv-label", "start", BOLD); svg.appendChild(rowLbl);
+  svg.appendChild(s("line", { x1: X(0), y1: AXIS, x2: X(9), y2: AXIS, class: "sv-wire-solid" }));
+  for (let m = 0; m <= 9; m++) {
+    svg.appendChild(s("line", { x1: X(m), y1: AXIS, x2: X(m), y2: AXIS + 6, class: "sv-wire-solid" }));
+    svg.appendChild(txt(X(m), AXIS + 21, "10:0" + m));
+  }
+  // tunnel shading (event time 2:00–3:00)
+  const tunnel = s("rect", { x: X(2), y: 94, width: X(3.1) - X(2), height: 30, rx: 8, class: "sv-panel", style: { strokeDasharray: "4 4" } });
+  svg.appendChild(tunnel);
+  const tunnelLbl = txt(X(2.55), 72, "in the tunnel"); svg.appendChild(tunnelLbl);
+  const tunnelTick = s("line", { x1: X(2.55), y1: 78, x2: X(2.55), y2: 92, class: "sv-wire" }); svg.appendChild(tunnelTick);
+  svg.appendChild(draw.phone(606, 50));
+  const phoneLbl = txt(574, 80, "", "sv-label", "end"); svg.appendChild(phoneLbl);
+  const winG = s("g"), dotG = s("g"), layer = s("g");
+  svg.append(winG, dotG);
+  const sumLbl = txt(330, 274, "", "sv-label", "middle", BOLD); svg.appendChild(sumLbl);
+  svg.appendChild(layer);
+
+  let clock = 0, wtype = 0, policy = 1, arrived = false, busy = false, slideEnd = 4;
+  const WNAMES = ["tumbling", "hopping", "sliding", "session"];
+  function events() {
+    const ev = ONTIME.map((t) => ({ t, late: false, on: true }));
+    if (arrived) LATE.forEach((l) => ev.push({ t: clock === 0 ? l.et : l.pt, late: true, on: clock === 1 || policy === 1 }));
+    return ev.sort((a, b) => a.t - b.t);
+  }
+  function windows(ev) {
+    const on = ev.filter((e) => e.on), W = [];
+    const mk = (a, b, lvl) => { const inn = on.filter((e) => e.t >= a && e.t < b); W.push({ a, b, lvl, n: inn.length, late: inn.filter((e) => e.late).length }); };
+    if (wtype === 0) for (let a = 0; a < 8; a += 2) mk(a, a + 2, 0);
+    else if (wtype === 1) [[0, 4, 0], [2, 6, 1], [4, 8, 0]].forEach(([a, b, l]) => mk(a, b, l));
+    else if (wtype === 2) mk(slideEnd - 2, slideEnd + 0.0001, 0);
+    else {
+      let cur = [];
+      const flush = () => { if (cur.length) W.push({ a: cur[0].t - 0.2, b: cur[cur.length - 1].t + 0.2, lvl: 0, n: cur.length, late: cur.filter((e) => e.late).length }); cur = []; };
+      on.forEach((e) => { if (cur.length && e.t - cur[cur.length - 1].t > 1) flush(); cur.push(e); });
+      flush();
+    }
+    return W;
+  }
+  function render() {
+    const ev = events();
+    rowLbl.textContent = "each dot is one tap, placed by " + (clock === 0 ? "when it happened" : "when it arrived");
+    K.clear(dotG);
+    ev.forEach((e) => dotG.appendChild(s("circle", { cx: X(e.t), cy: DOT, r: 7, class: e.late ? (e.on ? "sv-fill-coral" : "sv-bad") : "sv-fill-sun" })));
+    if (!arrived) [530, 548, 566].forEach((x) => dotG.appendChild(s("circle", { cx: x, cy: 54, r: 7, class: "sv-fill-coral" })));
+    phoneLbl.textContent = arrived ? "back online" : "offline · 3 taps stuck";
+    const showTunnel = clock === 0 || !arrived;
+    [tunnel, tunnelLbl, tunnelTick].forEach((n) => (n.style.opacity = showTunnel ? 1 : 0.25));
+    K.clear(winG);
+    windows(ev).forEach((w) => {
+      const y = 172 + w.lvl * 40, x0 = X(Math.max(0, w.a)) + 2, x1 = X(Math.min(9, w.b)) - 2;
+      const fake = clock === 1 && w.late, fixed = clock === 0 && w.late;
+      winG.appendChild(s("rect", { x: x0, y, width: x1 - x0, height: 30, rx: 9, class: fake ? "sv-bad" : fixed ? "sv-good" : "sv-server" }));
+      const label = fixed && wtype !== 2 ? (w.n - w.late) + " → " + w.n + " taps" : w.n + (w.n === 1 ? " tap" : " taps");
+      winG.appendChild(txt((x0 + x1) / 2, y + 20, label, "sv-label", "middle", BOLD));
+    });
+    const counted = ev.filter((e) => e.on).length, ignored = ev.filter((e) => !e.on).length;
+    sumLbl.textContent = !arrived ? "counted 8 taps so far · the true number is 11" : ignored ? "counted 8 of 11 taps · 3 stragglers ignored" : clock === 1 ? "all 11 counted — but three of them in the wrong minutes" : "all 11 taps counted, each where it really happened";
+    sumLbl.style.fill = !arrived ? "" : ignored || clock === 1 ? "var(--coral)" : "var(--mint)";
+    slideWrap.style.display = wtype === 2 ? "" : "none";
+    phoneB.disabled = arrived;
+  }
+  function narrate() {
+    const W = [
+      "<b>Tumbling</b> windows: fixed two-minute boxes that never overlap, so every tap is in exactly one. You just round each timestamp down.",
+      "<b>Hopping</b> windows: four minutes long, but a new one starts every two, so they overlap and smooth out the bumps. Most taps are counted in two windows.",
+      "<b>Sliding</b> window: “all taps within two minutes of each other”. It has no fixed borders — drag it anywhere. It can catch a burst that tumbling windows would cut in half.",
+      "<b>Session</b> windows have no fixed length: a session lasts until the player has been quiet for more than one minute.",
+    ][wtype];
+    let T;
+    if (!arrived) T = " The phone is still in the tunnel, so the 10:02–10:03 stretch looks almost silent.";
+    else if (clock === 1) T = " By <b>arrival time</b> the three tunnel taps land after 10:07 — a burst that never happened, next to a quiet spell that never happened either. The book's Figure 12-8 shows the same fake spike after a processor restart.";
+    else if (policy === 0) T = " By <b>event time</b> the late taps belong around 10:02 — but that result was already announced. Policy: <b>ignore</b> stragglers. Simple, but the count stays wrong, so at least keep a metric of how many you drop.";
+    else T = wtype === 3 ? " By <b>event time</b> the late taps fill the quiet gap — so what looked like two visits was really <b>one long session</b>. A <b>correction</b> replaces the old result." : " By <b>event time</b> the late taps go where they really happened, and the affected window publishes a <b>correction</b> (the old number may need to be retracted).";
+    setCap("#s8-cap", W + T);
+  }
+  async function online() {
+    if (busy || arrived) return; busy = true;
+    setCap("#s8-cap", "The phone leaves the tunnel and sends its three buffered taps — each stamped 10:02-something by the phone, but reaching the server after 10:07.");
+    const ps = LATE.map((l, i) => { const c = s("g", {}, s("circle", { cx: 0, cy: 0, r: 7, class: "sv-fill-coral" })); layer.appendChild(c); return c; });
+    const target = LATE.map((l) => X(clock === 0 ? l.et : l.pt));
+    await Promise.all(ps.map((p, i) => fly(p, [530 + i * 18, 54], [target[i], DOT], 800 + i * 120)));
+    ps.forEach((p) => p.remove());
+    arrived = true; render(); narrate(); busy = false;
+  }
+  const phoneB = h("button", { class: "btn primary", type: "button" }, "Phone comes back online");
+  const rstB = h("button", { class: "btn", type: "button" }, "Reset");
+  phoneB.addEventListener("click", online);
+  rstB.addEventListener("click", () => { if (busy) return; arrived = false; render(); narrate(); });
+  const slideWrap = slider({ id: "s8-w", label: "Slide the window", min: 20, max: 90, step: 1, value: 40, format: (v) => "ends 10:0" + Math.floor(v / 10) + ":" + String(Math.round((v % 10) * 6)).padStart(2, "0"), onInput: (v) => { slideEnd = v / 10; render(); } });
+  K.$("#s8-controls").append(h("span", { class: "rowwrap" }, h("span", { class: "lbl" }, "Window"), modeSeg(["Tumbling", "Hopping", "Sliding", "Session"], 0, "s8-win", () => !busy, (i) => { wtype = i; render(); narrate(); })), slideWrap);
+  K.$("#s8-controls2").append(phoneB, h("span", { class: "rowwrap" }, h("span", { class: "lbl" }, "Stragglers"), modeSeg(["Ignore", "Correct"], 1, "s8-pol", () => !busy, (i) => { policy = i; render(); narrate(); })), rstB);
+  K.$("#s8-seg").appendChild(modeSeg(["Event time", "Arrival time"], 0, "s8-clock", () => !busy, (i) => { clock = i; render(); narrate(); }));
+  render();
+})();
+
+/* ================= 9. THREE KINDS OF STREAM JOIN ================= */
+(function joinSim() {
+  const svg = K.$("#s9-svg");
+  const LANE_Y = [84, 224];
+  const laneT = LANE_Y.map((y) => {
+    svg.appendChild(s("rect", { x: 20, y: y - 36, width: 186, height: 74, rx: 14, class: "sv-box" }));
+    const t = txt(113, y - 14, "", "sv-label", "middle", BOLD); svg.appendChild(t);
+    return t;
+  });
+  const laneTag = LANE_Y.map(() => { const g = s("g"); svg.appendChild(g); return g; });
+  svg.appendChild(s("path", { d: "M206,84 C222,84 214,130 230,130", class: "sv-wire" }));
+  svg.appendChild(s("path", { d: "M206,224 C222,224 214,180 230,180", class: "sv-wire" }));
+  svg.appendChild(s("line", { x1: 420, y1: 155, x2: 440, y2: 155, class: "sv-wire" }));
+  svg.appendChild(s("rect", { x: 230, y: 28, width: 190, height: 254, rx: 16, class: "sv-server" }));
+  svg.appendChild(txt(325, 50, "stream processor", "sv-label", "middle", BOLD));
+  const stateT = txt(325, 68, ""); svg.appendChild(stateT);
+  svg.appendChild(s("rect", { x: 440, y: 28, width: 204, height: 254, rx: 16, class: "sv-box" }));
+  const outT = txt(542, 50, "", "sv-label", "middle", BOLD); svg.appendChild(outT);
+  const outSub = txt(542, 68, ""); svg.appendChild(outSub);
+  const rowY = (i) => 84 + i * 38;
+  const mkRows = (x, w, n) => Array.from({ length: n }, (_, i) => {
+    const r = s("rect", { x, y: rowY(i), width: w, height: 30, rx: 8, class: "sv-panel" });
+    const t = txt(x + w / 2, rowY(i) + 19.5, "", "sv-label", "middle", BOLD);
+    const g = s("g", { class: "fade" }, r, t); svg.appendChild(g); return { g, r, t };
+  });
+  const sRows = mkRows(240, 170, 5), oRows = mkRows(450, 184, 5);
+  const foot = txt(330, 308, "", "sv-label", "middle", BOLD); svg.appendChild(foot);
+  const layer = s("g"); svg.appendChild(layer);
+
+  let mode = 0, swapped = false, S = [], O = [], footText = "";
+  const MODES = [
+    { lanes: ["stream: searches", "stream: clicks"], state: "state: the last hour", out: "output stream", sub: "one result per search" },
+    { lanes: ["stream: activity events", "changelog: profiles"], state: "state: local table copy", out: "output stream", sub: "events with names attached" },
+    { lanes: ["stream: posts", "stream: follows"], state: "state: posts + followers", out: "timeline cache", sub: "a materialized view" },
+  ];
+  function render() {
+    const M = MODES[mode];
+    laneT.forEach((t, i) => (t.textContent = M.lanes[i]));
+    stateT.textContent = M.state; outT.textContent = M.out; outSub.textContent = M.sub;
+    [[sRows, S], [oRows, O]].forEach(([rows, data]) => rows.forEach((r, i) => {
+      const d = data[i];
+      r.t.textContent = d ? d.text : ""; r.g.style.opacity = d ? 1 : 0.35;
+      r.r.setAttribute("class", d ? (d.tone === "bad" ? "sv-bad" : d.tone === "good" ? "sv-good" : d.tone === "db" ? "sv-db" : "sv-data-soft") : "sv-panel");
+    }));
+    foot.textContent = footText;
+    swapB.style.display = mode === 1 ? "" : "none";
+  }
+  const setRow = (arr, key, text, tone) => { const i = arr.findIndex((d) => d.key === key); if (i >= 0) { arr[i].text = text; arr[i].tone = tone; return i; } arr.push({ key, text, tone }); return arr.length - 1; };
+  const dropRow = (arr, key) => { const i = arr.findIndex((d) => d.key === key); if (i >= 0) arr.splice(i, 1); };
+  /** one step: an event appears on a lane, flies into the processor, changes state, maybe emits output */
+  function ev(lane, label, cap, apply) {
+    return async () => {
+      K.clear(laneTag[lane]);
+      const shown = draw.tag(label, "sv-data-soft"); shown.setAttribute("transform", "translate(113," + (LANE_Y[lane] + 12) + ")"); laneTag[lane].appendChild(shown); pop(shown);
+      setCap("#s9-cap", cap);
+      await sleep(350);
+      const t = draw.tag(label, "sv-data-soft"); layer.appendChild(t);
+      await fly(t, [113, LANE_Y[lane] + 12], [325, lane ? 190 : 120], 520); t.remove();
+      const emit = apply();
+      render();
+      if (emit) {
+        const o = draw.tag("→", emit === "bad" ? "sv-bad" : "sv-good"); layer.appendChild(o);
+        await fly(o, [420, 155], [460, 155], 320); o.remove();
+      }
+    };
+  }
+  function script() {
+    if (mode === 0) return [
+      ev(0, "s1 searches “kite”", "Session <b>s1</b> searches for “kite”. No click yet — so the processor must <b>remember</b> the search and wait.", () => { setRow(S, "s1", "s1 · search “kite”"); footText = "click-through so far: 0 of 0 finished searches"; }),
+      ev(0, "s2 searches “ball”", "Session <b>s2</b> searches for “ball”. Remembered too.", () => { setRow(S, "s2", "s2 · search “ball”"); }),
+      ev(1, "s1 clicks a result", "A click arrives for <b>s1</b>. The processor looks in its state, finds s1's search, and emits the joined result: this search <b>was</b> clicked.", () => { dropRow(S, "s1"); setRow(O, "s1", "s1 “kite” → clicked", "good"); footText = "click-through so far: 1 of 1 finished searches"; return "good"; }),
+      ev(1, "s3 clicks a result", "A click for <b>s3</b> — but no search from s3 has been seen! Network delays delivered the click <b>first</b>. It is kept in state as well, waiting for its other half.", () => { setRow(S, "s3", "s3 · click (search?)", "bad"); }),
+      ev(0, "s3 searches “book”", "There is s3's search, late. The waiting click matches it at once. A join has to work in <b>both directions</b>.", () => { dropRow(S, "s3"); setRow(O, "s3", "s3 “book” → clicked", "good"); footText = "click-through so far: 2 of 2 finished searches"; return "good"; }),
+      ev(0, "(one hour passes)", "The join <b>window</b> is one hour. s2's search has now waited that long with no click, so it expires — and the processor emits “<b>not clicked</b>”. Without this you would only ever hear about the successes.", () => { dropRow(S, "s2"); setRow(O, "s2", "s2 “ball” → NOT clicked", "bad"); footText = "click-through rate: 2 of 3 searches"; return "bad"; }),
+    ];
+    if (mode === 1) {
+      const update = ev(1, "u7 moves to Quito", swapped
+        ? "Now the move to <b>Quito</b> arrives — too late for the purchase, which was already joined with Lima. Same events, different order, different answer. Nothing orders events <i>across</i> two streams, so a rerun of this job can give another result: the join is <b>nondeterministic</b>."
+        : "The profile database changes: Ana moves to <b>Quito</b>. The changelog carries that change into the processor's local copy.", () => { setRow(S, "u7", "u7 = Ana, Quito", "db"); });
+      const buy = ev(0, "u7 buys a kite", "Another activity event for u7 — joined with whatever the local table says <b>right now</b>.", () => {
+        const city = S.find((d) => d.key === "u7").text.split(", ")[1];
+        setRow(O, "b", "Ana (" + city + ") buys a kite", city === "Quito" ? "good" : "bad");
+        footText = swapped ? "same two events, other order → the sale is filed under " + city : "the sale is filed under " + city;
+        setCap("#s9-cap", "“u7 buys a kite” is enriched as <b>Ana (" + city + ")</b>. " + (swapped ? "The purchase overtook the profile update, so it was joined with the <b>old</b> city. Nothing orders events <i>across</i> two streams, so a rerun can give a different answer: the join is <b>nondeterministic</b>." : "The profile update got there first, so the purchase uses the new city. But was that luck? Press “Swap the last two arrivals”."));
+        return city === "Quito" ? "good" : "bad";
+      });
+      return [
+        ev(1, "u7 = Ana, Lima", "The changelog of the profile table is loaded into a <b>local copy</b> inside the processor, so lookups need no network round trip.", () => { setRow(S, "u7", "u7 = Ana, Lima", "db"); footText = "lookups are local: no trip to the database"; }),
+        ev(1, "u9 = Ben, Oslo", "Another row of the table arrives through the changelog.", () => { setRow(S, "u9", "u9 = Ben, Oslo", "db"); }),
+        ev(0, "u7 views a kite", "An activity event carries only a user ID. The processor looks up <b>u7</b> in its local table and <b>enriches</b> the event with the name and city.", () => { setRow(O, "a", "Ana (Lima) views a kite", "good"); return "good"; }),
+        ...(swapped ? [buy, update] : [update, buy]),
+      ];
+    }
+    return [
+      ev(1, "Ben follows Ana", "A <b>follow</b> event. The processor keeps the follower lists as state — it will need them when a post arrives.", () => { setRow(S, "f", "follow Ana: Ben", "db"); setRow(O, "ben", "Ben's feed: (empty)"); footText = "reading a timeline = one lookup"; }),
+      ev(0, "Ana posts “hi”", "A <b>post</b> event. It is joined with the current followers of Ana and written into each of their timelines.", () => { setRow(S, "p", "Ana posted: hi", "db"); setRow(O, "ben", "Ben's feed: hi", "good"); return "good"; }),
+      ev(1, "Cy follows Ana", "A change on the <i>other</i> side: Cy starts following. Now the new follow is joined with Ana's <b>existing posts</b>, so Cy's timeline isn't empty. (Changes in posts × current follows, plus current posts × changes in follows — the product rule.)", () => { setRow(S, "f", "follow Ana: Ben, Cy", "db"); setRow(O, "cy", "Cy's feed: hi", "good"); return "good"; }),
+      ev(0, "Ana posts “lunch?”", "The new post fans out to <b>both</b> followers' timelines.", () => { setRow(S, "p", "Ana posted: hi, lunch?", "db"); setRow(O, "ben", "Ben's feed: hi, lunch?", "good"); setRow(O, "cy", "Cy's feed: hi, lunch?", "good"); return "good"; }),
+      ev(1, "Ben unfollows Ana", "Ben unfollows, so Ana's posts are <b>removed</b> from his timeline. The cache now equals what the SQL join of <code>posts</code> and <code>follows</code> would return — kept up to date event by event.", () => { setRow(S, "f", "follow Ana: Cy", "db"); setRow(O, "ben", "Ben's feed: (empty)", "bad"); return "bad"; }),
+    ];
+  }
+  const steps = [];
+  function reset() {
+    S = []; O = []; footText = ""; K.clear(layer); laneTag.forEach((g) => K.clear(g));
+    steps.splice(0, steps.length, ...script());
+    render();
+    setCap("#s9-cap", ["<b>Stream–stream join.</b> Searches and clicks arrive on two streams; the session ID says which belong together. Press Step.", "<b>Stream–table join.</b> Activity events on top, the profile table's changelog below" + (swapped ? " — this time the purchase will arrive <i>before</i> the move to Quito." : "."), "<b>Table–table join.</b> Two changelogs — posts and follows — are combined into ready-made timelines."][mode]);
+  }
+  const swapB = h("button", { class: "btn", type: "button" }, "Swap the last two arrivals");
+  const flow = makeFlow("#s9-controls", steps, reset, "Play");
+  swapB.addEventListener("click", () => { if (flow.busy) return; swapped = !swapped; flow.restart(); });
+  flow.ctr.append(swapB);
+  K.$("#s9-seg").appendChild(modeSeg(["Stream–stream", "Stream–table", "Table–table"], 0, "s9-mode", () => !flow.busy, (i) => { mode = i; swapped = false; flow.restart(); }));
+  reset(); flow.sync();
+})();
+
+/* ================= 10. CRASH WITHOUT DOUBLE-COUNTING ================= */
+(function faultSim() {
+  const svg = K.$("#s10-svg");
+  const N = 8, EVERY = 3, X0 = 98, PITCH = 58, CW = 54;
+  const cellX = (i) => X0 + i * PITCH + CW / 2;
+  svg.appendChild(txt(330, 24, "input log · one event per ticket sold", "sv-label", "middle", BOLD));
+  const cells = [];
+  for (let i = 0; i < N; i++) {
+    const r = s("rect", { x: X0 + i * PITCH, y: 36, width: CW, height: 34, rx: 8, class: "sv-panel" });
+    svg.append(r, txt(cellX(i), 58, "sale " + i, "sv-label", "middle", BOLD)); cells.push(r);
+  }
+  const ptr = s("path", { d: "M-8,10 L8,10 L0,-1 Z", class: "sv-fill-blue" }); svg.appendChild(ptr);
+  const ptrLbl = txt(0, 100, "reads next", "sv-label"); svg.appendChild(ptrLbl);
+  svg.appendChild(s("line", { x1: 240, y1: 180, x2: 150, y2: 180, class: "sv-wire" }));
+  svg.appendChild(s("line", { x1: 360, y1: 180, x2: 482, y2: 180, class: "sv-wire" }));
+  svg.appendChild(draw.db(92, 180, 112, 88, "saved checkpoint"));
+  svg.appendChild(s("rect", { x: 50, y: 164, width: 84, height: 42, rx: 9, class: "sv-box" }));
+  const ck1 = txt(92, 181, "", "sv-label", "middle", BOLD), ck2 = txt(92, 198, "", "sv-label", "middle", BOLD); svg.append(ck1, ck2);
+  const procG = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "Crash the stream processor" });
+  const proc = draw.server(300, 180, 120, 88); procG.appendChild(proc); svg.appendChild(procG);
+  svg.appendChild(txt(300, 244, "stream processor", "sv-label", "middle", BOLD));
+  const mem = txt(300, 261, ""); svg.appendChild(mem);
+  svg.appendChild(draw.db(548, 180, 132, 96, "outside database"));
+  const dbPlate = s("rect", { x: 494, y: 164, width: 108, height: 28, rx: 9, class: "sv-box" }); svg.appendChild(dbPlate);
+  const dbV = txt(548, 183, "", "sv-text", "middle", { fontWeight: 700 }), dbL = txt(548, 202, ""); svg.append(dbV, dbL);
+  const pend = s("g", { class: "fade" }, s("rect", { x: 372, y: 160, width: 100, height: 40, rx: 10, class: "sv-data-soft" }));
+  const pendT = txt(422, 185, "", "sv-label", "middle", BOLD); pend.appendChild(pendT); svg.appendChild(pend);
+  const pendLbl = txt(422, 150, "open transaction", "sv-label"); pend.appendChild(pendLbl);
+  const verdict = txt(330, 304, "", "sv-label", "middle", BOLD); svg.appendChild(verdict);
+  const layer = s("g"); svg.appendChild(layer);
+  const st = { truth: stat("Really sold", 0), db: stat("Database says", 0, "good"), dup: stat("Counted twice", 0, "good"), skip: stat("Repeats skipped", 0) };
+  K.$("#s10-stats").append(st.truth, st.db, st.dup, st.skip);
+
+  let mode = 0, busy = false, pos, count, ck, sold, last, pending, written, truth, dupes, skipped, down;
+  function init() { pos = 0; count = 0; ck = { pos: 0, count: 0 }; sold = 0; last = -1; pending = 0; written = new Set(); truth = 0; dupes = 0; skipped = 0; down = false; K.clear(layer); }
+  function render() {
+    cells.forEach((r, i) => r.setAttribute("class", i < ck.pos ? "sv-good" : i < pos ? "sv-data-soft" : "sv-panel"));
+    const px = pos < N ? cellX(pos) : cellX(N - 1) + 40;
+    ptr.setAttribute("transform", "translate(" + px + ",76)"); ptrLbl.setAttribute("x", Math.min(px, 600));
+    ptrLbl.textContent = pos < N ? "reads next" : "end of log";
+    ck1.textContent = "offset " + ck.pos; ck2.textContent = "count " + ck.count;
+    proc.firstChild.setAttribute("class", down ? "sv-bad" : "sv-server"); proc.light.setAttribute("class", down ? "sv-fill-coral" : "sv-fill-mint");
+    mem.textContent = down ? "crashed · memory wiped" : "memory: count " + count + " · next " + pos;
+    mem.style.fill = down ? "var(--coral)" : "";
+    dbV.textContent = "sold = " + sold; dbV.style.fill = sold > truth ? "var(--coral)" : "";
+    dbL.textContent = mode === 2 ? "last offset " + (last < 0 ? "–" : last) : ""; dbPlate.setAttribute("height", mode === 2 ? 46 : 28);
+    pend.style.opacity = mode === 1 ? 1 : 0; pendT.textContent = pending ? "+" + pending + " not visible" : "empty";
+    const wrong = sold > truth;
+    verdict.textContent = wrong ? "the database says " + sold + ", but only " + truth + " tickets were sold" : sold === truth ? (truth ? "database and reality agree: " + truth : "") : "database shows " + sold + " of " + truth + " — the rest commits with the next checkpoint";
+    verdict.style.fill = wrong ? "var(--coral)" : sold === truth ? "var(--mint)" : "";
+    st.truth.set(truth); st.db.set(sold, wrong ? "bad" : sold === truth ? "good" : "warn"); st.dup.set(dupes, dupes ? "bad" : "good"); st.skip.set(skipped, skipped ? "good" : "");
+  }
+  async function tagFly(text, cls, a, b, ms) { const t = draw.tag(text, cls); layer.appendChild(t); await fly(t, a, b, ms); return t; }
+  async function step() {
+    const k = pos, replay = k < truth;
+    (await tagFly("sale " + k, "sv-data-soft", [cellX(k), 53], [300, 150], 420)).remove();
+    count++;
+    if (mode === 0) {
+      (await tagFly("+1", replay ? "sv-bad" : "sv-data-soft", [360, 180], [490, 180], 420)).remove();
+      sold++; if (written.has(k)) dupes++; written.add(k);
+    } else if (mode === 1) {
+      (await tagFly("+1", "sv-data-soft", [360, 180], [400, 180], 260)).remove(); pending++;
+    } else {
+      const t = await tagFly("+1 @" + k, replay ? "sv-bad" : "sv-data-soft", [360, 180], [490, 180], 420);
+      if (k <= last) { skipped++; await fly(t, [490, 180], [440, 214], 260); t.remove(); } else { t.remove(); sold++; last = k; }
+    }
+    pos++; truth = Math.max(truth, pos); render();
+    let cap = replay
+      ? (mode === 0 ? "Sale " + k + " is processed <b>a second time</b>. Inside the processor that's harmless — its count was rolled back too. But the outside database already had this “+1”, and gets it <b>again</b>."
+        : mode === 1 ? "Sale " + k + " is replayed. Its first “+1” died with the open transaction, so this is the only one the database will ever see."
+        : "Sale " + k + " is replayed and sends “+1 @" + k + "” again. The database compares it with its stored <b>last offset (" + last + ")</b>, sees it has " + (k <= last ? "already applied this one, and <b>ignores it</b>." : "not applied it, and adds it."))
+      : (mode === 0 ? "Sale " + k + " is counted in memory and a “+1” is written straight to the outside database."
+        : mode === 1 ? "Sale " + k + " is counted, and its “+1” joins an <b>open transaction</b>. Nothing is visible outside yet."
+        : "Sale " + k + " is counted. The write carries its offset — “+1 <b>@" + k + "</b>” — and the database stores that offset next to the value.");
+    if (pos % EVERY === 0 || pos === N) {
+      const jobs = [(async () => { (await tagFly("save", "sv-db", [240, 180], [150, 180], 420)).remove(); })()];
+      if (mode === 1 && pending) jobs.push((async () => { (await tagFly("+" + pending, "sv-good", [472, 180], [490, 180], 420)).remove(); })());
+      await Promise.all(jobs);
+      ck = { pos, count }; if (mode === 1) { sold += pending; pending = 0; }
+      render();
+      cap += mode === 1 ? " Then comes a <b>checkpoint</b>: the transaction's writes and the new offset are committed <b>together</b> — all or nothing." : " Then comes a <b>checkpoint</b>: offset " + pos + " and count " + count + " go to durable storage.";
+    }
+    setCap("#s10-cap", cap);
+  }
+  async function one() { if (busy) return; if (pos >= N) { setCap("#s10-cap", "The whole log has been processed. Compare “database says” with “really sold”, then Reset and try another mode."); return; } busy = true; await step(); busy = false; }
+  async function all() { if (busy) return; busy = true; while (pos < N) { await step(); await sleep(160); } busy = false; }
+  async function crash() {
+    if (busy) return; busy = true;
+    const lostWork = pos - ck.pos, lostPending = pending;
+    down = true; render(); proc.classList.remove("sv-shake"); void proc.getBBox(); proc.classList.add("sv-shake");
+    setCap("#s10-cap", "<b>Crash!</b> Everything in the processor's memory is gone.");
+    await sleep(900);
+    down = false; pos = ck.pos; count = ck.count; pending = 0; render();
+    setCap("#s10-cap", !lostWork
+      ? "It restarts from its checkpoint — and nothing had happened since then, so nothing needs replaying. Crash it <i>between</i> checkpoints to see the trouble."
+      : "It restarts from the last checkpoint: <b>offset " + ck.pos + ", count " + ck.count + "</b>. The " + lostWork + " sale" + (lostWork === 1 ? "" : "s") + " after that will be read <b>again</b>. " + (mode === 0 ? "Inside the framework that is exactly right. But their “+1”s already reached the outside database, and no checkpoint can pull those back." : mode === 1 ? "Their " + lostPending + " pending write" + (lostPending === 1 ? " was" : "s were") + " in a transaction that never committed, so " + (lostPending === 1 ? "it vanishes" : "they vanish") + " as if nothing happened." : "Their writes did reach the database — but each is stamped with its offset, so the repeats can be recognized."));
+    busy = false;
+  }
+  onPress(procG, crash);
+  const mk = (label, cls, fn) => { const b = h("button", { class: "btn " + cls, type: "button" }, label); b.addEventListener("click", fn); return b; };
+  function reset() { init(); render(); setCap("#s10-cap", ["<b>Checkpoints only.</b> Each sale is written to the outside database right away; the processor saves its place after every third event.", "<b>Atomic commit.</b> Writes wait in a transaction and become visible together with the checkpoint — all or nothing.", "<b>Idempotent writes.</b> Each write carries the offset of the event that caused it, and the database remembers the last offset it applied."][mode] + " Process a few sales, then crash the processor."); }
+  K.$("#s10-controls").append(mk("Process the next sale", "primary", one), mk("Process all", "", all), mk("Crash!", "danger", crash), mk("Reset", "", () => { if (!busy) reset(); }));
+  K.$("#s10-seg").appendChild(modeSeg(["Checkpoints only", "Atomic commit", "Idempotent writes"], 0, "s10-mode", () => !busy, (i) => { mode = i; reset(); }));
+  reset();
+})();
+
+/* ==SIMS== */
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "A producer sends faster than its consumer can process. Which of these is NOT one of the three basic options?", options: ["Drop some messages", "Buffer messages in a queue", "Apply backpressure and block the producer", "Make the consumer skip its acknowledgments"], answer: 3, why: "The book lists exactly three: drop, buffer, or backpressure (flow control). Skipping acks wouldn't make the consumer any faster — the broker would just redeliver everything." },
+  { q: "Two consumers share one queue (load balancing). Consumer 2 crashes while holding m3, and consumer 1 is busy with m4. What does consumer 1 end up processing?", options: ["m4, then m3, then m5 — out of order", "m3, then m4, then m5 — the broker waits", "m4 and m5 only; m3 is lost", "Nothing until consumer 2 comes back"], answer: 0, why: "With no ack for m3 the broker redelivers it — to consumer 1, after m4. Load balancing combined with redelivery inevitably reorders messages." },
+  { q: "In a log-based broker, what does a consumer need to remember to know which messages it has already processed?", options: ["A list of every message ID it has seen", "One acknowledgment per message", "Just its current offset in each partition", "Nothing; the broker deletes messages that were read"], answer: 2, why: "Everything below the offset has been processed, everything above hasn't. That tiny bookmark is also why a consumer can rewind and replay." },
+  { q: "Mei and Omar update the database and the search index with dual writes, and the two end up different. How does change data capture prevent this?", options: ["It makes the network faster", "The database alone decides the order, and the index follows its change log", "It locks both systems for every write", "It writes to the search index first"], answer: 1, why: "CDC makes one system the leader. Its log fixes a single order of changes, and every derived system applies that same order." },
+  { q: "A phone was offline and delivers three taps five minutes late. You window by processing time. What do you see?", options: ["The correct counts, slightly delayed", "An error from the stream processor", "A burst of taps in the wrong window that never really happened", "The taps are automatically moved to the right window"], answer: 2, why: "Processing time places each event where it arrived, not where it happened, so lag shows up as fake spikes and dips. Event time fixes that, at the cost of having to deal with stragglers." },
+  { q: "After a crash a stream processor restarts from its last checkpoint and replays some events. Which write to an outside database stays correct?", options: ["“Add 1 to the counter”", "“Add 1 to the counter”, sent twice to be safe", "“Add 1, unless you have already applied offset 4” — the write carries the offset", "Any write, because checkpoints undo outside effects"], answer: 2, why: "Incrementing isn't idempotent, and a checkpoint can't pull back something that already left the framework. Storing the offset with the value lets the database recognize and skip a repeat." },
+], 12);
+</script>
+</body>
+</html>

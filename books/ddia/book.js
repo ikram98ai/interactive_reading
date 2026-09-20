@@ -8,7 +8,7 @@ window.BOOK = {
   edition: "2nd edition",
   blurb: "A picture-book tour of how real data systems work, with machines you can poke, break, and fix.",
   accent: "blue",
-  built: 10, // chapters 1..10 have pages; the rest show as "coming soon"
+  built: 14, // every chapter has a page; lower this to show later ones as "coming soon"
   chapters: [
     { n: 1, short: "Trade-offs", title: "Trade-Offs in Data Systems Architecture", kid: "There's no perfect answer — only choices with pros and cons." },
     { n: 2, short: "Requirements", title: "Defining Nonfunctional Requirements", kid: "What makes an app fast, dependable, able to grow, and easy to fix?" },

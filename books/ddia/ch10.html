@@ -1257,6 +1257,7 @@ function makeFlow(ctrSel, steps, reset, label) {
     },
     async () => {
       votes = 0;
+      if (candidate < 0) return;
       setCap("#s8-cap", "Vote requests go out. Each node says yes only if it doesn't know of a leader with a <b>higher</b> epoch — and a crashed node says nothing at all.");
       for (const n of nodes) {
         if (!n.alive) { badges[n.i].style.opacity = 1; badges[n.i].setAttribute("class", "sv-fill-coral"); badgeTexts[n.i].textContent = "–"; continue; }
@@ -1269,6 +1270,7 @@ function makeFlow(ctrSel, steps, reset, label) {
       }
     },
     async () => {
+      if (candidate < 0) { line1.textContent = "nobody left to vote"; line1.style.fill = "var(--coral)"; return; }
       if (votes >= majority()) {
         nodes[candidate].role = "leader"; render();
         line1.textContent = "node " + (candidate + 1) + " is the leader of epoch " + epoch;
