@@ -1,0 +1,11 @@
+{
+  "name": "interactive-reading-tools",
+  "private": true,
+  "description": "Local checks for chapter pages. Not part of the published site.",
+  "scripts": {
+    "check": "node check-site.js"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.11.0"
+  }
+}

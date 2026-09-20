@@ -1,2 +1,8 @@
 *.pdf
 .DS_Store
+
+# tools/: dependencies, screenshots, and extracted book text (copyrighted, like the PDFs)
+tools/node_modules/
+tools/.venv/
+tools/.shots/
+tools/.text/

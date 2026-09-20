@@ -14,6 +14,7 @@ books/books.js          the list of books shown on the shelf
 books/<slug>/book.js    one book's chapter list + how many chapters are built
 books/<slug>/index.html that book's chapter route map
 books/<slug>/chNN.html  one interactive chapter
+tools/                  local checks for chapter pages (not published) — see tools/README.md
 ```
 
 `book.js` sets `window.BOOK` and loads before `assets/kit.js`, so the shared kit works
@@ -23,8 +24,11 @@ for any book. Chapters above `built` show as "coming soon" instead of broken lin
 
 1. Read the chapter.
 2. Ask for the interactive chapter page — it writes `books/<slug>/chNN.html`
-   and bumps `built` in `books/<slug>/book.js`.
-3. `git push` — the site redeploys itself.
+   and bumps `built` in `books/<slug>/book.js` and `books/books.js`.
+   [`tools/CHAPTER_BRIEF.md`](tools/CHAPTER_BRIEF.md) is the brief to build from.
+3. Check it: [`tools/`](tools/README.md) clicks through every simulation in a headless browser,
+   screenshots them, and checks the page's claims against the book's text.
+4. `git push` — the site redeploys itself.
 
 ## Adding a new book
 
