@@ -39,7 +39,8 @@
       <span class="ch-tag"><span class="num">3</span> Chapter three</span>
       <h1>Data Models and Query Languages</h1>
       <p class="lede">The same facts can be written down in very different shapes: neat tables, one nested document, or a web of arrows. The shape you pick decides which questions are easy to ask.</p>
-      <p class="quote">“The limits of my language mean the limits of my world.” — Ludwig Wittgenstein, quoted at the start of the chapter</p>
+      <p class="quote">“The limits of my language mean the limits of my world.” — Ludwig Wittgenstein, <i>Tractatus Logico-Philosophicus</i> (1922), quoted at the start of the chapter</p>
+      <p class="cite-note">Grown-up boxes are from Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd edition, with the printed page numbers.</p>
       <nav class="toc" aria-label="Scenes in this chapter">
         <a href="#declarative">Say what, not how</a>
         <a href="#shape">Tables or one document</a>
@@ -76,6 +77,7 @@
             <p>SQL, Cypher, SPARQL and Datalog are <b>declarative</b>: you say what conditions the results must meet and how to transform them (sorted, grouped, aggregated), not how to achieve it. Languages like Python and Java make you write the algorithm.</p>
             <p>Because implementation details are hidden, the database can add performance improvements without any change to your queries, and can run a query <b>in parallel</b> across multiple cores and machines.</p>
             <p>The chapter's real example: <code>SELECT date_trunc('month', observation_timestamp) AS observation_month, sum(num_animals) FROM observations WHERE family = 'Sharks' GROUP BY observation_month;</code> — expressible in MongoDB's aggregation pipeline too, with <code>$match</code> and <code>$group</code>.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;65–66, 82 · Terminology: Declarative Query Languages</p>
           </div>
         </details>
       </div>
@@ -107,6 +109,7 @@
             <p>Locality isn't unique to documents: Google's <b>Spanner</b> can interleave a table's rows inside a parent table, Oracle has multi-table index cluster tables, and Bigtable-style wide-column stores use <b>column families</b>.</p>
             <p><b>ORMs</b> (ActiveRecord, Hibernate) reduce translation boilerplate but can't hide the two models, and make it easy to write the <b>N+1 query problem</b>: one query for N comments, then N more to look up each author.</p>
             <p>One-to-many is often “one-to-few”. For a genuinely large number of related items — thousands of comments on a celebrity's post — embedding them all in one document is too unwieldy, and separate tables are better.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;66–72 · Relational Versus Document Models</p>
           </div>
         </details>
       </div>
@@ -138,6 +141,7 @@
             <p>Some document databases have no joins at all, so you do them in application code; MongoDB offers <code>$lookup</code> in an aggregation pipeline.</p>
             <p>X (formerly Twitter) stores only post IDs and sender IDs in each precomputed timeline, then looks up the content, like count and profile picture when the timeline is read — a join in application code called <b>hydrating</b> the IDs. It's done that way because likes and profile pictures change fast.</p>
             <p>Normalization is better for OLTP; analytics often fares better denormalized. Neither is good or bad — they're trade-offs between read cost, write cost and effort.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;70–74 · Normalization, Denormalization, and Joins</p>
           </div>
         </details>
       </div>
@@ -168,6 +172,7 @@
             <p>A denormalized option is to store the references on <i>both</i> sides (the résumé lists the org, the org lists the résumé), but then the relationship lives in two places and they can disagree.</p>
             <p>A normalized representation stores the relationship once and relies on <b>secondary indexes</b> on both the <code>user_id</code> and <code>org_id</code> columns so it can be queried efficiently in both directions. Many document databases can index fields inside arrays, such as <code>org_id</code> inside <code>positions</code>.</p>
             <p>The document model also can't refer directly to a nested item — you have to say “the second item in the list of positions for user 251”. It is, however, great for user-orderable lists like a to-do list, because order is just the array order.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;74–76 · Many-to-One and Many-to-Many Relationships</p>
           </div>
         </details>
       </div>
@@ -198,6 +203,7 @@
             <p>Each row of <code>fact_sales</code> is an event — a customer's purchase of a product (or a page view, for website traffic). Some columns are attributes like price and cost; others are foreign keys into dimension tables such as <code>dim_product</code> (SKU, description, brand, category, fat content, package size).</p>
             <p>Even dates get a dimension table, so queries can tell holidays from ordinary days. Fact tables often have over a hundred columns; dimension tables are wide too (<code>dim_store</code> may record the square footage, the in-store bakery, when it was last remodeled).</p>
             <p>A star or snowflake is mostly many-to-one relationships. Snowflake schemas are more normalized, but star schemas are often preferred because they're simpler for analysts. OBT precomputes the joins: more storage, sometimes faster queries — and denormalization is unproblematic here, because the data is a historical log that doesn't change.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;76–78 · Stars and Snowflakes: Schemas for Analytics</p>
           </div>
         </details>
       </div>
@@ -228,6 +234,7 @@
             <p>The book's own example: <code>if (user &amp;&amp; user.name &amp;&amp; !user.first_name) { user.first_name = user.name.split(" ")[0]; }</code> versus <code>ALTER TABLE users ADD COLUMN first_name text DEFAULT NULL;</code> followed by an <code>UPDATE</code> that rewrites every row.</p>
             <p>Adding a column with a default is fast even on large tables; the UPDATE is slow, and changing a column's datatype often copies the whole table. Tools exist for online migrations, but large migrations remain operationally challenging.</p>
             <p>Schema-on-read shines when data is <b>heterogeneous</b>: many types of object, or a structure decided by external systems you don't control. When all records really do have the same structure, a schema documents and enforces it.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;78–80 · Schema flexibility in the document model</p>
           </div>
         </details>
       </div>
@@ -274,7 +281,8 @@
                 <p>In a <b>triple store</b> everything is a <code>(subject, predicate, object)</code> statement; the object is either a primitive value (a property) or another vertex (an edge). Turtle/N3 and RDF/XML are encodings; <b>SPARQL</b> is the query language; the <b>Semantic Web</b> lives on in JSON-LD, Wikidata, Schema.org and Open Graph.</p>
                 <p><b>Datalog</b> (Datomic, LogicBlox, CozoDB, LinkedIn's LIquid) defines derived virtual tables with rules like <code>within_recursive(...) :- ...</code>; rules can invoke themselves, enabling graph traversal.</p>
                 <p>Facebook keeps one graph of people, locations, events, check-ins and comments; search engines keep <b>knowledge graphs</b>. The <b>GQL</b> ISO standard, based on Cypher, was published in 2024.</p>
-              </div>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;82–96 · Graph-Like Data Models</p>
+          </div>
             </details>
           </div>
           <div class="stage">
@@ -304,6 +312,7 @@
             <p>It does <b>not</b> allow recursive queries (unlike Cypher, SPARQL, SQL or Datalog) or arbitrary search conditions, because queries come from untrusted sources and expensive queries could cause a denial of service.</p>
             <p>It accepts duplication on purpose: a sender's name and image URL are repeated in every message, and the content of a replied-to message is duplicated under <code>replyTo</code>, because that's simpler for the client than making another request.</p>
             <p>The server can store the data normalized and do the joins itself — but only joins declared in the GraphQL schema can be requested. GraphQL can sit on top of a relational, document <i>or</i> graph database. Costs: tooling to convert queries into REST/gRPC calls, plus authorization, rate limiting and performance concerns.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;96–100 · GraphQL</p>
           </div>
         </details>
       </div>
@@ -335,6 +344,7 @@
             <p>Advantages: intent is clearer than row edits; views are <b>reproducible</b> (delete and recompute with fixed code); many views optimized for different queries; new views from the existing log; mistakes reversed with a later event; the log doubles as an <b>audit log</b>; logs absorb write bursts.</p>
             <p>Downsides: event processing must be <b>deterministic</b> (put the exchange rate <i>in</i> the event); immutability clashes with deletion requests under GDPR (hence <b>crypto-shredding</b>); and reprocessing must not repeat side effects like confirmation emails.</p>
             <p>Like a star-schema fact table, a log is a collection of past events — but fact table rows all share columns and are unordered, while events have many types and their <b>order matters</b>. Implementations: EventStoreDB, MartenDB, Axon, or Apache Kafka plus stream processors.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;100–104 · Event Sourcing and CQRS</p>
           </div>
         </details>
       </div>
@@ -365,6 +375,7 @@
             <p>A common use is transforming relational-like data into a matrix, like a pivot table: users as rows, movies as columns. The matrix is <b>sparse</b>, may have thousands of columns, and wouldn't fit well in a relational database — but NumPy and DataFrame libraries handle it easily.</p>
             <p>A matrix contains only numbers, so dates are scaled to floats and small fixed sets of values get <b>one-hot encoding</b> (which also generalizes to movies in several genres). Then linear algebra — the basis of many ML algorithms, such as recommending movies — becomes possible.</p>
             <p>Related: <b>array databases</b> such as TileDB for geospatial rasters, medical imaging and telescope data; DataFrames for financial time series; and DataFrame APIs added to Spark and Flink.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;104–106 · DataFrames, Matrices, and Arrays</p>
           </div>
         </details>
       </div>

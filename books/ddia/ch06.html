@@ -34,6 +34,7 @@
       <h1>Replication</h1>
       <p class="lede">Keeping the same data on several computers, so a broken machine never means lost homework — and so the copy nearest you can answer first. Easy, until the copies disagree.</p>
       <p class="quote">“The major difference between a thing that might go wrong and a thing that cannot possibly go wrong is that when a thing that cannot possibly go wrong goes wrong, it usually turns out to be impossible to get at or repair.” — Douglas Adams, <i>Mostly Harmless</i> (1992)</p>
+      <p class="cite-note">Grown-up boxes are from Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd edition, with the printed page numbers.</p>
       <nav class="toc" aria-label="Scenes in this chapter">
         <a href="#leader">One leader</a>
         <a href="#sync">Wait or don't wait</a>
@@ -70,6 +71,7 @@
             <p>Clients send all writes to the leader. The leader writes locally, then sends every change to its followers as a <b>replication log</b> or change stream. Followers apply the writes <i>in the same order</i>. Reads may go to any replica.</p>
             <p>Used by PostgreSQL, MySQL, Oracle Data Guard, SQL Server Always On, MongoDB, DynamoDB, Kafka, DRBD, and by consensus algorithms like Raft (CockroachDB, TiDB, etcd, RabbitMQ quorum queues), which elect a new leader automatically.</p>
             <p>The replication log itself comes in flavours: <b>statement-based</b> (replay the SQL — breaks on <code>NOW()</code>, <code>RAND()</code> and autoincrements), <b>write-ahead log shipping</b> (byte-level, ties the versions together), and <b>logical (row-based)</b> logs such as MySQL's binlog, which stay readable across versions and power change data capture.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;198–208 · Single-Leader Replication</p>
           </div>
         </details>
       </div>
@@ -99,6 +101,7 @@
             <p>So it is impracticable for all followers to be synchronous. In practice one follower is synchronous and the others asynchronous; if the synchronous one stalls, an asynchronous one is promoted to take its place. This is called <b>semisynchronous</b>.</p>
             <p>Some systems replicate synchronously to a <b>majority</b> of replicas (3 of 5) — a quorum. Fully asynchronous replication means a confirmed write may not be durable at all, yet it is widely used, especially with many or geographically distributed followers.</p>
             <p>Normally followers are less than a second behind, but there is no guarantee: recovery, near-capacity operation or network trouble can push them minutes behind.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;199–200 · Synchronous Versus Asynchronous Replication</p>
           </div>
         </details>
       </div>
@@ -129,6 +132,7 @@
             <p>Tools: Percona XtraBackup for MySQL snapshots; WAL-G and Litestream archive the log to object storage so steps 1–2 become a download.</p>
             <p><b>Follower failure</b> is the easy case: each follower keeps a log of what it has applied, so after a crash it asks the leader for everything since its last transaction. The leader can only delete log entries once all followers have them — otherwise it must choose between filling its disk and forcing a restore from backup.</p>
             <p>Replication is not a backup: a deletion replicates too. Backups store <i>old</i> snapshots so you can go back in time.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;198–203 · Setting Up New Followers</p>
           </div>
         </details>
       </div>
@@ -158,6 +162,7 @@
             <p>With asynchronous replication the new leader may be missing writes; the usual fix is to discard them, so writes believed committed weren't durable. At GitHub, an out-of-date MySQL follower was promoted and reused autoincrement primary keys that were already referenced in Redis — private data was shown to the wrong users.</p>
             <p><b>Split brain:</b> two nodes both believe they are leader. If both accept writes with no conflict resolution, data is lost or corrupted. Shutting one down (<b>fencing</b>) is the safety catch — carelessly designed, it can shut down both.</p>
             <p>Timeouts are a genuine trade-off, and for these reasons many teams prefer to do failover manually.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;203–205 · Leader failure: Failover</p>
           </div>
         </details>
       </div>
@@ -186,6 +191,7 @@
             <p>The delay between a write on the leader and it showing up on a follower is the <b>replication lag</b> — usually a fraction of a second, but there is no upper limit.</p>
             <p><b>Read-after-write consistency</b> techniques: read anything the user might have modified from the leader (e.g. always read your own profile from the leader); for one minute after a user's last write, send all their reads to the leader; monitor lag and avoid followers more than a minute behind; or have the client remember the timestamp (a logical one, such as a log sequence number) of its last write and require the replica to be at least that fresh, waiting or rerouting if it isn't.</p>
             <p>Across devices you may want <b>cross-device</b> read-after-write consistency: the metadata must then be centralized, and requests from all of a user's devices may need routing to the same region.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;209–211 · Problems with Replication Lag</p>
           </div>
         </details>
       </div>
@@ -228,7 +234,8 @@
                 <p><b>Monotonic reads</b> is stronger than eventual consistency and weaker than strong consistency: if one user makes several reads in sequence, they will not see time go backward. Achieved by routing each user to the same replica (e.g. by a hash of the user ID) — with rerouting needed if that replica fails.</p>
                 <p><b>Consistent prefix reads</b>: if a sequence of writes happens in a certain order, anyone reading them sees them in that order. It is violated mainly in <b>sharded</b> databases, where shards operate independently and there is no global ordering of writes. Solutions: keep causally related writes in one shard, or explicitly track causal dependencies.</p>
                 <p>If replication lag of minutes or hours would ruin the user experience, design for a stronger guarantee. Doing it in application code is complex and easy to get wrong; the simplest model is a database with <b>linearizability</b> and ACID transactions — the trend known as <b>NewSQL</b>.</p>
-              </div>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;211–214 · Monotonic reads / Consistent prefix reads</p>
+          </div>
             </details>
           </div>
           <div class="stage">
@@ -259,6 +266,7 @@
             <p>Across regions it wins on <b>performance</b> (writes served locally), <b>tolerance of regional outages</b> and <b>tolerance of network problems</b>. It loses on <b>consistency</b>: you can't guarantee a unique username or a non-negative balance, because two leaders can each accept a write that is fine alone but broken together.</p>
             <p><b>Topologies</b>: circular, star, and all-to-all. Circular and star break when one node fails; all-to-all is more fault tolerant but messages can overtake each other, so an update may arrive before the insert it depends on — a causality problem that needs <b>version vectors</b>, not wall-clock timestamps.</p>
             <p>Supported by MySQL, Oracle, SQL Server, YugabyteDB, and add-ons like Redis Enterprise, EDB Postgres Distributed and pglogical. It's often a retrofitted feature with sharp edges (autoincrementing keys, triggers, constraints). <b>Sync engines</b> (Google Firestore, Realm, Ditto, PouchDB/CouchDB, Automerge, Yjs) apply the same model to <b>offline-first</b> and <b>local-first</b> apps.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;215–221 · Multi-Leader Replication</p>
           </div>
         </details>
       </div>
@@ -303,7 +311,8 @@
                 <p><b>LWW</b> converges but loses data: with concurrent writes, which is “latest” is undefined, so the winner is essentially random — and real-time clocks make it sensitive to clock skew. <b>Siblings</b> (CouchDB) return all concurrent values and let the app or the user merge, which changes the API and can create fresh conflicts.</p>
                 <p><b>Automatic conflict resolution</b> gives <b>strong eventual consistency</b>: all replicas that processed the same writes have the same state. Text merges keep every insertion and deletion; collections track deletes so removed items stay removed (Cart = {Soap}); counters add up increments and decrements without double counting.</p>
                 <p>Two algorithm families: <b>CRDTs</b> (unique immutable IDs per character, used in Redis Enterprise, Riak, Azure Cosmos DB, Automerge, Yjs) and <b>operational transformation</b> (transform the index of each operation, used in Google Docs, ShareDB).</p>
-              </div>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;222–228 · Dealing with Conflicting Writes</p>
+          </div>
             </details>
           </div>
           <div class="stage">
@@ -334,6 +343,7 @@
             <p>Catching up: <b>read repair</b> (the client writes back the newer value it saw), <b>hinted handoff</b> (a stand-in stores writes for an absent replica and delivers them later), and <b>anti-entropy</b> (a background process copying differences in no particular order).</p>
             <p>Quorums are not absolute guarantees. Edge cases: restoring a node from an old replica, rebalancing, a read concurrent with a write, a write that succeeded on fewer than w replicas and is never rolled back, clock-based LWW dropping writes, and genuinely concurrent writes.</p>
             <p>A <b>sloppy quorum</b> (Riak and Dynamo; “consistency level ANY” in Cassandra/ScyllaDB) lets any reachable node accept the write during a big network interruption — no guarantee that later reads see it, but better than failing. Leaderless systems shine at <b>gray failures</b> and let clients use the fastest responses (<b>request hedging</b>).</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;228–236 · Leaderless Replication</p>
           </div>
         </details>
       </div>
@@ -363,6 +373,7 @@
             <p>Operation A <b>happens before</b> B if B knows about, depends on, or builds upon A. Two operations are <b>concurrent</b> if neither happens before the other — regardless of physical time.</p>
             <p>The algorithm: the server keeps a version number per key and bumps it on every write; a read returns all <b>siblings</b> plus the latest version; a client must read before writing and must merge what it read; a write carries the version from that prior read, and the server overwrites everything at that version or below while keeping anything higher as a sibling. A write with no version number is concurrent with everything.</p>
             <p>With multiple replicas you need a version number per replica per key: the collection is a <b>version vector</b> (Riak calls its encoding the <b>causal context</b>; the dotted version vector is used in Riak 2.0). It makes it safe to read from one replica and write back to another. A version vector is not quite the same as a vector clock — for comparing replica states, version vectors are the right structure.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;237–242 · Detecting Concurrent Writes</p>
           </div>
         </details>
       </div>

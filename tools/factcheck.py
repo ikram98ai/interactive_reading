@@ -54,7 +54,7 @@ def main():
         t = norm(term)
         return t in src or re.sub(r"[^a-z0-9]", "", t) in tight
 
-    boxes = [strip_tags(m.group(1)) for m in
+    boxes = [strip_tags(re.sub(r'<p class="cite">.*?</p>', '', m.group(1))) for m in
              re.finditer(r'<details class="book">.*?<div class="inner">(.*?)</div>\s*</details>', page, re.S)]
     print(f"{slug} ch{n}: {len(boxes)} book boxes, {sum(len(b.split()) for b in boxes)} words")
 

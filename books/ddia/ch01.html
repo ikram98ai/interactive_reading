@@ -38,7 +38,8 @@
       <span class="ch-tag"><span class="num">1</span> Chapter one</span>
       <h1>Trade-Offs in Data Systems Architecture</h1>
       <p class="lede">Every app is a little town where data gets made, stored, and looked at. Building that town means picking between good options that each cost something.</p>
-      <p class="quote">“There are no solutions; there are only trade-offs.” — Thomas Sowell, quoted at the start of the chapter</p>
+      <p class="quote">“There are no solutions; there are only trade-offs.” — Thomas Sowell, interview with Fred Barnes (2005), quoted at the start of the chapter</p>
+      <p class="cite-note">Grown-up boxes are from Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd edition, with the printed page numbers.</p>
       <nav class="toc" aria-label="Scenes in this chapter">
         <a href="#frontend">Frontend &amp; backend</a>
         <a href="#oltp">Cashier vs detective</a>
@@ -72,6 +73,7 @@
             <p>Client-side code is the <b>frontend</b>. Server-side code that handles requests is the <b>backend</b>, usually reached over HTTP.</p>
             <p>Application code is often <b>stateless</b>: information that must last from one request to the next lives on the client or in the server's <b>data infrastructure</b> (databases, caches, message queues).</p>
             <p>A frontend handles one user's data. The backend handles data for <i>all</i> users, which is where most of the hard problems are.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;2–3 · Terminology: Frontends and Backends</p>
           </div>
         </details>
       </div>
@@ -102,6 +104,7 @@
             </ul>
             <p>Analysts avoid querying OLTP systems directly: data is spread across <b>silos</b>, OLTP schemas don't suit analytics, big queries hurt performance for other users, and the systems may sit behind security boundaries.</p>
             <p><b>HTAP</b> systems try to do both in one system. <b>Product analytics</b> (Pinot, Druid, ClickHouse) put analytics inside user-facing features.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;4–8 · Characterizing Transaction Processing and Analytics</p>
           </div>
         </details>
       </div>
@@ -129,6 +132,7 @@
             <p>A <b>data warehouse</b> is a separate database holding a read-only copy of data from many OLTP systems. Analysts can query it as much as they like without slowing operations. It usually uses a relational model and SQL.</p>
             <p>A <b>data lake</b> is a central store of files with no fixed format or schema: Avro or Parquet records, text, images, sensor readings, feature vectors. It's often cheaper because it can sit on object storage.</p>
             <p>ETL has grown into general <b>data pipelines</b>. When analytics results flow back into operational systems (for example, an ML recommendation model), that's called <b>reverse ETL</b>.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;6–10 · Data Warehousing</p>
           </div>
         </details>
       </div>
@@ -156,6 +160,7 @@
             <p><b>System of record</b> (also called the source of truth): holds the authoritative version. New data is written here first, each fact once, usually normalized.</p>
             <p><b>Derived data systems</b>: caches, indexes, materialized views, denormalized values, trained models. It's technically redundant, but it's often essential for fast reads. If you lose it, you can re-create it from the source.</p>
             <p>A database isn't one kind or the other by nature. It depends on how <i>you use it</i>. Being clear about what is derived from what makes a messy architecture easier to follow.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;8–11 · Systems of Record and Derived Data</p>
           </div>
         </details>
       </div>
@@ -192,8 +197,9 @@
               <div class="inner">
                 <p>Self-hosting is often cheaper if you already know how to run the system and your load is predictable. The cloud shines when load varies a lot, as it does for analytical queries.</p>
                 <p>The downsides of the cloud come from lack of control: you can't add missing features, you wait out outages, you can't see internals when debugging, you risk <b>vendor lock-in</b> and price changes, sanctions can cut you off, and you have to trust the provider with your data.</p>
-                <p>Operations doesn't go away. It shifts: capacity planning becomes <i>financial</i> planning, and performance tuning becomes <i>cost</i> tuning.</p>
-              </div>
+                <p>Operations doesn't go away. It shifts: capacity planning becomes <i>financial</i> planning, and performance optimization becomes <i>cost</i> optimization.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;10–17 · Cloud Versus Self-Hosting</p>
+          </div>
             </details>
           </div>
           <div class="stage">
@@ -222,6 +228,7 @@
             <p>Traditionally, disks were treated as durable, with RAID keeping copies within one machine. In the cloud, a VM's local disk is an <b>ephemeral cache</b>: it disappears if the instance fails or gets replaced.</p>
             <p>Virtual block devices (like EBS) imitate disks over the network, but that adds overhead and every I/O becomes a network call. Cloud-native databases use dedicated services instead: <b>object stores</b> such as S3 for big blocks, and separate services for small values.</p>
             <p>This is <b>disaggregation</b>, or the separation of storage and compute. Cloud systems are also often <b>multitenant</b>: many customers share hardware, which takes care to isolate.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;12–16 · Cloud Native System Architecture</p>
           </div>
         </details>
       </div>
@@ -252,6 +259,7 @@
             <p>A simple single-threaded program can outperform a cluster with more than 100 CPU cores. Tools like DuckDB and SQLite let many workloads run on one node.</p>
             <p>Debugging a distributed system needs <b>observability</b>: tracing tools such as OpenTelemetry, Zipkin, and Jaeger. Keeping data consistent <i>across</i> services becomes the application's problem.</p>
             <p><b>Supercomputers (HPC)</b> are different: when a node fails they often stop the whole job and restart from a checkpoint, while cloud services have to keep serving users.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;18–23 · Distributed Versus Single-Node Systems</p>
           </div>
         </details>
       </div>
@@ -280,13 +288,14 @@
         <h2>One giant robot, or a team of small robots?</h2>
         <p class="story">You can build the whole app as <b>one big program</b>. Or you can build <b>microservices</b>: small programs that each do one job, each owned by one team, each with its own database, and all talking through <b>APIs</b>.</p>
         <p class="story">Microservices let teams work without waiting for one another. But now there are many more things to deploy, monitor, and keep working together.</p>
-        <p class="story"><b>Serverless</b> goes further: you hand the cloud a function, and it runs only when a request arrives. You pay only while it runs, though a “cold” function can be slow to wake up.</p>
+        <p class="story"><b>Serverless</b> goes further: you hand the cloud a function, and it runs only when a request arrives. You pay only while it runs, though the first request after a quiet spell can be slow to start.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
             <p>Microservices are “primarily a technical solution to a <b>people problem</b>”: they let teams make progress independently. That helps in a big company but is often unnecessary overhead in a small one.</p>
             <p>Services shouldn't share a database. Otherwise the whole database schema becomes part of the API and gets hard to change. Changing an API can break its clients, and standards like OpenAPI and gRPC help with that.</p>
-            <p><b>Serverless / FaaS</b> brings metered billing to running code, with limits on execution time and possible slow <b>cold starts</b>. It still runs on servers, just not ones you manage.</p>
+            <p><b>Serverless / FaaS</b> brings metered billing to running code, with limits on execution time and possible <b>slow start times when a function is first invoked</b>. It still runs on servers, just not ones you manage.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;20–22 · Microservices and Serverless</p>
           </div>
         </details>
       </div>
@@ -314,6 +323,7 @@
             <p>Regulations like the GDPR, the CCPA, and the EU AI Act shape how personal data can be used. Many systems rely on <b>immutable, append-only logs</b>, which makes deleting data from the middle of one hard. So does removing data from derived datasets and ML training data.</p>
             <p>The cost of storing data isn't just the storage bill. It also includes the risk of leaks, fines, government demands, and real danger to users when data could reveal criminalized behavior.</p>
             <p><b>Data minimization</b> (German: <i>Datensparsamkeit</i>) means collecting only for a specific purpose and not keeping data longer than needed. That runs against the “store everything” big-data habit.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;22–24 · Data Systems, Law, and Society</p>
           </div>
         </details>
       </div>
@@ -1086,11 +1096,11 @@ const setCap = (id, html) => { K.$(id).innerHTML = html; };
     });
     [0, 15, 30, 45, 60].forEach((sec) => stage.appendChild(draw.label(X(sec), 256, `${sec}s`)));
     stage.append(s("rect", { x: 190, y: 280, width: 12, height: 12, rx: 3, style: { fill: "var(--blue)" } }), draw.label(208, 290, "running your code", "sv-label", "start"),
-      s("rect", { x: 350, y: 280, width: 12, height: 12, rx: 3, style: { fill: "var(--coral)" } }), draw.label(368, 290, "cold start (waking up)", "sv-label", "start"));
+      s("rect", { x: 350, y: 280, width: 12, height: 12, rx: 3, style: { fill: "var(--coral)" } }), draw.label(368, 290, "first invoke (waking up)", "sv-label", "start"));
     const head = s("line", { y1: 40, y2: 236, style: { stroke: "var(--ink)", strokeWidth: 2 } }); stage.appendChild(head);
     raf = (tt) => { const x = X(((tt / 1000) * 8) % T); head.setAttribute("x1", x); head.setAttribute("x2", x); };
     stats([["Always-on billed", "60 s", "bad"], ["Serverless billed", `${billed.toFixed(1)} s`, "good"], ["Cold starts", String(cold), cold > 2 ? "warn" : ""]]);
-    setCap("#s10-cap", "<b>Serverless:</b> the cloud runs your function only when a request arrives, so you pay for seconds of work, not an idle server. After a quiet spell, the first request waits for a <b>cold start</b>.");
+    setCap("#s10-cap", "<b>Serverless:</b> the cloud runs your function only when a request arrives, so you pay for seconds of work, not an idle server. After a quiet spell, the first request waits while the function starts.");
   }
   function render(m) {
     mode = m; K.clear(stage); raf = null; L.stop(); again.hidden = m !== 2;

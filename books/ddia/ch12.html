@@ -39,6 +39,7 @@
       <h1>Stream Processing</h1>
       <p class="lede">The last chapter counted a mountain of data once a night. But data never stops arriving — so this chapter handles every event the moment it happens, forever.</p>
       <p class="quote">“A complex system that works is invariably found to have evolved from a simple system that works. The inverse proposition also appears to be true: A complex system designed from scratch never works and cannot be made to work.” — John Gall, <i>Systemantics</i> (1975), quoted at the start of the chapter</p>
+      <p class="cite-note">Grown-up boxes are from Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd edition, with the printed page numbers.</p>
       <nav class="toc" aria-label="Scenes in this chapter">
         <a href="#flow">Too fast to keep up</a>
         <a href="#brokers">Two clerks, one pile</a>
@@ -75,6 +76,7 @@
             <p>Two questions tell messaging systems apart. First: what if producers send faster than consumers can process? The options are to <b>drop</b> messages, <b>buffer</b> them in a queue, or apply <b>backpressure</b> (flow control) — Unix pipes and TCP use backpressure with a small fixed-size buffer. If you buffer: does the system crash when the queue no longer fits in memory, or spill to disk, and what does that do to performance?</p>
             <p>Second: what if nodes crash or go offline — are messages lost? Durability needs disk writes and/or replication, which cost throughput and latency. For periodic sensor readings an occasional missing value may be fine; if you are <b>counting</b> events, every lost message means a wrong counter.</p>
             <p><b>Direct messaging</b> skips the middleman: UDP multicast for stock market feeds, brokerless libraries such as ZeroMQ and nanomsg, StatsD metrics over UDP, and webhooks (HTTP callbacks). These generally assume producers and consumers are constantly online, and the application must cope with lost messages.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;487–490 · Messaging Systems</p>
           </div>
         </details>
       </div>
@@ -106,6 +108,7 @@
             <p><b>Load balancing</b> delivers each message to one consumer (a shared subscription in JMS); <b>fan-out</b> delivers each to all (topic subscriptions in JMS, exchange bindings in AMQP). Kafka's consumer groups combine the two.</p>
             <p>If a connection closes or times out without an <b>acknowledgment</b>, the broker redelivers. The message may in fact have been processed and only the ack lost; handling that needs atomic commit or idempotence. Load balancing plus redelivery <b>inevitably reorders</b> messages (consumer 1 sees m4, m3, m5) — which matters when messages have causal dependencies. A separate queue per consumer avoids it.</p>
             <p>A malformed message that crashes every consumer would be redelivered forever. <b>Dead letter queues</b> (DLQs) park such messages in a separate, monitored queue so an operator can drop, fix or replay them; Apache Pulsar and Kafka Streams support them too.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;490–494 · Message brokers</p>
           </div>
         </details>
       </div>
@@ -137,6 +140,7 @@
             <p>The broker records only <b>consumer offsets</b>, not per-message acks — just like the log sequence number in single-leader replication, with the broker as leader and the consumer as follower. After a failure a consumer resumes from its last <i>recorded</i> offset, so it may see some messages twice.</p>
             <p>The log is cut into <b>segments</b>; old ones are deleted or archived, making the log a big on-disk ring buffer. A 20 TB drive written at 250 MB/s takes about 22 hours to fill; in practice logs hold days or weeks. Kafka and Redpanda tier old messages to object storage; WarpStream, Confluent Freight and Bufstream keep everything there, as Iceberg tables.</p>
             <p>A consumer that falls too far behind misses messages, but only <i>it</i> is affected; you can monitor its lag and alert. And since the offset is under the consumer's control, you can <b>replay</b>: start a copy of a consumer at yesterday's offset and reprocess, as often as you like.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;494–498 · Log-Based Message Brokers</p>
           </div>
         </details>
       </div>
@@ -167,6 +171,7 @@
             <p><b>Change data capture (CDC)</b> observes every change written to a database and extracts it in a form that can be replicated elsewhere, ideally as a stream. The database decides the order and writes it to its replication log; the index applies the changes in the same order; another system is just another consumer. CDC makes one database the leader and the rest followers, and a log-based broker transports the changes because it preserves their order.</p>
             <p>Tools: <b>Debezium</b> (connectors for MySQL, PostgreSQL, Oracle, SQL Server, Db2, Cassandra and more), Kafka Connect, Maxwell (MySQL binlog), GoldenGate (Oracle), pgcapture (PostgreSQL). MySQL and PostgreSQL send changes through the same replication log they use for replicas; Google's Datastream does it for its cloud databases; Cassandra exposes raw log segments per node and leaves merging to the consumer.</p>
             <p>CDC is usually <b>asynchronous</b>: a slow consumer doesn't hold up the system of record, but all the problems of replication lag apply. It also turns the database schema into a public API — removing a column can break downstream services. <b>Data contracts</b> and the <b>outbox pattern</b> (a separate outbox table, written in the same transaction as the real change) decouple the two, at the price of extra writes and a transformation to maintain.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;500–507 · Keeping Systems in Sync</p>
           </div>
         </details>
       </div>
@@ -197,6 +202,7 @@
             <p><b>Log compaction</b> (the same idea as in log-structured storage engines) runs in the background, finds records with the same key and keeps only the most recent. A null value — a <b>tombstone</b> — marks a deleted key. The disk space needed then depends only on the current contents of the database, not on how many writes ever happened. The book's example (Figure 12-6) is exactly this: cat videos mew, purr, scratch and yawn with their play counts.</p>
             <p>To rebuild a derived system you start a new consumer at offset 0 of the compacted topic and scan it: it is guaranteed to contain the latest value of every key. Apache Kafka supports this, which lets a broker be durable storage, not just transient messaging.</p>
             <p>This works for CDC because each event holds the entire new version of a record. With <b>event sourcing</b>, events express a user's intent and later events don't override earlier ones, so you need the full history and can't compact the same way; such systems store snapshots of derived state purely as a performance optimization.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;502–506 · Initial snapshot / Log compaction</p>
           </div>
         </details>
       </div>
@@ -228,6 +234,7 @@
             <p><b>Several views from one log.</b> Druid ingests directly from Kafka; Kafka Connect sinks export to many databases and indexes. A new feature gets its own read-optimized view, built from the log and run side by side with the old one — easier than a schema migration. This is the idea of CQRS, and it makes the normalization-versus-denormalization debate largely irrelevant.</p>
             <p><b>Concurrency.</b> Views are usually updated asynchronously, so you may not read your own write. On the other hand a user action becomes a single self-contained event, appended atomically in one place, and a single-threaded consumer per shard needs no concurrency control.</p>
             <p><b>Limits.</b> With high churn the history can grow prohibitively large. And sometimes data really must go (GDPR, leaked secrets): Datomic calls it <i>excision</i>, Fossil <i>shunning</i>; <b>crypto-shredding</b> stores data encrypted and later forgets the key. Truly deleting data is surprisingly hard — it is more “making it harder to retrieve” than “impossible to retrieve”.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;506–512 · State, Streams, and Immutability</p>
           </div>
         </details>
       </div>
@@ -247,7 +254,7 @@
         <span class="eyebrow">Big idea 7 · uses of stream processing</span>
         <h2>Questions that sit and wait for their answers</h2>
         <p class="story">A normal database keeps the <i>data</i> and lets questions come and go. A <b>stream processor</b> flips that around: it keeps the <i>questions</i> and lets the data flow past. Each new event is shown to every waiting question — “is this the one you were looking for?”</p>
-        <p class="story">Watch Lena's bank card. One stored question hunts for a suspicious <i>pattern</i>: paying in two cities just minutes apart. One keeps a running <i>average</i>. One keeps a little <i>table</i> of totals always up to date. One is a saved <i>search</i> for bike shops.</p>
+        <p class="story">Watch Lena's bank card. One stored question hunts for a suspicious <i>pattern</i> — the book names fraud detection as a classic use of complex event processing; the two-city demo below is our illustration of a stored query. One keeps a running <i>average</i>. One keeps a little <i>table</i> of totals always up to date. One is a saved <i>search</i> for bike shops.</p>
         <p class="story">Same stream, four different jobs — and each one answers the instant an event arrives, not tomorrow morning.</p>
         <p class="imagine"><b>Try it:</b> make Lena pay in Lima a few times, then straight away in Oslo. Reset and try again, but press “Wait 10 minutes” before the Oslo payment.</p>
         <details class="book">
@@ -258,6 +265,7 @@
             <p><b>Stream analytics</b> is about aggregations over windows: rates, rolling averages, comparisons with last week. Probabilistic algorithms (Bloom filters, HyperLogLog, percentile estimators) save memory, but they are only an optimization — there is nothing inherently approximate about stream processing. Apache Storm, Spark Streaming, Flink, Samza, Beam, Kafka Streams; Google Cloud Dataflow, Azure Stream Analytics.</p>
             <p><b>Materialized views</b> need a window that stretches back to the beginning of time (Kafka Streams, ksqlDB). Databases often refresh views by batch (PostgreSQL's <code>REFRESH MATERIALIZED VIEW</code>); <b>incremental view maintenance</b> — Materialize, RisingWave, ClickHouse, Feldera — recomputes only what changed.</p>
             <p><b>Search on streams</b> stores the queries and runs each document past them, e.g. the percolator feature of Elasticsearch: media monitoring, or a real estate site that notifies users when a new property matching their search criteria appears on the market. Actor frameworks also pass messages, but they manage concurrency rather than data, and usually don't guarantee delivery after a crash.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;512–516 · Uses of Stream Processing</p>
           </div>
         </details>
       </div>
@@ -287,6 +295,7 @@
             <p><b>Stragglers.</b> With event-time windows you can never be sure a window is complete. Either ignore stragglers — and track how many you drop — or publish a <b>correction</b>, possibly retracting the old output. A special message saying “from now on, there will be no more messages with a timestamp earlier than <i>t</i>” can close windows, but with several producers each one must be tracked separately.</p>
             <p><b>Whose clock?</b> A phone may buffer events offline for hours or days, and its clock can't be trusted. One approach logs three timestamps: when the event occurred (device clock), when it was sent (device clock), and when it was received (server clock). The difference between the last two estimates the device clock's offset.</p>
             <p><b>Window types.</b> <i>Tumbling</i>: fixed length, every event in exactly one window (10:03:00–10:03:59). <i>Hopping</i>: fixed length with overlap, e.g. 5 minutes hopping by 1. <i>Sliding</i>: all events within some interval of each other — 10:03:39 and 10:08:12 share a 5-minute sliding window, though no fixed-boundary window would hold both. <i>Session</i>: no fixed length; it ends after a period of inactivity, e.g. 30 minutes. A counter needs constant state, but sliding windows must buffer events.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;516–522 · Reasoning About Time</p>
           </div>
         </details>
       </div>
@@ -317,6 +326,7 @@
             <p><b>Stream–table join (enrichment).</b> Looking up each user ID in a remote database is slow and may overload it. Instead, load a copy of the table into the stream processor — a <b>hash join</b> against a local hash table or on-disk index — and keep it fresh by subscribing to the table's CDC changelog. It is really a join of two streams, where the table side has a window reaching back to the beginning of time.</p>
             <p><b>Table–table join (materialized view maintenance).</b> The timeline cache is the materialized result of joining <code>posts</code> with <code>follows</code>. New posts go to every follower's timeline; deleted posts are removed; a new follow pulls in recent posts; an unfollow removes them. Seen as calculus, the change stream of a join follows the product rule (u·v)′ = u′v + uv′.</p>
             <p><b>Time dependence.</b> If state changes over time and you join with it, which point in time do you use? With no ordering guarantee across streams or shards the join becomes <b>nondeterministic</b>: rerunning the same job may interleave the inputs differently. Data warehouses call this a <b>slowly changing dimension</b> and give each version of a record (say, a tax rate) its own identifier — which makes the join deterministic but rules out log compaction. Alternatively, denormalize the rate into every sale event.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;522–524 · Stream Joins</p>
           </div>
         </details>
       </div>
@@ -347,6 +357,7 @@
             <p><b>Atomic commit.</b> All outputs and side effects of processing an event — downstream messages, database writes, operator state, and moving the consumer offset forward — must happen atomically or not at all. Google Cloud Dataflow, VoltDB and Apache Kafka do this efficiently by keeping the transaction internal to the framework rather than spanning heterogeneous systems as XA does, and by handling several input messages per transaction.</p>
             <p><b>Idempotence.</b> An operation is idempotent if doing it several times has the same effect as doing it once: deleting a key is; incrementing a counter is not. You can often add it with metadata — store the Kafka offset of the last applied message with the value (Storm's Trident does something similar). It assumes replay in the same order, deterministic processing, no other writer on the same value, and possibly <b>fencing</b> during failover.</p>
             <p><b>Rebuilding state.</b> Keep state in a remote replicated store (slow per message), or keep it local and replicate it: Flink snapshots operator state to a distributed filesystem, Kafka Streams sends state changes to a log-compacted Kafka topic, VoltDB processes each input redundantly on several nodes. Sometimes state can simply be rebuilt by replaying the input.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;524–528 · Fault Tolerance</p>
           </div>
         </details>
       </div>

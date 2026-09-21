@@ -36,6 +36,7 @@
       <h1>Transactions</h1>
       <p class="lede">A transaction is a promise: “these changes all happen together, or none of them happen at all.” It is how a database keeps its word when computers crash and everybody writes at once.</p>
       <p class="quote">“We believe it is better to have application programmers deal with performance problems due to overuse of transactions as bottlenecks arise, rather than always coding around the lack of transactions.” — James Corbett et al., “Spanner: Google’s Globally-Distributed Database” (2012)</p>
+      <p class="cite-note">Grown-up boxes are from Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd edition, with the printed page numbers.</p>
       <nav class="toc" aria-label="Scenes in this chapter">
         <a href="#allornothing">All or nothing</a>
         <a href="#acid">ACID</a>
@@ -73,6 +74,7 @@
             <p><b>ACID atomicity</b> is not about concurrency — that's the “I”. It describes what happens when a fault occurs partway through: process crash, network interruption, full disk, constraint violation. The book notes that “<b>abortability</b>” would have been a better word than atomicity.</p>
             <p>Retrying an aborted transaction is simple and effective, but imperfect: a commit acknowledgment lost in the network causes a double-run unless you deduplicate; retrying under contention makes overload worse (use limited retries and exponential backoff); permanent errors like constraint violations should not be retried; and side effects outside the database, such as sending an email, still happen.</p>
             <p>ORMs such as Rails ActiveRecord and Django don't retry aborted transactions — the error just bubbles up, which wastes the whole point of rollback.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;277–287 · What Exactly Is a Transaction?</p>
           </div>
         </details>
       </div>
@@ -105,6 +107,7 @@
             </ul>
             <p>The term ACID was coined by Theo Härder and Andreas Reuter in 1983; the book warns it “has unfortunately become mostly a marketing term.” <b>BASE</b> (basically available, soft state, eventual consistency) is even vaguer — it mostly means “not ACID”.</p>
             <p>Perfect durability does not exist: SSDs can violate their guarantees on power loss, fsync is hard to use correctly (PostgreSQL got it wrong for over 20 years), 30–80% of SSDs develop a bad block within four years, and correlated faults can take out every replica at once. Disk, replication and backups are risk-reduction techniques to use together.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;278–283 · The Meaning of ACID</p>
           </div>
         </details>
       </div>
@@ -133,6 +136,7 @@
             <p>Relational databases group operations by the client's TCP connection: everything between <code>BEGIN TRANSACTION</code> and <code>COMMIT</code>. Many nonrelational stores have no such grouping — a multi-put may succeed for some keys and fail for others.</p>
             <p>Even <b>single-object writes</b> need atomicity and isolation: a 20 kB JSON document must not be stored half-sent, spliced with its old value, or read half-updated. Storage engines provide this with a log for crash recovery and a lock per object.</p>
             <p>Some databases offer atomic <b>increment</b> and <b>conditional write</b> (compare-and-set) operations. Aerospike's strong-consistency mode and Cassandra/ScyllaDB “lightweight transactions” give linearizable reads and conditional writes on a single object, but no guarantees across objects.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;283–286 · Single-Object and Multi-Object Operations</p>
           </div>
         </details>
       </div>
@@ -161,6 +165,7 @@
             <p>Dirty writes are prevented with <b>row-level locks</b>: a writer holds the lock until commit or abort. Dirty reads are usually prevented not by read locks (one long writer would block every reader and hurt response time) but by remembering both the old committed value and the new uncommitted one, and handing readers the old value until commit.</p>
             <p><b>Read uncommitted</b> is weaker still: it prevents dirty writes but not dirty reads.</p>
             <p>Read committed does <i>not</i> prevent the lost-update race between two counter increments — there the second write happens after the first transaction committed, so it isn't a dirty write.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;289–292 · Read Committed</p>
           </div>
         </details>
       </div>
@@ -191,6 +196,7 @@
             <p><b>Visibility rules:</b> ignore writes by transactions that were in progress when the snapshot was taken (even if they later commit), ignore writes by transactions with a later txid, ignore writes by aborted transactions — everything else is visible. Equivalently: a row is visible if the inserting transaction had committed when the reader started, and the deleting transaction (if any) had not.</p>
             <p>CouchDB, Datomic and LMDB instead use immutable, <b>copy-on-write B-trees</b>: every write creates a new root, and each root <i>is</i> a consistent snapshot.</p>
             <p>Naming is a mess: snapshot isolation is called “repeatable read” in PostgreSQL, “serializable” in Oracle; MySQL's “repeatable read” is weaker; Db2's means serializability. The SQL standard predates snapshot isolation, so “nobody really knows what repeatable read isolation means.”</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;292–298 · Snapshot Isolation and Repeatable Read</p>
           </div>
         </details>
       </div>
@@ -222,6 +228,7 @@
               <li><b>Conditional write (compare-and-set)</b>: <code>UPDATE … WHERE id = 1234 AND content = 'old'</code>, or a version-number column — sometimes called <b>optimistic locking</b>.</li>
             </ul>
             <p>With multi-leader or leaderless replication there is no single up-to-date copy, so locks and compare-and-set don't apply. Instead concurrent writes create <b>siblings</b> that get merged afterwards — the idea behind <b>CRDTs</b>. <b>Last write wins</b> is prone to lost updates.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;298–302 · Preventing Lost Updates</p>
           </div>
         </details>
       </div>
@@ -251,6 +258,7 @@
             <p>Other examples: a <b>meeting room booking</b> system, a <b>multiplayer game</b> moving two figures to the same square, <b>claiming a username</b> (a uniqueness constraint fixes this one), and <b>preventing double-spending</b>.</p>
             <p>The pattern is always: a <code>SELECT</code> checks a condition, the application decides, then a write changes the very set of rows that condition matched. When a write in one transaction changes another's search result, that's a <b>phantom</b>.</p>
             <p>If the rows exist, <code>SELECT … FOR UPDATE</code> can lock them. If the query matches <i>no</i> rows there's nothing to lock. You can <b>materialize conflicts</b> — pre-create a table of room/time-slot rows purely to lock — but it's ugly and error-prone, “a last resort”. Automatically preventing write skew requires true <b>serializable</b> isolation.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;302–307 · Write Skew and Phantoms</p>
           </div>
         </details>
       </div>
@@ -280,6 +288,7 @@
             <p>Interactive multi-statement transactions aren't allowed; the application submits a <b>stored procedure</b>. Modern ones use general-purpose languages: VoltDB uses Java or Groovy, Datomic Java or Clojure, Redis Lua, MongoDB JavaScript. VoltDB also runs the same deterministic stored procedure on each replica — <b>state machine replication</b>.</p>
             <p>Throughput is limited to one CPU core unless you shard. Cross-shard transactions must run in lockstep across shards; VoltDB reports about <b>1,000 cross-shard writes per second</b>, orders of magnitude below single-shard throughput and not improved by adding machines.</p>
             <p>Constraints: every transaction must be small and fast (one slow one stalls everything), the active dataset should fit in memory, and write throughput must fit on one core or shard cleanly.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;308–312 · Actual Serial Execution</p>
           </div>
         </details>
       </div>
@@ -309,6 +318,7 @@
             <p>Locks are <b>shared</b> or <b>exclusive</b> (multi-reader single-writer). A transaction may upgrade shared to exclusive, and must hold every lock until commit or abort — hence “two-phase”. 2PL is used by the serializable level in MySQL/InnoDB and SQL Server, and by repeatable read in Db2.</p>
             <p>Performance is the reason it isn't the default: overhead plus much reduced concurrency. One big read takes a shared lock on the whole table and blocks all writers; latencies become unstable and very slow at high percentiles. Deadlocks are far more frequent than under read committed, and a deadlocked transaction's work is wasted.</p>
             <p>A <b>predicate lock</b> covers all objects matching a search condition, including ones that don't exist yet. Because checking many predicate locks is slow, most databases use <b>index-range locking</b> (next-key locking), a safe approximation that locks a larger set. With no suitable index, the fallback is a shared lock on the whole table.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;313–316 · Two-Phase Locking</p>
           </div>
         </details>
       </div>
@@ -338,6 +348,7 @@
             <p>Two things to detect: <b>stale MVCC reads</b> (the transaction ignored an uncommitted write that has since committed) and <b>writes that affect prior reads</b> (tracked on index entries, like an index-range lock that doesn't block — a <b>tripwire</b> that only notifies).</p>
             <p>Why wait until commit? A read-only transaction never needs aborting, the writer may yet abort, and avoiding unnecessary aborts preserves long-running consistent-snapshot reads.</p>
             <p>Trade-offs: finer tracking means more precise aborts but more bookkeeping. Optimistic control performs badly under high contention; commutative atomic operations reduce contention. Read/write transactions should be short — long read-only ones are fine. Unlike 2PL, nothing blocks, so query latency is much more predictable.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;317–322 · Serializable Snapshot Isolation</p>
           </div>
         </details>
       </div>
@@ -368,6 +379,7 @@
             <p>If the coordinator crashes after votes, participants are <b>in doubt</b> and can only wait — they must keep holding locks even across restarts, blocking other transactions. Lost coordinator logs need manual resolution; <b>heuristic decisions</b> let a participant decide alone, which the book calls “a euphemism for probably breaking atomicity”. <b>3PC</b> assumes bounded delays, so it doesn't help in practice.</p>
             <p><b>XA</b> (1991) standardizes 2PC across heterogeneous systems as a C API; it can't detect cross-system deadlocks and doesn't work with SSI. <b>Database-internal</b> distributed transactions (CockroachDB, TiDB, Spanner, FoundationDB, YugabyteDB, Kafka) avoid the lowest-common-denominator trap by replicating the coordinator with consensus and letting shards talk directly.</p>
             <p>You often don't need distributed transactions at all: recording a processed <b>message ID</b> in the same database transaction makes processing <b>idempotent</b>, giving exactly-once semantics without atomic commit across systems.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;323–334 · Two-Phase Commit</p>
           </div>
         </details>
       </div>
@@ -1530,7 +1542,7 @@ K.quiz($("#quiz-root"), [
     q: "A transaction fails halfway through. What does atomicity promise?",
     options: ["The half that worked is kept", "Every write it made is undone, so you can safely retry", "The database shuts down", "Other transactions are also cancelled"],
     answer: 1,
-    why: "Atomicity is really abortability: on failure the database discards all the transaction's writes, so retrying can't double-apply anything.",
+    why: "Atomicity is really abortability: on failure the database discards all the transaction's writes. A lost commit acknowledgment is different — retrying that one can run the work twice unless you deduplicate.",
   },
   {
     q: "Which of these can still happen under read-committed isolation?",

@@ -40,6 +40,7 @@
       <h1>Defining Nonfunctional Requirements</h1>
       <p class="lede">An app doesn't just need buttons that work. It needs to be <b>fast</b>, <b>dependable</b>, <b>able to grow</b>, and <b>easy to fix</b> — because an app that is unbearably slow or unreliable might as well not exist.</p>
       <p class="quote">“The Internet was done so well that most people think of it as a natural resource like the Pacific Ocean, rather than something that was man-made. When was the last time a technology with a scale like that was so error-free?” — Alan Kay, Dr. Dobb's Journal (2012)</p>
+      <p class="cite-note">Grown-up boxes are from Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd edition, with the printed page numbers.</p>
       <nav class="toc" aria-label="Scenes in this chapter">
         <a href="#timelines">The mailroom</a>
         <a href="#queueing">One checkout lane</a>
@@ -76,6 +77,7 @@
             <p>Polling: if 10 million users are online and each re-runs the timeline query every 5 seconds, that's <b>2 million queries per second</b>; times 200 followed accounts, about <b>400 million lookups per second</b>.</p>
             <p>The fix is <b>materialization</b>: precompute each user's home timeline and keep it in a cache — a <b>materialized view</b>. At a fan-out factor of 200, that's just over <b>1 million timeline writes per second</b>: far less work. During load spikes, deliveries can be <b>enqueued</b> and arrive a bit later, while timelines still load fast.</p>
             <p>Extreme cases: for someone following a huge number of very active accounts, it's OK to <b>drop some timeline writes</b> and show a sample. For celebrities it isn't — their posts are stored separately and <b>merged at read time</b>.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;33–36 · Case Study: Social Network Home Timelines</p>
           </div>
         </details>
       </div>
@@ -104,6 +106,7 @@
             <p><b>Response time:</b> elapsed time from when a user makes a request until they receive the answer, measured in seconds. <b>Throughput:</b> requests per second (or data volume per second) the system is processing.</p>
             <p>Response time stays low while throughput is low, then increases sharply as throughput approaches the hardware's capacity. The cause is <b>queueing</b>: an arriving request must wait for the CPU to finish earlier requests.</p>
             <p>Response time is what users care about; throughput determines how many servers you need, and hence the cost. A system is <b>scalable</b> if its maximum throughput can be significantly increased by adding computing resources.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;36–37 · Describing Performance</p>
           </div>
         </details>
       </div>
@@ -132,6 +135,7 @@
             <p>If response times grow so much that clients time out and resend, the rate of requests increases further — a <b>retry storm</b>. Even when the load falls again, the system may stay overloaded until it is rebooted: a <b>metastable failure</b>, a cause of serious production outages.</p>
             <p>Client-side cures: increase and randomize the gap between retries (<b>exponential backoff</b>) and stop sending to a service that recently errored or timed out (a <b>circuit breaker</b> or <b>token bucket</b> algorithm).</p>
             <p>Server-side cures: detect approaching overload and proactively reject requests (<b>load shedding</b>), or tell clients to slow down (<b>backpressure</b>). The choice of queueing and load-balancing algorithms matters too.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;36–38 · When an Overloaded System Won’t Recover</p>
           </div>
         </details>
       </div>
@@ -164,6 +168,7 @@
               <li><b>Latency</b> is a catchall for time when a request is not being actively processed — it is <i>latent</i>. <b>Network latency</b> is time spent travelling.</li>
             </ul>
             <p>Response time varies from request to request: context switches, lost packets and TCP retransmission, garbage-collection pauses, page faults, even mechanical vibration in the rack. Queueing delays often account for much of that variability, because a server processes only a few things at a time — <b>head-of-line blocking</b>.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;36–38 · Latency and Response Time</p>
           </div>
         </details>
       </div>
@@ -193,6 +198,7 @@
             <p>High percentiles are <b>tail latencies</b>. Amazon specifies internal response times at the <b>99.9th percentile</b>, even though it affects 1 request in 1,000, because the slowest requests often belong to the customers with the most data — the most valuable ones. Optimizing the 99.99th percentile was judged too expensive for too little benefit.</p>
             <p>Percentiles appear in <b>SLOs</b> (targets, e.g. median under 200 ms and p99 under 1 second, with 99.9% of valid requests non-error) and <b>SLAs</b> (contracts that say what happens if the target is missed, such as a refund).</p>
             <p>To compute them cheaply on a rolling window, use libraries such as <b>HdrHistogram</b>, <b>t-digest</b>, <b>OpenHistogram</b> or <b>DDSketch</b>. Averaging percentiles is mathematically meaningless — add the histograms instead.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;38–42 · Average, Median, and Percentiles</p>
           </div>
         </details>
       </div>
@@ -213,13 +219,14 @@
         <span class="eyebrow">Big idea 5 · use of response time metrics</span>
         <h2>The group photo waits for the slowest friend</h2>
         <p class="story">One tap in an app often fans out into many little calls behind the scenes: profile, timeline, ads, images. They all run at the same time — but you can't see the screen until the <b>last</b> one arrives.</p>
-        <p class="story">So if 1 call in 100 is slow, and your screen needs 20 calls, then roughly 1 screen in 5 is slow. Rare backend slowness becomes common user slowness. That's <b>tail latency amplification</b>.</p>
+        <p class="story">If a page needs many backend calls, a higher share of those pages will wait on at least one slow call. Rare backend slowness becomes common user slowness. That's <b>tail latency amplification</b>.</p>
         <p class="imagine"><b>Drag the number of calls</b> up and run 50 requests. Compare the measured result with the formula on screen.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
             <p>High percentiles matter most in backend services called several times while serving a single end-user request. Even when the calls are made in parallel, the request waits for the slowest of them; it takes just one slow call to make the whole end-user request slow.</p>
             <p>The more backend calls an end-user request needs, the higher the chance of hitting a slow one, so a larger proportion of end-user requests end up slow — <b>tail latency amplification</b>.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;40–41 · Use of Response Time Metrics</p>
           </div>
         </details>
       </div>
@@ -241,7 +248,7 @@
         <h2>A flat tyre is not a crashed car</h2>
         <p class="story">A <b>fault</b> is one part going wrong: a disk dies, a machine crashes, a service you depend on goes dark. A <b>failure</b> is when the <i>whole system</i> stops giving people what they came for.</p>
         <p class="story">A system is <b>fault-tolerant</b> when faults stay faults. If there are three app servers, losing one is a bad day for that machine and a completely normal day for everyone else. But if some part has no backup, a fault there takes everything down — that part is a <b>single point of failure</b>.</p>
-        <p class="imagine"><b>Break things on purpose</b> (that's <b>fault injection</b>). Turn on the standby database replica and break the database again. Then let the chaos monkey loose.</p>
+        <p class="imagine"><b>Break things on purpose</b> (that's <b>fault injection</b>, the heart of <b>chaos engineering</b>). Turn on the standby database replica and break the database again.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -249,6 +256,7 @@
             <p>A part whose fault escalates into a whole-system failure is a <b>single point of failure (SPOF)</b>. Fault tolerance is always limited to a certain number and type of faults; if all nodes crash, nothing can be done.</p>
             <p>Counterintuitively it makes sense to <i>increase</i> the rate of faults deliberately — <b>fault injection</b>, and the discipline of <b>chaos engineering</b> — because many critical bugs are due to poor error handling, and this keeps the fault-tolerance machinery exercised.</p>
             <p>In the timeline case study, a fan-out machine crashing mid-delivery must be taken over by another without missing or duplicating posts — <b>exactly-once semantics</b>.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;42–44 · Reliability and Fault Tolerance</p>
           </div>
         </details>
       </div>
@@ -278,6 +286,7 @@
             <p>Responses: <b>redundancy</b> (RAID, dual power supplies, generators), <b>availability zones</b>, and tolerating the loss of entire machines at the software level. Multi-node systems also allow <b>rolling upgrades</b> instead of planned downtime.</p>
             <p>Software faults are <b>strongly correlated</b> because many nodes run the same code: the 2012 leap second that hung Java applications through a Linux kernel bug; a firmware bug making certain SSDs fail after exactly 32,768 hours; runaway processes; cascading failures.</p>
             <p>One study of large internet services found <b>configuration changes by operators were the leading cause of outages</b>, with hardware faults in only 10–25% of cases. Blaming “human error” is counterproductive — it's a symptom of the <b>sociotechnical system</b>. Helpful measures: thorough testing, fast rollback, gradual rollouts, clear monitoring and observability, and <b>blameless postmortems</b>.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;42–48 · Hardware and Software Faults</p>
           </div>
         </details>
       </div>
@@ -308,6 +317,7 @@
             <p><b>Shared-disk</b> architectures give machines their own CPU and RAM but a shared array of disks (NAS or SAN); contention and locking overhead limit scalability.</p>
             <p><b>Shared-nothing / horizontal scaling / scaling out</b>: many nodes, each with its own CPUs, RAM and disks, coordinating in software over the network. It can scale linearly, pick the best price/performance hardware, and survive the loss of a datacenter — at the cost of explicit <b>sharding</b> and distributed-systems complexity.</p>
             <p>If doubling resources handles twice the load at the same performance, that's <b>linear scalability</b>. There is no <b>magic scaling sauce</b>: an architecture for one level of load is unlikely to cope with 10× that load, and it's rarely worth planning more than one order of magnitude ahead. Good principles: break the system into parts that operate independently, and don't make things more complicated than necessary.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;48–50 · Scalability</p>
           </div>
         </details>
       </div>
@@ -338,6 +348,7 @@
             <p><b>Operability:</b> good monitoring and observability, no dependence on individual machines, good documentation and a clear operational model (“if I do X, Y will happen”), good defaults that can be overridden, self-healing where appropriate, predictable behavior. More automation is not always better — automated systems that go wrong are harder to troubleshoot, and the leftover cases are the hardest ones.</p>
             <p><b>Simplicity:</b> complexity is a <b>big ball of mud</b>. Splitting complexity into <b>essential</b> and <b>accidental</b> is a flawed but useful idea, since the boundary shifts as tooling evolves. The best tool we have is <b>abstraction</b> — high-level languages hide machine code, SQL hides on-disk structures and concurrency.</p>
             <p><b>Evolvability:</b> loosely coupled, simple systems are easier to change. A major obstacle is <b>irreversibility</b> — if you can't switch back from a database migration, the stakes are far higher. Minimizing irreversibility improves flexibility.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;50–54 · Maintainability</p>
           </div>
         </details>
       </div>

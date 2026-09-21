@@ -32,6 +32,7 @@
       <h1>Consistency and Consensus</h1>
       <p class="lede">Many computers keep copies of your data. This chapter is about making them behave like <i>one</i> honest computer — and about the vote they hold when one of them disappears.</p>
       <p class="quote">“Never go to sea with two chronometers; take one or three.” — Frederick P. Brooks Jr., quoted at the start of the chapter</p>
+      <p class="cite-note">Grown-up boxes are from Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd edition, with the printed page numbers.</p>
       <nav class="toc" aria-label="Scenes in this chapter">
         <a href="#linear">One score, two phones</a>
         <a href="#timeline">When did it flip?</a>
@@ -67,6 +68,7 @@
             <p>It is a <b>recency guarantee</b>: as soon as one client's write completes, every client that reads must see the new value. A read may not return a value older than one another client already saw.</p>
             <p>The violation is only noticeable here because of an extra <b>communication channel</b>: Aaliyah's voice. The same race appears in computers — a web server that stores a video in file storage and then puts a job on a message queue, or a push notification that arrives before the data does.</p>
             <p>Linearizability is the strongest consistency model in common use; read-after-write consistency, monotonic reads, and consistent prefix reads are weaker guarantees it includes.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;402–411 · Linearizability</p>
           </div>
         </details>
       </div>
@@ -95,6 +97,7 @@
             <p>Every operation is marked with the point in time at which it appears to take effect. That marker must lie inside the operation's own bar, and joining the markers must produce a valid sequence for a register where each read returns the most recent write. The line joining the markers must always move <b>forward</b> in time, never backward.</p>
             <p>Linearizability is not the same as <b>serializability</b>. Serializability is a transaction isolation level over many objects and permits stale reads; linearizability is a recency guarantee on a single object. A system with both is called <b>strictly serializable</b> (strong-1SR) — Spanner and FoundationDB offer it; CockroachDB offers serializability with some recency guarantees but not strict serializability.</p>
             <p>Checking a recorded history for linearizability is possible but computationally expensive.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;404–408 · What Makes a System Linearizable?</p>
           </div>
         </details>
       </div>
@@ -123,6 +126,7 @@
             <p>Single-leader replication must ensure there is really only one leader, not several (<b>split brain</b>). One way to elect a leader is a <b>lease</b> that every node tries to acquire; the mechanism must be linearizable so two nodes can't hold it at once.</p>
             <p>Coordination services like <b>Apache ZooKeeper</b> and <b>etcd</b> implement linearizable operations in a fault-tolerant way, and libraries like Apache Curator provide higher-level recipes on top. ZooKeeper provides linearizable writes, but its reads may be stale; etcd has provided linearizable reads by default since version 3.</p>
             <p>Some constraints can be treated loosely — an overbooked flight can be fixed with compensation — and then linearizability isn't needed. Foreign-key and attribute constraints don't need it either.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;408–410 · Relying on Linearizability</p>
           </div>
         </details>
       </div>
@@ -150,6 +154,7 @@
             <p>Reviewing the replication methods: <b>single-leader</b> replication is potentially linearizable (if you really know who the leader is, and replication is not asynchronous); <b>consensus algorithms</b> are likely linearizable; <b>multi-leader</b> replication is not; <b>leaderless</b> Dynamo-style replication probably isn't, even with quorums.</p>
             <p>Dynamo-style quorums can be made linearizable at the cost of performance: a reader must perform <b>read repair synchronously</b> before returning, and a writer must read the latest state of a quorum before writing to ensure its write gets a greater timestamp. Riak skips synchronous read repair for performance; Cassandra waits for it but loses linearizability anyway because it uses time-of-day clocks for timestamps (as do ScyllaDB's last-write-wins rules).</p>
             <p>Even then, only reads and writes can be made linearizable this way. A linearizable <b>CAS</b> operation cannot — it requires a consensus algorithm.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;411–413 · Implementing Linearizable Systems</p>
           </div>
         </details>
       </div>
@@ -179,6 +184,7 @@
             <p>This trade-off is popularly known as the <b>CAP theorem</b>, named by Eric Brewer in 2000: a linearizable system must become unavailable to disconnected replicas (<b>CP</b>), while a system that doesn't need linearizability can keep serving them (<b>AP</b>).</p>
             <p>“Pick two out of three” is misleading — partitions are a fault, not a choice. A better phrasing is <b>either consistent or available when partitioned</b>. CAP is formally very narrow: one consistency model, one kind of fault (network partitions cause under 8% of incidents according to Google data), and an odd definition of availability. It is of mostly historical interest today, though it helped trigger the NoSQL movement. <b>PACELC</b> extends it: during a partition (P) choose availability (A) or consistency (C); else (E) choose low latency (L) or consistency (C).</p>
             <p>Most systems that drop linearizability do it for <b>performance</b>, not fault tolerance. Even RAM on a multi-core CPU isn't linearizable, because each core has its own cache. Attiya and Welch proved that the response time of linearizable reads and writes is at least proportional to the uncertainty of network delays — no faster algorithm exists.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;413–417 · The Cost of Linearizability</p>
           </div>
         </details>
       </div>
@@ -207,6 +213,7 @@
             <p>A single-node autoincrementing ID generator is a <b>fetch-and-add</b> operation and is linearizable, but it isn't fault-tolerant, is slow from other regions, and can become a bottleneck.</p>
             <p>The alternatives all weaken ordering: <b>sharded ID assignment</b> (reserve bits for a shard number — one node hands out even numbers, another odd), <b>preallocated blocks</b> of IDs, <b>random UUIDs</b> (version 4 is essentially a 128-bit random number, orderable only by luck), and <b>wall-clock timestamps made unique</b> — version 7 UUIDs, X's Snowflake, ULIDs, Hazelcast's Flake IDs, MongoDB ObjectIDs.</p>
             <p>Clock-based IDs can be misordered whenever one machine's clock runs slightly fast or slow, or jumps because of an NTP adjustment, so they are unlikely to be linearizable. High-precision clock synchronization with atomic clocks or GPS reduces, but doesn't remove, the problem.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;417–419 · ID Generators and Logical Clocks</p>
           </div>
         </details>
       </div>
@@ -237,6 +244,7 @@
             <p>A <b>hybrid logical clock</b> counts real seconds like a physical clock, but pulls itself forward like a Lamport clock when it sees a larger timestamp, and always increments, so it moves forward even if the underlying clock jumps backward. CockroachDB uses them.</p>
             <p>These clocks order concurrent events arbitrarily, so you usually can't tell whether two timestamps were concurrent. A <b>vector clock</b> can — it keeps a counter per node — but its timestamps are much bigger, potentially one integer per node.</p>
             <p>Lamport and hybrid logical clocks are good for generating <b>transaction IDs</b> for MVCC snapshot isolation, because the snapshot is then consistent with causality. But they are not linearizable: if you set your account to private on a laptop and then upload a photo from a phone, a lower timestamp on the photo can let a stranger see it.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;420–423 · Logical Clocks</p>
           </div>
         </details>
       </div>
@@ -268,6 +276,7 @@
             <p>There are two rounds of voting — one to elect a leader, one for each entry the leader wants to append — and the quorums must overlap. This looks superficially like 2PC but is different: any node can start an election and only a quorum must respond, whereas in 2PC only the coordinator requests votes and <i>every</i> participant must say yes.</p>
             <p>The <b>FLP result</b> proves consensus is unsolvable by a deterministic algorithm in the asynchronous model, but that model forbids clocks and timeouts; with timeouts (or randomness) consensus becomes solvable in practice.</p>
             <p>Costs: a strict majority is always required, adding nodes makes it slower rather than faster, and timeouts are hard to tune. Raft has edge cases where one consistently unreliable link makes leadership bounce forever; a pre-vote phase was added to fix this. EPaxos avoids a leader entirely.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;425–437 · Consensus</p>
           </div>
         </details>
       </div>
@@ -297,6 +306,7 @@
             <p>Raft, Viewstamped Replication and Zab provide shared logs directly; Paxos gives single-value consensus, and Multi-Paxos adds the log. Replaying a log of deterministic writes on every replica is <b>state machine replication</b>, the principle behind event sourcing; a counter over log entries makes good <b>fencing tokens</b> (ZooKeeper's zxid, etcd's revision number).</p>
             <p>A new leader must be at least as up to date as a majority before it may append (Raft) or must first bring its log up to date (Paxos). Weakening that — Kafka's <b>unclean leader election</b>, or asynchronous replication — trades safety for availability, and the theory no longer applies. Linearizable reads must also go through a quorum vote, as they do in etcd.</p>
             <p><b>Coordination services</b> — ZooKeeper, etcd, Consul, modeled on Google's Chubby — package this up with locks and leases, fencing tokens, failure detection via heartbeats and sessions (ZooKeeper's ephemeral nodes), and change notifications. Kubernetes relies on etcd; Spark and Flink in HA mode rely on ZooKeeper. They hold small, slow-changing data on a fixed set of three or five nodes, so thousands of application nodes can outsource their agreement to them. ZooKeeper's <b>observers</b> receive the log without voting, giving fast but possibly stale reads.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;427–440 · The Many Faces of Consensus</p>
           </div>
         </details>
       </div>

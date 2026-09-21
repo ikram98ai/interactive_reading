@@ -37,6 +37,7 @@
       <h1>Storage and Retrieval</h1>
       <p class="lede">A database only has two jobs: put your stuff away, and find it again fast. This chapter opens the filing cabinet and shows you the tricks inside.</p>
       <p class="quote">“A computer does not primarily compute in the sense of doing arithmetic. […] They primarily are filing systems.” — Richard Feynman, 1985, quoted at the start of the chapter</p>
+      <p class="cite-note">Grown-up boxes are from Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd edition, with the printed page numbers.</p>
       <nav class="toc" aria-label="Scenes in this chapter">
         <a href="#log">The endless notebook</a>
         <a href="#sstable">Sorted file &amp; thumb tabs</a>
@@ -73,7 +74,8 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
           <div class="inner">
             <p>Many databases internally use a <b>log</b>: an append-only sequence of records on disk (not the human-readable “application log”). Old values are never overwritten; the last occurrence of a key wins.</p>
             <p>An <b>index</b> is an additional structure <i>derived</i> from the primary data. Adding or removing one never changes the contents, only performance. Well-chosen indexes speed up reads, but every index costs disk space and <b>slows down writes</b>, so databases make you choose them.</p>
-            <p>The in-memory hash index still has four problems: you never free the space used by old entries; the map has to be rebuilt by scanning the whole log on restart; it must fit in memory (on-disk hash maps need lots of random I/O and fiddly collision logic); and <b>range queries</b> (“all keys from 10000 to 19999”) are not efficient.</p>
+            <p>The append-only log plus in-memory hash index still has four problems: you never free the <b>disk space occupied by old log entries</b>; the map has to be rebuilt by scanning the whole log on restart; it must fit in memory (on-disk hash maps need lots of random I/O and fiddly collision logic); and <b>range queries</b> (“all keys from 10000 to 19999”) are not efficient.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;115–118 · Storage and Indexing for OLTP</p>
           </div>
         </details>
       </div>
@@ -93,8 +95,8 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
       <div class="copy">
         <span class="eyebrow">Big idea 1 · sorted files</span>
         <h2>A dictionary with thumb tabs</h2>
-        <p class="story">Nobody reads a dictionary from page one. The words are in <b>order</b>, so you flip to roughly the right place and read a few lines. A <b>Sorted String Table</b> — an <b>SSTable</b> — is a file built the same way: sorted by key, each key appearing once.</p>
-        <p class="story">Because it's sorted, the index doesn't need every key. Keep only the <b>first key of each block</b>: that's a <b>sparse index</b>. Looking for <i>handiwork</i>? It must sit between <i>handicap</i> and <i>handlebar</i>, so jump to that block and scan a few kilobytes.</p>
+        <p class="story">Nobody reads a dictionary from page one. The words are in <b>order</b>, so you flip to roughly the right place and read a few lines. A <b>Sorted Strings Table</b> — an <b>SSTable</b> — is a file built the same way: sorted by key, each key appearing once.</p>
+        <p class="story">Because it's sorted, the index doesn't need every key. Keep only the <b>first key of each block</b>: that's a <b>sparse index</b>. Looking for <i>handiwork</i>? The book's example puts it between <i>handbag</i> and <i>handsome</i>, so jump to that block and scan a few kilobytes.</p>
         <p class="story">Blocks can also be <b>compressed</b>, which saves disk space and I/O bandwidth for a little extra CPU time.</p>
         <p class="imagine"><b>Try it:</b> search for <i>handheld</i>, a word that isn't in the file. The sorted order still tells you exactly which block to check — and that it's definitely not there.</p>
         <details class="book">
@@ -103,6 +105,7 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
             <p>An <b>SSTable</b> stores key-value pairs sorted by key, each key exactly once. Pairs are grouped into <b>blocks</b> of a few kilobytes; only the first key of each block goes into the index, which is therefore <b>sparse</b>. That index lives inside the SSTable, stored as an immutable B-tree, a trie, or similar.</p>
             <p>In the book's example, one block starts at <i>handbag</i> and the next at <i>handsome</i>; the key <i>handiwork</i> must lie between them, so you seek to <i>handbag</i>'s offset and scan forward. A block of a few kilobytes scans very quickly.</p>
             <p>Each block can be compressed (the shaded area in Figure 4-2), saving space and I/O bandwidth at the cost of CPU time.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., p.&nbsp;118 · The SSTable file format</p>
           </div>
         </details>
       </div>
@@ -136,6 +139,7 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
             </ul>
             <p>A separate on-disk log makes the memtable crash-safe; it can be discarded once the memtable has been written out. Deletes append a <b>tombstone</b>, which is dropped once merged into the oldest segment.</p>
             <p>This is the <b>Log-Structured Merge-tree (LSM-tree)</b>, published in 1996 and used by <b>RocksDB</b>, <b>Cassandra</b>, <b>ScyllaDB</b> and <b>HBase</b>, all inspired by Google's <b>Bigtable</b> paper (which coined “SSTable” and “memtable”). Segment files are immutable, so crash recovery is easy: delete the unfinished file and start again. They also suit object storage — SlateDB and Delta Lake do exactly that.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;118–126 · Log-Structured Storage</p>
           </div>
         </details>
       </div>
@@ -157,13 +161,14 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
         <p class="story">Looking for a key that doesn't exist is the slowest thing an LSM engine does: it has to open every segment to be sure. A <b>Bloom filter</b> is a tiny bitmap that answers “is this key in this file?” almost instantly.</p>
         <p class="story">To add a key, you hash it into a few numbers and switch those bits to 1. To ask about a key, you hash it the same way and peek at those bits. If <i>any</i> of them is 0, the key is <b>definitely not</b> in the file: skip it. If all are 1, the key is <b>probably</b> there, so go and check properly.</p>
         <p class="story">Sometimes other keys have already set all the bits you check, and the filter says “probably” about a key that was never added. That's a <b>false positive</b>: you do a little wasted work, and nothing breaks.</p>
-        <p class="imagine"><b>Try it:</b> add all three keys, then query <i>handsome</i>. It was never added, yet every one of its bits is 1. You just made a false positive.</p>
+        <p class="imagine"><b>Try it:</b> add all three keys, then query <i>handheld</i> — the book's example, a definite miss. Then query <i>handsome</i>: it was never added, yet every one of its bits is already 1. That's a <b>false positive</b>.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
             <p>Each segment often carries a <b>Bloom filter</b>: hash every key in the SSTable into a set of numbers used as indexes into a bit array, and set those bits. The book's example uses 16 bits and the key <i>handbag</i> hashing to (2, 9, 4); the query <i>handheld</i> hashes to (6, 11, 2).</p>
             <p>If at least one queried bit is 0, the key <b>definitely</b> isn't in that SSTable. If all are 1 it's <i>likely</i> present, but may be a <b>false positive</b>, in which case you consult the sparse index, decode the block, find nothing, and move on to the next-oldest segment. No harm done.</p>
             <p>Rule of thumb: about <b>10 bits per key</b> gives a 1% false-positive rate, and the rate drops tenfold for every 5 extra bits per key. Bloom filters don't help <b>range queries</b>, which is why range queries are relatively more expensive on LSM storage.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;120–122 · Bloom filters</p>
           </div>
         </details>
       </div>
@@ -193,6 +198,7 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
             <p>Inserting into a full page <b>splits</b> it into two half-full pages and updates the parent, possibly all the way to a new root. This keeps the tree balanced: depth O(log n). A four-level tree of 4 KiB pages with branching factor 500 holds up to <b>250 TB</b>.</p>
             <p>Overwriting several pages at once is dangerous: a crash can leave an orphan page, and hardware may leave a <b>torn page</b>. So B-trees keep a <b>write-ahead log (WAL)</b> — in filesystems the same idea is called journaling — where every modification is appended before it touches the tree. Data is durable once it is in the WAL and <b>fsync</b>ed.</p>
             <p>Variants: <b>copy-on-write</b> (LMDB) instead of a WAL, abbreviated keys for a higher branching factor, leaf pages laid out sequentially, and sibling pointers for scanning in order.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;124–128 · B-Trees</p>
           </div>
         </details>
       </div>
@@ -223,6 +229,7 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
             <p><b>Write amplification</b> = bytes written to disk ÷ bytes you would have written to a plain log. LSM-trees usually amplify less because they never rewrite whole pages and can compress blocks. Measure for long enough that compaction has started, or you'll flatter the LSM engine.</p>
             <p><b>Space:</b> B-trees fragment and need processes like PostgreSQL's <b>vacuum</b>; LSM files are rewritten anyway and compress better, but deleted data can linger in old levels until the tombstone reaches the bottom — a real problem when you must prove data was erased. Immutable segments make cheap <b>snapshots</b>.</p>
             <p><b>Keeping everything in memory:</b> when a dataset fits in RAM, in-memory stores such as <b>Memcached</b>, <b>Redis</b>, <b>VoltDB</b>, <b>SingleStore</b>, <b>RAMCloud</b> and Oracle <b>TimesTen</b> skip disk structures entirely. Their speed comes not from avoiding disk reads (the OS caches those anyway) but from avoiding the work of <i>encoding</i> data into a disk-friendly form.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;128–132 · Comparing B-Trees and LSM-Trees</p>
           </div>
         </details>
       </div>
@@ -253,6 +260,7 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
             <p>In a <b>clustered index</b> the row is stored inside the index — MySQL's <b>InnoDB</b> always clusters on the primary key, and SQL Server allows one per table. Otherwise the value is a reference: the primary key (InnoDB's secondary indexes) or a location in a <b>heap file</b>, the approach <b>Postgres</b> uses.</p>
             <p>A <b>covering index</b> (index with included columns) stores some columns in the index so a query can be answered without touching the heap — the index <i>covers</i> the query. Faster reads, more space, slower writes.</p>
             <p>Updating a heap record in place works while the new value fits; a bigger value must move, so every index must be updated to the new location, or a <b>forwarding pointer</b> is left behind.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;130–132 · Multicolumn and Secondary Indexes</p>
           </div>
         </details>
       </div>
@@ -284,6 +292,7 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
             <p><b>Bitmap encoding</b> turns a column with n distinct values into n bitmaps. Sparse bitmaps are <b>run-length encoded</b>; <b>roaring bitmaps</b> switch between representations. <code>WHERE product_sk IN (31, 68, 69)</code> becomes a bitwise OR; <code>WHERE product_sk = 30 AND store_sk = 3</code> becomes a bitwise AND.</p>
             <p>Choosing a <b>sort order</b> (say date first, product second) makes date-range queries fast and gives the first sort column long runs that compress to almost nothing. Writes arrive in a sorted in-memory store and are merged into new column files in bulk — log-structured again. Don't confuse column stores with <b>wide-column</b> (column-family) databases like Bigtable and HBase, which are row-oriented.</p>
             <p>Queries get fast CPUs through <b>query compilation</b> (generate and JIT-compile code, often with LLVM) or <b>vectorized processing</b> (predefined operators chewing through batches of column values). <b>Materialized views</b> and <b>data cubes</b> precompute popular aggregates — fast, but less flexible than the raw data.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;134–142 · Column-Oriented Storage</p>
           </div>
         </details>
       </div>
@@ -310,9 +319,10 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>A <b>concatenated index</b> appends one column to another; it can't answer a query on the second column alone. Two-dimensional range queries (latitude <i>and</i> longitude together) need a <b>space-filling curve</b> plus a B-tree, or specialized <b>R-trees</b> / <b>Bkd-trees</b> — PostGIS builds R-trees on PostgreSQL's GiST facility. The same applies to (red, green, blue) colour search or (date, temperature) weather search.</p>
+            <p>A <b>concatenated index</b> appends one column to another; it can't answer a query on the second column alone. Two-dimensional range queries (latitude <i>and</i> longitude together) need a <b>space-filling curve</b> plus a B-tree, or specialized <b>R-trees</b> / <b>Bkd-trees</b> — PostGIS builds R-trees on PostgreSQL's Generalized Search Tree indexing facility. The same applies to (red, green, blue) colour search or (date, temperature) weather search.</p>
             <p><b>Full-text search</b> treats each term as a dimension. The <b>inverted index</b> maps a term to its <b>postings list</b> of document IDs, which can be stored as a sparse bitmap. <b>Lucene</b> (behind Elasticsearch and Solr) keeps term → postings in SSTable-like sorted files merged in the background; PostgreSQL's <b>GIN</b> index does something similar.</p>
             <p><b>n-grams</b> (the trigrams of “hello” are hel, ell, llo) allow substring and even regular-expression search, at the cost of a large index. Lucene handles typos with a <b>Levenshtein automaton</b> that finds words within a given <b>edit distance</b>.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;144–146 · Multidimensional and Full-Text Indexes</p>
           </div>
         </details>
       </div>
@@ -342,6 +352,7 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
             <p>Semantic search underpins <b>retrieval-augmented generation</b>, where search results are fed into a large language model. Embedding models (Word2Vec, BERT, GPT and newer multimodal models) map text, images, audio or video into a vector of floating-point numbers — often more than 1,000 of them — whose positions encode meaning.</p>
             <p>Careful: the <b>vector</b> of vectorized query processing is a batch of values for fast CPU work; the <b>vector</b> of an embedding is a point in multidimensional space. Different meanings, same word.</p>
             <p>Vector indexes: <b>flat</b> (exact, reads every vector), <b>IVF</b> (space clustered into partitions called centroids; a query picks how many <b>probes</b> to check — more probes, more accurate, slower), and <b>HNSW</b> (Hierarchical Navigable Small World: layered graphs, entering at a sparse top layer and descending into denser ones). IVF and HNSW are approximate. Facebook's <b>Faiss</b> and PostgreSQL's <b>pgvector</b> implement both.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;146–148 · Vector Embeddings</p>
           </div>
         </details>
       </div>
@@ -379,7 +390,7 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
         <div class="word"><dt>index</dt><dd>An extra map built from the data that helps you find things without reading everything.</dd></div>
         <div class="word"><dt>hash index</dt><dd>A map kept in memory from each key to the exact spot in the file where its value sits.</dd></div>
         <div class="word"><dt>byte offset</dt><dd>How many bytes into the file something starts — like a page number for a computer.</dd></div>
-        <div class="word"><dt>SSTable</dt><dd>Sorted String Table: a file of key-value pairs kept in key order, each key once.</dd></div>
+        <div class="word"><dt>SSTable</dt><dd>Sorted Strings Table: a file of key-value pairs kept in key order, each key once.</dd></div>
         <div class="word"><dt>sparse index</dt><dd>An index that remembers only the first key of each block, not every key.</dd></div>
         <div class="word"><dt>memtable</dt><dd>The small sorted pile of recent writes kept in memory before it's written to disk.</dd></div>
         <div class="word"><dt>segment</dt><dd>One SSTable file on disk. Once written, it never changes again.</dd></div>
@@ -619,9 +630,7 @@ const btn = (label, cls, fn) => { const b = h("button", { type: "button", class:
 (function scSSTable() {
   const svg = K.$("#s2-svg");
   const blocks = [
-    ["handbag", "handcuff", "handful"],
-    ["handicap", "handiwork", "handkerchief"],
-    ["handlebar", "handprint", "handshake"],
+    ["handbag", "handcuff", "handful", "handiwork"],
     ["handsome", "handstand", "handy"]];
   svg.append(
     txt(40, 44, "SPARSE INDEX (in memory)", "sv-label", "start"),
@@ -629,8 +638,8 @@ const btn = (label, cls, fn) => { const b = h("button", { type: "button", class:
     txt(620, 44, "COMPRESSED BLOCKS", "sv-label", "end"));
   const idxRects = [], keyRects = [], blockRects = [];
   blocks.forEach((keys, b) => {
-    const y0 = 56 + b * 72;
-    const br = rect(270, y0, 350, 64, "sv-panel", 10);
+    const y0 = 56 + b * 108;
+    const br = rect(270, y0, 350, keys.length * 18 + 12, "sv-panel", 10);
     blockRects.push(br); svg.appendChild(br);
     keys.forEach((k, i) => {
       const y = y0 + 6 + i * 18;
@@ -644,7 +653,7 @@ const btn = (label, cls, fn) => { const b = h("button", { type: "button", class:
       draw.arrow(234, y0 + 31, 266, y0 + 31, "sv-wire"));
   });
   const layer = s("g"); svg.appendChild(layer);
-  const st = { read: stat("Keys read", 0), idx: stat("Index entries", "4 of 12 keys"), res: stat("Result", "—") };
+  const st = { read: stat("Keys read", 0), idx: stat("Index entries", "2 of 7 keys"), res: stat("Result", "—") };
   Object.values(st).forEach((x) => K.$("#s2-stats").appendChild(x));
 
   let busy = false;
@@ -668,7 +677,7 @@ const btn = (label, cls, fn) => { const b = h("button", { type: "button", class:
     setCap("#s2-cap", "Because the file is <b>sorted</b>, " + query + " must sit between <b>" + blocks[chosen][0] + "</b> and <b>" + nextKey + "</b>. Seek straight to block " + (chosen + 1) + " — no other block can possibly hold it.");
     blockRects.forEach((r, b) => { if (b !== chosen) r.classList.add("dim"); });
     const tag = draw.tag("seek", "sv-data-soft"); layer.appendChild(tag);
-    await fly(tag, [234, 56 + chosen * 72 + 31], [300, 56 + chosen * 72 + 31], 450);
+    await fly(tag, [234, 56 + chosen * 108 + 31], [300, 56 + chosen * 108 + 31], 450);
     tag.remove();
     let read = 0, hit = null;
     for (const k of keyRects) {
@@ -680,7 +689,7 @@ const btn = (label, cls, fn) => { const b = h("button", { type: "button", class:
     if (hit) {
       hit.rect.classList.remove("read"); hit.rect.classList.add("hit");
       st.res.set("found", "good");
-      setCap("#s2-cap", "Found <b>" + query + "</b> after reading only <b>" + read + " keys</b> out of 12 — and the index in memory holds just <b>4</b> of them. Real blocks are a few kilobytes and are scanned in a blink.");
+      setCap("#s2-cap", "Found <b>" + query + "</b> after reading only <b>" + read + " keys</b> out of 7 — and the index in memory holds just <b>2</b> of them. Real blocks are a few kilobytes and are scanned in a blink.");
     } else {
       keyRects.filter((k) => k.block === chosen).forEach((k) => { k.rect.classList.remove("read"); k.rect.classList.add("miss"); });
       st.res.set("not here", "bad");

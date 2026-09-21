@@ -34,6 +34,7 @@
       <h1>Batch Processing</h1>
       <p class="lede">Some questions are too big to answer while somebody waits. So you gather a mountain of data, run one big job over all of it, and come back later for a small, tidy answer.</p>
       <p class="quote">“A system cannot be successful if it is too strongly influenced by a single person. Once the initial design is complete and fairly robust, the real test begins as people with many different viewpoints undertake their own experiments.” — Donald Knuth, “The Errors of TeX” (1989), quoted at the start of the chapter</p>
+      <p class="cite-note">Grown-up boxes are from Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd edition, with the printed page numbers.</p>
       <nav class="toc" aria-label="Scenes in this chapter">
         <a href="#rerun">Run it again</a>
         <a href="#pipeline">Six little tools</a>
@@ -70,6 +71,7 @@
             <p>Treating inputs as immutable and avoiding side effects gives <b>human fault tolerance</b>: roll back buggy code and rerun, or simply switch back to the old output directory. Most object stores and open table formats support this as <b>time travel</b>. Most databases with read/write transactions don't have this property — rolling back the code does nothing to fix bad data already written. This <b>minimizing of irreversibility</b> speeds up feature development. The same input files can also feed other jobs, such as monitoring jobs that compare a run's output with the previous run.</p>
             <p>The downsides: with most frameworks the output can be used by other jobs only after the whole job finishes, and any change to the input — even a single byte — means reprocessing the entire input. The alternative, <b>stream processing</b>, is the subject of Chapter 12.</p>
             <p>Modern batch processing was shaped by <b>MapReduce</b>, published by Google in 2004 and implemented in Hadoop, CouchDB and MongoDB. It is now largely obsolete and no longer used at Google; batch work today is more often done with <b>Spark</b>, <b>Flink</b> or data warehouse query engines. Workflow schedulers such as Oozie and Azkaban have given way to <b>Airflow, Dagster and Prefect</b>; storage is shifting from distributed filesystems (HDFS, GlusterFS, CephFS) to object stores such as S3; and cloud warehouses like BigQuery and Snowflake blur the line between warehouse and batch processor.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;451–453 · Batch Processing</p>
           </div>
         </details>
       </div>
@@ -106,6 +108,7 @@
             <p><code>sort</code> makes a URL requested <i>n</i> times appear <i>n</i> times in a row; <code>uniq -c</code> collapses adjacent equal lines and prefixes a counter; <code>sort -r -n</code> orders by that number, largest first; <code>head -n 5</code> keeps five lines. The chain processes gigabytes of logs in a matter of seconds and is easy to change: <code>$7 !~ /\.css$/ {print $7}</code> leaves out CSS files, <code>{print $1}</code> counts client IP addresses instead.</p>
             <p>Many analyses take a few minutes with a mix of <b>awk, sed, grep, sort, uniq and xargs</b>, and they perform surprisingly well. The book also shows the same analysis as a short Python program with a hash table of counters; which you prefer is partly taste, but the <i>execution flow</i> is very different — that's the next scene.</p>
             <p>Log parsing may look contrived, but it is a critical part of operations at many technology companies, from ad pipelines to payment processing, and it was a driving force behind MapReduce and the “big data” movement.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;454–456 · Batch Processing with Unix Tools</p>
           </div>
         </details>
       </div>
@@ -136,6 +139,7 @@
             <p>The <b>working set</b> — the memory a job needs random access to — depends only on the number of <i>distinct</i> URLs: a million log entries for one URL still need just one entry and one counter. For most small to mid-sized sites all distinct URLs fit in (say) 1 GB, and a hash table works fine, even on a laptop.</p>
             <p>If the working set is larger than memory, sorting wins because it uses disks efficiently, on the same principle as log-structured storage: chunks are sorted in memory and written out as <b>segment files</b>, then several sorted segments are <b>merged</b> into a larger sorted file. Mergesort has sequential access patterns that perform well on disks.</p>
             <p>GNU Coreutils <code>sort</code> automatically spills to disk for larger-than-memory datasets and parallelizes across CPU cores, so the simple chain scales to large datasets without running out of memory; the bottleneck is likely the rate at which the input can be read from disk. The real limitation of Unix tools is that they run on a <b>single machine</b>.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;456–457 · Sorting Versus In-Memory Aggregation</p>
           </div>
         </details>
       </div>
@@ -166,6 +170,7 @@
             <p>Each machine runs a daemon serving blocks (HDFS <b>DataNodes</b>, GlusterFS <b>glusterfsd</b>); a metadata service tracks where things are (Hadoop's <b>NameNode</b>; DeepSeek's 3FS keeps metadata in a key-value store such as FoundationDB). A DFS is <b>shared-nothing</b> on commodity hardware, unlike NAS and SAN appliances. Blocks are <b>replicated</b>, or protected by erasure coding such as <b>Reed–Solomon</b> codes — like RAID, but over an ordinary datacenter network. Replicas also let a scheduler run a task on any node holding its input.</p>
             <p><b>Object stores</b> (Amazon S3, Google Cloud Storage, Azure Blob Storage, OpenStack Swift) address objects by <b>bucket and key</b>, read with <code>get</code> and written with <code>put</code>. Objects are immutable once written (Azure Blob Storage and S3 Express One Zone support appends). There are no real directories — slashes are part of the key, a prefix listing behaves like a recursive <code>ls -R</code>, and empty directories can't exist. There are no hard links, symbolic links or locks, and renames are nonatomic: copy, then delete. S3's API is also spoken by MinIO, Cloudflare R2, Tigris, Backblaze B2 and others.</p>
             <p>DFSs such as HDFS let a task run on the machine that stores its file, saving bandwidth. Object stores usually keep storage and computation separate: more bandwidth, but modern datacenter networks are fast, and CPU and memory can be scaled independently of storage.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;457–461 · Distributed Filesystems / Object Stores</p>
           </div>
         </details>
       </div>
@@ -196,6 +201,7 @@
             <p>Scheduling balances <b>fairness and efficiency</b>. The book's puzzle: 160 cores, two jobs wanting 100 each. Run 80 tasks of each? Run one job completely and start the other only when 100 cores are free (<b>gang scheduling</b>) — leaving nodes idle, and risking deadlock? Just wait, and risk <b>starvation</b>? Or <b>preempt</b> running tasks, wasting their work? The general problem is <b>NP-hard</b>, so real schedulers use heuristics: FIFO, dominant resource fairness (DRF), priority queues, capacity or quota-based scheduling, and bin-packing.</p>
             <p>Jobs usually form a <b>workflow</b>, a directed acyclic graph (DAG) in which one job's output is another's input. Per-job schedulers such as YARN's ResourceManager or Spark's built-in one don't manage that; <b>workflow schedulers</b> — Airflow, Dagster, Prefect — do, waiting until all of a job's inputs have completed successfully. Workflows of 50 to 100 jobs are common.</p>
             <p>Low-priority tasks on spare capacity — <b>spot instances</b> on Amazon EC2, spot virtual machines on Azure, preemptible instances on Google Cloud — are cheap, and preemptions happen more often than hardware faults. Because tasks regenerate output from scratch, the system deletes the partial output and reschedules just that task; MapReduce and its successors keep parallel tasks independent so they can retry at the granularity of one task.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;461–466 · Distributed Job Orchestration</p>
           </div>
         </details>
       </div>
@@ -226,6 +232,7 @@
             <p>The mapper is called once per record, may emit any number of pairs, and keeps no state between records. The reducer is called once per key with an iterator over that key's values. The idea comes from functional programming (Lisp's map and reduce/fold): with no mutable state, the framework may run calls in parallel and simply call them again elsewhere if a task fails.</p>
             <p>A <b>shuffle</b> is a distributed sort whose input and output are both sharded. One map task runs per input shard; the number of reduce tasks is set by the job's author. Each mapper writes one sorted file per reducer on its local disk, choosing the file by a <b>hash of the key</b>; reducers copy their files from every mapper and merge them mergesort-style, so equal keys become consecutive. Each reducer writes one output file, and those files are the shards of the output dataset.</p>
             <p>Raw MapReduce is laborious (joins must be written from scratch) and slow — its file-based I/O prevents pipelining. Shuffles live on in Spark, Flink, Daft, Dataflow and BigQuery, which keeps shuffle data in memory and uses external sorting services.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;466–471 · MapReduce / Shuffling Data</p>
           </div>
         </details>
       </div>
@@ -256,6 +263,7 @@
             <p>Their advantages over MapReduce: expensive work such as <b>sorting happens only where required</b>; operators that don't change the sharding (map, filter) are <b>combined into a single task</b>; the scheduler sees all data dependencies and can make <b>locality optimizations</b>; intermediate state usually stays <b>in memory or on local disk</b> instead of being replicated to a DFS or object store; operators <b>start as soon as their input is ready</b>; and existing processes are reused, where MapReduce launches a new JVM for every task.</p>
             <p>For faults, MapReduce always writes intermediate data back to the DFS and waits for it, which works even when preemption is common but means a lot of writes. Spark keeps intermediate data in memory (spilling to local disk), tracks how it was computed, and <b>recomputes</b> it if lost; Flink periodically <b>checkpoints</b> a snapshot of tasks.</p>
             <p>Writing to a DFS between jobs does have a use: it decouples jobs so they can run at different times or be read by several teams. A Unix pipe, by contrast, has only a small in-memory buffer, and a full buffer makes the producer wait — a form of <b>backpressure</b>.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;468–469 · Dataflow Engines</p>
           </div>
         </details>
       </div>
@@ -286,6 +294,7 @@
             <p>One mapper goes over the events and emits the viewed URL keyed by user ID; another goes over the user database and emits the date of birth keyed by user ID. The shuffle brings all pairs with the same key to the same reducer. With a <b>secondary sort</b>, the reducer always sees the user record first, followed by that user's events in timestamp order.</p>
             <p>The reducer stores the date of birth in a local variable and then iterates over the events, outputting each URL with the viewer's date of birth. It keeps only one user record in memory at a time and never makes a request over the network. This is a <b>sort-merge join</b>: mapper output is sorted by key, and reducers merge the sorted lists from both sides.</p>
             <p>A following job can shuffle by URL and count views per age group — that is how <b>group by</b> and aggregation are built. Shuffling is the foundation for both joins and aggregations in most batch systems.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;471–472 · Joins and Grouping</p>
           </div>
         </details>
       </div>
@@ -316,6 +325,7 @@
             <p>Query engines such as <b>Hive, Trino, Spark and Flink</b> translate a query into a syntax tree and physical operators, and have <b>cost-based optimizers</b> that analyze the properties of join inputs, choose the most suitable join algorithm, and may even <b>change the order of joins</b> to minimize intermediate state. Niche languages remain: Apache Pig and the newer Morel, JSON languages like jq, JMESPath and JSONPath, and graph languages such as TinkerPop's Gremlin.</p>
             <p>Batch systems and cloud warehouses are converging: batch frameworks speak SQL over columnar formats like Parquet, while warehouses adopted scheduling, fault-tolerance and shuffling techniques — and other models too (BigQuery's DataFrames library, Snowflake's Snowpark with Pandas). But iterative graph algorithms such as PageRank, complex ML, and multimodal AI data are hard to express in SQL; row-by-row computation suits columnar storage poorly; and warehouses tend to cost more for large jobs than Spark or Flink.</p>
             <p><b>DataFrames</b> come from R and Pandas. Spark, Flink and Daft offer distributed versions, which are generally <i>not</i> indexed and ordered the way local ones are — a source of performance surprises. <b>Pandas executes each call immediately; Spark first turns the calls into a query plan and optimizes it.</b> Daft computes small things on the client and large ones on a server; Apache Arrow gives both a shared columnar data model.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;473–475 · Query Languages / DataFrames</p>
           </div>
         </details>
       </div>
@@ -347,6 +357,7 @@
             <p><b>Analytics</b>: SQL on a query engine over a DFS or object store, with table formats like Apache Iceberg and catalogs like Unity, is a <b>data lakehouse</b>. Queries are either scheduled pre-aggregations (OLAP cubes, data marts, pushed to Apache Druid or Pinot) or ad hoc. <b>Machine learning</b>: feature engineering, model training, batch inference (Spark MLlib, FlinkML); graph processing in the bulk synchronous parallel (Pregel) model (Giraph, GraphX, Gelly); LLM data preparation on Kubeflow, Flyte and Ray; and notebooks such as Jupyter and Hex.</p>
             <p><b>Serving derived data</b>: writing to the production database from inside tasks is slow (a request per record), can overwhelm the database, and breaks the clean all-or-nothing guarantee — partial results become visible and retried tasks may duplicate output.</p>
             <p>Better: push the output to a stream such as a <b>Kafka</b> topic, which Elasticsearch, Pinot, Druid, Venice and ClickHouse can ingest. Streams take sequential writes well, buffer so consumers can throttle, feed several systems, and can sit in a DMZ; but the job must still signal completion, and consumers must keep the data invisible until then. Or build a brand-new database inside the job and <b>bulk-load</b> its files (TiDB Lightning, Pinot's Hadoop import jobs, RocksDB's SST file import), which makes atomic version switches easy but incremental updates hard; Venice supports a hybrid.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;476–481 · Batch Use Cases</p>
           </div>
         </details>
       </div>

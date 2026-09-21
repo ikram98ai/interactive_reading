@@ -36,6 +36,7 @@
       <h1>Doing the Right Thing</h1>
       <p class="lede">Every chapter so far was about machines. The last one is about the people inside the data — and how to build systems that treat them fairly and kindly.</p>
       <p class="quote">“Feeding AI systems on the world’s beauty, ugliness, and cruelty, but expecting it to reflect only the beauty is a fantasy.” — Vinay Uday Prabhu and Abeba Birhane, “Large Datasets: A Pyrrhic Win for Computer Vision?” (2020), quoted at the start of the chapter</p>
+      <p class="cite-note">Grown-up boxes are from Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd edition, with the printed page numbers.</p>
       <nav class="toc" aria-label="Scenes in this chapter">
         <a href="#predict">One label, five doors</a>
         <a href="#bias">The copycat learner</a>
@@ -72,6 +73,7 @@
             <p><b>Predictive analytics</b> is a major reason people are excited about big data and AI. Predicting the weather or the spread of diseases is one thing; predicting whether a convict is likely to reoffend, a loan applicant likely to default, or an insurance customer likely to make expensive claims has a direct effect on individual lives.</p>
             <p>Payment networks want to prevent fraud, banks want to avoid bad loans, airlines want to avoid hijackings, companies want to avoid bad hires. For them a missed business opportunity is cheap and a bad loan or problematic employee is expensive, so when in doubt they are better off saying no.</p>
             <p>As <b>algorithmic decision making</b> spreads, someone who has (accurately or falsely) been labeled as risky may suffer many of those “no” decisions. Being systematically excluded from jobs, air travel, insurance coverage, property rental, financial services and other key aspects of society has been called <b>“algorithmic prison”</b>. Criminal justice presumes innocence until proven guilty; automated systems can exclude a person without any proof of guilt, and with little chance of appeal.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;585–586 · Predictive Analytics</p>
           </div>
         </details>
       </div>
@@ -103,6 +105,7 @@
             <p>Anti-discrimination laws in many countries prohibit treating people differently depending on <b>protected traits</b> such as ethnicity, age, gender, sexuality, disability, or beliefs. Other features may be analyzed — but in racially segregated neighborhoods a person's <b>postal code or even their IP address</b> is a strong predictor of race.</p>
             <p>Believing that an algorithm could take biased data as input and produce fair and impartial output has been satirized as <b>“machine learning is like money laundering for bias”</b>.</p>
             <p>Predictive systems merely extrapolate from the past; if the past is discriminatory, they codify and amplify that discrimination. “If we want the future to be better than the past, <b>moral imagination</b> is required, and that's something only humans can provide. Data and models should be our tools, not our masters.”</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;585–586 · Bias and Discrimination</p>
           </div>
         </details>
       </div>
@@ -121,7 +124,7 @@
     <div class="wrap scene-grid">
       <div class="copy">
         <span class="eyebrow">Big idea 3 · responsibility and accountability</span>
-        <h2>“Computer says no” — and then what?</h2>
+        <h2>Who is similar to you — and then what?</h2>
         <p class="story">Mateo is turned down for a loan. If a person had decided, he could ask her why, show her the mistake, and she would have to answer for it. When a program decides, who answers?</p>
         <p class="story">An old-fashioned credit score asks <b>“How did you behave in the past?”</b> It is built from facts about Mateo's own borrowing. If one fact is wrong it can be corrected — though the agencies don't make that easy.</p>
         <p class="story">A prediction machine asks something else: <b>“Who is similar to you, and how did people like you behave?”</b> It drops Mateo into a bucket with his neighbours. The bucket can be right on average and still wrong about him. If people in your country live to 80 on average, nobody expects you to drop dead on your 80th birthday.</p>
@@ -134,6 +137,7 @@
             <p>Drawing parallels to others' behavior implies <b>stereotyping</b> — for example by where people live, a close proxy for race and socioeconomic class. What about people put in the wrong bucket? And if a decision is wrong because of erroneous data, recourse is almost impossible.</p>
             <p>Much data is statistical: even if the probability distribution as a whole is correct, individual cases may well be wrong. “A blind belief in the supremacy of data for making decisions is not only delusional but also positively dangerous.” We need to work out how to avoid reinforcing biases, make algorithms accountable and transparent, and fix them when they inevitably make mistakes.</p>
             <p>The same analytics can do good or harm: it could focus aid on those who need it most, or be used by predatory businesses to find vulnerable people and sell them risky products such as high-cost loans or worthless college degrees.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;586–588 · Responsibility and Accountability</p>
           </div>
         </details>
       </div>
@@ -164,6 +168,7 @@
             <p>When predictive analytics affect people's lives, <b>self-reinforcing feedback loops</b> are particularly pernicious. The book's example is employers using credit scores to evaluate hires: a misfortune outside your control leads to missed payments, a worse score, less chance of work, joblessness, poverty, and a worse score again — “a downward spiral due to poisonous assumptions, hidden behind a camouflage of mathematical rigor and data”.</p>
             <p>Another loop: economists found that when gas stations in Germany introduced algorithmic prices, competition was reduced and prices for consumers went up, because the algorithms learned to collude.</p>
             <p><b>Systems thinking</b> means thinking about the entire system — not just the computerized parts but also the people interacting with it. Does the system reinforce and amplify existing differences (making the rich richer or the poor poorer), or does it try to combat injustice? Even with the best intentions, beware of unintended consequences.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;586–588 · Feedback Loops</p>
           </div>
         </details>
       </div>
@@ -195,6 +200,7 @@
             <p>Surveillance of our location and movements, social relationships and communications, purchases and payments, and health has become almost unavoidable. A surveillance organization may know more about a person than they know themselves — for example identifying illnesses or economic problems before the person is aware of them. The difference from totalitarian regimes is “just” that the data is collected by corporations to provide services rather than by government agencies seeking control.</p>
             <p>Not all data collection qualifies as surveillance, but examining it as such helps us understand our relationship with the collector. Feeling you have “nothing to hide” means you are in line with existing power structures and not a marginalized minority; not everyone is so fortunate.</p>
             <p>It looks less benign once it drives decisions: driving behavior tracked by cars without drivers' consent affecting insurance premiums, health insurance that depends on wearing a fitness tracker — and the movement sensor in a smartwatch can be used to work out what you are typing, such as passwords, with fairly good accuracy.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;588–590 · Privacy and Tracking</p>
           </div>
         </details>
       </div>
@@ -227,6 +233,7 @@
             <p>Data is extracted through a one-way process, not a relationship with true reciprocity: no dialogue, no negotiation. The relationship is <b>asymmetric and one-sided</b>; the terms are set by the service.</p>
             <p>Under the EU's <b>GDPR</b>, consent must be “freely given, specific, informed, and unambiguous”, the user must be able to “refuse or withdraw consent without detriment”, requests must use “clear and plain language”, and “silence, pre-ticked boxes or inactivity” do not constitute consent. Consent is not the only lawful basis — others include complying with legislation, protecting somebody's life, and legitimate interest (e.g. fraud prevention) — but it is the most frequently used by internet services.</p>
             <p>Opting out is not a free choice either. If a service is “regarded by most people as essential for basic social participation”, its use is effectively mandatory; the book's examples are carrying a smartphone, using social networks for socializing, and using Google to find information. With <b>network effects</b> there is a social cost to declining. Platforms are designed to engage, many using game mechanics and tactics common in gambling. Declining is realistic only for the few with the time, knowledge and privilege to afford it; for everyone else “surveillance becomes inescapable”.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;590–592 · Consent and Freedom of Choice</p>
           </div>
         </details>
       </div>
@@ -258,6 +265,7 @@
             <p>Many companies focus on managing the <i>perception</i> of creepiness rather than asking how intrusive they are. Any data may be wrong, undesirable or inappropriate — something factually correct may still trigger painful memories — so engineers must be humble and build mechanisms for handling those failures.</p>
             <p><b>Privacy settings</b> are a starting point for handing back control, but regardless of the setting the service itself has unfettered access and may use the data in any way its privacy policy permits, often going much further than what is overtly visible to users.</p>
             <p>This large-scale transfer of privacy rights from individuals to corporations is historically unprecedented. Trust relationships have always existed — patient and doctor, defendant and attorney — but there the use of data is strictly governed by ethical, legal and regulatory constraints.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;590–592 · Privacy and Use of Data</p>
           </div>
         </details>
       </div>
@@ -289,6 +297,7 @@
             <p>Companies want the data; governments want it too, and may obtain it through secret deals, coercion, legal compulsion, or simply theft. When a company goes bankrupt, personal data is one of the assets sold. And because data is difficult to secure, breaches happen disconcertingly often.</p>
             <p>Hence critics call data a <b>“toxic asset”</b>, or at least <b>“hazardous material”</b> — “maybe data is not the new gold, or the new oil, but rather the new uranium”. Systems may be compromised by criminals or hostile intelligence services, leaked by insiders, inherited by unscrupulous management, or seized by a regime with no qualms about compelling a handover. We must consider not just today's political environment but all possible future governments; as Bruce Schneier puts it, “It is poor civic hygiene to install technologies that could someday facilitate a police state.”</p>
             <p>“Knowledge is power” — and “to scrutinize others while avoiding scrutiny oneself is one of the most important forms of power”. Technology companies may not seek political power, but the data they have accumulated, much of it surreptitiously and outside public oversight, gives them a lot of power over our lives.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;592–594 · Data as Assets and Power</p>
           </div>
         </details>
       </div>
@@ -321,6 +330,7 @@
             <p><b>Legislation:</b> the GDPR says personal data must be “collected for specified, explicit and legitimate purposes” and be “adequate, relevant and limited to what is necessary”. This principle of <b>data minimization</b> runs directly counter to the philosophy of big data — maximize collection, combine datasets, explore for unforeseen insights. The book judges that the regulation has had some effect on online advertising but has been weakly enforced and has not changed culture much across the wider industry.</p>
             <p>Opposition to regulation is partly justified: sharing medical data creates privacy risks but also opportunities for better diagnostics and treatments, and overregulation may prevent such breakthroughs. Balancing is difficult.</p>
             <p><b>Self-regulation:</b> the book calls for a culture shift — stop regarding users as metrics to be optimized; educate them about how their data is used; let each individual keep control over their own data. That control is like a national park: unprotected, it suffers the <b>tragedy of the commons</b>. “Ubiquitous surveillance is not inevitable. We are still able to stop it.” As a first step: don't retain data forever, purge it as soon as it is no longer needed, and minimize what you collect. “Data you don't have is data that can't be leaked, stolen, or compelled by governments to be handed over.”</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;594–596 · Remembering the Industrial Revolution</p>
           </div>
         </details>
       </div>
@@ -349,6 +359,7 @@
             <p>The closing summary runs through all fourteen chapters — from the trade-offs of Chapter 1 to the streaming philosophy of Chapter 13 — and then describes this one: “although data can be used to do good, it can also do significant harm: making decisions that seriously affect people's lives and are difficult to appeal against, leading to discrimination and exploitation, normalizing surveillance, and exposing intimate information.” It adds the risk of data breaches, and that a well-intentioned use of data may have unintended consequences.</p>
             <p>Its last words: “Given the large impact that software and data have on the world, we as engineers must remember that we carry a responsibility to work toward the kind of world that we want to live in: a world that treats people with humanity and respect. Let's work together toward that goal.”</p>
             <p>Earlier in the chapter, in the same spirit: “As people working in technology, if we don't consider the societal impact of our work, we're not doing our job.”</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;596–598 · Summary</p>
           </div>
         </details>
       </div>

@@ -32,6 +32,7 @@
       <h1>The Trouble with Distributed Systems</h1>
       <p class="lede">One computer is either working or broken. A whole town of computers is always <i>partly</i> broken: messages vanish, clocks tell fibs, and machines take naps without telling anyone.</p>
       <p class="quote">“They’re funny things, Accidents. You never have them till you’re having them.” — A.A. Milne, <i>The House at Pooh Corner</i> (1928), quoted at the start of the chapter</p>
+      <p class="cite-note">Grown-up boxes are from Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd edition, with the printed page numbers.</p>
       <nav class="toc" aria-label="Scenes in this chapter">
         <a href="#partial">Partly broken</a>
         <a href="#network">Six fates of a message</a>
@@ -64,8 +65,9 @@
           <div class="inner">
             <p>A single computer with good software is usually <b>deterministic</b>: the same operation always gives the same result. Computers are deliberately designed to crash completely rather than return a wrong answer, so they present an “idealized system model”.</p>
             <p>In a distributed system, parts can be broken in unpredictable ways while other parts work fine. This is a <b>partial failure</b>, and partial failures are <b>nondeterministic</b> — you may not even know whether something succeeded.</p>
-            <p>The book quotes Coda Hale's list of real faults: long-lived network partitions, PDU failures, switch failures, accidental power cycles of whole racks, whole-datacenter power failures, and a driver crashing a pickup truck into a datacenter's HVAC system.</p>
+            <p>The book quotes Coda Hale's list of real faults: long-lived network partitions, whole-DC backbone failures, PDU failures, switch failures, accidental power cycles of whole racks, whole-datacenter power failures, and a hypoglycemic driver crashing a Ford pickup truck into a datacenter's HVAC system.</p>
             <p>The upside: a system that tolerates partial failures can do a <b>rolling upgrade</b>, rebooting one node at a time while the service stays up. We build a reliable system from unreliable components.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;346–347 · Faults and Partial Failures</p>
           </div>
         </details>
       </div>
@@ -95,6 +97,7 @@
             <p>These are <b>indistinguishable</b>. The usual handling is a <b>timeout</b> — but when a timeout fires you still don't know whether the remote node got your request, and a queued request may still be delivered after you gave up.</p>
             <p><b>TCP</b> retransmits dropped packets, reorders them and checksums them, but it can't tell whether the packet or the acknowledgment was lost, and an ack only means the remote <i>kernel</i> got the bytes. To be sure a request succeeded you need a positive response from the application itself.</p>
             <p>Fault detection is unreliable too: an <code>RST</code>/<code>FIN</code>, a crash-notification script (HBase does this), switch management interfaces, or an <code>ICMP Destination Unreachable</code> can give you fast feedback — but you can't count on any of it.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;347–352 · Unreliable Networks</p>
           </div>
         </details>
       </div>
@@ -123,7 +126,8 @@
             <p>Variability of packet delay is “most often due to queueing”: at the switch when several nodes send to one destination (<b>network congestion</b>); at the destination machine when all CPU cores are busy; inside a VM monitor while another VM uses the core; and at the sender, because TCP limits its own send rate.</p>
             <p>Queueing delay has an especially wide range when a system is near its maximum capacity. In public clouds a <b>noisy neighbor</b> can saturate shared links and NICs.</p>
             <p>Asynchronous networks have <b>unbounded delays</b>. A telephone network instead sets up a <b>circuit</b> with reserved bandwidth (ISDN: 16 bits every 250 µs) and therefore a <b>bounded delay</b>. Ethernet and IP are <b>packet-switched</b>, optimized for bursty traffic, which maximizes utilization at the cost of queueing.</p>
-            <p>So variable delay “is not a law of nature but simply the result of a cost/benefit trade-off”. Some cases use UDP instead of TCP: when delayed data is worthless (VoIP), the retry happens at the human layer — “Could you repeat that please?”</p>
+            <p>So “Variable delays in networks are not a law of nature but simply the result of a cost/benefit trade-off”. Some cases use UDP instead of TCP: when delayed data is worthless (VoIP), the retry happens at the human layer — “Could you repeat that please?”</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;353–357 · Timeouts and Unbounded Delays</p>
           </div>
         </details>
       </div>
@@ -153,6 +157,7 @@
             <p>Declaring a node dead prematurely is dangerous: an action (like sending an email) may be performed twice, and moving a slow node's load onto others can trigger a <b>cascading failure</b>, in the extreme case with every node declaring every other node dead.</p>
             <p>Better than a constant: keep measuring response times and their <b>jitter</b> and adjust automatically. The <b>Phi Accrual failure detector</b> (used in Akka and Cassandra) does this; TCP retransmission timeouts work similarly.</p>
             <p>Measured reality: about 12 network faults per month in one medium datacenter study; round-trip times of several minutes at high percentiles across cloud regions; packet delays over a minute inside one datacenter during a switch upgrade. Cows, beavers, sharks and human misconfiguration have all cut fiber links.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;350–355 · Network Faults in Practice</p>
           </div>
         </details>
       </div>
@@ -182,6 +187,7 @@
             <p>A <b>monotonic clock</b> (<code>CLOCK_MONOTONIC</code>, <code>System.nanoTime</code>) always moves forward and is good for durations and timeouts. Its absolute value is meaningless, so comparing it between two computers makes no sense. NTP may <b>slew</b> its rate by up to 0.05%, but can't make it jump.</p>
             <p>Clocks drift: Google assumes up to <b>200 ppm</b>, about 6 ms of drift if resynchronized every 30 seconds, or 17 seconds if resynchronized once a day. Over the internet, a minimum error of about <b>35 ms</b> is achievable, with spikes of around a second on congested networks.</p>
             <p><b>Leap seconds</b> make a minute 59 or 61 seconds long and have crashed many large systems; the fix is often to <b>smear</b> the adjustment across a day. Leap seconds will no longer be used from 2035. Inside VMs, the clock can suddenly jump forward when the VM is resumed.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;359–361 · Monotonic Versus Time-of-Day Clocks</p>
           </div>
         </details>
       </div>
@@ -203,7 +209,7 @@
             <span class="eyebrow">Big idea 6 · timestamps for ordering events</span>
             <h2>“Whoever has the newest sticker wins”</h2>
             <p class="story">Three friends keep copies of the same number. Whenever someone changes it, they stick a time sticker on it, and the copy with the newest sticker wins. That rule is called <b>last write wins</b>.</p>
-            <p class="story">It only works if everybody's watch agrees. Here node 1's clock is three milliseconds fast — less skew than you'd get in real life — and that tiny lie is enough to make a write silently disappear.</p>
+            <p class="story">It only works if everybody's watch agrees. Here node 1's clock is less than three milliseconds fast — less skew than you'd get in real life — and that tiny lie is enough to make a write silently disappear.</p>
             <p class="imagine"><b>Step through it</b> with time-of-day stickers, then switch to <b>logical clocks</b> (plain counters that only say “this came after that”) and watch the same story end correctly.</p>
           </div>
           <div class="stage">
@@ -226,7 +232,8 @@
                 <p>Cassandra and ScyllaDB use the client clock plus LWW. A node with a lagging clock then can't overwrite values from a faster node until the skew has elapsed, and “arbitrary amounts of data” can be silently dropped.</p>
                 <p>NTP can't be made accurate enough to fix this, because its accuracy is limited by network round-trip time. <b>Logical clocks</b> — incrementing counters — are the safer alternative for ordering; time-of-day and monotonic clocks are <b>physical clocks</b>.</p>
                 <p>The <b>TrueTime</b> API in Spanner and <b>Amazon ClockBound</b> return <code>[earliest, latest]</code>. Spanner waits out the confidence interval before committing, and Google puts a GPS receiver or atomic clock in each datacenter to keep it near <b>7 ms</b>. YugabyteDB can use ClockBound on AWS.</p>
-              </div>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;362–366 · Relying on Synchronized Clocks</p>
+          </div>
             </details>
           </div>
           <div class="stage">
@@ -256,6 +263,7 @@
             <p>Causes of long pauses: <b>stop-the-world garbage collection</b> (once minutes long), VM suspend/resume and live migration, laptop lids closing, context switches and <b>steal time</b> from other VMs, slow synchronous disk I/O (even a lazy Java classloader read), page faults and <b>thrashing</b> when swapping, and <code>SIGSTOP</code> from a stray Ctrl-Z.</p>
             <p>A node must assume it can be paused at any point, even mid-function, while the rest of the world keeps moving — and may not notice until it next checks the clock.</p>
             <p>Escapes exist but are costly: <b>hard real-time</b> systems with an RTOS, documented worst-case execution times and restricted allocation (airbags, rockets). For servers this is “not economical or appropriate”. GC impact can be limited instead: treat a GC pause as a brief planned outage and route traffic away, or restart processes before long-lived objects pile up.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;366–370 · Process Pauses</p>
           </div>
         </details>
       </div>
@@ -285,6 +293,7 @@
             <p>Shutting the zombie down — “shoot the other node in the head” (STONITH) — doesn't protect against the delayed request, can make nodes shut each other down, and may come too late.</p>
             <p>A <b>fencing token</b> is a number that increases each time the lock is granted; the storage service rejects any write with an outdated token. A client that just acquired the lease should write immediately, which fences off any zombie.</p>
             <p>Other names: <b>sequencers</b> in Chubby, <b>epoch numbers</b> in Kafka, <b>ballot number</b> in Paxos and <b>term number</b> in Raft. ZooKeeper's <code>zxid</code> or <code>cversion</code>, etcd's revision number, or Hazelcast's FencedLock all work. Object stores offer conditional writes instead (S3 conditional writes, Azure conditional headers, GCS request preconditions). Put the token in the top digits of a timestamp and it even works for leaderless replicas.</p>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;373–377 · Distributed Locks and Leases</p>
           </div>
         </details>
       </div>
@@ -327,7 +336,8 @@
                 <p>A node that “lies” — sending arbitrary faulty or corrupted responses, such as casting contradictory votes — has a <b>Byzantine fault</b>; agreeing anyway is the <b>Byzantine Generals Problem</b>, a generalization of the two generals problem. Most Byzantine-tolerant algorithms need a supermajority of more than two-thirds of nodes to be correct.</p>
                 <p>It matters for aerospace (radiation can corrupt memory) and for systems with mutually untrusting parties, such as blockchain consensus. In ordinary datacenters we assume nodes are “unreliable but honest”: BFT protocols are expensive and a bug deployed to all nodes defeats them anyway.</p>
                 <p>Cheap partial defenses are still worth it: application-level <b>checksums</b> (corrupt packets do slip past TCP checksums), input sanitization and range checks, and NTP clients querying several servers so a misconfigured one is spotted as an outlier.</p>
-              </div>
+            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;371–380 · The Majority Rules / Byzantine Faults</p>
+          </div>
             </details>
           </div>
           <div class="stage">
@@ -398,7 +408,7 @@
         <div class="word"><dt>limping node</dt><dd>Also gray failure: alive and answering health checks, but far too slow to be useful.</dd></div>
         <div class="word"><dt>partially synchronous model</dt><dd>“Usually well behaved, occasionally terrible” — the realistic assumption.</dd></div>
         <div class="word"><dt>safety vs liveness</dt><dd>Nothing bad ever happens, versus something good eventually happens.</dd></div>
-        <div class="word"><dt>fault injection</dt><dd>Deliberately breaking things (Chaos Monkey, Jepsen) to see what your system does.</dd></div>
+        <div class="word"><dt>fault injection</dt><dd>Deliberately breaking things (Jepsen is the book's example) to see what your system does.</dd></div>
       </dl>
     </div>
   </section>
