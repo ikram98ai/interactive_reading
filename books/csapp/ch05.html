@@ -1,0 +1,1334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 5 · Optimizing Program Performance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .eyebrow { color: var(--mint); }
+  .toc a:hover { border-color: var(--mint); color: var(--mint); }
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box { stroke: var(--mint); }
+  .fade { transition: opacity .3s; }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .first { font-size: 15.5px; color: var(--ink-2); background: var(--mint-soft); border-radius: var(--r-m); padding: 12px 14px; }
+  .first b { color: var(--ink); }
+  .hero-stage { aspect-ratio: auto; }
+  .hero-stage svg { width: 100%; height: auto; display: block; }
+  .stage, .stage-scroll { min-width: 0; max-width: 100%; }
+  .scene-grid, .scene-grid.flip { grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 901px) {
+    .scene-grid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+    .scene-grid.flip { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); }
+  }
+  .readings { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); }
+  .reading { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-s); padding: 10px 12px; }
+  .reading .k { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .reading .v { font-family: var(--f-mono); font-size: 15px; font-weight: 700; color: var(--ink); margin-top: 4px; word-break: break-all; }
+  .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  pre.code { margin: 0; padding: 12px 14px; background: var(--surface-2); border-top: 1px solid var(--line);
+             font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+             overflow-x: auto; white-space: pre-wrap; min-height: 72px; }
+  pre.code b { color: var(--ink); font-weight: 700; }
+  pre.code i { color: var(--ink-3); font-style: normal; }
+  @media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">5</span> Chapter five · Bitville</span>
+      <h1>Optimizing Program Performance</h1>
+      <p class="lede">The same sum can take ten cycles per number, or half a cycle. The chip is already fast. The job is to stop asking it to redo work, and to stop making it wait.</p>
+      <p class="first"><b>New here?</b> Read the short story, then press the buttons on the picture. You cannot break it. The book’s exact combine names and CPE numbers live under “What the book says.”</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#alias">Aliasing</a>
+        <a href="#cpe">CPE</a>
+        <a href="#combine">combine1</a>
+        <a href="#loop">Loop hoist</a>
+        <a href="#calls">Fewer calls</a>
+        <a href="#regs">Accumulator</a>
+        <a href="#cpu">The processor</a>
+        <a href="#unroll">Unrolling</a>
+        <a href="#parallel">Parallel acc</a>
+        <a href="#bound">Bottlenecks</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · integer + on Haswell</span><span class="pill info" id="hero-pill"><i></i>CPE</span></div>
+      <svg id="hero-svg" viewBox="0 0 680 200" role="img" aria-label="Four combining versions and their cycles-per-element on the reference machine"></svg>
+      <div class="caption" aria-live="polite" id="hero-cap">Same vector sum. Each rewrite throws away a kind of extra work.</div>
+    </div>
+  </section>
+
+  <section class="scene" id="alias">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 1 · compilers</span>
+        <h2>Two sticky notes, or one note with two names</h2>
+        <p class="story">Priya has two notes, <code>xp</code> and <code>yp</code>. Kenji’s recipe says: add the second note to the first, twice. That looks the same as adding double the second note, once. If the notes are different, both recipes finish at the same number — but the short one only touches memory three times, not six.</p>
+        <p class="story">If both names point at the <i>same</i> note, they disagree. Adding a number to itself twice multiplies by four. Adding double once multiplies by three. The compiler cannot see Priya’s fingers, so it must assume the names might be twins. That is <b>memory aliasing</b>, and it is an <b>optimization blocker</b>.</p>
+        <p class="story">Function calls block it too. <code>func1</code> adds <code>f()</code> four times. <code>func2</code> does <code>4*f()</code>. If <code>f</code> ticks a counter, those are not the same answer.</p>
+        <p class="imagine"><b>Try it:</b> Toggle alias so both pointers share one cell, then run <code>twiddle1</code> and <code>twiddle2</code>. Switch to calls and compare <code>func1</code> with <code>func2</code>.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>gcc with <code>-Og</code> applies a basic set of optimizations; <code>-O1</code> and higher do more. The chapter mostly measures <code>-O1</code>, even though <code>-O2</code> is the usual project default. Compilers may apply only safe optimizations: the result must match an unoptimized program for every case the C standard allows.</p>
+            <p><code>twiddle1</code> does <code>*xp += *yp</code> twice (six memory references). <code>twiddle2</code> does <code>*xp += 2 * *yp</code> (three). “The compiler knows nothing about how twiddle1 will be called, and so it must assume that arguments xp and yp can be equal.” When they are equal, <code>twiddle1</code> scales <code>*xp</code> by 4 and <code>twiddle2</code> scales it by 3.</p>
+            <p>“If a compiler cannot determine whether or not two pointers may be aliased, it must assume that either case is possible, limiting the set of possible optimizations.” The other blocker is calls. With <code>counter</code> starting at 0, <code>func1</code> returns 0+1+2+3 = 6 and <code>func2</code> returns 0. gcc inlines only functions defined in the same file (<code>-finline</code> or <code>-O1</code> and higher).</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Safe vs tempting</span><span id="s1-seg"></span></div>
+        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 680 300" role="img" aria-label="twiddle aliasing and function-call side effects"></svg></div>
+        <div class="controls" id="s1-controls"></div>
+        <div class="caption" aria-live="polite" id="s1-cap">If the two pointers might be the same cell, gcc will not rewrite twiddle1 as twiddle2.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="cpe">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 2 · CPE</span>
+        <h2>The slope is the thing you can fix</h2>
+        <p class="story">Mei times a stamp machine. Lighting the lamp costs a fixed pile of ticks. After that, each extra ticket adds a steady number of ticks. For a long queue, the start-up pile barely matters. The slope does.</p>
+        <p class="story">That slope is <b>CPE</b> — cycles per element. The book’s prefix-sum <code>psum1</code> costs about <code>368 + 9.0n</code> cycles. <code>psum2</code> stamps two tickets per trip and costs <code>368 + 6.0n</code>. Same intercept, kinder slope.</p>
+        <p class="imagine"><b>Try it:</b> Slide <code>n</code> and watch both lines. Press Play to walk n upward. The gap is <code>3n</code> cycles — never the 368.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A 4 GHz clock is 4.0×10<sup>9</sup> cycles per second: period 0.25 nanoseconds, or 250 picoseconds. Cycles beat wall-clock units because they count work, not how fast the crystal ticks.</p>
+            <p>Figure 5.1: <code>psum1</code> writes one prefix per iteration; <code>psum2</code> uses 2-way loop unrolling. A least-squares fit of Figure 5.2 gives 368 + 9.0n and 368 + 6.0n. The 368 is timing code plus setup. “We focus our efforts on minimizing the CPE for our computations.”</p>
+            <p>By that measure <code>psum2</code> (CPE 6.0) beats <code>psum1</code> (CPE 9.0). Practice 5.2 later gives three combine-style fits: 60 + 35n, 136 + 4n, and 157 + 1.25n.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 5.2 · prefix-sum slopes</span><div class="stats" id="s2-stats"></div></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 680 300" role="img" aria-label="Cycle counts for psum1 and psum2 versus vector length"></svg></div>
+        <div class="controls" id="s2-controls"></div>
+        <div class="caption" aria-live="polite" id="s2-cap">CPE is the slope. The 368-cycle intercept is the same on both lines.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="combine">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 3 · combine1</span>
+        <h2>A header, a row of lockers, a running answer</h2>
+        <p class="story">Omar’s class stores a vector as two pieces: a header (<code>len</code> and a pointer <code>data</code>) and a row of lockers. The combining function folds every locker into one answer. <code>IDENT</code> 0 and <code>OP +</code> make a sum. <code>IDENT</code> 1 and <code>OP *</code> make a product.</p>
+        <p class="story"><code>combine1</code> is the polite, abstract version. Every trip around the loop it asks <code>vec_length</code> again, then calls <code>get_vec_element</code>, which checks the index against the ends. Safe. Slow.</p>
+        <p class="imagine"><b>Try it:</b> Pick sum or product, then Step through the four lockers. Watch <code>dest</code> update, and count the extra questions.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 5.3–5.4: <code>vec_rec</code> holds <code>long len</code> and <code>data_t *data</code>. <code>data_t</code> is compiled as <code>int</code>, <code>long</code>, <code>float</code>, or <code>double</code>. <code>get_vec_element</code> returns 0 on an out-of-range index. The book notes this style is similar to Java arrays: safer, and slower.</p>
+            <p>Figure 5.5 <code>combine1</code> writes <code>*dest = IDENT</code>, then on each <code>i</code> from 0 to <code>vec_length(v)</code> it fetches <code>val</code> and does <code>*dest = *dest OP val</code>. Reference machine: Intel Core i7 Haswell. Integer 32-bit and 64-bit matched (except division); <code>float</code> matched <code>double</code>.</p>
+            <p>Unoptimized CPE: integer + 22.68, integer * 20.02, float + 19.98, float * 20.18. With <code>-O1</code>: 10.12, 10.12, 10.17, 11.14 — more than 2× with no rewrite. The book leaves the messy hundredths; the more likely CPE for integer sum is 23.00 rather than 22.68. Later measurements use <code>-O1</code> and <code>-O2</code>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stack">
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">Figure 5.5 · combine1</span><span id="s3-seg"></span></div>
+          <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 680 300" role="img" aria-label="Naive combine1 walking a four-element vector"></svg></div>
+          <div class="controls" id="s3-controls"></div>
+          <pre class="code" id="s3-code"></pre>
+          <div class="caption" aria-live="polite" id="s3-cap">Every iteration asks how long the vector is, then asks for the next locker with a bounds check.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="loop">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 4 · code motion</span>
+        <h2>Do not recount the banner for every letter</h2>
+        <p class="story">Fatima lowercases a shouty banner. The slow recipe, <code>lower1</code>, measures the whole banner with <code>strlen</code> <i>before every letter</i>. <code>strlen</code> itself walks until it finds a zero. For n letters that is about n walks of length n — time like n².</p>
+        <p class="story"><code>lower2</code> measures once, stores <code>len</code>, and walks once. Same letters. Different universe. For 1,048,576 characters the book timed 17 minutes versus 2.0 milliseconds.</p>
+        <p class="imagine"><b>Try it:</b> Step the slow recipe and watch the length-walker restart. Switch to hoist and the walker goes once. Slide n to see n² versus n.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><code>combine2</code> moves <code>vec_length</code> out of the loop test into local <code>length</code> — <b>code motion</b>. Integer + CPE falls from 10.12 to 7.02; integer * from 10.12 to 9.03; float + 10.17 to 9.02; float * 11.14 to 11.03. Compilers stay cautious about moving calls: a side effect in <code>vec_length</code> would change the meaning.</p>
+            <p>Figure 5.7: <code>lower1</code> calls <code>strlen</code> in the <code>for</code> test; <code>lower2</code> hoists it. Figure 5.8(b): for length 1,048,576, <code>lower1</code> takes 1,049.89 seconds and <code>lower2</code> takes 0.0020 seconds, over 500,000 times faster. Each doubling of n quadruples <code>lower1</code>’s time.</p>
+            <p>“For a string of length 1,048,576, lower1 requires over 17 minutes of CPU time.” Even an inlining compiler cannot prove the string never gains or loses a zero in the middle. The programmer has to hoist.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 5.7 · lower1 vs lower2</span><span id="s4-seg"></span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 680 300" role="img" aria-label="strlen called every iteration versus once"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <div class="caption" aria-live="polite" id="s4-cap">strlen walks the whole string. Calling it in the loop test makes lowercase quadratic.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="calls">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 5 · procedure calls</span>
+        <h2>Stop asking the clerk for every jar</h2>
+        <p class="story">Yara still calls <code>get_vec_element</code> on every locker. That clerk checks whether i sits between 0 and len every time — useful for a stranger, silly once you have already proved the walk stays in range.</p>
+        <p class="story"><code>combine3</code> asks once for the shelf address (<code>get_vec_start</code>) and then reads <code>data[i]</code> itself. A modularity purist winces. The clock barely notices: integer + even gets a little worse, 7.02 to 7.17. The next bottleneck is still sitting there. This rewrite is a door, not the prize.</p>
+        <p class="imagine"><b>Try it:</b> Step combine2 (clerk every time) then switch to combine3 (direct lockers). Count calls. Watch CPE refuse to fall.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 5.9 adds <code>get_vec_start</code>, which returns <code>v-&gt;data</code>. <code>combine3</code> hoists <code>length</code> and <code>data</code>, then does <code>*dest = *dest OP data[i]</code> with no call in the inner loop.</p>
+            <p>CPE after the change: integer + 7.17 (slightly worse than combine2’s 7.02), integer * 9.02, float + 9.02, float * 11.03. “Surprisingly, there is no apparent performance improvement.” Section 5.11.2 later shows the bounds checks were highly predictable, so they were not the limiter.</p>
+            <p>The transformation still matters: it enables the memory-reference rewrite that follows. The book treats it as one step in a chain, not a win by itself.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 5.9 · combine2 vs combine3</span><span id="s5-seg"></span></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 680 300" role="img" aria-label="Bounds-checked element calls versus direct array access"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="caption" aria-live="polite" id="s5-cap">The clerk goes away. The CPE barely moves. Something else is the jam.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="regs">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 6 · memory references</span>
+        <h2>Keep the running total in your head</h2>
+        <p class="story">Tomas writes the soup total back on the fridge after every spoon. The inner loop of <code>combine3</code> does the same: read <code>*dest</code>, combine, write <code>*dest</code>. For <code>double</code> × that is <code>vmovsd</code>, <code>vmulsd</code>, <code>vmovsd</code> — two reads and a write per locker.</p>
+        <p class="story"><code>combine4</code> keeps a local <code>acc</code> and writes <code>*dest</code> once, after the loop. The compiler can park <code>acc</code> in <code>%xmm0</code>. Integer + drops to 1.27 CPE — about 5.7×. gcc will not do this to <code>combine3</code> for you: <code>dest</code> might <i>be</i> one of the lockers.</p>
+        <p class="imagine"><b>Try it:</b> Step combine3 and watch dest memory flicker. Switch to combine4 and only <code>acc</code> moves. Then open the alias case: vector [2, 3, 5] with dest at the last locker.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 5.10: local <code>acc = IDENT</code>, then <code>acc = acc OP data[i]</code>, then <code>*dest = acc</code>. combine3 CPE 7.17 / 9.02 / 9.02 / 11.03 becomes combine4 1.27 / 3.01 / 3.01 / 5.01 — factors from 2.2× to 5.7×.</p>
+            <p>Let v = [2, 3, 5] and dest alias the last element. combine3 writes 1, then 2, then 6, then 36. combine4 leaves the vector alone until the end and writes 30. “The two functions can have different behaviors due to memory aliasing.”</p>
+            <p>With <code>-O2</code>, gcc’s combine3 keeps the product in <code>%xmm0</code> and still stores to dest each iteration (CPE 1.60 / 3.01 / 3.01 / 5.01). Practice 5.4 asks whether that still matches aliasing combine3.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">combine3 vs combine4</span><span id="s6-seg"></span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 680 320" role="img" aria-label="Accumulating in dest memory versus a register, including an aliasing case"></svg></div>
+        <div class="controls" id="s6-controls"></div>
+        <div class="caption" aria-live="polite" id="s6-cap">Reading and writing dest every iteration is wasteful — unless dest aliases the data.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="cpu">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 7 · modern processors</span>
+        <h2>A kitchen with eight stations, and a waiting line</h2>
+        <p class="story">Aisha’s kitchen can start more than one job per tick, and not always in menu order — <b>superscalar</b> and <b>out of order</b>. From the recipe it still looks like one instruction after another. Inside, a hundred operations can be in flight.</p>
+        <p class="story">Two ceilings matter. The <b>latency bound</b> is how long a job that needs the previous answer must wait (float × takes 5 cycles). The <b>throughput bound</b> is how fast the stations can start independent jobs (two loads per cycle → CPE 0.50). combine4 sits on the latency ceiling, except integer + at 1.27 instead of 1.00.</p>
+        <p class="imagine"><b>Try it:</b> Pick an operation and press Fire. Watch a token wait L cycles on one chain. Switch to stations to see which Haswell units can do the work.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 5.11: instruction control unit (fetch, predict, decode) and execution unit (functional units, load/store, data cache). Haswell has eight units: 0 integer / float * / ÷ / branches; 1 integer / float + / integer * / float *; 2–3 load; 4 store; 5 integer; 6 integer / branches; 7 store address. A store needs two units.</p>
+            <p>Figure 5.12 latency / issue / capacity: integer + 1, 1, 4; integer * 3, 1, 1; integer ÷ 3–30; float + 3, 1, 1; float * 5, 1, 2; float ÷ 3–15. Issue 1 means fully pipelined. Latency bounds 1.00 / 3.00 / 3.00 / 5.00. Throughput bounds 0.50 / 1.00 / 1.00 / 0.50 (the 0.50 from two load units).</p>
+            <p>combine4 CPE 1.27 / 3.01 / 3.01 / 5.01 matches latency except integer +. 20 × 20 unrolling spills (16 integer registers, 16 YMM): some CPEs get worse. A mispredict on the reference machine cost about 19 cycles. combine4b’s predictable bounds checks barely move the latency-bound cases. minmax1 on random data: CPE about 13.5; minmax2 with conditional moves: about 4.0.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Haswell · latency vs issue</span><span id="s7-seg"></span></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 680 320" role="img" aria-label="Latency chain versus Haswell functional units"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="caption" aria-live="polite" id="s7-cap">combine4 feeds each multiply its own yesterday. The pipeline is ready; the data is not.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="unroll">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 8 · loop unrolling</span>
+        <h2>Two letters per trip, same waiting line</h2>
+        <p class="story">Soren used to walk to the mailbox once per letter. <code>combine5</code> carries two: <code>acc = (acc OP data[i]) OP data[i+1]</code>, then a short cleanup loop. Fewer trips. Less loop overhead.</p>
+        <p class="story">Integer + finally hits its latency bound: 1.27 becomes 1.01. The other three stay put at 3.01 / 3.01 / 5.01. Why? Each iteration still does two combines <i>in a chain</i>. Half as many trips, still n multiplies in a line. gcc can unroll at <code>-O3</code>; the dependency does not care.</p>
+        <p class="imagine"><b>Try it:</b> Step the 2 × 1 loop. Watch i jump by 2, and watch acc wait for the first combine before the second.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 5.16: 2 × 1 unrolling. Limit is <code>length - 1</code>; i steps by 2; a tail loop finishes 0 or 1 leftover. For factor k the limit is n − k + 1.</p>
+            <p>CPE: combine4 1.27 / 3.01 / 3.01 / 5.01; combine5 1.01 / 3.01 / 3.01 / 5.01; 3 × 1 same as 2 × 1 on the last three. Figure 5.17: unrolling to k = 10 never beats the latency bound. The data-flow still has n sequential <code>mul</code>s.</p>
+            <p>The inner loop becomes two <code>vmulsd</code>s into the same <code>%xmm0</code>. Pointer-based versus array-based code did not change times on the reference machine. gcc may pick wildly different shapes from small source edits.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 5.16 · combine5 2 × 1</span><span class="pill" id="s8-pill">i = 0</span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 680 300" role="img" aria-label="Two-way loop unrolling with a single accumulator"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="caption" aria-live="polite" id="s8-cap">Two elements per trip. One accumulator, so the multiplies still stand in a single line.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="parallel">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 9 · ILP</span>
+        <h2>Two running totals, or a sneakier pair of parentheses</h2>
+        <p class="story">Lucia and her twin each keep a product: even lockers in <code>acc0</code>, odd in <code>acc1</code>, then one combine at the end. That is combine6, <b>2 × 2</b> unrolling. The waiting line is n/2 long. Float × CPE falls from 5.01 to 2.51 — through the latency wall.</p>
+        <p class="story">combine7 only moves parentheses: <code>acc OP (data[i] OP data[i+1])</code>. The first multiply does not need yesterday’s acc, so the critical path is again n/2. Integers are associative even on overflow. Floats are not; a wild mix of huge and tiny values could overflow one half. Most compilers will not reassociate floats for you.</p>
+        <p class="imagine"><b>Try it:</b> Step 2 × 2 and watch both accumulators. Switch to reassociate and watch the pair multiply first, then acc.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>combine6 CPE 0.81 / 1.51 / 1.51 / 2.51. combine7 (2 × 1a) 1.01 / 1.51 / 1.51 / 2.51. k × k needs k ≥ C · L to fill the pipes: float × wants k ≥ 10; float + wants k ≥ 3. 10 × 10 reaches 0.55 / 1.00 / 1.01 / 0.52 — near the throughput bounds. Integer + hits 0.54 at k = 7.</p>
+            <p>“We have broken through the barrier imposed by the latency bound.” Two’s-complement + and * stay associative; “floating-point multiplication and addition are not associative.” gcc may reassociate integers, not always helpfully.</p>
+            <p>Section 5.10: from combine1 at 10.12–11.14 down to 10 × 10 near 0.50–1.00 is a 10–20× scalar gain. With AVX vector code, single-precision * went from 11.14 to 0.06, over 180×. 20 × 20 spills and some CPEs worsen (0.83 / 1.03 / 1.02 / 0.68).</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">combine6 and combine7</span><span id="s9-seg"></span></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 680 320" role="img" aria-label="Two accumulators versus reassociated pairing"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="caption" aria-live="polite" id="s9-cap">Two independent chains, each n/2 long. The stations can finally stay busy.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="bound">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 10 · limits</span>
+        <h2>When memory is the queue, or the tallest bar</h2>
+        <p class="story">A treasure map where each box names the next one cannot go faster than a load. <code>list_len</code> walks <code>ls = ls-&gt;next</code>. The book measured CPE 4.00 — the L1 load latency. Stores are different: <code>write_read</code> is fine (CPE 1.3) until src and dest are the same cell (CPE 7.3). The load must wait for the store buffer.</p>
+        <p class="story">On a big program you first find the tall bar. A gprof run on Shakespeare’s bigrams spent 3.5 minutes in insertion sort. qsort made sort vanish; list order, a weak hash, then <code>lower1</code> each became the next jam. 3.5 minutes became 0.2 seconds. Amdahl: if one part is 97% of the time, fixing it is a huge win — and then a new 97% appears.</p>
+        <p class="imagine"><b>Try it:</b> Step the linked list (one load waits for the last). Switch to the profiler and press Next version through the six rewrites.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Haswell: two load units (up to 72 pending reads each), one store unit (buffer of 42). Loads start one per unit per cycle, so a program that loads one value per result cannot beat CPE 0.50 without SIMD. <code>list_len</code> CPE 4.00. <code>clear_array</code> CPE 1.0 (one store unit). <code>write_read</code> Example A (different cells) CPE 1.3; Example B (same cell) CPE 7.3 — about 6 extra cycles for the write/read dependency. Matching addresses set the location to n − 1.</p>
+            <p>gprof: compile <code>-Og -pg</code>, run, then <code>gprof prog</code>. Shakespeare: 965,028 words, 23,706 unique; n = 2 gives 363,039 unique bigrams (“I am” 1,892 times, “to be” 1,020). Initial insertion sort: 3.5 minutes, sort_words 203.66 s (97.58%). qsort ≈ 5.4 s. Iter-first (insert at front) ≈ 7.5 s; iter-last ≈ 5.3 s. 1,021 buckets → 199,999 still 5.1 s until a shift/xor hash dropped it to 0.6 s; <code>lower2</code> to about 0.2 s, around 1,000×.</p>
+            <p>Amdahl: sorting was 203.7 of 209.0 s, α = 0.974, predicted speedup 39.0 versus measured 38.5. Interval timing (δ of 1.0–10.0 ms) is rough under about 1 second. Library times hide inside callers unless you wrap them (the book’s <code>Strlen</code> wrapper: 12,511,031 calls, 0.30 s).</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Load chain or gprof bars</span><span id="s10-seg"></span></div>
+        <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 680 320" role="img" aria-label="Linked-list load latency and a profiler bar history"></svg></div>
+        <div class="controls" id="s10-controls"></div>
+        <div class="caption" aria-live="polite" id="s10-cap">A load that needs the last load waits 4 cycles. A profiler points at the tallest bar, then the next one.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The seesaws from this chapter</h2><p>Each row is a choice that moves CPE. The chip already has the stations. The source code decides whether they wait.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>Safe gcc</h4><p>Must assume aliasing and side effects. Leaves twiddle1 and dest-in-memory alone.</p></div><div class="vs">vs</div><div class="side"><h4>You rewrite</h4><p>Hoist, drop calls, keep acc local. Then the compiler can go further.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>CPE slope</h4><p>Work per element. This is what unrolling and ILP change.</p></div><div class="vs">vs</div><div class="side"><h4>Intercept</h4><p>368 cycles of setup in psum. Drowns only when n is tiny.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Abstract ADT</h4><p>combine1: vec_length + get_vec_element every i. CPE ~10 after -O1.</p></div><div class="vs">vs</div><div class="side"><h4>Direct + acc</h4><p>combine4: one load per i, acc in a register. CPE 1.27–5.01.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Latency bound</h4><p>One chain: L cycles per element. combine4 lives here.</p></div><div class="vs">vs</div><div class="side"><h4>Throughput bound</h4><p>Fill every pipe. 0.50–1.00. Needs k × k or reassociation.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>k × 1 unroll</h4><p>Fewer trips. Critical path still n combines. Helps integer +.</p></div><div class="vs">vs</div><div class="side"><h4>k × k accs</h4><p>k independent chains of n/k. Breaks the latency wall.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Integer + / *</h4><p>Associative, even on overflow. Compiler may reassociate.</p></div><div class="vs">vs</div><div class="side"><h4>Float + / *</h4><p>Not associative. You own the risk; gcc usually will not.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Predictable branch</h4><p>Loop tails, always-true bounds. Cheap. combine4b barely slower.</p></div><div class="vs">vs</div><div class="side"><h4>Random branch</h4><p>~19-cycle miss. Write functional code so gcc can emit cmov.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Compute-bound</h4><p>Critical path or full pipes. Fix the C, watch assembly.</p></div><div class="vs">vs</div><div class="side"><h4>Memory-bound</h4><p>Load-to-load (CPE 4.00) or write/read (CPE 7.3). Or a bad algorithm.</p></div></div>
+      </div>
+      <div class="themes" style="margin-top:18px">
+        <div class="card"><h3>What we skipped</h3><p>Section 5.13’s checklist (high-level algorithms, then blockers, then unrolling / multiple accs / cmov) — we used the machines instead of the laundry list. Homework and practice: inner4, memset, poly / Horner, merge, copy_array, psum critical-path problems. The Web Aside OPT:SIMD table (scalar 10 × 10 versus AVX 8 × 8). History of the CDC 6600 and PentiumPro. Intel VTune and Valgrind as extra profilers. Chapter 6 will open caches; Chapter 12 will open threads.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>The chapter’s grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>CPE</dt><dd>Cycles per element: the slope of time versus n, not the setup intercept.</dd></div>
+        <div class="word"><dt>memory aliasing</dt><dd>Two pointers that might name the same cell. The compiler must assume they can.</dd></div>
+        <div class="word"><dt>optimization blocker</dt><dd>Aliasing or a call with a possible side effect. gcc leaves the slow code alone.</dd></div>
+        <div class="word"><dt>code motion</dt><dd>Hoist a loop-invariant call or math to a place that runs less often.</dd></div>
+        <div class="word"><dt>combine1…7</dt><dd>The book’s running example: abstract fold, then hoist, direct data, acc, unroll, 2 × 2, reassociate.</dd></div>
+        <div class="word"><dt>latency bound</dt><dd>Minimum CPE when each combine must wait for the last. Equals L of the op.</dd></div>
+        <div class="word"><dt>throughput bound</dt><dd>Minimum CPE from how many results the units can start per cycle (and from loads).</dd></div>
+        <div class="word"><dt>issue time</dt><dd>Cycles before the same unit can start another independent op. 1 means fully pipelined.</dd></div>
+        <div class="word"><dt>superscalar / OoO</dt><dd>Several ops per cycle, not necessarily in program order, still looking sequential.</dd></div>
+        <div class="word"><dt>critical path</dt><dd>The longest dependency chain in the data-flow of a loop. A lower bound on time.</dd></div>
+        <div class="word"><dt>k × k unrolling</dt><dd>Stride-k loop plus k accumulators. Fill C · L pipes to reach throughput.</dd></div>
+        <div class="word"><dt>reassociation</dt><dd>acc OP (a OP b) instead of (acc OP a) OP b. Shortens the chain; changes float rounding.</dd></div>
+        <div class="word"><dt>register spilling</dt><dd>Too many live accs, so some sit on the stack. 20 × 20 lost its lead.</dd></div>
+        <div class="word"><dt>write/read dependency</dt><dd>A load of an address that a recent store still holds in its buffer. Extra wait.</dd></div>
+        <div class="word"><dt>gprof</dt><dd>Unix profiler: -pg, then a time table and a call graph. Points at the tall bar.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width:820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Eight questions. Finish all eight to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible } = K;
+K.page(5);
+const cap = (id, html) => { K.$(id).innerHTML = html; };
+
+function box(parent, x, y, w, hgt, cls, title, sub) {
+  const r = s("rect", { x, y, width: w, height: hgt, rx: 10, class: cls });
+  parent.appendChild(r);
+  const ty = sub ? y + hgt / 2 - 4 : y + hgt / 2 + 5;
+  const t = s("text", { x: x + w / 2, y: ty, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700, fontSize: "13px" } }, title || "");
+  parent.appendChild(t);
+  let u = null;
+  if (sub) {
+    u = s("text", { x: x + w / 2, y: y + hgt / 2 + 14, class: "sv-label", "text-anchor": "middle" }, sub);
+    parent.appendChild(u);
+  }
+  return { r, t, u, x, y, w, h: hgt, cx: x + w / 2, cy: y + hgt / 2 };
+}
+
+function setCls(el, cls) { el.setAttribute("class", cls); }
+function showG(g, on) { g.setAttribute("visibility", on ? "visible" : "hidden"); }
+
+/* ================= HERO ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const VERS = [
+    { name: "combine1", cpe: "10.12", sub: "abstract -O1", why: "vec_length and get_vec_element on every i. Integer + after -O1 is already twice the unoptimized 22.68, and still the slowest bar." },
+    { name: "combine2", cpe: "7.02", sub: "hoist length", why: "Code motion: ask vec_length once. Integer + falls to 7.02. The clerk still checks every locker." },
+    { name: "combine4", cpe: "1.27", sub: "acc in a reg", why: "Local acc, one write to dest. Integer + hits 1.27 — near the latency bound of 1.00." },
+    { name: "combine6", cpe: "0.81", sub: "2 × 2 accs", why: "Two accumulators break the one-at-a-time chain. Integer + is under the latency bound, heading for the 0.50 load limit." },
+  ];
+  const cards = VERS.map((v, i) => {
+    const x = 24 + i * 164;
+    const b = box(svg, x, 40, 148, 88, "sv-panel", v.cpe, v.name);
+    svg.appendChild(s("text", { x: x + 74, y: 148, class: "sv-label", "text-anchor": "middle" }, v.sub));
+    return b;
+  });
+  const foot = s("text", { x: 340, y: 178, class: "sv-label", "text-anchor": "middle" }, "Haswell  ·  integer +  ·  tap to step");
+  svg.appendChild(foot);
+  let i = 0, vis = false;
+  function paint() {
+    cards.forEach((c, k) => setCls(c.r, k === i ? "sv-good" : k < i ? "sv-server" : "sv-panel"));
+    K.$("#hero-pill").innerHTML = `<i></i>CPE ${VERS[i].cpe}`;
+    cap("#hero-cap", `<b>${VERS[i].name}</b> · ${VERS[i].why}`);
+  }
+  paint();
+  whenVisible(svg, () => (vis = true), () => (vis = false));
+  (async function auto() {
+    await sleep(800);
+    for (;;) {
+      if (vis && !K.reduced && !document.hidden) {
+        i = (i + 1) % VERS.length;
+        paint();
+      }
+      await sleep(1600);
+    }
+  })();
+  svg.style.cursor = "pointer";
+  svg.addEventListener("click", () => { i = (i + 1) % VERS.length; paint(); });
+})();
+
+/* ================= 1. ALIAS ================= */
+(function alias() {
+  const svg = K.$("#s1-svg");
+  const gTw = s("g"), gFn = s("g");
+  svg.append(gTw, gFn);
+  const cellA = box(gTw, 40, 36, 170, 78, "sv-db", "3", "*xp");
+  const cellB = box(gTw, 255, 36, 170, 78, "sv-db", "5", "*yp");
+  const out = box(gTw, 470, 36, 170, 78, "sv-panel", "—", "result *xp");
+  const twN = s("text", { x: 340, y: 148, class: "sv-text", "text-anchor": "middle" }, "");
+  const twR = s("text", { x: 340, y: 176, class: "sv-label", "text-anchor": "middle" }, "");
+  gTw.append(twN, twR);
+  const ctrB = box(gFn, 40, 36, 170, 78, "sv-server", "0", "counter");
+  const f1B = box(gFn, 255, 36, 170, 78, "sv-panel", "func1", "f+f+f+f");
+  const f2B = box(gFn, 470, 36, 170, 78, "sv-panel", "func2", "4*f()");
+  const fnN = s("text", { x: 340, y: 148, class: "sv-text", "text-anchor": "middle" }, "");
+  const fnR = s("text", { x: 340, y: 176, class: "sv-label", "text-anchor": "middle" }, "");
+  gFn.append(fnN, fnR);
+  let mode = 0, aliased = false, busy = false, xp0 = 3, yp0 = 5;
+  function resetTw() {
+    cellA.t.textContent = String(xp0);
+    cellB.t.textContent = aliased ? "same cell" : String(yp0);
+    cellA.u.textContent = aliased ? "xp and yp" : "*xp = 3";
+    cellB.u.textContent = aliased ? "aliased" : "*yp = 5";
+    setCls(cellA.r, "sv-db");
+    setCls(cellB.r, aliased ? "sv-bad" : "sv-db");
+    out.t.textContent = "—";
+    setCls(out.r, "sv-panel");
+    twN.textContent = aliased ? "xp == yp   ·   one address" : "two addresses   ·   six refs vs three";
+    twR.textContent = "twiddle1: *xp += *yp twice     twiddle2: *xp += 2 * *yp";
+    cap("#s1-cap", aliased
+      ? "Because both names are the same cell, the recipes will disagree. Run each."
+      : "Different cells: both recipes should leave 13. twiddle2 only touches memory three times.");
+  }
+  function resetFn() {
+    ctrB.t.textContent = "0";
+    f1B.t.textContent = "func1";
+    f2B.t.textContent = "func2";
+    setCls(f1B.r, "sv-panel"); setCls(f2B.r, "sv-panel"); setCls(ctrB.r, "sv-server");
+    fnN.textContent = "f() returns counter++";
+    fnR.textContent = "func1 calls f four times     func2 multiplies once";
+    cap("#s1-cap", "If f ticks a global, 4*f() is not f()+f()+f()+f(). Press Run func1 or Run func2.");
+  }
+  function paintMode() {
+    showG(gTw, mode === 0);
+    showG(gFn, mode === 1);
+    if (mode === 0) resetTw(); else resetFn();
+    [...K.$("#s1-controls").querySelectorAll("button")].forEach((b) => {
+      const tw = b.dataset.m === "0", fn = b.dataset.m === "1";
+      if (tw || fn) b.style.display = (tw && mode === 0) || (fn && mode === 1) ? "" : "none";
+    });
+  }
+  const ctr = K.$("#s1-controls");
+  const add = (lab, cls, m, fn) => {
+    const b = h("button", { class: "btn " + cls, type: "button" }, lab);
+    b.dataset.m = m;
+    b.addEventListener("click", fn);
+    ctr.appendChild(b);
+    return b;
+  };
+  add("Toggle alias", "", "0", () => { if (busy || mode !== 0) return; aliased = !aliased; resetTw(); });
+  add("Run twiddle1", "primary", "0", async () => {
+    if (busy || mode !== 0) return;
+    busy = true;
+    const start = xp0;
+    const end = aliased ? start * 4 : start + 2 * yp0;
+    const p = draw.tag(aliased ? "×4" : "+yp +yp");
+    svg.appendChild(p);
+    await fly(p, [cellA.cx, 24], [out.cx, 24], 480);
+    p.remove();
+    out.t.textContent = String(end);
+    setCls(out.r, "sv-good");
+    cellA.t.textContent = String(end);
+    cap("#s1-cap", aliased
+      ? `Because X, Y: *xp += *xp twice turns ${start} into <b>${end}</b> (factor 4). Six memory references.`
+      : `Because the cells differ, two adds of 5 turn 3 into <b>${end}</b>. Six references: two reads of each pointer and two writes.`);
+    busy = false;
+  });
+  add("Run twiddle2", "", "0", async () => {
+    if (busy || mode !== 0) return;
+    busy = true;
+    const start = xp0;
+    const end = aliased ? start + 2 * start : start + 2 * yp0;
+    const p = draw.tag(aliased ? "×3" : "+ 2*yp");
+    svg.appendChild(p);
+    await fly(p, [cellB.cx, 24], [out.cx, 24], 480);
+    p.remove();
+    out.t.textContent = String(end);
+    setCls(out.r, aliased ? "sv-bad" : "sv-good");
+    cellA.t.textContent = String(end);
+    cap("#s1-cap", aliased
+      ? `*xp += 2 * *xp turns ${start} into <b>${end}</b> (factor 3). gcc cannot pick this rewrite.`
+      : `One scaled add: 3 + 2×5 = <b>${end}</b>. Three memory references. Same answer as twiddle1 only when the pointers differ.`);
+    busy = false;
+  });
+  add("Reset", "", "0", () => { if (mode === 0) { busy = false; resetTw(); } });
+  add("Run func1", "primary", "1", async () => {
+    if (busy || mode !== 1) return;
+    busy = true;
+    let sum = 0;
+    for (let k = 0; k < 4; k++) {
+      ctrB.t.textContent = String(k + 1);
+      sum += k;
+      f1B.t.textContent = String(sum);
+      setCls(f1B.r, "sv-data-soft");
+      await sleep(280);
+    }
+    setCls(f1B.r, "sv-good");
+    fnN.textContent = "0 + 1 + 2 + 3 = 6";
+    cap("#s1-cap", "Because f has a side effect, four calls return <b>6</b> and leave counter at 4. gcc will not turn this into 4*f().");
+    busy = false;
+  });
+  add("Run func2", "", "1", async () => {
+    if (busy || mode !== 1) return;
+    busy = true;
+    ctrB.t.textContent = "1";
+    const p = draw.tag("4×0");
+    svg.appendChild(p);
+    await fly(p, [ctrB.cx, 24], [f2B.cx, 24], 420);
+    p.remove();
+    f2B.t.textContent = "0";
+    setCls(f2B.r, "sv-bad");
+    fnN.textContent = "4 * 0 = 0    ·    counter is now 1";
+    cap("#s1-cap", "One call. f returns 0, times 4 is <b>0</b>. Same source look, different program.");
+    busy = false;
+  });
+  add("Reset", "", "1", () => { if (mode === 1) { busy = false; resetFn(); } });
+  K.$("#s1-seg").appendChild(seg(["twiddle", "calls"], 0, (i) => { mode = i; busy = false; paintMode(); }, "s1-mode"));
+  paintMode();
+})();
+
+/* ================= 2. CPE ================= */
+(function cpe() {
+  const svg = K.$("#s2-svg");
+  const ox = 70, oy = 240, pw = 560, ph = 190;
+  svg.append(
+    s("line", { x1: ox, y1: oy, x2: ox + pw, y2: oy, class: "sv-wire-solid" }),
+    s("line", { x1: ox, y1: oy, x2: ox, y2: oy - ph, class: "sv-wire-solid" }),
+    draw.label(ox + pw - 4, 278, "n  →", "sv-label", "end"),
+    draw.label(28, 48, "cycles", "sv-label", "start"));
+  [0, 100, 200].forEach((n) => {
+    const x = ox + (n / 200) * pw;
+    svg.append(draw.label(x, 262, String(n), "sv-label"));
+  });
+  function nx(n) { return ox + (n / 200) * pw; }
+  function cy(c) { return oy - (c / 2300) * ph; }
+  const p1 = s("polyline", { fill: "none", class: "sv-wire-solid", style: { stroke: "var(--coral)", strokeWidth: 2.5 } });
+  const p2 = s("polyline", { fill: "none", class: "sv-wire-solid", style: { stroke: "var(--mint)", strokeWidth: 2.5 } });
+  svg.append(p1, p2);
+  const pts = (m) => [0, 40, 80, 120, 160, 200].map((n) => `${nx(n)},${cy(368 + m * n)}`).join(" ");
+  p1.setAttribute("points", pts(9));
+  p2.setAttribute("points", pts(6));
+  svg.append(
+    draw.label(nx(200) - 8, cy(368 + 9 * 200) - 8, "psum1  9.0", "sv-label", "end"),
+    draw.label(nx(200) - 8, cy(368 + 6 * 200) - 8, "psum2  6.0", "sv-label", "end"),
+    draw.label(ox + 36, cy(368) - 6, "368", "sv-label", "start"));
+  const d1 = s("circle", { r: 7, class: "sv-fill-coral" });
+  const d2 = s("circle", { r: 7, class: "sv-fill-mint" });
+  svg.append(d1, d2);
+  const st = { n: stat("n", "80"), a: stat("psum1", "—"), b: stat("psum2", "—") };
+  Object.values(st).forEach((v) => K.$("#s2-stats").appendChild(v));
+  let n = 80, busy = false;
+  function place() {
+    const y1 = 368 + 9 * n, y2 = 368 + 6 * n;
+    d1.setAttribute("cx", nx(n)); d1.setAttribute("cy", cy(y1));
+    d2.setAttribute("cx", nx(n)); d2.setAttribute("cy", cy(y2));
+    st.n.set(n); st.a.set(y1.toFixed(0)); st.b.set(y2.toFixed(0));
+    cap("#s2-cap", `Because n is <b>${n}</b>, psum1 needs 368 + 9×${n} = <b>${y1}</b> cycles and psum2 needs 368 + 6×${n} = <b>${y2}</b>. The gap is ${3 * n} cycles — the intercept cancelled.`);
+  }
+  place();
+  K.$("#s2-controls").append(
+    slider({ id: "s2-n", label: "n", min: 20, max: 200, step: 4, value: n, onInput: (v) => { n = v; place(); } }),
+    h("button", { class: "btn primary", type: "button", onclick: async function () {
+      if (busy) return; busy = true; this.disabled = true;
+      for (let v = 20; v <= 200; v += 12) {
+        n = v; const sl = K.$("#s2-n"); sl.value = v; sl.dispatchEvent(new Event("input"));
+        await sleep(90);
+      }
+      busy = false; this.disabled = false;
+    } }, "Play n"),
+  );
+})();
+
+/* ================= 3. COMBINE1 ================= */
+(function combine() {
+  const svg = K.$("#s3-svg");
+  const DATA = [2, 3, 5, 9];
+  const hdr = box(svg, 24, 28, 150, 70, "sv-server", "len 4", "vec header");
+  const destB = box(svg, 506, 28, 150, 70, "sv-db", "—", "*dest");
+  const cells = DATA.map((v, i) => box(svg, 24 + i * 164, 120, 148, 64, "sv-panel", String(v), "data[" + i + "]"));
+  const ask = s("text", { x: 340, y: 220, class: "sv-text", "text-anchor": "middle" }, "");
+  const foot = s("text", { x: 340, y: 248, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(ask, foot);
+  let op = 0, i = -1, dest = 0, busy = false;
+  const IDENT = () => (op === 0 ? 0 : 1);
+  const apply = (a, b) => (op === 0 ? a + b : a * b);
+  const CODE = () => op === 0
+    ? "<b>*dest = 0;</b>   IDENT 0,  OP +\nfor (i = 0; i < vec_length(v); i++) {\n  get_vec_element(v, i, &amp;val);\n  *dest = *dest + val;\n}"
+    : "<b>*dest = 1;</b>   IDENT 1,  OP *\nfor (i = 0; i < vec_length(v); i++) {\n  get_vec_element(v, i, &amp;val);\n  *dest = *dest * val;\n}";
+  function paintIdle() {
+    dest = IDENT();
+    i = -1;
+    destB.t.textContent = String(dest);
+    destB.u.textContent = "*dest";
+    setCls(destB.r, "sv-db");
+    cells.forEach((c) => setCls(c.r, "sv-panel"));
+    ask.textContent = "combine1  ·  abstract ADT";
+    foot.textContent = "CPE after -O1   int+ 10.12   int* 10.12   fp+ 10.17   fp* 11.14";
+    K.$("#s3-code").innerHTML = CODE();
+    cap("#s3-cap", `Start with IDENT = <b>${dest}</b>. Each Step asks vec_length (still 4) and get_vec_element with a bounds check.`);
+  }
+  const ctr = K.$("#s3-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || i >= 3) return;
+    busy = true; stepB.disabled = true;
+    i++;
+    cells.forEach((c, k) => setCls(c.r, k === i ? "sv-data-soft" : "sv-panel"));
+    ask.textContent = `i = ${i}   ·   vec_length(v) → 4   ·   get_vec_element`;
+    const p = draw.tag(String(DATA[i]));
+    svg.appendChild(p);
+    await fly(p, [cells[i].cx, cells[i].cy], [destB.cx, destB.cy], 460);
+    p.remove();
+    dest = apply(dest, DATA[i]);
+    destB.t.textContent = String(dest);
+    setCls(destB.r, "sv-good");
+    setCls(cells[i].r, "sv-good");
+    foot.textContent = i < 3 ? "loop test will call vec_length again" : "done  ·  four bounds checks, four length calls";
+    cap("#s3-cap", i < 3
+      ? `Because combine1 is abstract, iteration ${i} both asked the length and checked the index. dest is now <b>${dest}</b>.`
+      : `Fold complete: dest = <b>${dest}</b>. The polite ADT cost is why the -O1 CPE is still about 10.`);
+    busy = false; stepB.disabled = i >= 3;
+  });
+  resetB.addEventListener("click", () => { busy = false; stepB.disabled = false; paintIdle(); });
+  ctr.append(stepB, resetB);
+  K.$("#s3-seg").appendChild(seg(["sum +", "product *"], 0, (k) => { op = k; busy = false; stepB.disabled = false; paintIdle(); }, "s3-mode"));
+  paintIdle();
+})();
+
+/* ================= 4. LOOP / LOWER ================= */
+(function looph() {
+  const svg = K.$("#s4-svg");
+  const CH = ["H", "E", "L", "L", "O"];
+  const cells = CH.map((ch, i) => box(svg, 30 + i * 128, 36, 112, 70, "sv-panel", ch, "[" + i + "]"));
+  const walk = box(svg, 30, 128, 200, 70, "sv-server", "0", "strlen walks");
+  const work = box(svg, 250, 128, 200, 70, "sv-data-soft", "0", "char tests");
+  const big = box(svg, 470, 128, 180, 70, "sv-db", "—", "at 1,048,576");
+  const note = s("text", { x: 340, y: 230, class: "sv-text", "text-anchor": "middle" }, "");
+  const foot = s("text", { x: 340, y: 258, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(note, foot);
+  let mode = 0, i = 0, walks = 0, tests = 0, nShow = 5, busy = false, done = false;
+  function resetCells() {
+    CH.forEach((ch, k) => { cells[k].t.textContent = ch; setCls(cells[k].r, "sv-panel"); });
+  }
+  function paint() {
+    walk.t.textContent = String(walks);
+    work.t.textContent = String(tests);
+    if (mode === 0) {
+      const quad = nShow * nShow;
+      big.t.textContent = nShow >= 1000 ? "17 min" : String(quad);
+      big.u.textContent = nShow >= 1000 ? "lower1  1,049.89 s" : "n × n walks";
+      note.textContent = done ? "lower1 finished   ·   quadratic in n" : `i = ${i}   ·   strlen still in the for-test`;
+      foot.textContent = "each i restarts at s[0] and walks to '\\0'";
+    } else {
+      big.t.textContent = nShow >= 1000 ? "2.0 ms" : String(nShow);
+      big.u.textContent = nShow >= 1000 ? "lower2  0.0020 s" : "one strlen";
+      note.textContent = done ? "lower2 finished   ·   linear in n" : "len stored   ·   one walk, then n converts";
+      foot.textContent = "500,000× faster at n = 1,048,576";
+    }
+  }
+  function fullReset() {
+    i = 0; walks = 0; tests = 0; done = false; busy = false;
+    resetCells();
+    setCls(walk.r, "sv-server"); setCls(work.r, "sv-data-soft");
+    paint();
+    cap("#s4-cap", mode === 0
+      ? "Fatima is about to lowercase HELLO the slow way. Each Step calls strlen from the start, then converts one letter."
+      : "len = 5 is already known. Each Step only converts. Slide n to compare n² with n, including the book’s million-letter row.");
+  }
+  const ctr = K.$("#s4-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || done) return;
+    busy = true; stepB.disabled = true;
+    if (mode === 0) {
+      for (let k = 0; k < 5; k++) {
+        setCls(cells[k].r, "sv-data-soft");
+        walks++; walk.t.textContent = String(walks);
+        await sleep(70);
+        setCls(cells[k].r, "sv-panel");
+      }
+    } else if (i === 0 && walks === 0) {
+      for (let k = 0; k < 5; k++) {
+        setCls(cells[k].r, "sv-good");
+        walks++; walk.t.textContent = String(walks);
+        await sleep(70);
+      }
+      cells.forEach((c) => setCls(c.r, "sv-panel"));
+    }
+    cells[i].t.textContent = CH[i].toLowerCase();
+    setCls(cells[i].r, "sv-good");
+    tests++;
+    i++;
+    if (i >= 5) done = true;
+    paint();
+    cap("#s4-cap", done
+      ? (mode === 0
+        ? `Because strlen ran 5 times, Fatima walked <b>${walks}</b> characters to convert 5 letters. Scale that to a million.`
+        : `One measure (<b>${walks}</b> steps) plus 5 converts. Same banner, linear time.`)
+      : (mode === 0
+        ? `strlen said 5 again. Letter ${i} is next. Walks so far: <b>${walks}</b>.`
+        : `len is still 5. Converted ${i} of 5.`));
+    busy = false; stepB.disabled = done;
+  });
+  resetB.addEventListener("click", () => { stepB.disabled = false; fullReset(); });
+  ctr.append(stepB, resetB);
+  [[5, "n=5"], [16, "n=16"], [256, "n=256"], [1048576, "n=1,048,576"]].forEach(([v, lab]) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => {
+      nShow = v; paint();
+      cap("#s4-cap", v >= 1000
+        ? "The book’s row: lower1 1,049.89 seconds (over 17 minutes), lower2 0.0020 seconds."
+        : `If the banner had ${v} letters, lower1 does about ${v * v} character inspections in strlen alone; lower2 does ${v}.`);
+    } }, lab));
+  });
+  K.$("#s4-seg").appendChild(seg(["lower1", "lower2"], 0, (k) => { mode = k; stepB.disabled = false; fullReset(); }, "s4-mode"));
+  fullReset();
+})();
+
+/* ================= 5. CALLS ================= */
+(function calls() {
+  const svg = K.$("#s5-svg");
+  const DATA = [2, 3, 5, 9];
+  const clerk = box(svg, 24, 28, 200, 74, "sv-server", "get_vec_element", "0 ≤ i < len ?");
+  const shelf = box(svg, 248, 28, 200, 74, "sv-db", "data *", "get_vec_start");
+  const destB = box(svg, 472, 28, 184, 74, "sv-panel", "0", "*dest");
+  const cells = DATA.map((v, i) => box(svg, 24 + i * 164, 124, 148, 64, "sv-panel", String(v), "data[" + i + "]"));
+  const note = s("text", { x: 340, y: 222, class: "sv-text", "text-anchor": "middle" }, "");
+  const foot = s("text", { x: 340, y: 250, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(note, foot);
+  let mode = 0, i = -1, dest = 0, callsN = 0, busy = false;
+  function idle() {
+    i = -1; dest = 0; callsN = 0;
+    destB.t.textContent = "0";
+    setCls(destB.r, "sv-panel");
+    cells.forEach((c) => setCls(c.r, "sv-panel"));
+    setCls(clerk.r, mode === 0 ? "sv-server" : "sv-box");
+    setCls(shelf.r, mode === 1 ? "sv-good" : "sv-db");
+    clerk.t.textContent = mode === 0 ? "get_vec_element" : "idle";
+    note.textContent = mode === 0 ? "combine2  ·  CPE int+  7.02" : "combine3  ·  CPE int+  7.17";
+    foot.textContent = mode === 0 ? "length hoisted; clerk still on every i" : "direct data[i]  ·  no inner call";
+    cap("#s5-cap", mode === 0
+      ? "length is already local. Each Step still asks the clerk, who checks the bounds and copies the locker."
+      : "Shelf address is in hand. Each Step reads data[i] and writes dest. The CPE does not improve — dest memory is the next jam.");
+  }
+  const ctr = K.$("#s5-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || i >= 3) return;
+    busy = true; stepB.disabled = true;
+    i++;
+    if (mode === 0) {
+      callsN++;
+      setCls(clerk.r, "sv-data-soft");
+      clerk.t.textContent = "check i=" + i;
+    } else {
+      setCls(shelf.r, "sv-good");
+      clerk.t.textContent = "idle";
+    }
+    cells.forEach((c, k) => setCls(c.r, k === i ? "sv-data-soft" : "sv-panel"));
+    const p = draw.tag(String(DATA[i]));
+    svg.appendChild(p);
+    await fly(p, [cells[i].cx, cells[i].cy], [destB.cx, destB.cy], 420);
+    p.remove();
+    dest += DATA[i];
+    destB.t.textContent = String(dest);
+    setCls(destB.r, "sv-good");
+    setCls(cells[i].r, "sv-good");
+    setCls(clerk.r, mode === 0 ? "sv-server" : "sv-box");
+    note.textContent = mode === 0 ? `calls so far  ${callsN}` : "inner loop: no calls";
+    cap("#s5-cap", mode === 0
+      ? `Because get_vec_element still runs, iteration ${i} paid a bounds check. dest = <b>${dest}</b>. CPE stays 7.02.`
+      : `Direct data[${i}]. dest = <b>${dest}</b>. Integer + CPE is 7.17 — slightly worse. The clerk was not the jam.`);
+    busy = false; stepB.disabled = i >= 3;
+  });
+  resetB.addEventListener("click", () => { busy = false; stepB.disabled = false; idle(); });
+  ctr.append(stepB, resetB);
+  K.$("#s5-seg").appendChild(seg(["combine2", "combine3"], 0, (k) => { mode = k; busy = false; stepB.disabled = false; idle(); }, "s5-mode"));
+  idle();
+})();
+
+/* ================= 6. REGS ================= */
+(function regs() {
+  const svg = K.$("#s6-svg");
+  const gMem = s("g"), gAl = s("g");
+  svg.append(gMem, gAl);
+  const DATA = [2, 3, 5, 9];
+  const destM = box(gMem, 24, 28, 160, 70, "sv-db", "0", "*dest memory");
+  const accM = box(gMem, 248, 28, 160, 70, "sv-server", "—", "acc  %xmm0");
+  const cpeM = box(gMem, 472, 28, 184, 70, "sv-panel", "7.17", "CPE int+");
+  const cellsM = DATA.map((v, i) => box(gMem, 24 + i * 164, 118, 148, 60, "sv-panel", String(v), "data[" + i + "]"));
+  const nM = s("text", { x: 340, y: 210, class: "sv-text", "text-anchor": "middle" }, "");
+  const fM = s("text", { x: 340, y: 238, class: "sv-label", "text-anchor": "middle" }, "");
+  gMem.append(nM, fM);
+  const v0 = box(gAl, 40, 36, 120, 70, "sv-panel", "2", "v[0]");
+  const v1 = box(gAl, 180, 36, 120, 70, "sv-panel", "3", "v[1]");
+  const v2 = box(gAl, 320, 36, 150, 70, "sv-db", "5", "v[2] = dest");
+  const accA = box(gAl, 500, 36, 140, 70, "sv-server", "1", "acc / dest");
+  const nA = s("text", { x: 340, y: 150, class: "sv-text", "text-anchor": "middle" }, "");
+  const fA = s("text", { x: 340, y: 186, class: "sv-label", "text-anchor": "middle" }, "");
+  const tA = s("text", { x: 340, y: 222, class: "sv-text", "text-anchor": "middle" }, "");
+  gAl.append(nA, fA, tA);
+  let mode = 0, useAcc = false, i = -1, dest = 0, acc = 0, busy = false, ai = -1;
+  const AL = [2, 3, 5];
+  function idleMem() {
+    i = -1; dest = 0; acc = 0;
+    destM.t.textContent = "0"; accM.t.textContent = useAcc ? "0" : "—";
+    setCls(destM.r, "sv-db"); setCls(accM.r, useAcc ? "sv-server" : "sv-box");
+    cpeM.t.textContent = useAcc ? "1.27" : "7.17";
+    cpeM.u.textContent = useAcc ? "combine4  int+" : "combine3  int+";
+    cellsM.forEach((c) => setCls(c.r, "sv-panel"));
+    nM.textContent = useAcc ? "acc = acc + data[i]   then one store" : "each i: load dest, add, store dest";
+    fM.textContent = useAcc ? "one memory read per i  ·  acc in a register" : "two reads + a write per i";
+    cap("#s6-cap", useAcc
+      ? "combine4 parks the total in acc. Step and dest stays quiet until the end."
+      : "combine3 keeps the total in dest memory. Step and watch dest flicker every spoon.");
+  }
+  function idleAl() {
+    ai = -1;
+    v0.t.textContent = "2"; v1.t.textContent = "3"; v2.t.textContent = "5";
+    accA.t.textContent = "1";
+    setCls(v0.r, "sv-panel"); setCls(v1.r, "sv-panel"); setCls(v2.r, "sv-db"); setCls(accA.r, "sv-server");
+    nA.textContent = "v = [2, 3, 5]   dest aliases v[2]   OP = *   IDENT = 1";
+    fA.textContent = "combine3 writes dest each i   ·   combine4 writes once";
+    tA.textContent = "Press Step alias to watch 36 versus 30";
+    cap("#s6-cap", "Same vector, dest is the last locker. combine3 will smash that locker as it goes; combine4 will not.");
+  }
+  function paintMode() {
+    showG(gMem, mode === 0);
+    showG(gAl, mode === 1);
+    if (mode === 0) idleMem(); else idleAl();
+    [...K.$("#s6-controls").querySelectorAll("button")].forEach((b) => {
+      const m0 = b.dataset.m === "0", m1 = b.dataset.m === "1";
+      if (m0 || m1) b.style.display = (m0 && mode === 0) || (m1 && mode === 1) ? "" : "none";
+    });
+  }
+  const ctr = K.$("#s6-controls");
+  const add = (lab, cls, m, fn) => {
+    const b = h("button", { class: "btn " + cls, type: "button" }, lab);
+    b.dataset.m = m;
+    b.addEventListener("click", fn);
+    ctr.appendChild(b);
+  };
+  add("Use dest memory", "", "0", () => { if (busy || mode !== 0) return; useAcc = false; idleMem(); });
+  add("Use acc", "", "0", () => { if (busy || mode !== 0) return; useAcc = true; idleMem(); });
+  add("Step", "primary", "0", async () => {
+    if (busy || mode !== 0 || i >= 3) return;
+    busy = true;
+    i++;
+    cellsM.forEach((c, k) => setCls(c.r, k === i ? "sv-data-soft" : "sv-panel"));
+    const p = draw.tag(String(DATA[i]));
+    svg.appendChild(p);
+    if (useAcc) {
+      await fly(p, [cellsM[i].cx, cellsM[i].cy], [accM.cx, accM.cy], 400);
+      p.remove();
+      acc += DATA[i];
+      accM.t.textContent = String(acc);
+      setCls(accM.r, "sv-good");
+      if (i >= 3) {
+        destM.t.textContent = String(acc);
+        setCls(destM.r, "sv-good");
+      }
+      cap("#s6-cap", i < 3
+        ? `acc is now <b>${acc}</b> in a register. dest was not read or written.`
+        : `Loop done. One store writes dest = <b>${acc}</b>. CPE 1.27 instead of 7.17.`);
+    } else {
+      await fly(p, [cellsM[i].cx, cellsM[i].cy], [destM.cx, destM.cy], 400);
+      p.remove();
+      dest += DATA[i];
+      destM.t.textContent = String(dest);
+      setCls(destM.r, "sv-bad");
+      cap("#s6-cap", `Load dest, add ${DATA[i]}, store dest = <b>${dest}</b>. That traffic is why combine3 stays near CPE 7.`);
+    }
+    setCls(cellsM[i].r, "sv-good");
+    busy = false;
+  });
+  add("Reset", "", "0", () => { if (mode === 0) { busy = false; idleMem(); } });
+  add("Step alias", "primary", "1", async () => {
+    if (busy || mode !== 1 || ai >= 3) return;
+    busy = true;
+    const slots = [v0, v1, v2];
+    if (ai < 2) {
+      ai++;
+      const running = [1, 2, 6, 36];
+      const p = draw.tag("x" + AL[ai]);
+      svg.appendChild(p);
+      await fly(p, [slots[ai].cx, slots[ai].cy], [v2.cx, v2.cy], 420);
+      p.remove();
+      v2.t.textContent = String(running[ai + 1]);
+      accA.t.textContent = String(running[ai + 1]);
+      setCls(v2.r, "sv-bad");
+      setCls(slots[ai].r, "sv-data-soft");
+      nA.textContent = `combine3  i=${ai}   dest (= v[2]) is now ${running[ai + 1]}`;
+      tA.textContent = ai === 2 ? "combine3 final  [2, 3, 36]" : "dest is the last locker, so it keeps eating itself";
+      cap("#s6-cap", `Because dest aliases v[2], combine3 writes <b>${running[ai + 1]}</b> into the vector. After i=2 the book’s table is [2, 3, 36].`);
+    } else {
+      ai = 3;
+      v0.t.textContent = "2"; v1.t.textContent = "3"; v2.t.textContent = "5";
+      accA.t.textContent = "30";
+      setCls(v2.r, "sv-good"); setCls(accA.r, "sv-good");
+      nA.textContent = "combine4  acc = 1*2*3*5 = 30   vector still [2, 3, 5]";
+      tA.textContent = "then dest = 30   ·   last locker becomes 30, not 36";
+      cap("#s6-cap", "combine4 never reads dest inside the loop, so the vector stays [2, 3, 5] until the final store of <b>30</b>. gcc cannot pick this for combine3.");
+    }
+    busy = false;
+  });
+  add("Reset", "", "1", () => { if (mode === 1) { busy = false; idleAl(); } });
+  K.$("#s6-seg").appendChild(seg(["dest vs acc", "alias 36 / 30"], 0, (k) => { mode = k; busy = false; paintMode(); }, "s6-mode"));
+  paintMode();
+})();
+
+/* ================= 7. CPU ================= */
+(function cpu() {
+  const svg = K.$("#s7-svg");
+  const gLat = s("g"), gFu = s("g");
+  svg.append(gLat, gFu);
+  const OPS = [
+    { k: "int+", L: 1, T: "0.50", m: "1.27", name: "integer +" },
+    { k: "int*", L: 3, T: "1.00", m: "3.01", name: "integer *" },
+    { k: "fp+", L: 3, T: "1.00", m: "3.01", name: "float +" },
+    { k: "fp*", L: 5, T: "0.50", m: "5.01", name: "float *" },
+  ];
+  const cards = OPS.map((o, i) => box(gLat, 24 + i * 164, 28, 148, 78, "sv-panel", "L " + o.L, o.k));
+  const chain = [0, 1, 2, 3, 4].map((i) => box(gLat, 24 + i * 128, 128, 116, 64, "sv-panel", "acc", "cycle"));
+  const nL = s("text", { x: 340, y: 226, class: "sv-text", "text-anchor": "middle" }, "");
+  const fL = s("text", { x: 340, y: 254, class: "sv-label", "text-anchor": "middle" }, "");
+  gLat.append(nL, fL);
+  const FUS = [
+    ["0", "* / div / br"], ["1", "+ / *"], ["2", "load"], ["3", "load"],
+    ["4", "store"], ["5", "int"], ["6", "int / br"], ["7", "st addr"],
+  ];
+  const fus = FUS.map((fu, i) => box(gFu, 22 + (i % 4) * 164, i < 4 ? 36 : 130, 148, 72, "sv-panel", "FU " + fu[0], fu[1]));
+  const nF = s("text", { x: 340, y: 236, class: "sv-text", "text-anchor": "middle" }, "eight functional units  ·  Haswell");
+  const fF = s("text", { x: 340, y: 264, class: "sv-label", "text-anchor": "middle" }, "two loads  ·  two float *  ·  four integer adders");
+  gFu.append(nF, fF);
+  let mode = 0, opi = 3, busy = false;
+  function paintLat() {
+    const o = OPS[opi];
+    cards.forEach((c, k) => setCls(c.r, k === opi ? "sv-good" : "sv-panel"));
+    chain.forEach((c, k) => {
+      const cyc = k + 1;
+      c.t.textContent = String(cyc);
+      c.u.textContent = cyc === o.L ? "bound" : cyc < o.L ? "wait" : "idle";
+      setCls(c.r, cyc < o.L ? "sv-data-soft" : cyc === o.L ? "sv-good" : "sv-box");
+    });
+    nL.textContent = o.name + "   latency " + o.L + "   thru CPE " + o.T + "   combine4 " + o.m;
+    fL.textContent = "issue time 1  ·  fully pipelined  ·  divide is not";
+    cap("#s7-cap", `Because each ${o.name} needs the last acc, combine4 cannot beat CPE ${o.L}.00. Measured ${o.m}. The pipes could start a new independent op every cycle.`);
+  }
+  function paintFu() {
+    const glow = opi === 0 ? [0, 1, 5, 6] : opi === 1 ? [1] : opi === 2 ? [1] : [0, 1];
+    fus.forEach((c, k) => setCls(c.r, glow.includes(k) ? "sv-server" : "sv-panel"));
+    nF.textContent = OPS[opi].name + "   can start on the highlighted units";
+    cap("#s7-cap", "Haswell unit 0 does float * and divide; unit 1 does float + and both multiplies; 2 and 3 only load. Two loads cap CPE at 0.50 unless you use SIMD.");
+  }
+  function paint() {
+    showG(gLat, mode === 0);
+    showG(gFu, mode === 1);
+    if (mode === 0) paintLat(); else paintFu();
+    [...K.$("#s7-controls").querySelectorAll("button")].forEach((b) => {
+      if (b.dataset.fire) b.style.display = mode === 0 ? "" : "none";
+    });
+  }
+  const ctr = K.$("#s7-controls");
+  OPS.forEach((o, k) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => { opi = k; paint(); } }, o.k));
+  });
+  const fire = h("button", { class: "btn primary", type: "button" }, "Fire chain");
+  fire.dataset.fire = "1";
+  fire.addEventListener("click", async () => {
+    if (busy || mode !== 0) return;
+    busy = true; fire.disabled = true;
+    const L = OPS[opi].L;
+    for (let k = 0; k < 5; k++) {
+      chain.forEach((c, j) => setCls(c.r, j === k ? "sv-good" : j < k ? "sv-server" : "sv-panel"));
+      const p = draw.tag("acc");
+      svg.appendChild(p);
+      await fly(p, [chain[Math.max(0, k - 1)].cx, 118], [chain[k].cx, 118], 280);
+      p.remove();
+      if (k + 1 >= L) {
+        cap("#s7-cap", `After <b>${L}</b> cycles the next ${OPS[opi].name} may start — but only if it still needs this acc. That is the latency bound.`);
+        break;
+      }
+    }
+    paintLat();
+    busy = false; fire.disabled = false;
+  });
+  ctr.append(fire);
+  K.$("#s7-seg").appendChild(seg(["latency", "stations"], 0, (k) => { mode = k; busy = false; paint(); }, "s7-mode"));
+  paint();
+})();
+
+/* ================= 8. UNROLL ================= */
+(function unroll() {
+  const svg = K.$("#s8-svg");
+  const DATA = [2, 3, 5, 9];
+  const cells = DATA.map((v, i) => box(svg, 24 + i * 164, 28, 148, 64, "sv-panel", String(v), "data[" + i + "]"));
+  const accB = box(svg, 24, 114, 200, 70, "sv-server", "0", "acc");
+  const pathB = box(svg, 248, 114, 200, 70, "sv-data-soft", "n muls", "critical path");
+  const cpeB = box(svg, 472, 114, 184, 70, "sv-panel", "1.01", "int+ CPE");
+  const note = s("text", { x: 340, y: 220, class: "sv-text", "text-anchor": "middle" }, "");
+  const foot = s("text", { x: 340, y: 248, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(note, foot);
+  let i = 0, acc = 0, busy = false;
+  function idle() {
+    i = 0; acc = 0;
+    accB.t.textContent = "0";
+    pathB.t.textContent = "n muls";
+    cpeB.t.textContent = "1.01 / 3.01";
+    cpeB.u.textContent = "int+ / others";
+    cells.forEach((c) => setCls(c.r, "sv-panel"));
+    setCls(accB.r, "sv-server");
+    note.textContent = "acc = (acc OP data[i]) OP data[i+1]";
+    foot.textContent = "limit = length-1   ·   tail loop for leftovers";
+    K.$("#s8-pill").textContent = "i = 0";
+    cap("#s8-cap", "2 × 1 unrolling. Each Step eats two lockers, but the second combine still waits for the first.");
+  }
+  const ctr = K.$("#s8-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step pair");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || i >= 4) return;
+    busy = true; stepB.disabled = true;
+    setCls(cells[i].r, "sv-data-soft");
+    const p = draw.tag(String(DATA[i]));
+    svg.appendChild(p);
+    await fly(p, [cells[i].cx, cells[i].cy], [accB.cx, accB.cy], 360);
+    p.remove();
+    acc += DATA[i];
+    accB.t.textContent = String(acc);
+    cap("#s8-cap", `First combine of the pair: acc = <b>${acc}</b>. The second multiply cannot start until this one finishes.`);
+    await sleep(200);
+    setCls(cells[i + 1].r, "sv-data-soft");
+    const q = draw.tag(String(DATA[i + 1]));
+    svg.appendChild(q);
+    await fly(q, [cells[i + 1].cx, cells[i + 1].cy], [accB.cx, accB.cy], 360);
+    q.remove();
+    acc += DATA[i + 1];
+    accB.t.textContent = String(acc);
+    setCls(cells[i].r, "sv-good"); setCls(cells[i + 1].r, "sv-good"); setCls(accB.r, "sv-good");
+    i += 2;
+    K.$("#s8-pill").textContent = "i = " + i;
+    pathB.t.textContent = i >= 4 ? "still 4 muls" : "n muls in a line";
+    note.textContent = i >= 4 ? "done  ·  two iterations, four chained adds" : "i jumped by 2";
+    cap("#s8-cap", i >= 4
+      ? "Four combines still stood in one line. Integer + reached 1.01 (the latency bound). float * stayed 5.01."
+      : `Pair done. acc = <b>${acc}</b>. Half the trips, same-length chain.`);
+    busy = false; stepB.disabled = i >= 4;
+  });
+  resetB.addEventListener("click", () => { busy = false; stepB.disabled = false; idle(); });
+  ctr.append(stepB, resetB);
+  idle();
+})();
+
+/* ================= 9. PARALLEL ================= */
+(function parallel() {
+  const svg = K.$("#s9-svg");
+  const g2 = s("g"), gR = s("g");
+  svg.append(g2, gR);
+  const DATA = [2, 3, 5, 9];
+  const cells2 = DATA.map((v, i) => box(g2, 24 + i * 164, 24, 148, 56, "sv-panel", String(v), "data[" + i + "]"));
+  const a0 = box(g2, 80, 100, 200, 70, "sv-server", "0", "acc0 even");
+  const a1 = box(g2, 400, 100, 200, 70, "sv-good", "0", "acc1 odd");
+  const n2 = s("text", { x: 340, y: 204, class: "sv-text", "text-anchor": "middle" }, "");
+  const f2 = s("text", { x: 340, y: 236, class: "sv-label", "text-anchor": "middle" }, "");
+  const t2 = s("text", { x: 340, y: 268, class: "sv-label", "text-anchor": "middle" }, "");
+  g2.append(n2, f2, t2);
+  const cellsR = DATA.map((v, i) => box(gR, 24 + i * 164, 24, 148, 56, "sv-panel", String(v), "data[" + i + "]"));
+  const pair = box(gR, 80, 100, 200, 70, "sv-data-soft", "—", "data[i] OP data[i+1]");
+  const accR = box(gR, 400, 100, 200, 70, "sv-server", "0", "acc");
+  const nR = s("text", { x: 340, y: 204, class: "sv-text", "text-anchor": "middle" }, "");
+  const fR = s("text", { x: 340, y: 236, class: "sv-label", "text-anchor": "middle" }, "");
+  const tR = s("text", { x: 340, y: 268, class: "sv-label", "text-anchor": "middle" }, "");
+  gR.append(nR, fR, tR);
+  let mode = 0, i = 0, acc0 = 0, acc1 = 0, acc = 0, busy = false;
+  function idle2() {
+    i = 0; acc0 = 0; acc1 = 0;
+    a0.t.textContent = "0"; a1.t.textContent = "0";
+    setCls(a0.r, "sv-server"); setCls(a1.r, "sv-good");
+    cells2.forEach((c) => setCls(c.r, "sv-panel"));
+    n2.textContent = "combine6  ·  2 × 2   ·   CPE  0.81 / 1.51 / 1.51 / 2.51";
+    f2.textContent = "two critical paths of n/2   ·   then acc0 OP acc1";
+    t2.textContent = "k >= C*L fills the pipes   ·   float * wants k >= 10";
+    cap("#s9-cap", "Even lockers into acc0, odd into acc1. The two multiplies do not wait for each other.");
+  }
+  function idleR() {
+    i = 0; acc = 0;
+    pair.t.textContent = "—"; accR.t.textContent = "0";
+    setCls(pair.r, "sv-data-soft"); setCls(accR.r, "sv-server");
+    cellsR.forEach((c) => setCls(c.r, "sv-panel"));
+    nR.textContent = "combine7  ·  2 × 1a   ·   CPE  1.01 / 1.51 / 1.51 / 2.51";
+    fR.textContent = "acc = acc OP (data[i] OP data[i+1])";
+    tR.textContent = "pair multiply is off the acc chain   ·   floats may round differently";
+    cap("#s9-cap", "Reassociation: multiply the pair first (no wait on acc), then fold into acc. Critical path length n/2.");
+  }
+  function paintMode() {
+    showG(g2, mode === 0);
+    showG(gR, mode === 1);
+    if (mode === 0) idle2(); else idleR();
+    [...K.$("#s9-controls").querySelectorAll("button")].forEach((b) => {
+      const m0 = b.dataset.m === "0", m1 = b.dataset.m === "1";
+      if (m0 || m1) b.style.display = (m0 && mode === 0) || (m1 && mode === 1) ? "" : "none";
+    });
+  }
+  const ctr = K.$("#s9-controls");
+  const add = (lab, cls, m, fn) => {
+    const b = h("button", { class: "btn " + cls, type: "button" }, lab);
+    b.dataset.m = m;
+    b.addEventListener("click", fn);
+    ctr.appendChild(b);
+  };
+  add("Step 2 × 2", "primary", "0", async () => {
+    if (busy || mode !== 0 || i >= 4) return;
+    busy = true;
+    setCls(cells2[i].r, "sv-data-soft");
+    setCls(cells2[i + 1].r, "sv-data-soft");
+    const p = draw.tag(String(DATA[i]));
+    const q = draw.tag(String(DATA[i + 1]));
+    svg.append(p, q);
+    await Promise.all([
+      fly(p, [cells2[i].cx, cells2[i].cy], [a0.cx, a0.cy], 400),
+      fly(q, [cells2[i + 1].cx, cells2[i + 1].cy], [a1.cx, a1.cy], 400),
+    ]);
+    p.remove(); q.remove();
+    acc0 += DATA[i]; acc1 += DATA[i + 1];
+    a0.t.textContent = String(acc0); a1.t.textContent = String(acc1);
+    setCls(cells2[i].r, "sv-good"); setCls(cells2[i + 1].r, "sv-good");
+    i += 2;
+    if (i >= 4) {
+      n2.textContent = "acc0 + acc1 = " + (acc0 + acc1) + "   ·   two chains of 2, not one of 4";
+      cap("#s9-cap", `Because the accs are independent, float * CPE can be 5/2 ≈ 2.51. Final <b>${acc0 + acc1}</b>. 10 × 10 later reaches 0.52.`);
+    } else {
+      cap("#s9-cap", `acc0 = <b>${acc0}</b>, acc1 = <b>${acc1}</b>. Neither waited for the other. That is how we leave the latency bound.`);
+    }
+    busy = false;
+  });
+  add("Reset", "", "0", () => { if (mode === 0) { busy = false; idle2(); } });
+  add("Step 2 × 1a", "primary", "1", async () => {
+    if (busy || mode !== 1 || i >= 4) return;
+    busy = true;
+    const left = DATA[i], right = DATA[i + 1];
+    setCls(cellsR[i].r, "sv-data-soft");
+    setCls(cellsR[i + 1].r, "sv-data-soft");
+    const p = draw.tag(String(left + right));
+    svg.appendChild(p);
+    await fly(p, [(cellsR[i].cx + cellsR[i + 1].cx) / 2, cellsR[i].cy], [pair.cx, pair.cy], 380);
+    pair.t.textContent = String(left + right);
+    setCls(pair.r, "sv-good");
+    await fly(p, [pair.cx, pair.cy], [accR.cx, accR.cy], 380);
+    p.remove();
+    acc += left + right;
+    accR.t.textContent = String(acc);
+    setCls(accR.r, "sv-good");
+    setCls(cellsR[i].r, "sv-good"); setCls(cellsR[i + 1].r, "sv-good");
+    i += 2;
+    nR.textContent = i >= 4 ? "acc = " + acc + "   ·   pair ops were off the critical path" : "pair first, then acc";
+    cap("#s9-cap", `The pair ${left}+${right} did not need acc. Then acc became <b>${acc}</b>. Same CPE story as combine6 for * and float.`);
+    busy = false;
+  });
+  add("Reset", "", "1", () => { if (mode === 1) { busy = false; idleR(); } });
+  K.$("#s9-seg").appendChild(seg(["2 × 2 acc", "reassociate"], 0, (k) => { mode = k; busy = false; paintMode(); }, "s9-mode"));
+  paintMode();
+})();
+
+/* ================= 10. BOUND ================= */
+(function bound() {
+  const svg = K.$("#s10-svg");
+  const gL = s("g"), gP = s("g");
+  svg.append(gL, gP);
+  const nodes = ["A", "B", "C", "D"].map((lab, i) => box(gL, 28 + i * 164, 36, 140, 70, "sv-panel", lab, "next"));
+  const lenB = box(gL, 28, 130, 200, 70, "sv-server", "0", "len");
+  const cpeL = box(gL, 248, 130, 200, 70, "sv-db", "4.00", "CPE  L1 load");
+  const hit = box(gL, 468, 130, 184, 70, "sv-panel", "—", "waiting on");
+  const nL = s("text", { x: 340, y: 234, class: "sv-text", "text-anchor": "middle" }, "");
+  const fL = s("text", { x: 340, y: 262, class: "sv-label", "text-anchor": "middle" }, "");
+  gL.append(nL, fL);
+  const VERS = [
+    { name: "Initial", t: "209 s", bar: 0.97, note: "insertion sort  203.66 s  (97.58%)" },
+    { name: "Quicksort", t: "5.4 s", bar: 0.22, note: "sort becomes tiny   ·   list scan is next" },
+    { name: "Iter first", t: "7.5 s", bar: 0.30, note: "new nodes at the front  ·  worse" },
+    { name: "Iter last", t: "5.3 s", bar: 0.21, note: "append at the end  ·  frequent keys first" },
+    { name: "Better hash", t: "0.6 s", bar: 0.08, note: "shift/xor   ·   199,999 buckets now help" },
+    { name: "Linear lower", t: "0.2 s", bar: 0.04, note: "lower2   ·   about 1,000× from the start" },
+  ];
+  const bars = VERS.map((v, i) => {
+    const y = 28 + i * 42;
+    const bg = s("rect", { x: 200, y: y, width: 440, height: 32, rx: 8, class: "sv-panel" });
+    const fg = s("rect", { x: 200, y: y, width: 24, height: 32, rx: 8, class: "sv-server" });
+    const lab = s("text", { x: 28, y: y + 22, class: "sv-text", "text-anchor": "start", style: { fontSize: "13px", fontWeight: 700 } }, v.name);
+    const tm = s("text", { x: 656, y: y + 22, class: "sv-label", "text-anchor": "end" }, v.t);
+    gP.append(bg, fg, lab, tm);
+    return { fg, v };
+  });
+  let mode = 0, ni = 0, busy = false, pi = 0;
+  function idleL() {
+    ni = 0;
+    nodes.forEach((n) => setCls(n.r, "sv-panel"));
+    lenB.t.textContent = "0";
+    hit.t.textContent = "—";
+    setCls(hit.r, "sv-panel");
+    nL.textContent = "list_len   ·   ls = ls->next";
+    fL.textContent = "each load address is the last load   ·   write_read alias is CPE 7.3";
+    cap("#s10-cap", "A chain of next pointers. Each Step waits on the load that just finished. The book’s CPE is 4.00.");
+  }
+  function paintP() {
+    bars.forEach((b, k) => {
+      b.fg.setAttribute("width", String(Math.max(16, 440 * b.v.bar * (k <= pi ? 1 : 0.15))));
+      setCls(b.fg, k === pi ? "sv-good" : k < pi ? "sv-server" : "sv-panel");
+    });
+    cap("#s10-cap", `<b>${VERS[pi].name}</b> · ${VERS[pi].note}. Shakespeare’s 363,039 bigrams. Fix the tall bar, then look again.`);
+  }
+  function paintMode() {
+    showG(gL, mode === 0);
+    showG(gP, mode === 1);
+    if (mode === 0) idleL(); else paintP();
+    [...K.$("#s10-controls").querySelectorAll("button")].forEach((b) => {
+      const m0 = b.dataset.m === "0", m1 = b.dataset.m === "1";
+      if (m0 || m1) b.style.display = (m0 && mode === 0) || (m1 && mode === 1) ? "" : "none";
+    });
+  }
+  const ctr = K.$("#s10-controls");
+  const add = (lab, cls, m, fn) => {
+    const b = h("button", { class: "btn " + cls, type: "button" }, lab);
+    b.dataset.m = m;
+    b.addEventListener("click", fn);
+    ctr.appendChild(b);
+  };
+  add("Step load", "primary", "0", async () => {
+    if (busy || mode !== 0 || ni >= 4) return;
+    busy = true;
+    nodes.forEach((n, k) => setCls(n.r, k === ni ? "sv-data-soft" : k < ni ? "sv-good" : "sv-panel"));
+    hit.t.textContent = nodes[ni].t.textContent;
+    setCls(hit.r, "sv-bad");
+    const p = draw.tag("next");
+    svg.appendChild(p);
+    const from = ni === 0 ? [nodes[0].cx, 24] : [nodes[ni - 1].cx, nodes[ni - 1].cy];
+    await fly(p, from, [nodes[ni].cx, nodes[ni].cy], 420);
+    p.remove();
+    ni++;
+    lenB.t.textContent = String(ni);
+    setCls(nodes[ni - 1].r, "sv-good");
+    setCls(hit.r, ni >= 4 ? "sv-good" : "sv-data-soft");
+    hit.t.textContent = ni >= 4 ? "NULL" : "next";
+    nL.textContent = ni >= 4 ? "len = 4   ·   four loads in a chain" : "len = " + ni + "   ·   next load cannot start yet";
+    cap("#s10-cap", ni >= 4
+      ? "Four chained loads. CPE 4.00 matches L1. Independent stores (clear_array) can do CPE 1.0; aliased write_read jumps to 7.3."
+      : `Because the address of the next box was inside this one, the load waited. len is <b>${ni}</b>.`);
+    busy = false;
+  });
+  add("Reset", "", "0", () => { if (mode === 0) { busy = false; idleL(); } });
+  add("Next version", "primary", "1", () => {
+    if (mode !== 1) return;
+    pi = Math.min(VERS.length - 1, pi + 1);
+    paintP();
+  });
+  add("Reset", "", "1", () => { if (mode === 1) { pi = 0; paintP(); } });
+  K.$("#s10-seg").appendChild(seg(["list_len", "gprof"], 0, (k) => { mode = k; busy = false; paintMode(); }, "s10-mode"));
+  paintMode();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "Why will gcc not rewrite twiddle1 as twiddle2?", options: ["xp and yp might be the same address, and then ×4 is not ×3", "twiddle2 needs a special Haswell unit", "-O1 is not allowed to change arithmetic", "Six memory references are required by the C standard"], answer: 0, why: "Memory aliasing. If the pointers are equal, twiddle1 scales *xp by 4 and twiddle2 scales it by 3. The compiler must assume that case is possible." },
+  { q: "What is the CPE of psum1 versus psum2?", options: ["368 versus 368 — the intercept is the metric", "1.27 versus 0.81", "9.0 versus 6.0 — the slopes of 368 + 9.0n and 368 + 6.0n", "22.68 versus 10.12"], answer: 2, why: "Figure 5.2. CPE is cycles per element, the slope, not the shared 368-cycle setup." },
+  { q: "What does combine4 change relative to combine3?", options: ["It unrolls by 2 and keeps two accs", "It accumulates in a local acc so dest is not read and written every iteration", "It calls get_vec_element on every i", "It moves vec_length into the loop test"], answer: 1, why: "Figure 5.10. Integer + CPE falls from 7.17 to 1.27. gcc will not do this to combine3 because dest might alias the vector (the [2, 3, 5] → 36 versus 30 example)." },
+  { q: "How long did lower1 take on a string of length 1,048,576?", options: ["2.0 milliseconds", "0.26 seconds, same as n = 16,384", "Linear in n, like lower2", "Over 17 minutes (1,049.89 seconds)"], answer: 3, why: "Figure 5.8. lower1 is quadratic because strlen walks the string on every iteration. lower2 is 0.0020 seconds — over 500,000 times faster." },
+  { q: "On the Haswell reference machine, what is the latency of floating-point multiply?", options: ["5 cycles (issue 1, capacity 2)", "3 cycles, same as float add", "1 cycle, fully combinational", "0.50 CPE, the load-unit bound"], answer: 0, why: "Figure 5.12. Float * latency 5, issue 1, capacity 2. That is why combine4’s float * CPE is 5.01 — the latency bound." },
+  { q: "Why does 2 × 1 unrolling (combine5) not beat the latency bound?", options: ["Haswell has only one load unit", "gcc refuses to unroll at -O1", "The critical path still has n sequential combining operations", "IDENT is recomputed every iteration"], answer: 2, why: "Each iteration does two combines in a chain into the same acc. Half as many trips, still n operations on the path. Only integer + improved (1.27 → 1.01)." },
+  { q: "What float-* CPE does combine6 (2 × 2) measure?", options: ["5.01, still the latency bound", "2.51, about L/2", "0.50, the throughput bound", "11.14, the original abstract code"], answer: 1, why: "Two independent accumulators, each n/2 long. 5.00/2 = 2.50, measured 2.51. 10 × 10 later reaches 0.52, near the two-multiplier / two-load bound." },
+  { q: "Why is list_len’s CPE 4.00?", options: ["One store unit, like clear_array", "Two load units limit every program to 0.50", "A write/read dependency, like write_read Example B (7.3)", "Each next-pointer load must finish before the following load can start — L1 latency is 4"], answer: 3, why: "ls = ls->next makes a load-to-load chain. 4.00 matches the documented L1 access time. Independent loads can overlap; this chain cannot." },
+], 5);
+</script>
+</body>
+</html>

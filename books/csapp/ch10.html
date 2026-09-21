@@ -1,0 +1,1322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 10 · System-Level I/O</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .eyebrow { color: var(--mint); }
+  .toc a:hover { border-color: var(--mint); color: var(--mint); }
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box { stroke: var(--mint); }
+  .fade { transition: opacity .3s; }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .first { font-size: 15.5px; color: var(--ink-2); background: var(--mint-soft); border-radius: var(--r-m); padding: 12px 14px; }
+  .first b { color: var(--ink); }
+  .hero-stage { aspect-ratio: auto; }
+  .hero-stage svg { width: 100%; height: auto; display: block; }
+  .stage, .stage-scroll { min-width: 0; max-width: 100%; }
+  .scene-grid, .scene-grid.flip { grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 901px) {
+    .scene-grid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+    .scene-grid.flip { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); }
+  }
+  .readings { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); }
+  .reading { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-s); padding: 10px 12px; }
+  .reading .k { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .reading .v { font-family: var(--f-mono); font-size: 15px; font-weight: 700; color: var(--ink); margin-top: 4px; word-break: break-all; }
+  .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  pre.code { margin: 0; padding: 12px 14px; background: var(--surface-2); border-top: 1px solid var(--line);
+             font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+             overflow-x: auto; white-space: pre-wrap; min-height: 72px; }
+  pre.code b { color: var(--ink); font-weight: 700; }
+  pre.code i { color: var(--ink-3); font-style: normal; }
+  @media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">10</span> Chapter ten · Bitville</span>
+      <h1>System-Level I/O</h1>
+      <p class="lede">Every disk, keyboard, and network line looks like the same kind of drawer. You only hold a small ticket number. The kernel keeps the drawer.</p>
+      <p class="quote">“All I/O devices, such as networks, disks, and terminals, are modeled as files, and all input and output is performed by reading and writing the appropriate files.”</p>
+      <p class="first"><b>New here?</b> Read the short story, then press the buttons on the picture. You cannot break it. The book’s exact function names and figure numbers live under “What the book says.”</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#unix">Unix I/O</a>
+        <a href="#types">File types</a>
+        <a href="#open">Open + close</a>
+        <a href="#rw">Read + write</a>
+        <a href="#rio">Rio</a>
+        <a href="#stat">Metadata</a>
+        <a href="#share">Sharing</a>
+        <a href="#redir">Redirection</a>
+        <a href="#which">Which I/O</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · everything is a file</span><span class="pill info" id="hero-pill"><i></i>fd</span></div>
+      <svg id="hero-svg" viewBox="0 0 680 210" role="img" aria-label="A process descriptor table connected to a keyboard, a screen, a disk, and a socket"></svg>
+      <div class="caption" aria-live="polite" id="hero-cap">Priya holds ticket numbers. The kernel holds the files.</div>
+    </div>
+  </section>
+
+  <section class="scene" id="unix">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">10.1 · Unix I/O</span>
+        <h2>A ticket, not the drawer</h2>
+        <p class="story">Priya walks into a post office. Every window — the letter slot, the counter screen, even the phone line to another town — is the same kind of drawer. She does not carry the drawer. She carries a small numbered ticket. That ticket is a <b>descriptor</b>.</p>
+        <p class="story">A new program already holds three tickets: 0 for what she types, 1 for what she prints, 2 for complaints. The clerks (the <b>kernel</b>) remember where each ticket points, and how far through the pile they have read. That “how far” is the <b>file position</b>.</p>
+        <p class="imagine"><b>Try it:</b> Press <b>Open foo.txt</b> to get ticket 3. Then <b>Read 4</b> and watch the file position climb. <b>Close</b> puts 3 back in the pool.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A Linux file is a sequence of <i>m</i> bytes. Opening a file asks the kernel for a small nonnegative integer, the descriptor. “The kernel keeps track of all information about the open file. The application only keeps track of the descriptor.”</p>
+            <p>Each process created by a Linux shell begins with standard input (descriptor 0), standard output (1), and standard error (2). <code>unistd.h</code> names them <code>STDIN_FILENO</code>, <code>STDOUT_FILENO</code>, and <code>STDERR_FILENO</code>.</p>
+            <p>The kernel keeps a file position <i>k</i>, initially 0. A read of <i>n</i>&gt;0 bytes starts at <i>k</i> and then sets <i>k</i> ← <i>k</i>+<i>n</i>. If <i>k</i> ≥ <i>m</i>, the application sees end-of-file. There is no explicit EOF character at the end of a file. Close frees the kernel structures and returns the descriptor to the pool. Process exit closes every open file.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Descriptor table · one process</span><div class="stats" id="s1-stats"></div></div>
+        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 680 300" role="img" aria-label="A process with file descriptors 0 to 3 pointing at a keyboard, a screen, and a disk file"></svg></div>
+        <div class="controls" id="s1-controls"></div>
+        <div class="caption" aria-live="polite" id="s1-cap">Priya starts with tickets 0, 1, and 2. The kernel still owns the drawers.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="types">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">10.2 · 10.7 · files and directories</span>
+        <h2>Houses, street signs, phone lines</h2>
+        <p class="story">Kenji’s town map has one root street named <code>/</code>. A house holds a story — a <b>regular file</b>. A street sign is a list of names, each name pointing at another place. That list is a <b>directory</b>. A phone line to another town is a <b>socket</b>.</p>
+        <p class="story">Every directory keeps two special names: <code>.</code> (this street) and <code>..</code> (the street above). Kenji’s <b>current working directory</b> is where he is standing, so the same house has two addresses: one from the root, and one from here.</p>
+        <p class="imagine"><b>Try it:</b> Tap a file to see its type and both pathnames. Switch cwd with the buttons. Then pick <b>readdir</b> and <b>Step</b> through <code>.</code>, <code>..</code>, and <code>hello.c</code>.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A regular file holds arbitrary data. Applications distinguish text files (ASCII or Unicode) from binary files. “To the kernel there is no difference between text and binary files.” A Linux text line ends with a newline <code>'\n'</code>, the ASCII line feed, numeric value 0x0a. Linux and Mac OS X use that byte; MS Windows and HTTP use the sequence <code>'\r\n'</code> (0xd 0xa).</p>
+            <p>A directory is an array of links from filename to file. Each directory contains at least <code>.</code> and <code>..</code>. Figure 10.1 is a slice of the hierarchy: <code>/home/droh/hello.c</code>, <code>/usr/include/stdio.h</code>, <code>/bin/bash</code>, <code>/dev/tty1</code>. An absolute pathname starts with a slash. A relative pathname starts from the current working directory: from <code>/home/droh</code> the relative name of <code>hello.c</code> is <code>./hello.c</code>.</p>
+            <p>Sockets talk to another process across a network (Section 11.4). Named pipes, symbolic links, and character and block devices are beyond the chapter’s scope.</p>
+            <p>Applications walk a directory with <code>opendir</code>, <code>readdir</code>, and <code>closedir</code>. Each <code>struct dirent</code> has <code>d_ino</code> and <code>d_name</code> — the only two members standard across systems. <code>readdir</code> returns NULL at the end or on error; the only way to tell is to check whether <code>errno</code> changed. Figure 10.11 is the loop.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 10.1 · then readdir</span><span id="s2-seg"></span></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 680 300" role="img" aria-label="Files from the Linux directory hierarchy and a readdir walk of /home/droh"></svg></div>
+        <div class="controls" id="s2-controls"></div>
+        <div class="caption" aria-live="polite" id="s2-cap">Tap a house on Kenji’s map. The type and both pathnames update.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="open">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">10.3 · opening and closing</span>
+        <h2>Always the lowest empty locker</h2>
+        <p class="story">Mei asks for a locker. The attendant never skips. Lockers 0, 1, and 2 are already taken, so the first <code>open</code> hands her <b>3</b>. She gives 3 back. The next <code>open</code> — even for a different file — hands her 3 again.</p>
+        <p class="story">When she creates a new notebook, two stamps decide who may touch it: the <b>mode</b> she asked for, and her process <b>umask</b>, which crosses out bits she does not want the group or the world to have.</p>
+        <p class="imagine"><b>Try it:</b> <b>Step</b> Practice Problem 10.1: open <code>foo.txt</code>, close it, open <code>baz.txt</code>. Then switch to <b>umask</b> and watch <code>mode &amp; ~umask</code> knock out group-write and other-write.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><code>open(filename, flags, mode)</code> returns a new descriptor or −1. “The descriptor returned is always the smallest descriptor that is not currently open in the process.” Access flags: <code>O_RDONLY</code>, <code>O_WRONLY</code>, <code>O_RDWR</code>. Extra write flags, or-ed in: <code>O_CREAT</code> (create a truncated empty file if missing), <code>O_TRUNC</code>, <code>O_APPEND</code> (seek to the end before each write).</p>
+            <p>Figure 10.2 lists the permission bits in <code>sys/stat.h</code> (<code>S_IRUSR</code> … <code>S_IXOTH</code>). New-file bits are <code>mode &amp; ~umask</code>. With <code>DEF_MODE = S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH</code> and <code>DEF_UMASK = S_IWGRP|S_IWOTH</code>, the owner can read and write and everyone else can only read.</p>
+            <p><code>close</code> returns 0 or −1. Closing a descriptor that is already closed is an error. Practice Problem 10.1 prints <code>fd2 = 3</code>: the first <code>Open</code> returns 3, <code>Close</code> frees it, the next <code>Open</code> returns 3 again.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">open · close · umask</span><span id="s3-seg"></span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 680 300" role="img" aria-label="File descriptor slots filling with the lowest unused number, and umask permission bits"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <pre class="code" id="s3-code"></pre>
+        <div class="caption" aria-live="polite" id="s3-cap">Lockers 0, 1, and 2 are taken. The next open must return 3.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="rw">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">10.4 · reading and writing</span>
+        <h2>Asked for fifty, got twenty</h2>
+        <p class="story">Omar asks the clerk for 50 letters. The pigeonhole has 20 left. He gets 20 — not a scolding. That smaller pile is a <b>short count</b>. He asks again and gets 0. The drawer is empty. That empty is <b>EOF</b>. Nobody hid a special end-mark character in the file.</p>
+        <p class="story">On a disk this almost only happens at the end. On a keyboard, each <code>read</code> brings one typed line. On a network socket, delays and buffers can hand back any number of bytes, and a <code>write</code> can go short too.</p>
+        <p class="imagine"><b>Try it:</b> On <b>disk EOF</b>, press <b>read(50)</b> twice. Then switch to <b>socket</b> and step the short deliveries. Slide the request size if you like.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><code>read(fd, buf, n)</code> copies at most <i>n</i> bytes from the current file position. It returns −1 on error, 0 on EOF, otherwise the number of bytes actually transferred. <code>write</code> is the same idea in the other direction. Figure 10.3 copies standard input to standard output one byte at a time. <code>lseek</code> can move the position; it is beyond the chapter’s scope.</p>
+            <p>“Such short counts do not indicate an error.” They happen (1) at EOF — 20 bytes left, 50-byte chunks, so the next read returns 20 and the one after that returns 0; (2) on a terminal, one text line per read; (3) on network sockets, from internal buffering and long delays; also on Linux pipes, which are beyond our scope.</p>
+            <p>In practice you will never encounter short counts when you read from disk files except on EOF, and you will never encounter short counts when you write to disk files. Robust network programs must loop until every requested byte has moved. On x86-64, <code>size_t</code> is an unsigned long and <code>ssize_t</code> is a long: <code>read</code> must be able to return −1, which halves the maximum size of a read.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Short counts</span><span id="s4-seg"></span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 680 300" role="img" aria-label="A 20-byte disk file returning a short count, versus a socket delivering bytes in chunks"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <div class="caption" aria-live="polite" id="s4-cap">Twenty bytes left, fifty requested. The short count is 20, and it is not an error.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="rio">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">10.5 · the Rio package</span>
+        <h2>Keep asking until the pile is complete</h2>
+        <p class="story">Aisha needs 8 letters from a slow line. Raw <code>read</code> may hand her 3 and walk away. If she treats that as “done,” the other 5 never arrive. <code>rio_readn</code> stays at the window and asks again until she has all 8, or the line hangs up. <code>rio_writen</code> never shrugs and sends fewer.</p>
+        <p class="story">For text lines she uses a second trick: fill a private drawer once, then serve characters from that drawer. That drawer is a <code>rio_t</code> buffer. The book sizes it at 8192 bytes. We draw a tiny one so you can see the refill.</p>
+        <p class="imagine"><b>Try it:</b> On <b>rio_readn</b>, press <b>Ask for 8</b> on both sides. Raw stops at 3. Rio keeps going. Then switch to <b>readlineb</b> and step two lines out of one refill.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Rio (Robust I/O) hides short counts. Unbuffered <code>rio_readn</code> / <code>rio_writen</code> transfer directly between memory and a file — useful for binary data on networks. “The rio_readn function can only return a short count if it encounters EOF.” <code>rio_writen</code> never returns a short count. Both restart <code>read</code> / <code>write</code> after <code>EINTR</code>. They may be interleaved on the same descriptor.</p>
+            <p>Buffered input: <code>rio_readinitb</code> ties a descriptor to a <code>rio_t</code> (<code>rio_fd</code>, <code>rio_cnt</code>, <code>rio_bufptr</code>, <code>rio_buf[RIO_BUFSIZE]</code> with <code>RIO_BUFSIZE</code> 8192). <code>rio_readlineb</code> copies the next text line, including the newline, and adds a NULL; it reads at most <code>maxlen-1</code> bytes and truncates longer lines. <code>rio_readnb</code> is a buffered <code>rio_readn</code>. The two buffered calls may interleave; do not mix them with unbuffered <code>rio_readn</code> on the same descriptor. They are thread-safe. Figure 10.5 is <code>cpfile</code>: <code>Rio_readinitb</code>, then <code>Rio_readlineb</code> / <code>Rio_writen</code>.</p>
+            <p>Internal <code>rio_read</code> refills the buffer with <code>read</code> when empty (a short fill is fine), then copies <code>min(n, rio_cnt)</code>. Rio is inspired by Stevens’s <code>readn</code>, <code>writen</code>, and <code>readline</code>; the buffered pair fixes the static-buffer thread-safety problem and the fact that Stevens’s buffered <code>readline</code> and unbuffered <code>readn</code> cannot be used together on the same descriptor.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Raw short count vs Rio</span><span id="s5-seg"></span></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 680 320" role="img" aria-label="Side by side raw read returning a short count versus rio_readn looping, and a rio_t line buffer"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="caption" aria-live="polite" id="s5-cap">The socket dribbles 3, then 3, then 2. Raw read stops at the first dribble.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="stat">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">10.6 · file metadata</span>
+        <h2>Ask the card catalogue, do not open the book</h2>
+        <p class="story">Fatima wants to know how big a notebook is, and whether she may read it, without opening it. She asks the librarian for the card. That card is the file’s <b>metadata</b>. Standard I/O has no such catalogue.</p>
+        <p class="story">Two questions live in one stamp called <code>st_mode</code>: what kind of file is this, and who may touch it? Macros such as <code>S_ISREG</code> read the kind. A bit such as <code>S_IRUSR</code> reads “may the owner read?”</p>
+        <p class="imagine"><b>Try it:</b> Tap <b>foobar.txt</b>, the directory, or the socket. Watch <code>statcheck</code> print the type and the owner-read bit.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><code>stat(filename, &amp;buf)</code> and <code>fstat(fd, &amp;buf)</code> fill a <code>struct stat</code> (Figure 10.9). The chapter needs <code>st_mode</code> and <code>st_size</code> for the Web servers in Section 11.5; the other members are beyond its scope. <code>st_size</code> is the file size in bytes. <code>st_mode</code> encodes both the permission bits of Figure 10.2 and the file type of Section 10.2.</p>
+            <p>Macros in <code>sys/stat.h</code>: <code>S_ISREG(m)</code> regular file, <code>S_ISDIR(m)</code> directory, <code>S_ISSOCK(m)</code> network socket. Figure 10.10 <code>statcheck</code> prints <code>type: regular|directory|other</code> and <code>read: yes|no</code> by testing <code>stat.st_mode &amp; S_IRUSR</code>.</p>
+            <p>The chapter introduction notes that the standard I/O library provides no way to access file metadata such as file size or file creation time — one reason to learn Unix I/O at all.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 10.10 · statcheck</span><span class="pill" id="s6-pill">pick a file</span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 680 280" role="img" aria-label="stat metadata for a regular file, a directory, and a socket"></svg></div>
+        <div class="controls" id="s6-controls"></div>
+        <pre class="code" id="s6-code"></pre>
+        <div class="caption" aria-live="polite" id="s6-cap">Fatima has not opened the file. The card already knows the type and the owner-read bit.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="share">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">10.8 · sharing files</span>
+        <h2>Two tickets, one bookmark or two</h2>
+        <p class="story">Yuki opens <code>foobar.txt</code> twice. She now holds two tickets. Each ticket has its own bookmark, so both reads start at <code>f</code>. Open twice, and you get two bookmarks.</p>
+        <p class="story">If she instead <b>forks</b> a helper, Sofia, they share one bookmark. Sofia reads <code>f</code> and the bookmark slides. Yuki’s next read is <code>o</code>. Parent and child must both close their tickets before the kernel throws the bookmark away. That leftover count is the <b>reference count</b>.</p>
+        <p class="imagine"><b>Try it:</b> On <b>two opens</b>, press <b>Read fd1</b> then <b>Read fd2</b>. Both say <code>f</code>. Switch to <b>fork</b>, <b>Child reads</b>, then <b>Parent reads</b>. The parent gets <code>o</code>.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The kernel uses three tables. Each process has its own descriptor table; an open entry points into the file table. The file table is shared by all processes: current file position, a reference count of descriptors that point at the entry, and a pointer into the v-node table. Closing decrements the reference count; the kernel deletes the file table entry when the count hits zero. The v-node table is also shared and holds most of the <code>stat</code> information, including <code>st_mode</code> and <code>st_size</code>.</p>
+            <p>Figure 10.12: descriptors 1 and 4 name two different files — no sharing. Figure 10.13: two descriptors, same disk file, two file table entries. “The key idea is that each descriptor has its own distinct file position.” That is what two calls to <code>open</code> on the same name do. Practice Problem 10.2 therefore prints <code>c = f</code>.</p>
+            <p>Figure 10.14: after <code>fork</code>, the child gets a copy of the parent’s descriptor table. They share the open file table entries, so they share the file position, and each reference count becomes 2. Both must close before the kernel deletes the entry. Practice Problem 10.3: the child reads the first byte of <code>foobar</code>, the parent reads the second, and the output is <code>c = o</code>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">fd table · file table · v-node</span><span id="s7-seg"></span></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 680 340" role="img" aria-label="Two open descriptors with separate file positions, versus parent and child sharing one file position after fork"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="caption" aria-live="polite" id="s7-cap">Two opens of foobar.txt. Each ticket has its own position, so both reads start at f.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="redir">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">10.9 · I/O redirection</span>
+        <h2>Point the window at a notebook</h2>
+        <p class="story">Luca’s shell can say “print the class list into a notebook, not the window”: <code>ls &gt; foo.txt</code>. The book nicknames that <code>&gt;</code> a right hoinky. The trick behind it is <code>dup2</code>: copy ticket 4 onto ticket 1.</p>
+        <p class="story">Ticket 1 used to mean the terminal. After <code>dup2(4,1)</code> it means the disk file that 4 already named. The old terminal entry is closed. From then on, anything written to standard output lands in the notebook. A Web server does the same kind of swap when it runs a CGI program.</p>
+        <p class="imagine"><b>Try it:</b> Press <b>dup2(4,1)</b> and watch fd 1 join file B. Then switch to <b>Practice 10.5</b> and step: after the redirect, the next read is <code>o</code>, not <code>f</code>.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Linux shells associate standard input and output with disk files. Example: <code>ls &gt; foo.txt</code>. A Web server performs a similar redirection for a CGI program (Section 11.5). <code>dup2(oldfd, newfd)</code> copies descriptor table entry <code>oldfd</code> onto <code>newfd</code>. If <code>newfd</code> was already open, then <code>dup2</code> closes <code>newfd</code> before it copies <code>oldfd</code>.</p>
+            <p>Start from Figure 10.12: descriptor 1 is file A (a terminal), descriptor 4 is file B (a disk file), both reference counts 1. After <code>dup2(4,1)</code> (Figure 10.15) both descriptors point at B, A’s file table and v-node entries are deleted, and B’s reference count is 2. Practice Problem 10.4 redirects standard input with <code>dup2(5,0)</code> or <code>dup2(5, STDIN_FILENO)</code>.</p>
+            <p>Practice Problem 10.5: two opens of <code>foobar.txt</code>, <code>Read(fd2)</code>, <code>Dup2(fd2, fd1)</code>, <code>Read(fd1)</code>. Because fd1 now shares fd2’s file table entry, the second read is the second byte. The output is <code>c = o</code>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">dup2 · redirect stdout</span><span id="s8-seg"></span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 680 320" role="img" aria-label="dup2 copying descriptor 4 onto descriptor 1, and Practice Problem 10.5 on foobar.txt"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="caption" aria-live="polite" id="s8-cap">fd 1 is the terminal. fd 4 is the disk. dup2(4,1) points the window at the notebook.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="which">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">10.10 · 10.11 · standard I/O and advice</span>
+        <h2>Three toolboxes, one stove</h2>
+        <p class="story">Under the floor is Unix I/O — <code>open</code>, <code>read</code>, <code>write</code>, <code>close</code>, <code>stat</code>. On top sit two nicer boxes. <b>Standard I/O</b> is the everyday restaurant: <code>fopen</code>, <code>printf</code>, <code>fgets</code>. <b>Rio</b> is the reliable takeaway for a wobbly network line.</p>
+        <p class="story">Noor’s rule of thumb: homework files and the terminal? Standard I/O. A socket? Rio. A binary file? Never a line-reader — a <code>0xa</code> byte in a picture is not a newline. Standard I/O and sockets also fight: you cannot <code>lseek</code> a socket, and closing two <code>FILE</code> streams on the same descriptor closes it twice.</p>
+        <p class="imagine"><b>Try it:</b> Tap <b>disk text</b>, <b>binary</b>, or <b>socket</b> and see which box lights up. Then switch to <b>socket trap</b> and step the two-<code>fclose</code> disaster versus the Rio path.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The standard I/O library (<code>libc</code>) offers <code>fopen</code> / <code>fclose</code>, <code>fread</code> / <code>fwrite</code>, <code>fgets</code> / <code>fputs</code>, <code>scanf</code> / <code>printf</code>. An open file is a stream: a pointer to a <code>FILE</code>. Every ANSI C program begins with <code>stdin</code>, <code>stdout</code>, and <code>stderr</code> (descriptors 0, 1, 2). A <code>FILE</code> is a descriptor plus a stream buffer, filled by one <code>read</code> so later <code>getc</code> calls stay in user space. Figure 10.16 stacks standard I/O and Rio on top of Unix I/O.</p>
+            <p>G1: “Use the standard I/O functions whenever possible.” They are the method of choice on disk and terminal devices. Most C programmers use them exclusively, except possibly <code>stat</code>, which has no standard I/O counterpart. G2: do not use <code>scanf</code> or <code>rio_readlineb</code> to read binary files — those files may be littered with 0xa bytes that are not line endings. G3: “Use the Rio functions for I/O on network sockets.”</p>
+            <p>Streams are full duplex, but input after output needs <code>fflush</code>, <code>fseek</code>, <code>fsetpos</code>, or <code>rewind</code>; output after input needs one of the seek functions unless the input hit EOF. <code>lseek</code> is illegal on a socket, so the second restriction cannot be worked around. Opening two streams with <code>fdopen</code> and calling <code>fclose</code> on both closes the same socket descriptor twice — a recipe for disaster in a threaded program (Section 12.7.4). Format in memory with <code>sprintf</code> and send with <code>rio_writen</code>; read a line with <code>rio_readlineb</code> and parse with <code>sscanf</code>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 10.16 · which functions</span><span id="s9-seg"></span></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 680 300" role="img" aria-label="Unix I/O, Rio, and standard I/O stacked, with the book's advice for disk, binary, and sockets"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="caption" aria-live="polite" id="s9-cap">Three toolboxes. Pick a job and the book’s guideline lights up.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The seesaws from this chapter</h2><p>Each row is a choice the kernel, the library, or you make. Chapter 11 will put these tickets on a network.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>Unix I/O</h4><p>open, read, write, close, stat. The kernel’s own verbs.</p></div><div class="vs">vs</div><div class="side"><h4>Standard I/O</h4><p>fopen, printf, fgets. The everyday choice on disk and the terminal.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Raw read / write</h4><p>Can return a short count. Fine on disk; fragile on a socket.</p></div><div class="vs">vs</div><div class="side"><h4>Rio</h4><p>rio_readn loops; rio_writen never shorts. Built for networks.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Two opens</h4><p>Two file table entries. Two bookmarks. Both reads start at f.</p></div><div class="vs">vs</div><div class="side"><h4>fork</h4><p>One file table entry, refcnt 2. One bookmark. The parent reads o.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Line readers</h4><p>scanf, rio_readlineb. They stop at 0xa.</p></div><div class="vs">vs</div><div class="side"><h4>Binary</h4><p>That 0xa is just a byte. Use rio_readn or fread.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>stdio on disk</h4><p>G1 says yes. Buffers, formatted I/O, one stream.</p></div><div class="vs">vs</div><div class="side"><h4>stdio on a socket</h4><p>lseek is illegal; two fclose calls close one fd twice.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Absolute path</h4><p>Starts with /. Always from the root.</p></div><div class="vs">vs</div><div class="side"><h4>Relative path</h4><p>From the current working directory. ./hello.c if you are already there.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>rio_readn</h4><p>Unbuffered. Safe to mix with rio_writen on the same fd.</p></div><div class="vs">vs</div><div class="side"><h4>rio_readlineb</h4><p>Shares the rio_t drawer. Do not mix with rio_readn.</p></div></div>
+      </div>
+      <div class="themes" style="margin-top:18px">
+        <div class="card"><h3>What we skipped</h3><p>The full Rio source listings (Figures 10.4, 10.7, 10.8), <code>lseek</code> (the book leaves it beyond scope), named pipes, symbolic links, character and block devices, Linux pipes, most <code>stat</code> members beyond <code>st_mode</code> and <code>st_size</code>, and the homework problems. The pictures use tiny buffers and short files so the mechanism fits on one stage; the book’s <code>rio_buf</code> is 8192 bytes.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>The chapter’s grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>descriptor</dt><dd>A small nonnegative integer that names an open file in this process. 0, 1, and 2 are already taken.</dd></div>
+        <div class="word"><dt>Unix I/O</dt><dd>The kernel’s uniform interface: open, close, read, write, and friends, for every kind of file.</dd></div>
+        <div class="word"><dt>file position</dt><dd>The byte offset k where the next read or write will start. Seek can move it.</dd></div>
+        <div class="word"><dt>EOF</dt><dd>End-of-file: a read when k is past the last byte. Returns 0. No special end character.</dd></div>
+        <div class="word"><dt>short count</dt><dd>Fewer bytes than you asked for. Not an error. Common on sockets and at EOF.</dd></div>
+        <div class="word"><dt>Rio</dt><dd>Robust I/O: wrappers that loop on short counts. rio_readn, rio_writen, rio_readlineb, rio_readnb.</dd></div>
+        <div class="word"><dt>rio_t</dt><dd>The buffered reader’s private drawer: descriptor, unread count, pointer, and a 8192-byte buffer.</dd></div>
+        <div class="word"><dt>metadata</dt><dd>Facts about a file (size, type, permissions) from stat or fstat, without reading the data.</dd></div>
+        <div class="word"><dt>descriptor table</dt><dd>Per process. Each open slot points at one file table entry.</dd></div>
+        <div class="word"><dt>file table</dt><dd>Shared. Holds the file position, a reference count, and a pointer to a v-node.</dd></div>
+        <div class="word"><dt>v-node</dt><dd>Shared. Holds most of the stat information for one disk file, including type and size.</dd></div>
+        <div class="word"><dt>dup2</dt><dd>Copy one descriptor table slot onto another. The usual implementation of &gt; and &lt;.</dd></div>
+        <div class="word"><dt>stream</dt><dd>A FILE* in standard I/O: a descriptor plus a buffer, so getc is cheap after the first read.</dd></div>
+        <div class="word"><dt>umask</dt><dd>Bits the process refuses to grant when it creates a file. New mode is mode &amp; ~umask.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width:820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Eight questions. Finish all eight to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible } = K;
+K.page(10);
+const cap = (id, html) => { K.$(id).innerHTML = html; };
+
+function box(parent, x, y, w, hgt, cls, title, sub) {
+  const r = s("rect", { x, y, width: w, height: hgt, rx: 10, class: cls });
+  parent.appendChild(r);
+  const ty = sub ? y + hgt / 2 - 4 : y + hgt / 2 + 5;
+  const t = s("text", { x: x + w / 2, y: ty, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700, fontSize: "13px" } }, title || "");
+  parent.appendChild(t);
+  let u = null;
+  if (sub) {
+    u = s("text", { x: x + w / 2, y: y + hgt / 2 + 14, class: "sv-label", "text-anchor": "middle" }, sub);
+    parent.appendChild(u);
+  }
+  return { r, t, u, x, y, w, h: hgt, cx: x + w / 2, cy: y + hgt / 2 };
+}
+
+function setCls(el, cls) { el.setAttribute("class", cls); }
+
+function showG(g, on) { g.setAttribute("visibility", on ? "visible" : "hidden"); }
+
+function modeBtns(ctr, mode) {
+  [...ctr.querySelectorAll("[data-mode]")].forEach((b) => {
+    const m = Number(b.dataset.mode);
+    const on = m === mode;
+    b.style.display = on ? "" : "none";
+    if (b.tagName === "BUTTON") b.disabled = !on;
+  });
+}
+
+/* ================= HERO ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const ROWS = [
+    { fd: 0, name: "stdin",  dev: "keyboard", dir: "in" },
+    { fd: 1, name: "stdout", dev: "screen",   dir: "out" },
+    { fd: 2, name: "stderr", dev: "screen",   dir: "out" },
+    { fd: 3, name: "foo.txt",dev: "disk",     dir: "in" },
+  ];
+  svg.append(draw.label(24, 22, "FD TABLE", "sv-label", "start"), draw.label(430, 22, "DEVICES", "sv-label", "start"));
+  const slots = ROWS.map((row, i) => {
+    const y = 36 + i * 42;
+    const b = box(svg, 24, y, 200, 36, "sv-panel", "fd " + row.fd + "  " + row.name, "");
+    const d = box(svg, 430, y, 226, 36, "sv-db", row.dev, "");
+    svg.appendChild(draw.arrow(224, y + 18, 430, y + 18));
+    return { row, b, d };
+  });
+  let i = 0, vis = false;
+  function paint() {
+    slots.forEach((sl, k) => {
+      setCls(sl.b.r, k === i ? "sv-good" : "sv-panel");
+      setCls(sl.d.r, k === i ? "sv-data-soft" : "sv-db");
+    });
+    const r = ROWS[i];
+    K.$("#hero-pill").innerHTML = `<i></i>fd ${r.fd} · ${r.name}`;
+    cap("#hero-cap", r.dir === "in"
+      ? `Because fd <b>${r.fd}</b> names the ${r.dev}, a read copies bytes into memory. Priya only stores the number ${r.fd}.`
+      : `Because fd <b>${r.fd}</b> names the ${r.dev}, a write copies bytes out of memory. Same Unix I/O call, different drawer.`);
+  }
+  paint();
+  whenVisible(svg, () => (vis = true), () => (vis = false));
+  (async function auto() {
+    await sleep(800);
+    for (;;) {
+      if (vis && !K.reduced && !document.hidden) {
+        i = (i + 1) % ROWS.length;
+        paint();
+      }
+      await sleep(1600);
+    }
+  })();
+  svg.style.cursor = "pointer";
+  svg.addEventListener("click", () => { i = (i + 1) % ROWS.length; paint(); });
+})();
+
+/* ================= 1. UNIX ================= */
+(function unix() {
+  const svg = K.$("#s1-svg");
+  const proc = box(svg, 24, 36, 148, 100, "sv-server", "Priya", "process");
+  const mem = box(svg, 24, 152, 148, 100, "sv-panel", "—", "memory buf");
+  const fds = [0, 1, 2, 3].map((n, i) => box(svg, 192, 36 + i * 56, 156, 48, "sv-panel", "fd " + n, n < 3 ? ["stdin", "stdout", "stderr"][n] : "closed"));
+  const devs = [
+    box(svg, 416, 36, 240, 48, "sv-db", "keyboard", "terminal"),
+    box(svg, 416, 92, 240, 48, "sv-db", "screen", "stdout"),
+    box(svg, 416, 148, 240, 48, "sv-db", "screen", "stderr"),
+    box(svg, 416, 204, 240, 48, "sv-db", "foo.txt", "disk · 8 bytes"),
+  ];
+  svg.append(draw.arrow(348, 60, 416, 60), draw.arrow(348, 116, 416, 116), draw.arrow(348, 172, 416, 172));
+  const link3 = draw.arrow(348, 228, 416, 228);
+  svg.appendChild(link3);
+  const st = { fd: stat("next fd", "3"), pos: stat("k", "—") };
+  Object.values(st).forEach((v) => K.$("#s1-stats").appendChild(v));
+  const S0 = { open: false, pos: 0, data: "HELLO!!!", mem: "" };
+  let state = { ...S0, mem: "" };
+  let busy = false;
+  const layer = s("g", {});
+  svg.appendChild(layer);
+  function paint() {
+    fds[3].t.textContent = state.open ? "fd 3" : "fd 3";
+    fds[3].u.textContent = state.open ? "foo.txt" : "closed";
+    setCls(fds[3].r, state.open ? "sv-good" : "sv-panel");
+    setCls(devs[3].r, state.open ? "sv-data-soft" : "sv-db");
+    link3.setAttribute("opacity", state.open ? "1" : "0");
+    mem.t.textContent = state.mem || "—";
+    mem.u.textContent = state.mem ? "got " + state.mem.length + " bytes" : "memory buf";
+    setCls(mem.r, state.mem ? "sv-good" : "sv-panel");
+    st.fd.set(state.open ? "used" : "3");
+    st.pos.set(state.open ? String(state.pos) : "—");
+  }
+  function reset() {
+    state = { open: false, pos: 0, data: "HELLO!!!", mem: "" };
+    K.clear(layer);
+    busy = false;
+    paint();
+    cap("#s1-cap", "Priya starts with tickets 0, 1, and 2. Press Open foo.txt. The kernel will hand her the lowest free number, 3.");
+  }
+  const ctr = K.$("#s1-controls");
+  const bOpen = h("button", { class: "btn primary", type: "button" }, "Open foo.txt");
+  const bRead = h("button", { class: "btn", type: "button" }, "Read 4");
+  const bClose = h("button", { class: "btn", type: "button" }, "Close");
+  const bReset = h("button", { class: "btn", type: "button" }, "Reset");
+  bOpen.addEventListener("click", async () => {
+    if (busy || state.open) return;
+    busy = true;
+    const p = draw.tag("3");
+    layer.appendChild(p);
+    await fly(p, [devs[3].cx, devs[3].cy], [fds[3].cx, fds[3].cy], 480);
+    p.remove();
+    state.open = true;
+    state.pos = 0;
+    paint();
+    cap("#s1-cap", "Because 0, 1, and 2 were already open, <code>open</code> returned <b>3</b>. Priya stores 3. The kernel stores the path, the position k = 0, and the 8-byte file.");
+    busy = false;
+  });
+  bRead.addEventListener("click", async () => {
+    if (busy || !state.open) return;
+    const left = state.data.length - state.pos;
+    if (left <= 0) {
+      cap("#s1-cap", "k is already at the end. The next read returns 0 — EOF. There is no EOF character hiding in the file.");
+      return;
+    }
+    busy = true;
+    const n = Math.min(4, left);
+    const chunk = state.data.slice(state.pos, state.pos + n);
+    const p = draw.tag(chunk);
+    layer.appendChild(p);
+    await fly(p, [devs[3].cx, devs[3].cy], [mem.cx, mem.cy], 500);
+    p.remove();
+    state.mem += chunk;
+    state.pos += n;
+    paint();
+    cap("#s1-cap", `A read of 4 copied <b>${chunk}</b> into memory and then did k ← k+${n}. File position is now <b>${state.pos}</b>.`);
+    busy = false;
+  });
+  bClose.addEventListener("click", () => {
+    if (busy || !state.open) return;
+    state.open = false;
+    state.pos = 0;
+    paint();
+    cap("#s1-cap", "Close frees the kernel’s structures and puts 3 back in the pool. If Priya’s process exits, the kernel closes every leftover file for her.");
+  });
+  bReset.addEventListener("click", reset);
+  ctr.append(bOpen, bRead, bClose, bReset);
+  reset();
+})();
+
+/* ================= 2. TYPES ================= */
+(function types() {
+  const svg = K.$("#s2-svg");
+  const gTree = s("g", {});
+  const gDir = s("g", {});
+  svg.append(gTree, gDir);
+  const FILES = [
+    { name: "hello.c", type: "regular", abs: "/home/droh/hello.c", from: { "/home/droh": "./hello.c", "/home/bryant": "../home/droh/hello.c", "/": "home/droh/hello.c" } },
+    { name: "droh/", type: "directory", abs: "/home/droh", from: { "/home/droh": ".", "/home/bryant": "../droh", "/": "home/droh" } },
+    { name: "stdio.h", type: "regular", abs: "/usr/include/stdio.h", from: { "/home/droh": "../../usr/include/stdio.h", "/home/bryant": "../../usr/include/stdio.h", "/": "usr/include/stdio.h" } },
+    { name: "tty1", type: "other", abs: "/dev/tty1", from: { "/home/droh": "../../dev/tty1", "/home/bryant": "../../dev/tty1", "/": "dev/tty1" } },
+    { name: "socket", type: "socket", abs: "(network file)", from: { "/home/droh": "—", "/home/bryant": "—", "/": "—" } },
+  ];
+  const CWDS = ["/home/droh", "/home/bryant", "/"];
+  let mode = 0, sel = 0, cwd = 0, di = 0, opened = false;
+  const ENTRIES = [
+    { name: ".", ino: "1001" },
+    { name: "..", ino: "1000" },
+    { name: "hello.c", ino: "2244" },
+  ];
+  const tiles = FILES.map((f, i) => {
+    const x = 24 + (i % 5) * 128;
+    const b = box(gTree, x, 36, 118, 56, "sv-panel", f.name, f.type);
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": f.name });
+    g.append(b.r, b.t, b.u);
+    g.addEventListener("click", () => { sel = i; paint(); });
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sel = i; paint(); } });
+    gTree.appendChild(g);
+    return b;
+  });
+  const info = box(gTree, 24, 112, 632, 70, "sv-panel", "tap a file", "absolute · relative");
+  const cwdB = box(gTree, 24, 200, 632, 56, "sv-server", "/home/droh", "current working directory");
+  const dirSlots = ENTRIES.map((e, i) => box(gDir, 24 + i * 220, 50, 200, 80, "sv-panel", e.name, "d_ino " + e.ino));
+  const dirHead = box(gDir, 24, 160, 632, 70, "sv-panel", "DIR * closed", "opendir / readdir / closedir");
+  gTree.append(draw.label(24, 28, "Figure 10.1 · tap a file", "sv-label", "start"));
+  gDir.append(draw.label(24, 28, "readdir · /home/droh", "sv-label", "start"));
+  function paint() {
+    showG(gTree, mode === 0);
+    showG(gDir, mode === 1);
+    if (mode === 0) {
+      const f = FILES[sel], here = CWDS[cwd];
+      tiles.forEach((t, i) => setCls(t.r, i === sel ? "sv-good" : "sv-panel"));
+      info.t.textContent = f.abs;
+      info.u.textContent = "relative from cwd:  " + f.from[here];
+      cwdB.t.textContent = here;
+      cap("#s2-cap", f.type === "directory"
+        ? `Because <b>${f.name}</b> is a directory, it is an array of links. It always contains <code>.</code> and <code>..</code>. Absolute path <span class="mono">${f.abs}</span>.`
+        : f.type === "socket"
+          ? "A socket is a file used to talk to another process across a network. Same Unix I/O calls, different kind of drawer."
+          : `Type <b>${f.type}</b>. From <span class="mono">${here}</span> the relative pathname is <span class="mono">${f.from[here]}</span>. The kernel does not care whether a regular file is text or binary.`);
+    } else {
+      const last = di > 0 && di <= 3 ? ENTRIES[di - 1] : null;
+      dirSlots.forEach((b, i) => {
+        const seen = opened && i < Math.min(di, 3);
+        b.t.textContent = seen ? ENTRIES[i].name : "—";
+        b.u.textContent = seen ? "d_ino " + ENTRIES[i].ino : "not yet";
+        setCls(b.r, opened && di <= 3 && i === di - 1 ? "sv-good" : seen ? "sv-data-soft" : "sv-panel");
+      });
+      dirHead.t.textContent = !opened ? "DIR * closed" : di >= 4 ? "NULL · end of stream" : "DIR * open";
+      dirHead.u.textContent = !opened ? "call opendir" : di >= 4 ? "closedir · errno still 0" : "readdir → " + last.name;
+      setCls(dirHead.r, !opened ? "sv-panel" : di >= 4 ? "sv-good" : "sv-server");
+      cap("#s2-cap", !opened
+        ? "<code>opendir(\"/home/droh\")</code> returns a directory stream — an ordered list of entries. Press Step."
+        : di >= 4
+          ? "NULL with <code>errno</code> still 0 means the stream is finished, not an error. <code>closedir</code> frees the handle."
+          : `Because the stream still has entries, <code>readdir</code> returned <b>${last.name}</b> (inode ${last.ino}). <code>.</code> is this directory; <code>..</code> is the parent.`);
+    }
+  }
+  const ctr = K.$("#s2-controls");
+  const stepB = h("button", { class: "btn primary", type: "button", "data-mode": "1" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button", "data-mode": "1" }, "Reset");
+  stepB.addEventListener("click", () => {
+    if (mode !== 1) return;
+    if (!opened) { opened = true; di = 1; }
+    else if (di < 4) di++;
+    paint();
+  });
+  resetB.addEventListener("click", () => { opened = false; di = 0; paint(); });
+  CWDS.forEach((c, i) => {
+    const b = h("button", { class: "btn small", type: "button", "data-mode": "0" }, "cwd " + c);
+    b.addEventListener("click", () => { cwd = i; paint(); });
+    ctr.appendChild(b);
+  });
+  ctr.append(stepB, resetB);
+  K.$("#s2-seg").appendChild(seg(["hierarchy", "readdir"], 0, (i) => {
+    mode = i;
+    if (mode === 1) { opened = false; di = 0; }
+    modeBtns(ctr, mode);
+    paint();
+  }, "s2-mode"));
+  modeBtns(ctr, 0);
+  paint();
+})();
+
+/* ================= 3. OPEN ================= */
+(function open() {
+  const svg = K.$("#s3-svg");
+  const gFd = s("g", {});
+  const gMask = s("g", {});
+  svg.append(gFd, gMask);
+  const slots = [0, 1, 2, 3, 4].map((n, i) => box(gFd, 24 + i * 128, 40, 118, 70, "sv-panel", "fd " + n, n < 3 ? "taken" : "free"));
+  const msg = box(gFd, 24, 140, 632, 70, "sv-panel", "next unused = 3", "Open always picks the lowest free slot");
+  const PERM = [
+    { k: "IRUSR", lab: "u r", on: true, mask: false },
+    { k: "IWUSR", lab: "u w", on: true, mask: false },
+    { k: "IXUSR", lab: "u x", on: false, mask: false },
+    { k: "IRGRP", lab: "g r", on: true, mask: false },
+    { k: "IWGRP", lab: "g w", on: true, mask: true },
+    { k: "IXGRP", lab: "g x", on: false, mask: false },
+    { k: "IROTH", lab: "o r", on: true, mask: false },
+    { k: "IWOTH", lab: "o w", on: true, mask: true },
+    { k: "IXOTH", lab: "o x", on: false, mask: false },
+  ];
+  gMask.append(draw.label(24, 28, "DEF_MODE bits, then umask masks group/other write", "sv-label", "start"));
+  const bits = PERM.map((p, i) => {
+    const x = 24 + (i % 9) * 72;
+    return box(gMask, x, 48, 66, 70, "sv-panel", p.lab, "mode");
+  });
+  const result = box(gMask, 24, 150, 632, 70, "sv-good", "owner rw · group r · other r", "mode & ~umask");
+  let mode = 0, step = 0, busy = false;
+  const CODE = [
+    `fd1 = Open("foo.txt", O_RDONLY, 0);`,
+    `Close(fd1);`,
+    `fd2 = Open("baz.txt", O_RDONLY, 0);`,
+    `printf("fd2 = %d\\n", fd2);   /* 3 */`,
+  ];
+  function paint() {
+    showG(gFd, mode === 0);
+    showG(gMask, mode === 1);
+    if (mode === 0) {
+      const taken = { 0: "stdin", 1: "stdout", 2: "stderr", 3: "free", 4: "free" };
+      if (step === 1) taken[3] = "foo.txt";
+      if (step >= 2) taken[3] = step === 2 ? "free" : "baz.txt";
+      slots.forEach((b, i) => {
+        const lab = taken[i];
+        b.t.textContent = "fd " + i;
+        b.u.textContent = lab;
+        setCls(b.r, lab === "free" ? "sv-panel" : (i === 3 && step > 0 ? "sv-good" : "sv-server"));
+      });
+      msg.t.textContent = step === 0 ? "next unused = 3" : step === 1 ? "fd1 = 3  ·  foo.txt" : step === 2 ? "3 is free again" : "fd2 = 3  ·  baz.txt";
+      msg.u.textContent = step < 3 ? CODE[step] : "output: fd2 = 3";
+      setCls(msg.r, step === 3 ? "sv-good" : "sv-panel");
+      K.$("#s3-code").innerHTML = CODE.map((l, i) => (i === Math.min(step, 3) ? `<b>${l}</b>` : l)).join("\n");
+      cap("#s3-cap", step === 0
+        ? "Mei’s process already holds 0, 1, and 2. Press Step. <code>Open(\"foo.txt\", O_RDONLY, 0)</code> must return 3."
+        : step === 1
+          ? "Because 3 was the lowest unused descriptor, <code>fd1</code> is 3. Press Step to close it."
+          : step === 2
+            ? "Close put 3 back in the pool. Closing an already-closed descriptor would be an error. Press Step."
+            : "The second <code>Open</code>, even of a different file, returns 3 again. Practice Problem 10.1 prints <b>fd2 = 3</b>.");
+    } else {
+      bits.forEach((b, i) => {
+        const p = PERM[i];
+        const keep = p.on && !p.mask;
+        b.t.textContent = p.lab;
+        b.u.textContent = !p.on ? "off" : p.mask ? "masked" : "kept";
+        setCls(b.r, !p.on ? "sv-box" : p.mask ? "sv-bad" : "sv-good");
+      });
+      result.t.textContent = "owner rw · group r · other r";
+      K.$("#s3-code").innerHTML = `<b>umask(DEF_UMASK);</b>\nOpen("foo.txt", O_CREAT|O_TRUNC|O_WRONLY, DEF_MODE);\n<i>S_IWGRP and S_IWOTH are crossed out</i>`;
+      cap("#s3-cap", "Because the umask includes <code>S_IWGRP</code> and <code>S_IWOTH</code>, those write bits vanish. The new file is owner read/write and read-only for everyone else.");
+    }
+  }
+  const ctr = K.$("#s3-controls");
+  const stepB = h("button", { class: "btn primary", type: "button", "data-mode": "0" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button", "data-mode": "0" }, "Reset");
+  const twice = h("button", { class: "btn small", type: "button", "data-mode": "0" }, "Close 3 twice");
+  stepB.addEventListener("click", async () => {
+    if (mode !== 0 || busy || step >= 3) return;
+    busy = true;
+    step++;
+    paint();
+    await sleep(80);
+    busy = false;
+    if (step >= 3) stepB.disabled = true;
+  });
+  resetB.addEventListener("click", () => { step = 0; busy = false; stepB.disabled = false; paint(); });
+  twice.addEventListener("click", () => {
+    if (mode !== 0) return;
+    cap("#s3-cap", "Closing a descriptor that is already closed is an error: <code>close</code> returns <b>−1</b>. The slot is not a second gift.");
+    setCls(msg.r, "sv-bad");
+    msg.t.textContent = "close(3) → −1";
+    msg.u.textContent = "already closed";
+  });
+  ctr.append(stepB, resetB, twice);
+  K.$("#s3-seg").appendChild(seg(["Practice 10.1", "umask"], 0, (i) => {
+    mode = i; step = 0; busy = false;
+    modeBtns(ctr, mode);
+    paint();
+  }, "s3-mode"));
+  modeBtns(ctr, 0);
+  paint();
+})();
+
+/* ================= 4. READ / WRITE ================= */
+(function rw() {
+  const svg = K.$("#s4-svg");
+  const gDisk = s("g", {});
+  const gSock = s("g", {});
+  svg.append(gDisk, gSock);
+  const DISK = "ABCDEFGHIJ0123456789";
+  const cells = DISK.split("").map((ch, i) => {
+    const x = 24 + (i % 20) * 32;
+    const b = box(gDisk, x, 40, 28, 44, "sv-db", ch, "");
+    return { ch, b };
+  });
+  const gotD = box(gDisk, 24, 110, 300, 70, "sv-panel", "nread = —", "user buffer");
+  const reqD = box(gDisk, 356, 110, 300, 70, "sv-server", "n = 50", "requested");
+  const footD = box(gDisk, 24, 200, 632, 64, "sv-panel", "k = 0 / 20", "disk never shorts except at EOF");
+  const CHUNKS = [3, 5, 2];
+  const sockCells = "HELLO!!???".split("").map((ch, i) => box(gSock, 24 + i * 64, 40, 56, 50, "sv-db", ch, ""));
+  const gotS = box(gSock, 24, 114, 300, 70, "sv-panel", "got 0 / 10", "usrbuf");
+  const nextS = box(gSock, 356, 114, 300, 70, "sv-data-soft", "next chunk 3", "socket dribble");
+  const footS = box(gSock, 24, 204, 632, 64, "sv-panel", "short counts are not errors", "buffering and delays");
+  let mode = 0, pos = 0, last = null, nreq = 50, si = 0, sgot = 0, busy = false;
+  const layer = s("g", {});
+  svg.appendChild(layer);
+  function paint() {
+    showG(gDisk, mode === 0);
+    showG(gSock, mode === 1);
+    if (mode === 0) {
+      cells.forEach((c, i) => setCls(c.b.r, i < pos ? "sv-good" : "sv-db"));
+      gotD.t.textContent = last == null ? "nread = —" : last === 0 ? "nread = 0  EOF" : "nread = " + last;
+      setCls(gotD.r, last === 0 ? "sv-bad" : last ? "sv-good" : "sv-panel");
+      reqD.t.textContent = "n = " + nreq;
+      footD.t.textContent = `k = ${pos} / 20`;
+      cap("#s4-cap", last == null
+        ? `The disk file still has <b>${20 - pos}</b> bytes. Omar is about to ask for <b>${nreq}</b>. Press read.`
+        : last === 0
+          ? "Because k ≥ m, this read returns 0. That is EOF. The short count of 0 is how the application notices."
+          : `Because only ${last} bytes were left, <code>read</code> returned a short count of <b>${last}</b>. Not an error. k is now ${pos}.`);
+    } else {
+      sockCells.forEach((b, i) => setCls(b.r, i < sgot ? "sv-good" : "sv-db"));
+      gotS.t.textContent = `got ${sgot} / 10`;
+      nextS.t.textContent = si >= CHUNKS.length ? "socket quiet" : "next chunk " + CHUNKS[si];
+      footS.t.textContent = si === 0 ? "first read will return 3, not 10" : si < 3 ? "still short — keep looping" : "10 bytes after three reads";
+      setCls(gotS.r, sgot === 10 ? "sv-good" : "sv-panel");
+      cap("#s4-cap", sgot === 0
+        ? "A network socket can return any short count. The first <code>read</code> will transfer 3 of the 10 requested bytes."
+        : sgot < 10
+          ? `Because of buffering and delay, that call returned <b>${CHUNKS[si - 1]}</b>. A robust program calls <code>read</code> again. Got ${sgot} so far.`
+          : "Three short reads added up to 10. Disk writes never do this; sockets do. That is why Rio exists.");
+    }
+  }
+  const ctr = K.$("#s4-controls");
+  const readB = h("button", { class: "btn primary", type: "button", "data-mode": "0" }, "read(n)");
+  const resetD = h("button", { class: "btn", type: "button", "data-mode": "0" }, "Reset");
+  const sockB = h("button", { class: "btn primary", type: "button", "data-mode": "1" }, "read socket");
+  const resetS = h("button", { class: "btn", type: "button", "data-mode": "1" }, "Reset");
+  readB.addEventListener("click", async () => {
+    if (mode !== 0 || busy) return;
+    busy = true;
+    const left = 20 - pos;
+    last = left === 0 ? 0 : Math.min(nreq, left);
+    if (last > 0) {
+      const p = draw.tag(DISK.slice(pos, pos + last));
+      layer.appendChild(p);
+      await fly(p, [340, 62], [gotD.cx, gotD.cy], 480);
+      p.remove();
+      pos += last;
+    }
+    paint();
+    busy = false;
+  });
+  resetD.addEventListener("click", () => { pos = 0; last = null; K.clear(layer); paint(); });
+  sockB.addEventListener("click", async () => {
+    if (mode !== 1 || busy || si >= CHUNKS.length) return;
+    busy = true;
+    const n = CHUNKS[si];
+    const p = draw.tag(String(n));
+    layer.appendChild(p);
+    await fly(p, [nextS.cx, nextS.cy], [gotS.cx, gotS.cy], 420);
+    p.remove();
+    sgot += n;
+    si++;
+    paint();
+    busy = false;
+  });
+  resetS.addEventListener("click", () => { si = 0; sgot = 0; K.clear(layer); paint(); });
+  const sl = slider({ id: "s4-n", label: "n", min: 10, max: 50, value: 50, onInput: (v) => { nreq = v; if (mode === 0) paint(); } });
+  sl.dataset.mode = "0";
+  ctr.append(readB, resetD, sl, sockB, resetS);
+  K.$("#s4-seg").appendChild(seg(["disk EOF", "socket"], 0, (i) => {
+    mode = i;
+    K.clear(layer);
+    modeBtns(ctr, mode);
+    paint();
+  }, "s4-mode"));
+  modeBtns(ctr, 0);
+  paint();
+})();
+
+/* ================= 5. RIO ================= */
+(function rio() {
+  const svg = K.$("#s5-svg");
+  const gRaw = s("g", {});
+  const gLine = s("g", {});
+  svg.append(gRaw, gLine);
+  const rawBox = box(gRaw, 24, 36, 300, 80, "sv-panel", "got 0 / 8", "raw read");
+  const rioBox = box(gRaw, 356, 36, 300, 80, "sv-panel", "got 0 / 8", "rio_readn");
+  const sock = box(gRaw, 24, 140, 632, 64, "sv-db", "socket will send 3, then 3, then 2", "short counts");
+  const rawNote = box(gRaw, 24, 220, 300, 64, "sv-panel", "stops at first short", "user thinks they are done");
+  const rioNote = box(gRaw, 356, 220, 300, 64, "sv-good", "loops while nleft > 0", "EINTR restarts too");
+  const FILE = "hi\\nbye\\n";
+  const rbuf = box(gLine, 24, 36, 632, 70, "sv-db", "rio_buf  empty", "shown small · book is 8192");
+  const usr = box(gLine, 24, 126, 300, 70, "sv-panel", "usrbuf  —", "rio_readlineb");
+  const meta = box(gLine, 356, 126, 300, 70, "sv-server", "rio_cnt = 0", "unread in buffer");
+  const footL = box(gLine, 24, 216, 632, 64, "sv-panel", "one refill, two lines", "do not mix with rio_readn");
+  let mode = 0, rawGot = 0, rioGot = 0, rawI = 0, rioI = 0, busy = false;
+  const CH = [3, 3, 2];
+  let buf = "", cnt = 0, lines = [], filePos = 0, needFill = true;
+  const layer = s("g", {});
+  svg.appendChild(layer);
+  function paint() {
+    showG(gRaw, mode === 0);
+    showG(gLine, mode === 1);
+    if (mode === 0) {
+      rawBox.t.textContent = "got " + rawGot + " / 8";
+      rioBox.t.textContent = "got " + rioGot + " / 8";
+      setCls(rawBox.r, rawGot > 0 && rawGot < 8 ? "sv-bad" : rawGot === 8 ? "sv-good" : "sv-panel");
+      setCls(rioBox.r, rioGot === 8 ? "sv-good" : rioGot ? "sv-data-soft" : "sv-panel");
+      sock.t.textContent = "socket will send 3, then 3, then 2";
+      rawNote.t.textContent = rawGot === 0 ? "not called yet" : rawGot < 8 ? "stops at first short" : "would need a loop";
+      rioNote.t.textContent = rioGot < 8 ? "loops while nleft > 0" : "rio_readn returned 8";
+      cap("#s5-cap", rawGot === 0
+        ? "Aisha wants 8 bytes. The socket will dribble 3, 3, then 2. Press Ask for 8 and compare raw <code>read</code> with <code>rio_readn</code>."
+        : rawGot < 8 && rioGot < 8
+          ? `Raw <code>read</code> returned <b>${rawGot}</b> and stopped. That short count is not an error, but the other bytes are still on the wire.`
+          : rioGot === 8
+            ? "Because <code>rio_readn</code> kept calling <code>read</code> until nleft hit 0, Aisha’s buffer holds all 8. It would only return a short count at EOF."
+            : "Raw stopped short. Press Ask for 8 again if Rio has not finished.");
+    } else {
+      rbuf.t.textContent = buf ? "rio_buf  " + buf.replace(/\n/g, "↵") : "rio_buf  empty";
+      usr.t.textContent = lines.length ? "usrbuf  " + lines[lines.length - 1].replace(/\n/g, "↵") : "usrbuf  —";
+      meta.t.textContent = "rio_cnt = " + cnt;
+      setCls(rbuf.r, buf ? "sv-data-soft" : "sv-db");
+      setCls(usr.r, lines.length ? "sv-good" : "sv-panel");
+      footL.t.textContent = lines.length === 0 ? "buffer empty · refill with read" : lines.length === 1 ? "second line still in rio_buf" : "two lines, one kernel read";
+      cap("#s5-cap", lines.length === 0
+        ? "<code>rio_readinitb</code> sets rio_cnt to 0. The first <code>rio_readlineb</code> will refill the buffer, then copy until <code>\\n</code>."
+        : lines.length === 1
+          ? "The first line <b>hi↵</b> came from the buffer. rio_cnt is still " + cnt + ", so the next line needs no trap to the kernel."
+          : "Second line <b>bye↵</b> came from the same refill. Mixing this with unbuffered <code>rio_readn</code> on the same fd would steal bytes from the drawer.");
+    }
+  }
+  const ctr = K.$("#s5-controls");
+  const ask = h("button", { class: "btn primary", type: "button", "data-mode": "0" }, "Ask for 8");
+  const resetR = h("button", { class: "btn", type: "button", "data-mode": "0" }, "Reset");
+  const lineB = h("button", { class: "btn primary", type: "button", "data-mode": "1" }, "rio_readlineb");
+  const resetL = h("button", { class: "btn", type: "button", "data-mode": "1" }, "Reset");
+  ask.addEventListener("click", async () => {
+    if (mode !== 0 || busy) return;
+    busy = true;
+    if (rawI === 0) {
+      rawGot = CH[0];
+      rawI = 1;
+      const p = draw.tag("3");
+      layer.appendChild(p);
+      await fly(p, [sock.cx, sock.cy], [rawBox.cx, rawBox.cy], 420);
+      p.remove();
+      paint();
+    }
+    while (rioI < CH.length && rioGot < 8) {
+      const n = CH[rioI];
+      const p = draw.tag(String(n));
+      layer.appendChild(p);
+      await fly(p, [sock.cx, sock.cy], [rioBox.cx, rioBox.cy], 360);
+      p.remove();
+      rioGot += n;
+      rioI++;
+      paint();
+      await sleep(120);
+    }
+    busy = false;
+  });
+  resetR.addEventListener("click", () => { rawGot = rioGot = rawI = rioI = 0; K.clear(layer); paint(); });
+  lineB.addEventListener("click", async () => {
+    if (mode !== 1 || busy || lines.length >= 2) return;
+    busy = true;
+    if (needFill) {
+      buf = "hi\nbye\n";
+      cnt = 8;
+      needFill = false;
+      filePos = 8;
+      const p = draw.tag("read 8");
+      layer.appendChild(p);
+      await fly(p, [340, 20], [rbuf.cx, rbuf.cy], 400);
+      p.remove();
+    }
+    const take = lines.length === 0 ? "hi\n" : "bye\n";
+    const p = draw.tag(take.replace(/\n/g, "↵"));
+    layer.appendChild(p);
+    await fly(p, [rbuf.cx, rbuf.cy], [usr.cx, usr.cy], 400);
+    p.remove();
+    lines.push(take);
+    if (lines.length === 1) { buf = "bye\n"; cnt = 4; }
+    if (lines.length === 2) { buf = ""; cnt = 0; }
+    paint();
+    busy = false;
+  });
+  resetL.addEventListener("click", () => { buf = ""; cnt = 0; lines = []; filePos = 0; needFill = true; K.clear(layer); paint(); });
+  ctr.append(ask, resetR, lineB, resetL);
+  K.$("#s5-seg").appendChild(seg(["rio_readn", "readlineb"], 0, (i) => {
+    mode = i;
+    K.clear(layer);
+    modeBtns(ctr, mode);
+    paint();
+  }, "s5-mode"));
+  modeBtns(ctr, 0);
+  paint();
+})();
+
+/* ================= 6. STAT ================= */
+(function statSim() {
+  const svg = K.$("#s6-svg");
+  const FILES = [
+    { name: "foobar.txt", kind: "regular", size: "6", read: true, pred: "S_ISREG" },
+    { name: "/home/droh", kind: "directory", size: "—", read: true, pred: "S_ISDIR" },
+    { name: "socket", kind: "other", size: "—", read: true, pred: "S_ISSOCK" },
+  ];
+  let sel = 0;
+  const tiles = FILES.map((f, i) => {
+    const x = 24 + i * 220;
+    const b = box(svg, x, 36, 200, 64, "sv-panel", f.name, f.kind);
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": f.name });
+    g.append(b.r, b.t, b.u);
+    const pick = () => { sel = i; paint(); };
+    g.addEventListener("click", pick);
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+    svg.appendChild(g);
+    return b;
+  });
+  const modeB = box(svg, 24, 120, 200, 64, "sv-server", "st_mode", "type + perms");
+  const sizeB = box(svg, 240, 120, 200, 64, "sv-db", "st_size", "bytes");
+  const readB = box(svg, 456, 120, 200, 64, "sv-good", "S_IRUSR", "owner read");
+  const out = box(svg, 24, 200, 632, 56, "sv-panel", "type: —  read: —", "statcheck");
+  function paint() {
+    const f = FILES[sel];
+    tiles.forEach((t, i) => setCls(t.r, i === sel ? "sv-good" : "sv-panel"));
+    modeB.t.textContent = f.pred;
+    modeB.u.textContent = "st_mode";
+    sizeB.t.textContent = f.size === "—" ? "st_size  —" : "st_size  " + f.size;
+    readB.t.textContent = f.read ? "S_IRUSR  yes" : "S_IRUSR  no";
+    setCls(readB.r, f.read ? "sv-good" : "sv-bad");
+    const type = f.kind === "regular" ? "regular" : f.kind === "directory" ? "directory" : "other";
+    out.t.textContent = "type: " + type + ", read: " + (f.read ? "yes" : "no");
+    setCls(out.r, "sv-good");
+    K.$("#s6-pill").textContent = f.name;
+    K.$("#s6-code").innerHTML = `Stat("${f.name}", &amp;stat);\nif (${f.pred}(stat.st_mode)) type = "${type}";\nreadok = (stat.st_mode &amp; S_IRUSR) ? "yes" : "no";`;
+    cap("#s6-cap", f.kind === "regular"
+      ? `Because <code>S_ISREG</code> is true and <code>S_IRUSR</code> is set, <code>statcheck</code> prints <b>type: regular, read: yes</b>. foobar.txt is 6 bytes — the book’s six ASCII characters.`
+      : f.kind === "directory"
+        ? "Because <code>S_ISDIR</code> is true, the type string is directory. Fatima never opened the folder; <code>stat</code> only read the card."
+        : "Not regular, not a directory, so Figure 10.10 prints <b>type: other</b>. A socket would light <code>S_ISSOCK</code> if we tested it.");
+  }
+  const ctr = K.$("#s6-controls");
+  FILES.forEach((f, i) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => { sel = i; paint(); } }, f.name));
+  });
+  paint();
+})();
+
+/* ================= 7. SHARE ================= */
+(function share() {
+  const svg = K.$("#s7-svg");
+  const gOpen = s("g", {});
+  const gFork = s("g", {});
+  svg.append(gOpen, gFork);
+  gOpen.append(draw.label(24, 24, "two opens · own positions", "sv-label", "start"));
+  const fd1 = box(gOpen, 24, 40, 150, 70, "sv-server", "fd1", "pos 0");
+  const fd2 = box(gOpen, 24, 130, 150, 70, "sv-server", "fd2", "pos 0");
+  const ft1 = box(gOpen, 220, 40, 180, 70, "sv-panel", "refcnt 1", "file table");
+  const ft2 = box(gOpen, 220, 130, 180, 70, "sv-panel", "refcnt 1", "file table");
+  const vn = box(gOpen, 456, 84, 200, 72, "sv-db", "foobar.txt", "v-node · size 6");
+  gOpen.append(draw.arrow(174, 75, 220, 75), draw.arrow(174, 165, 220, 165), draw.arrow(400, 75, 456, 110), draw.arrow(400, 165, 456, 130));
+  const outO = box(gOpen, 24, 230, 632, 70, "sv-panel", "c = —", "each read starts at f");
+  gFork.append(draw.label(24, 24, "after fork · shared position", "sv-label", "start"));
+  const par = box(gFork, 24, 40, 180, 70, "sv-server", "parent fd", "descriptor copy");
+  const chd = box(gFork, 24, 130, 180, 70, "sv-server", "child fd", "same table entry");
+  const ftF = box(gFork, 260, 84, 180, 72, "sv-panel", "pos 0 · refcnt 2", "shared file table");
+  const vnF = box(gFork, 496, 84, 160, 72, "sv-db", "foobar", "v-node");
+  gFork.append(draw.arrow(204, 75, 260, 110), draw.arrow(204, 165, 260, 130), draw.arrow(440, 120, 496, 120));
+  const outF = box(gFork, 24, 230, 632, 70, "sv-panel", "child then parent", "one bookmark");
+  let mode = 0, p1 = 0, p2 = 0, c1 = "", c2 = "", fpos = 0, childC = "", parentC = "", busy = false;
+  const DATA = "foobar";
+  const layer = s("g", {});
+  svg.appendChild(layer);
+  function paint() {
+    showG(gOpen, mode === 0);
+    showG(gFork, mode === 1);
+    if (mode === 0) {
+      fd1.u.textContent = "pos " + p1;
+      fd2.u.textContent = "pos " + p2;
+      ft1.t.textContent = "refcnt 1";
+      ft2.t.textContent = "refcnt 1";
+      ft1.u.textContent = "pos " + p1;
+      ft2.u.textContent = "pos " + p2;
+      setCls(fd1.r, c1 ? "sv-good" : "sv-server");
+      setCls(fd2.r, c2 ? "sv-good" : "sv-server");
+      outO.t.textContent = c2 ? "c = " + c2 : c1 ? "fd1 read " + c1 : "c = —";
+      cap("#s7-cap", !c1
+        ? "Yuki opened foobar.txt twice. Two file table entries, one v-node. Press Read fd1 — that bookmark moves alone."
+        : !c2
+          ? `fd1’s read got <b>${c1}</b> and its own position is ${p1}. fd2 still sits at 0. Press Read fd2.`
+          : `fd2 also started at the first byte, so c is <b>${c2}</b>, not o. Practice Problem 10.2: each descriptor has its own file position.`);
+    } else {
+      ftF.t.textContent = "pos " + fpos + " · refcnt 2";
+      par.u.textContent = parentC ? "read " + parentC : "waiting";
+      chd.u.textContent = childC ? "read " + childC : "about to read";
+      setCls(chd.r, childC ? "sv-good" : "sv-server");
+      setCls(par.r, parentC ? "sv-good" : "sv-server");
+      outF.t.textContent = parentC ? "c = " + parentC : childC ? "child ate f" : "shared bookmark at 0";
+      cap("#s7-cap", !childC
+        ? "After fork, parent and child share one file table entry (refcnt 2) and one position. Press Child reads."
+        : !parentC
+          ? `Sofia’s read got <b>${childC}</b> and slid the shared bookmark to ${fpos}. Yuki has not read yet.`
+          : `Because they shared the position, the parent’s read is the second byte: <b>c = ${parentC}</b>. Practice Problem 10.3. Both must close before refcnt hits 0.`);
+    }
+  }
+  const ctr = K.$("#s7-controls");
+  const r1 = h("button", { class: "btn primary", type: "button", "data-mode": "0" }, "Read fd1");
+  const r2 = h("button", { class: "btn", type: "button", "data-mode": "0" }, "Read fd2");
+  const rstO = h("button", { class: "btn", type: "button", "data-mode": "0" }, "Reset");
+  const chB = h("button", { class: "btn primary", type: "button", "data-mode": "1" }, "Child reads");
+  const paB = h("button", { class: "btn", type: "button", "data-mode": "1" }, "Parent reads");
+  const rstF = h("button", { class: "btn", type: "button", "data-mode": "1" }, "Reset");
+  r1.addEventListener("click", async () => {
+    if (mode !== 0 || busy || c1) return;
+    busy = true;
+    const p = draw.tag("f");
+    layer.appendChild(p);
+    await fly(p, [vn.cx, vn.cy], [fd1.cx, fd1.cy], 440);
+    p.remove();
+    c1 = DATA[p1];
+    p1 += 1;
+    paint();
+    busy = false;
+  });
+  r2.addEventListener("click", async () => {
+    if (mode !== 0 || busy || c2) return;
+    busy = true;
+    const p = draw.tag("f");
+    layer.appendChild(p);
+    await fly(p, [vn.cx, vn.cy], [fd2.cx, fd2.cy], 440);
+    p.remove();
+    c2 = DATA[p2];
+    p2 += 1;
+    paint();
+    busy = false;
+  });
+  rstO.addEventListener("click", () => { p1 = p2 = 0; c1 = c2 = ""; K.clear(layer); paint(); });
+  chB.addEventListener("click", async () => {
+    if (mode !== 1 || busy || childC) return;
+    busy = true;
+    const p = draw.tag("f");
+    layer.appendChild(p);
+    await fly(p, [vnF.cx, vnF.cy], [chd.cx, chd.cy], 440);
+    p.remove();
+    childC = DATA[fpos];
+    fpos += 1;
+    paint();
+    busy = false;
+  });
+  paB.addEventListener("click", async () => {
+    if (mode !== 1 || busy || !childC || parentC) return;
+    busy = true;
+    const p = draw.tag("o");
+    layer.appendChild(p);
+    await fly(p, [vnF.cx, vnF.cy], [par.cx, par.cy], 440);
+    p.remove();
+    parentC = DATA[fpos];
+    fpos += 1;
+    paint();
+    busy = false;
+  });
+  rstF.addEventListener("click", () => { fpos = 0; childC = parentC = ""; K.clear(layer); paint(); });
+  ctr.append(r1, r2, rstO, chB, paB, rstF);
+  K.$("#s7-seg").appendChild(seg(["two opens", "fork"], 0, (i) => {
+    mode = i;
+    K.clear(layer);
+    modeBtns(ctr, mode);
+    paint();
+  }, "s7-mode"));
+  modeBtns(ctr, 0);
+  paint();
+})();
+
+/* ================= 8. REDIR ================= */
+(function redir() {
+  const svg = K.$("#s8-svg");
+  const gDup = s("g", {});
+  const gP = s("g", {});
+  svg.append(gDup, gP);
+  gDup.append(draw.label(24, 24, "Figure 10.12 then dup2(4,1)", "sv-label", "start"));
+  const d1 = box(gDup, 24, 40, 150, 70, "sv-server", "fd 1", "stdout");
+  const d4 = box(gDup, 24, 130, 150, 70, "sv-server", "fd 4", "disk");
+  const fA = box(gDup, 230, 40, 180, 70, "sv-panel", "file A", "refcnt 1 · terminal");
+  const fB = box(gDup, 230, 130, 180, 70, "sv-db", "file B", "refcnt 1 · disk");
+  const noteD = box(gDup, 24, 220, 632, 70, "sv-panel", "ls > foo.txt", "right hoinky · stdout → disk");
+  const arr1A = draw.arrow(174, 75, 230, 75);
+  const arr1B = draw.arrow(174, 75, 230, 155);
+  const arr4B = draw.arrow(174, 165, 230, 165);
+  gDup.append(arr1A, arr1B, arr4B);
+  const pFd1 = box(gP, 24, 40, 140, 64, "sv-server", "fd1", "pos 0");
+  const pFd2 = box(gP, 24, 124, 140, 64, "sv-server", "fd2", "pos 0");
+  const pFt1 = box(gP, 200, 40, 160, 64, "sv-panel", "entry 1", "own pos");
+  const pFt2 = box(gP, 200, 124, 160, 64, "sv-panel", "entry 2", "own pos");
+  const pVn = box(gP, 400, 82, 160, 64, "sv-db", "foobar", "size 6");
+  const pOut = box(gP, 24, 214, 632, 70, "sv-panel", "step the program", "Practice 10.5");
+  const pA1 = draw.arrow(164, 72, 200, 72);
+  const pA1b = draw.arrow(164, 72, 200, 156);
+  const pA2 = draw.arrow(164, 156, 200, 156);
+  const pV1 = draw.arrow(360, 72, 400, 104);
+  const pV2 = draw.arrow(360, 156, 400, 124);
+  gP.append(pA1, pA1b, pA2, pV1, pV2);
+  let mode = 0, done = false, step = 0, busy = false;
+  const layer = s("g", {});
+  svg.appendChild(layer);
+  function paint() {
+    showG(gDup, mode === 0);
+    showG(gP, mode === 1);
+    if (mode === 0) {
+      d1.u.textContent = done ? "now file B" : "stdout";
+      fA.t.textContent = done ? "file A gone" : "file A";
+      fA.u.textContent = done ? "refcnt 0 · deleted" : "refcnt 1 · terminal";
+      fB.u.textContent = done ? "refcnt 2 · disk" : "refcnt 1 · disk";
+      setCls(d1.r, done ? "sv-good" : "sv-server");
+      setCls(fA.r, done ? "sv-bad" : "sv-panel");
+      setCls(fB.r, done ? "sv-good" : "sv-db");
+      arr1A.setAttribute("opacity", done ? "0" : "1");
+      arr1B.setAttribute("opacity", done ? "1" : "0");
+      arr4B.setAttribute("opacity", "1");
+      noteD.t.textContent = done ? "writes to fd 1 land in B" : "ls > foo.txt";
+      cap("#s8-cap", done
+        ? "Because <code>dup2(4,1)</code> closed the old stdout, file A’s refcnt hit 0 and vanished. Both tickets now name B (refcnt 2). Standard output is the notebook."
+        : "fd 1 is the terminal (file A), fd 4 is the disk (file B). Press dup2(4,1) — that is how the shell implements the right hoinky.");
+    } else {
+      const pos1 = step >= 3 ? 2 : 0;
+      const pos2 = step >= 1 ? 1 : 0;
+      pFd1.u.textContent = step >= 3 ? "→ entry 2" : "pos 0";
+      pFd2.u.textContent = "pos " + pos2;
+      pFt1.t.textContent = step >= 3 ? "closed" : "entry 1";
+      pFt2.t.textContent = "entry 2  pos " + pos2;
+      pOut.t.textContent = step === 0 ? "two opens of foobar.txt" : step === 1 ? "Read(fd2)  c = f" : step === 2 ? "Dup2(fd2, fd1)" : "Read(fd1)  c = o";
+      setCls(pFt1.r, step >= 3 ? "sv-bad" : "sv-panel");
+      setCls(pFd1.r, step >= 3 ? "sv-good" : "sv-server");
+      setCls(pOut.r, step === 3 ? "sv-good" : "sv-panel");
+      pA1.setAttribute("opacity", step >= 3 ? "0" : "1");
+      pA1b.setAttribute("opacity", step >= 3 ? "1" : "0");
+      pV1.setAttribute("opacity", step >= 3 ? "0" : "1");
+      cap("#s8-cap", step === 0
+        ? "Two opens, two bookmarks. Press Step. First the program reads fd2 and gets f."
+        : step === 1
+          ? "fd2’s position is now 1. Next, <code>Dup2(fd2, fd1)</code> will point fd1 at that same file table entry."
+          : step === 2
+            ? "fd1 now shares fd2’s bookmark (already past f). The next read on fd1 is not the first byte."
+            : "Because we redirected fd1 onto fd2, the second read is the second byte. Practice Problem 10.5 prints <b>c = o</b>.");
+    }
+  }
+  const ctr = K.$("#s8-controls");
+  const dupB = h("button", { class: "btn primary", type: "button", "data-mode": "0" }, "dup2(4,1)");
+  const rstD = h("button", { class: "btn", type: "button", "data-mode": "0" }, "Reset");
+  const stB = h("button", { class: "btn primary", type: "button", "data-mode": "1" }, "Step");
+  const rstP = h("button", { class: "btn", type: "button", "data-mode": "1" }, "Reset");
+  dupB.addEventListener("click", async () => {
+    if (mode !== 0 || busy || done) return;
+    busy = true;
+    const p = draw.tag("dup2");
+    layer.appendChild(p);
+    await fly(p, [d4.cx, d4.cy], [d1.cx, d1.cy], 480);
+    p.remove();
+    done = true;
+    paint();
+    busy = false;
+  });
+  rstD.addEventListener("click", () => { done = false; K.clear(layer); paint(); });
+  stB.addEventListener("click", async () => {
+    if (mode !== 1 || busy || step >= 3) return;
+    busy = true;
+    step++;
+    if (step === 1 || step === 3) {
+      const p = draw.tag(step === 1 ? "f" : "o");
+      layer.appendChild(p);
+      await fly(p, [pVn.cx, pVn.cy], [step === 1 ? pFd2.cx : pFd1.cx, step === 1 ? pFd2.cy : pFd1.cy], 400);
+      p.remove();
+    }
+    paint();
+    busy = false;
+    if (step >= 3) stB.disabled = true;
+  });
+  rstP.addEventListener("click", () => { step = 0; busy = false; stB.disabled = false; K.clear(layer); paint(); });
+  ctr.append(dupB, rstD, stB, rstP);
+  K.$("#s8-seg").appendChild(seg(["dup2(4,1)", "Practice 10.5"], 0, (i) => {
+    mode = i;
+    K.clear(layer);
+    modeBtns(ctr, mode);
+    paint();
+  }, "s8-mode"));
+  modeBtns(ctr, 0);
+  paint();
+})();
+
+/* ================= 9. WHICH ================= */
+(function which() {
+  const svg = K.$("#s9-svg");
+  const gPick = s("g", {});
+  const gTrap = s("g", {});
+  svg.append(gPick, gTrap);
+  const stdio = box(gPick, 24, 36, 200, 80, "sv-panel", "standard I/O", "fopen printf fgets");
+  const rioB = box(gPick, 240, 36, 200, 80, "sv-panel", "Rio", "rio_readn writen");
+  const unix = box(gPick, 456, 36, 200, 80, "sv-server", "Unix I/O", "open read write stat");
+  const job = box(gPick, 24, 136, 632, 64, "sv-panel", "pick a job", "G1 disk · G2 binary · G3 socket");
+  const tip = box(gPick, 24, 216, 632, 56, "sv-panel", "guideline —", "the book's advice");
+  const t1 = box(gTrap, 24, 36, 200, 70, "sv-panel", "fpin = fdopen r", "stream 1");
+  const t2 = box(gTrap, 240, 36, 200, 70, "sv-panel", "fpout = fdopen w", "stream 2");
+  const sock = box(gTrap, 456, 36, 200, 70, "sv-db", "sockfd", "one descriptor");
+  const tOut = box(gTrap, 24, 128, 632, 64, "sv-panel", "two fclose calls", "second close fails");
+  const tRio = box(gTrap, 24, 210, 632, 56, "sv-good", "Rio instead", "sprintf + rio_writen");
+  let mode = 0, jobI = 0, trap = 0, busy = false;
+  const JOBS = [
+    { k: "disk text", g: "G1", good: [true, false, true], text: "Use the standard I/O functions whenever possible. Disk and terminal: fopen, printf, fgets.", box: 0 },
+    { k: "binary", g: "G2", good: [false, true, true], text: "Do not use scanf or rio_readlineb on a binary file. A 0xa byte is not a newline. Prefer rio_readn or fread.", box: 1 },
+    { k: "socket", g: "G3", good: [false, true, true], text: "Use the Rio functions for I/O on network sockets. Standard I/O fights socket rules.", box: 1 },
+  ];
+  function paint() {
+    showG(gPick, mode === 0);
+    showG(gTrap, mode === 1);
+    if (mode === 0) {
+      const J = JOBS[jobI];
+      setCls(stdio.r, J.good[0] ? "sv-good" : "sv-bad");
+      setCls(rioB.r, J.good[1] ? "sv-good" : "sv-panel");
+      setCls(unix.r, "sv-server");
+      job.t.textContent = J.k + "  ·  " + J.g;
+      tip.t.textContent = J.g + "  " + J.k;
+      cap("#s9-cap", J.text);
+    } else {
+      t1.u.textContent = trap >= 1 ? "open" : "not yet";
+      t2.u.textContent = trap >= 1 ? "open" : "not yet";
+      setCls(t1.r, trap >= 1 ? "sv-server" : "sv-panel");
+      setCls(t2.r, trap >= 1 ? "sv-server" : "sv-panel");
+      tOut.t.textContent = trap === 0 ? "two FILE streams on one socket" : trap === 1 ? "fclose(fpin) closes sockfd" : trap === 2 ? "fclose(fpout) closes it again" : "Rio never shares that trap";
+      setCls(tOut.r, trap === 2 ? "sv-bad" : trap === 3 ? "sv-good" : "sv-panel");
+      setCls(sock.r, trap === 2 ? "sv-bad" : "sv-db");
+      tRio.t.textContent = trap === 3 ? "sprintf + rio_writen · readlineb + sscanf" : "Rio instead";
+      cap("#s9-cap", trap === 0
+        ? "A socket cannot use <code>lseek</code>, so the usual stdio seek-between-read-and-write rule has no workaround. People try two <code>fdopen</code> streams. Press Step."
+        : trap === 1
+          ? "Both streams wrap the same <code>sockfd</code>. The first <code>fclose</code> closes that descriptor and frees one buffer."
+          : trap === 2
+            ? "The second <code>fclose</code> tries to close an already-closed descriptor. Sequential programs shrug; threaded ones (Section 12.7.4) do not."
+            : "So the book says: do not use standard I/O on sockets. Format with <code>sprintf</code> and send with <code>rio_writen</code>; read a line with <code>rio_readlineb</code> and parse with <code>sscanf</code>.");
+    }
+  }
+  const ctr = K.$("#s9-controls");
+  JOBS.forEach((J, i) => {
+    const b = h("button", { class: "btn small", type: "button", "data-mode": "0" }, J.k);
+    b.addEventListener("click", () => { jobI = i; paint(); });
+    ctr.appendChild(b);
+  });
+  const stB = h("button", { class: "btn primary", type: "button", "data-mode": "1" }, "Step");
+  const rstB = h("button", { class: "btn", type: "button", "data-mode": "1" }, "Reset");
+  stB.addEventListener("click", async () => {
+    if (mode !== 1 || busy || trap >= 3) return;
+    busy = true;
+    trap++;
+    paint();
+    await sleep(80);
+    busy = false;
+    if (trap >= 3) stB.disabled = true;
+  });
+  rstB.addEventListener("click", () => { trap = 0; busy = false; stB.disabled = false; paint(); });
+  ctr.append(stB, rstB);
+  K.$("#s9-seg").appendChild(seg(["which stack", "socket trap"], 0, (i) => {
+    mode = i;
+    modeBtns(ctr, mode);
+    paint();
+  }, "s9-mode"));
+  modeBtns(ctr, 0);
+  paint();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "A process already has descriptors 0, 1, and 2 open. What does the first successful open return?", options: ["0, because that is standard input", "1, because stdout is the default", "The smallest unused descriptor, which is 3", "−1 unless you pass O_CREAT"], answer: 2, why: "open always returns the smallest descriptor that is not currently open. With 0–2 taken, that is 3." },
+  { q: "Practice Problem 10.1: Open foo.txt, Close that fd, Open baz.txt. What is fd2?", options: ["3", "4", "2", "−1"], answer: 0, why: "The first Open returns 3. Close frees 3. The next Open returns 3 again, so the program prints fd2 = 3." },
+  { q: "foobar.txt is the six characters foobar. Two Opens, then Read a byte from each. What is c after the second Read?", options: ["o, because the shared bookmark moved", "f, because each descriptor has its own file position", "r, the last character", "0, meaning EOF"], answer: 1, why: "Figure 10.13 / Practice 10.2: two file table entries, two positions. Both reads start at the first byte, so c = f." },
+  { q: "Same file, one Open, then Fork. The child Reads one byte and exits. The parent Reads one byte. What is c?", options: ["f", "b", "o", "nothing — the child stole the descriptor"], answer: 2, why: "Parent and child share the file table entry, so they share the position. The child consumed f; the parent reads o." },
+  { q: "Why does rio_writen never return a short count (except on error)?", options: ["The kernel forbids short writes", "It only writes one byte at a time", "It uses fwrite, which is buffered", "It loops on write until all n bytes are transferred, restarting on EINTR"], answer: 3, why: "Figure 10.4: while nleft > 0, call write. EINTR retries. Only a real error returns −1. rio_readn can short only at EOF." },
+  { q: "Which Unix I/O function is illegal on a socket?", options: ["read", "write", "lseek", "close"], answer: 2, why: "The chapter’s socket/stdio discussion: it is illegal to use lseek on a socket, so you cannot reset the file position between stdio input and output." },
+  { q: "Which I/O should you use on a network socket?", options: ["Standard I/O, because it is buffered", "fopen on the hostname", "The Rio functions; avoid standard I/O", "scanf, then fflush"], answer: 2, why: "G3: use Rio on sockets. Standard I/O’s stream restrictions clash with sockets, and two fclose calls close one descriptor twice." },
+  { q: "What does S_ISREG(stat.st_mode) ask?", options: ["May the owner read this file?", "Is this a regular file?", "Is the file empty?", "Is this a network socket?"], answer: 1, why: "S_ISREG tests the type bits in st_mode. Owner-read is S_IRUSR. Sockets use S_ISSOCK. Figure 10.10 is the picture." },
+], 10);
+</script>
+</body>
+</html>

@@ -221,7 +221,7 @@
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>Principle (2.5): <code>T2U<sub>w</sub>(x) = x + 2<sup>w</sup></code> if x &lt; 0, else x. Principle (2.6): <code>U2T<sub>w</sub>(u) = u − 2<sup>w</sup></code> if u &gt; TMax, else u.</p>
+            <p>Principle (2.5): <code>T2U<sub>w</sub>(x) = x + 2<sup>w</sup></code> if x &lt; 0, else x. Principle (2.7): <code>U2T<sub>w</sub>(u) = u − 2<sup>w</sup></code> if u &gt; TMax, else u.</p>
             <p>“Most systems follow the rule that the underlying bit representation does not change.”</p>
             <p>Figure 2.19: <code>-1 &lt; 0U</code> evaluates to 0. “When either operand of a comparison is unsigned, the other operand is implicitly cast to unsigned.” Printing <code>int x = -1</code> with <code>%u</code> yields 4294967295.</p>
           </div>
@@ -280,7 +280,7 @@
           <div class="inner">
             <p>Opening example (p. 68): <code>200 * 300 * 400 * 500</code> yields −884,901,888. Multiplication is still associative: every parenthesization gives that same wrong number.</p>
             <p>Unsigned overflow iff <code>s &lt; x</code> (or <code>s &lt; y</code>). Two’s-complement overflow: negative overflow when x+y &lt; TMin, positive when x+y &gt; TMax (Figure 2.25).</p>
-            <p>Principle: <code>-<sup>t</sup> TMin<sub>w</sub> = TMin<sub>w</sub></code>. “TMin is its own additive inverse.”</p>
+            <p>Principle: <code>-<sup>t</sup> TMin<sub>w</sub> = TMin<sub>w</sub></code>. “TMin_w is its own additive inverse.”</p>
           </div>
         </details>
       </div>
@@ -332,7 +332,7 @@
           <div class="inner">
             <p>p. 69: “<code>(3.14+1e20)-1e20</code> will evaluate to 0.0 on most machines, while <code>3.14+(1e20-1e20)</code> will evaluate to 3.14.” Integers overflow to a wrap; floats overflow to +∞ and stay positive.</p>
             <p>Figure 2.32: single = 1+8+23 (bias 127), double = 1+11+52 (bias 1023). Figure 2.33: exp all 0 → denorm; all 1 → inf/NaN; else normalized with E = e − Bias, M = 1 + f.</p>
-            <p>Figure 2.35 (k=4, n=3, bias 7): largest denorm 7/64 and smallest norm 8/64 meet smoothly because denorms use E = 1 − Bias, not −Bias.</p>
+            <p>Figure 2.35 (k=4, n=3, bias 7): largest denorm 7/512 and smallest norm 8/512 meet smoothly because denorms use E = 1 − Bias, not −Bias.</p>
             <p>Default rounding is <b>round-to-even</b> (Figure 2.37).</p>
           </div>
         </details>

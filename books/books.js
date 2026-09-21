@@ -1,6 +1,18 @@
 /* The shelf. Add one entry per book you read, pointing at its folder under books/. */
 window.LIBRARY = [
   {
+    slug: "csapp",
+    path: "books/csapp/index.html",
+    title: "Bitville",
+    book: "Computer Systems: A Programmer's Perspective",
+    author: "Randal E. Bryant & David R. O'Hallaron",
+    spine: "CS:APP · 3rd ed.",
+    accent: "mint",
+    blurb: "What really happens between your program and the machine that runs it — bits, instructions, caches and processes.",
+    chapters: 12,
+    built: 12,
+  },
+  {
     slug: "ddia",
     path: "books/ddia/index.html",
     title: "Data Town",
@@ -11,17 +23,5 @@ window.LIBRARY = [
     blurb: "How real data systems store, copy, and agree on data — as machines you can poke, break, and fix.",
     chapters: 14,
     built: 14,
-  },
-  {
-    slug: "csapp",
-    path: "books/csapp/index.html",
-    title: "Bitville",
-    book: "Computer Systems: A Programmer's Perspective",
-    author: "Randal E. Bryant & David R. O'Hallaron",
-    spine: "CS:APP · 3rd ed.",
-    accent: "mint",
-    blurb: "What really happens between your program and the machine that runs it — bits, instructions, caches and processes.",
-    chapters: 12,
-    built: 2,
   },
 ];

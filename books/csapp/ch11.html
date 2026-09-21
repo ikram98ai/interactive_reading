@@ -1,0 +1,1133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 11 · Network Programming</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .eyebrow { color: var(--mint); }
+  .toc a:hover { border-color: var(--mint); color: var(--mint); }
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box { stroke: var(--mint); }
+  .fade { transition: opacity .3s; }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .first { font-size: 15.5px; color: var(--ink-2); background: var(--mint-soft); border-radius: var(--r-m); padding: 12px 14px; }
+  .first b { color: var(--ink); }
+  .hero-stage { aspect-ratio: auto; }
+  .hero-stage svg { width: 100%; height: auto; display: block; }
+  .stage, .stage-scroll { min-width: 0; max-width: 100%; }
+  .scene-grid, .scene-grid.flip { grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 901px) {
+    .scene-grid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+    .scene-grid.flip { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); }
+  }
+  .readings { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); }
+  .reading { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-s); padding: 10px 12px; }
+  .reading .k { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .reading .v { font-family: var(--f-mono); font-size: 15px; font-weight: 700; color: var(--ink); margin-top: 4px; word-break: break-all; }
+  .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  pre.code { margin: 0; padding: 12px 14px; background: var(--surface-2); border-top: 1px solid var(--line);
+             font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+             overflow-x: auto; white-space: pre-wrap; min-height: 72px; }
+  pre.code b { color: var(--ink); font-weight: 700; }
+  pre.code i { color: var(--ink-3); font-style: normal; }
+  @media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">11</span> Chapter eleven · Bitville</span>
+      <h1>Network Programming</h1>
+      <p class="lede">A browser and a server are just two programs passing notes. The notes travel as packets, the conversation is a connection, and the language they agree on is HTTP.</p>
+      <p class="quote">“all network applications are based on the same basic programming model, have similar overall logical structures, and rely on the same programming interface.”</p>
+      <p class="first"><b>New here?</b> Read the short story, then press the buttons on the picture. You cannot break it. The book’s exact figures, IP addresses, and Tiny traces live under “What the book says.”</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#model">Client–server</a>
+        <a href="#lan">Ethernet</a>
+        <a href="#ip">Packets</a>
+        <a href="#tcp">Connections</a>
+        <a href="#dns">DNS</a>
+        <a href="#sock">Sockets</a>
+        <a href="#endian">Byte order</a>
+        <a href="#http">HTTP</a>
+        <a href="#tiny">Tiny</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · one transaction</span><span class="pill info" id="hero-pill"><i></i>request</span></div>
+      <svg id="hero-svg" viewBox="0 0 680 210" role="img" aria-label="A client sending a request across the Internet to a server and getting a response back"></svg>
+      <div class="caption" aria-live="polite" id="hero-cap">Amara’s browser asks. Kenji’s server answers. The Internet is just the road in the middle.</div>
+    </div>
+  </section>
+
+  <section class="scene" id="model">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">11.1 · the client-server model</span>
+        <h2>Ask the shop, get a parcel back</h2>
+        <p class="story">Amara’s browser wants a page. Kenji’s program owns a shelf of files. She sends a note. He reads a file. He sends the file back. She draws it on the screen. That four-beat loop is a <b>transaction</b>.</p>
+        <p class="story">The shop and the customer are <b>processes</b>, not buildings. One laptop can run both. Two laptops can split them. The dance does not change.</p>
+        <p class="imagine"><b>Try it:</b> Step the four beats of Figure 11.1. Watch the request leave Amara, Kenji touch the disk, and the page fly home.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 11.1 is a four-step <b>client-server transaction</b>: the client sends a request; the server interprets it and manipulates a resource; the server sends a response; the client receives it. A Web server reads a disk file; an FTP server stores and retrieves files; an email server updates a spool file.</p>
+            <p>“Client-server transactions are not database transactions and do not share any of their properties, such as atomicity.” Here a transaction is only a sequence of steps.</p>
+            <p>Clients and servers are processes, not hosts. One host can run many of each. The model is the same whether they share a machine or sit on opposite sides of the Internet.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 11.1 · transaction</span><span class="pill" id="s1-pill">idle</span></div>
+        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 680 280" role="img" aria-label="Client, server, and disk resource stepping through a four-step transaction"></svg></div>
+        <div class="controls" id="s1-controls"></div>
+        <div class="caption" aria-live="polite" id="s1-cap">A transaction is a request, some work, a response, then the client uses it.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="lan">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">11.2 · networks and Ethernet</span>
+        <h2>Everyone hears the shout, one kid reads it</h2>
+        <p class="story">To a computer, the network is just another I/O gadget — a plug that can swallow bits or spit them out. The plug is a <b>network adapter</b> with a 48-bit name burned in.</p>
+        <p class="story">On a cheap Ethernet, a <b>hub</b> copies every bit to every wire. Lucia shouts “for Omar.” Priya hears it too, and ignores it. A <b>bridge</b> is nosier and wiser: it learns who lives on which wire and only copies when the shout must cross.</p>
+        <p class="imagine"><b>Try it:</b> Send a frame from A to B, then from A to C. Switch to the bridge and watch it throw a same-segment frame away.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 11.2: data arrive by DMA from the adapter across the I/O and memory buses. Ethernet began at Xerox PARC in the mid-1970s and grew from 3 Mb/s to 10 Gb/s. A segment (Figure 11.3) is wires plus a hub, typically 100 Mb/s or 1 Gb/s.</p>
+            <p>“A hub slavishly copies every bit that it receives on each port to every other port.” Each adapter has a globally unique 48-bit address. “Every host adapter sees the frame, but only the destination host actually reads it.”</p>
+            <p>Figure 11.4: bridges join segments into a bridged Ethernet. Bridge–bridge wires can run at 1 Gb/s while hub–bridge wires stay at 100 Mb/s. If host A sends to host B on the same segment, bridge X throws the frame away. If A sends to host C, X copies only toward bridge Y.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Frames on a wire</span><span id="s2-seg"></span></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 680 300" role="img" aria-label="Ethernet hosts around a hub, then a bridge that filters frames"></svg></div>
+        <div class="controls" id="s2-controls"></div>
+        <div class="caption" aria-live="polite" id="s2-cap">A hub floods. A bridge copies only when the destination lives on another port.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="ip">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">11.2–11.3 · internets and IP</span>
+        <h2>A letter, then a new envelope at the depot</h2>
+        <p class="story">Two neighbourhoods speak different wire languages. A <b>router</b> sits between them. Yara’s program hands bytes to the kernel. The kernel wraps them in an internet <b>packet</b>, then in a local frame addressed to the router — a parcel inside a parcel.</p>
+        <p class="story">At the depot the old street envelope comes off. A new one, written in the next neighbourhood’s script, goes on. The inner address never changes. That is how a <b>datagram</b> hops a mix of LANs and WANs.</p>
+        <p class="imagine"><b>Try it:</b> Step the wrap at host A, the hop at the router, and the unwrap at host B. The payload stays the same; only the outer header swaps.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>An internet (lowercase) is LANs and WANs joined by routers. The protocol gives a uniform naming scheme and bundles bits into packets: a header with size and addresses, plus a payload. Figure 11.7 walks eight steps from host A on LAN1 to host B on LAN2. The LAN1 frame payload is an internet packet. “This kind of encapsulation is one of the fundamental insights of internetworking.”</p>
+            <p>The router indexes a routing table, strips FH1, and prepends FH2. Host B strips both headers and copies the data into the server’s address space.</p>
+            <p>IP sends 32-bit-addressed datagrams and “makes no effort to recover if datagrams are lost or duplicated.” UDP extends that host-to-host service to processes. TCP builds reliable full-duplex connections on IP. The book treats TCP/IP as one protocol and does not discuss UDP. IPv6’s 128-bit addresses existed, but as of 2015 only 4 percent of users reached Google over IPv6, so the chapter stays on IPv4.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 11.7 · encapsulation</span><span class="pill" id="s3-pill">data</span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 680 300" role="img" aria-label="A packet gaining a LAN1 header, swapping it at a router, then unwrapping at host B"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <div class="caption" aria-live="polite" id="s3-cap">The internet header names host B. The frame header only has to reach the next hop.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="tcp">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">11.3.3 · connections and ports</span>
+        <h2>A private phone line, both can talk</h2>
+        <p class="story">Once two processes agree to talk, they have a <b>connection</b>: one pair of ends, both directions at once, and the bytes arrive in the order they were sent — unless a backhoe cuts the cable.</p>
+        <p class="story">Each end is a <b>socket</b> named <span class="mono">address:port</span>. The server usually sits on a well-known door (Web is 80, email is 25). The client gets a spare door the kernel picks — an <b>ephemeral port</b>. The pair of names is the connection’s ID.</p>
+        <p class="imagine"><b>Try it:</b> Read the book’s socket pair, then send HELLO. Drop the third letter: IP loses it; TCP still delivers H E L L O.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A connection is point-to-point, full duplex, and reliable: “the stream of bytes sent by the source process is eventually received by the destination process in the same order it was sent.”</p>
+            <p>A socket address is an IP address plus a 16-bit port, written <code>address:port</code>. Web servers typically use port 80 (<code>http</code> in <code>/etc/services</code>); email uses port 25 (<code>smtp</code>). The client port is assigned automatically. Figure 11.11’s socket pair is <code>(128.2.194.242:51213, 208.216.181.15:80)</code>.</p>
+            <p>IP datagrams can be lost or duplicated. TCP is the protocol that turns that unreliable hop-by-hop service into a reliable byte stream between processes. Software ports are not the hardware ports on a hub or router.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Socket pair · then a stream</span><span id="s4-seg"></span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 680 300" role="img" aria-label="A Web client and server connection, then a five-byte stream that IP can lose and TCP repairs"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <div class="stats" id="s4-stats" style="padding:10px 14px;border-top:1px solid var(--line)"></div>
+        <div class="caption" aria-live="polite" id="s4-cap">The connection is the pair of socket addresses. The stream is the bytes that ride it.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="dns">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">11.3.2 · domain names</span>
+        <h2>A name you can say, a number the wire uses</h2>
+        <p class="story">People remember <span class="mono">whaleshark.ics.cs.cmu.edu</span>. Programs dial <span class="mono">128.2.210.175</span>. The phone book that maps one to the other used to be a single file called <span class="mono">HOSTS.TXT</span>. Since 1988 it is a worldwide database: <b>DNS</b>.</p>
+        <p class="story">Some names share one number. Some names share a handful of numbers. Some perfectly legal names — like <span class="mono">edu</span> — have no address at all. And every host answers to <span class="mono">localhost</span> at 127.0.0.1, which is handy when the client and server are roommates.</p>
+        <p class="imagine"><b>Try it:</b> Look up the book’s names. twitter.com returns four addresses; edu returns none.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 11.10: an unnamed root, then ICANN first-level names (<code>com</code>, <code>edu</code>, <code>gov</code>, <code>org</code>, <code>net</code>), then second-level names such as <code>cmu.edu</code>. An organisation that owns a second-level name may create <code>cs.cmu.edu</code> and so on.</p>
+            <p><code>localhost</code> always maps to the loopback address 127.0.0.1. <code>whaleshark.ics.cs.cmu.edu</code> maps one-to-one to 128.2.210.175. <code>cs.mit.edu</code> and <code>eecs.mit.edu</code> both map to 18.62.1.6. <code>www.twitter.com</code> and <code>twitter.com</code> share 199.16.156.6, .70, .102, and .230. <code>nslookup edu</code> and <code>ics.cs.cmu.edu</code> print “No answer.”</p>
+            <p>Until 1988 the map lived in HOSTS.TXT. The Internet Domain Survey counted about 20,000 hosts in 1987 and over 1,000,000,000 by 2015.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">nslookup · Figure 11.10</span><span class="pill" id="s5-pill">pick a name</span></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 680 300" role="img" aria-label="DNS lookups from the book, from localhost to twitter.com"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="caption" aria-live="polite" id="s5-cap">A host entry is a set of names glued to a set of addresses — not always one-to-one.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="sock">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">11.4 · the sockets interface</span>
+        <h2>Open the shop, then wait by the door</h2>
+        <p class="story">Kenji opens a socket — to the kernel that is just another file descriptor. He pins it to port 80 (<b>bind</b>), hangs a “we are a shop” sign (<b>listen</b>), and blocks in <b>accept</b>. That listening descriptor stays for the life of the server.</p>
+        <p class="story">Amara opens her own socket and <b>connect</b>s. Accept wakes up and hands Kenji a <i>new</i> descriptor, <span class="mono">connfd</span>, just for her. The old door keeps waiting for the next customer. That split is why a later chapter can serve many clients at once.</p>
+        <p class="imagine"><b>Try it:</b> Step Figure 11.14. The shop is listenfd 3; the private counter is connfd 4.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Berkeley sockets arrived in the early 1980s in Unix 4.2BSD. Figure 11.12 is the road map: the server calls <code>socket</code>, <code>bind</code>, <code>listen</code>, <code>accept</code>; the client calls <code>socket</code> and <code>connect</code>. Helpers <code>open_listenfd</code> and <code>open_clientfd</code> wrap <code>getaddrinfo</code> so the same C works for any IP version.</p>
+            <p><code>listen</code> turns an active socket into a listening socket. The <code>backlog</code> is a hint; the book typically uses 1,024. Figure 11.14: the server blocks in <code>accept</code> on <code>listenfd</code> (descriptor 3; 0–2 are the standard files). The client blocks in <code>connect</code>. <code>accept</code> returns <code>connfd</code> 4. The listening descriptor lives for the server’s lifetime; the connected one lasts for one client.</p>
+            <p>The echo server in Figure 11.20–11.22 is iterative: one client at a time. Chapter 12 builds concurrent servers. EOF on a connection is not a character; it is the kernel reporting that the peer closed its end.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 11.14 · the dance</span><span class="pill" id="s6-pill">closed</span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 680 300" role="img" aria-label="Server socket bind listen accept and client connect, showing listenfd versus connfd"></svg></div>
+        <div class="controls" id="s6-controls"></div>
+        <div class="caption" aria-live="polite" id="s6-cap">listenfd is the shop door. connfd is the table for one guest.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="endian">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">11.3.1 · 11.4.1 · addresses and byte order</span>
+        <h2>The postcard always writes the big end first</h2>
+        <p class="story">An IPv4 address is a 32-bit unsigned integer. Humans write it dotted: 128.2.194.242. That is hex <span class="mono">0x8002c2f2</span>. Different chips store a 32-bit word in opposite byte orders, so the Internet picked one: <b>network byte order</b>, which is big-endian.</p>
+        <p class="story"><span class="mono">htonl</span> and <span class="mono">htons</span> pack host integers for the wire. <span class="mono">ntohl</span> and <span class="mono">ntohs</span> unpack them. A <span class="mono">sockaddr_in</span> is 16 bytes: family <span class="mono">AF_INET</span>, a 16-bit port, a 32-bit address (both already in network order), and eight pad bytes so it matches a generic <span class="mono">sockaddr</span>.</p>
+        <p class="imagine"><b>Try it:</b> Flip host order versus network order for 128.2.194.242, then pack port 80 with <code>htons</code>.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 11.9: <code>struct in_addr { uint32_t s_addr; }</code> — always network (big-endian) byte order. 128.2.194.242 is 0x8002c2f2. <code>hostname -i</code> on the book’s host printed 128.2.210.175. Convert with <code>inet_pton</code> / <code>inet_ntop</code> (“p” = presentation, “n” = network). They also accept <code>AF_INET6</code>, which the book does not cover.</p>
+            <p><code>htonl</code> / <code>ntohl</code> convert 32-bit values; <code>htons</code> / <code>ntohs</code> convert 16-bit values. There are no 64-bit twins. Practice 11.1 asks you to fill a dotted-decimal ↔ hex table, including 0x00000080, 0xFFFFFF00, and 0x0A010140.</p>
+            <p>Figure 11.13: <code>sockaddr_in</code> has <code>sin_family</code> (always <code>AF_INET</code>), <code>sin_port</code>, <code>sin_addr</code>, and <code>sin_zero[8]</code>. The “_in” suffix means internet, not input. Sockets calls take a generic <code>sockaddr *</code>; the book typedefs it <code>SA</code>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">0x8002c2f2 · then sockaddr_in</span><span id="s7-seg"></span></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 680 280" role="img" aria-label="Dotted-decimal bytes in host and network order, then a sockaddr_in layout"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="caption" aria-live="polite" id="s7-cap">The wire is big-endian. A little-endian host must swap before it copies an address into a packet.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="http">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">11.5 · Web servers</span>
+        <h2>A note that starts GET, a reply that starts 200</h2>
+        <p class="story">Mateo types in a browser. Under the paint, the browser opens a connection and writes text: a <b>request line</b> <span class="mono">GET / HTTP/1.1</span>, then headers, then a blank line. HTTP/1.1 insists on a <span class="mono">Host</span> header so a proxy knows whose copy to fetch.</p>
+        <p class="story">The server answers with a <b>status</b> (<span class="mono">200 OK</span>, or 404, or 501), a <span class="mono">Content-Type</span> such as <span class="mono">text/html</span>, a length, a blank line, then the body. Static content is a file. Dynamic content is the output of a program, often a CGI child that reads <span class="mono">QUERY_STRING</span>.</p>
+        <p class="imagine"><b>Try it:</b> Step the book’s telnet to www.aol.com, then the adder CGI that prints 15000 + 213 = 15213.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 11.24: <code>telnet www.aol.com 80</code> reaches 205.188.146.23. The client sends <code>GET / HTTP/1.1</code> and <code>Host: www.aol.com</code>, then a blank line. Each line ends in <code>\r\n</code>. The server replies <code>HTTP/1.0 200 OK</code>, <code>Content-Type: text/html</code>, <code>Content-Length: 42092</code>, then HTML, then closes. The Host header is “required in HTTP/1.1 requests, but not in HTTP/1.0 requests.”</p>
+            <p>A request line is <code>method URI version</code>. Methods include GET, POST, OPTIONS, HEAD, PUT, DELETE, and TRACE; the chapter discusses GET. Figure 11.25: 200 OK, 301, 400, 403, 404, 501, 505. Figure 11.23 lists MIME types including <code>text/html</code>, <code>text/plain</code>, <code>image/gif</code>, <code>image/png</code>, and <code>image/jpeg</code>.</p>
+            <p>URL <code>http://www.google.com:80/index.html</code> — port 80 is optional. Dynamic example: <code>http://bluefish.ics.cs.cmu.edu:8000/cgi-bin/adder?15000&amp;213</code>. Figure 11.28: Tiny plus adder return 115 bytes of HTML, “The answer is: 15000 + 213 = 15213”. The child sets <code>QUERY_STRING</code> and <code>dup2</code>s stdout onto the connected descriptor.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">telnet · request then reply</span><span id="s8-seg"></span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 680 320" role="img" aria-label="An HTTP GET to AOL and a CGI adder transaction from the book"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <pre class="code" id="s8-code"></pre>
+        <div class="caption" aria-live="polite" id="s8-cap">A blank line ends the headers. Then the body — a file, or whatever the CGI child prints.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="tiny">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">11.6 · the Tiny Web server</span>
+        <h2>Two hundred and fifty lines, one GET at a time</h2>
+        <p class="story">Tiny is Kenji’s shop in 250 lines of C. It listens, accepts, calls <span class="mono">doit</span>, and closes. <span class="mono">doit</span> reads the request line. If the method is not GET, it answers 501 and goes back to the door.</p>
+        <p class="story">A URI with <span class="mono">cgi-bin</span> is dynamic: fork, set <span class="mono">QUERY_STRING</span>, point stdout at the client, <span class="mono">execve</span>. Anything else is a file under the current directory; a trailing slash becomes <span class="mono">./home.html</span>. Missing file: 404. No read or execute permission: 403.</p>
+        <p class="imagine"><b>Try it:</b> Fire the book’s adder GET, a static home page, a POST (501), and a missing file (404).</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 11.29: iterative HTTP/1.0 server, GET only, about 250 lines. <code>open_listenfd</code>, then loop <code>Accept</code> / <code>doit</code> / <code>Close</code>. Figure 11.30 <code>doit</code>: parse the request line; reject non-GET with 501; <code>read_requesthdrs</code> (Figure 11.32) prints headers and ignores them; <code>parse_uri</code> then <code>stat</code>.</p>
+            <p>Figure 11.33: no <code>cgi-bin</code> means static — filename is <code>.</code> plus the URI, and a trailing <code>/</code> appends <code>home.html</code>. With <code>cgi-bin</code>, arguments after <code>?</code> become CGI args. <code>serve_static</code> (Figure 11.34) sends <code>HTTP/1.0 200 OK</code>, <code>Server: Tiny Web Server</code>, then <code>mmap</code>s the file. Types: <code>.html</code>, <code>.gif</code>, <code>.png</code>, <code>.jpg</code>, else <code>text/plain</code>.</p>
+            <p>Figure 11.35 <code>serve_dynamic</code>: write the 200 line and Server header, <code>fork</code>, <code>setenv("QUERY_STRING", …)</code>, <code>Dup2(fd, STDOUT_FILENO)</code>, <code>Execve</code>; the parent <code>Wait</code>s. A write to a client that already clicked Stop can raise SIGPIPE / EPIPE (“Broken pipe”). Tiny does not catch that.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stack">
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">tiny.c · doit</span><span class="pill" id="s9-pill">idle</span></div>
+          <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 680 300" role="img" aria-label="Tiny parsing a GET and serving static content, CGI, or an error"></svg></div>
+          <div class="controls" id="s9-controls"></div>
+          <pre class="code" id="s9-code"></pre>
+          <div class="caption" aria-live="polite" id="s9-cap">One connection, one doit, then close. The next client waits in line.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The seesaws from this chapter</h2><p>Each row is a choice the network, the kernel, or Tiny makes. Chapter 12 opens the door to serving many clients at once.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>Hub</h4><p>Every bit to every port. Simple, wasteful.</p></div><div class="vs">vs</div><div class="side"><h4>Bridge</h4><p>Learns who lives where. Copies only if needed.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>IP datagram</h4><p>Names a host. May be lost or duplicated.</p></div><div class="vs">vs</div><div class="side"><h4>TCP stream</h4><p>Names a process pair. Same bytes, same order.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>IPv4</h4><p>32-bit addresses. What this chapter actually uses.</p></div><div class="vs">vs</div><div class="side"><h4>IPv6</h4><p>128-bit. The APIs work for both; the book skips the details.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Well-known port</h4><p>80 is http, 25 is smtp. The shop’s street number.</p></div><div class="vs">vs</div><div class="side"><h4>Ephemeral port</h4><p>The kernel picks one for the client, like 51213.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>listenfd</h4><p>One door, lives as long as the server.</p></div><div class="vs">vs</div><div class="side"><h4>connfd</h4><p>One table per guest, then close.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>HTTP/1.0</h4><p>Simple. Host header optional. One transaction, then close.</p></div><div class="vs">vs</div><div class="side"><h4>HTTP/1.1</h4><p>Host required. Caching, security, persistent connections.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Static</h4><p>mmap a file, send the bytes, done.</p></div><div class="vs">vs</div><div class="side"><h4>Dynamic</h4><p>fork a CGI child; it writes the body to stdout.</p></div></div>
+      </div>
+      <div class="themes" style="margin-top:18px">
+        <div class="card"><h3>What we skipped</h3><p>The full <code>getaddrinfo</code> flag list and <code>addrinfo</code> walk, the echo client/server C listings (Figures 11.20–11.22), <code>open_clientfd</code> / <code>open_listenfd</code> source, Tiny’s <code>clienterror</code> HTML, <code>mmap</code> leak notes, SIGPIPE handling, and every homework extension (HEAD, POST, MPG, SIGCHLD). The book also leaves UDP and IPv6 internals aside on purpose.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>The chapter’s grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>transaction</dt><dd>Request, server work, response, client work. Not a database transaction.</dd></div>
+        <div class="word"><dt>adapter</dt><dd>The I/O card with a 48-bit Ethernet address that moves frames to memory, often by DMA.</dd></div>
+        <div class="word"><dt>hub / bridge</dt><dd>A hub copies every bit to every port. A bridge learns and copies only when it must.</dd></div>
+        <div class="word"><dt>internet / Internet</dt><dd>Lowercase: any mesh of LANs and WANs plus routers. Uppercase: the global IP one.</dd></div>
+        <div class="word"><dt>datagram</dt><dd>An IP packet. Best-effort: it may be lost or duplicated.</dd></div>
+        <div class="word"><dt>encapsulation</dt><dd>A packet stuffed inside a frame. The next hop peels the outer header and writes a new one.</dd></div>
+        <div class="word"><dt>domain name</dt><dd>A path in the DNS tree, such as whaleshark.ics.cs.cmu.edu.</dd></div>
+        <div class="word"><dt>connection</dt><dd>A reliable, full-duplex, point-to-point byte stream between two processes.</dd></div>
+        <div class="word"><dt>socket pair</dt><dd>The two socket addresses that uniquely name a connection.</dd></div>
+        <div class="word"><dt>ephemeral port</dt><dd>The 16-bit number the kernel assigns the client for one connection.</dd></div>
+        <div class="word"><dt>network byte order</dt><dd>Big-endian. What <code>s_addr</code> and <code>sin_port</code> always use.</dd></div>
+        <div class="word"><dt>listenfd / connfd</dt><dd>The long-lived shop door versus the per-client table.</dd></div>
+        <div class="word"><dt>URI / URL</dt><dd>URI is the suffix the server sees (<code>/index.html</code>). URL is the whole thing, including host and port.</dd></div>
+        <div class="word"><dt>MIME type</dt><dd>A label on a byte sequence, such as text/html or image/jpeg.</dd></div>
+        <div class="word"><dt>CGI</dt><dd>Rules for dynamic content: arguments in QUERY_STRING, output on stdout.</dd></div>
+        <div class="word"><dt>Tiny</dt><dd>The book’s iterative HTTP/1.0 GET server, about 250 lines, static and CGI.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width:820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Eight questions. Finish all eight to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible } = K;
+K.page(11);
+const cap = (id, html) => { K.$(id).innerHTML = html; };
+
+function box(parent, x, y, w, hgt, cls, title, sub) {
+  const r = s("rect", { x, y, width: w, height: hgt, rx: 10, class: cls });
+  parent.appendChild(r);
+  const ty = sub ? y + hgt / 2 - 4 : y + hgt / 2 + 5;
+  const t = s("text", { x: x + w / 2, y: ty, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700, fontSize: "13px" } }, title || "");
+  parent.appendChild(t);
+  let u = null;
+  if (sub) {
+    u = s("text", { x: x + w / 2, y: y + hgt / 2 + 14, class: "sv-label", "text-anchor": "middle" }, sub);
+    parent.appendChild(u);
+  }
+  return { r, t, u, x, y, w, h: hgt, cx: x + w / 2, cy: y + hgt / 2 };
+}
+
+function setCls(el, cls) { el.setAttribute("class", cls); }
+function vis(el, on) { if (el) el.setAttribute("visibility", on ? "visible" : "hidden"); }
+function visBox(b, on) { vis(b.r, on); vis(b.t, on); if (b.u) vis(b.u, on); }
+
+/* ================= HERO ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const client = box(svg, 24, 48, 150, 78, "sv-server", "browser", "Amara");
+  const net = box(svg, 236, 48, 208, 78, "sv-panel", "Internet", "hosts + routers");
+  const server = box(svg, 506, 48, 150, 78, "sv-good", "Web server", "Kenji");
+  svg.append(draw.arrow(174, 87, 236, 87), draw.arrow(444, 87, 506, 87));
+  const line = s("text", { x: 340, y: 168, class: "sv-text", "text-anchor": "middle" }, "");
+  const foot = s("text", { x: 340, y: 194, class: "sv-label", "text-anchor": "middle" }, "tap to step  ·  Figure 11.1");
+  svg.append(line, foot);
+  const STEPS = [
+    { cls: ["sv-data-soft", "sv-panel", "sv-good"], pill: "request", line: "GET /index.html", why: "Amara’s process sends a request. The Internet is just another I/O device in the middle." },
+    { cls: ["sv-server", "sv-panel", "sv-data-soft"], pill: "process", line: "read disk file", why: "Kenji’s process interprets the request and reads a resource — here a disk file." },
+    { cls: ["sv-server", "sv-panel", "sv-good"], pill: "response", line: "200 OK  ·  text/html", why: "Because the file is there, the server writes a response and waits for the next client." },
+    { cls: ["sv-good", "sv-panel", "sv-server"], pill: "display", line: "Amara draws the page", why: "The client receives the bytes and displays them. Clients and servers are processes, not machines." },
+  ];
+  let i = 0, visOn = false;
+  function paint() {
+    const st = STEPS[i];
+    setCls(client.r, st.cls[0]); setCls(net.r, st.cls[1]); setCls(server.r, st.cls[2]);
+    line.textContent = st.line;
+    K.$("#hero-pill").innerHTML = `<i></i>${st.pill}`;
+    cap("#hero-cap", st.why);
+  }
+  paint();
+  whenVisible(svg, () => (visOn = true), () => (visOn = false));
+  (async function auto() {
+    await sleep(900);
+    for (;;) {
+      if (visOn && !K.reduced && !document.hidden) { i = (i + 1) % STEPS.length; paint(); }
+      await sleep(1700);
+    }
+  })();
+  svg.style.cursor = "pointer";
+  svg.addEventListener("click", () => { i = (i + 1) % STEPS.length; paint(); });
+})();
+
+/* ================= 1. MODEL ================= */
+(function model() {
+  const svg = K.$("#s1-svg");
+  const client = box(svg, 24, 36, 170, 80, "sv-server", "client", "browser");
+  const server = box(svg, 255, 36, 170, 80, "sv-panel", "server", "Web process");
+  const disk = box(svg, 486, 36, 170, 80, "sv-db", "resource", "disk files");
+  svg.append(draw.arrow(194, 76, 255, 76), draw.arrow(425, 76, 486, 76));
+  const beat = box(svg, 24, 150, 632, 70, "sv-panel", "idle", "Figure 11.1");
+  const layer = s("g");
+  svg.appendChild(layer);
+  const CAPS = [
+    "Four processes could share one host. The picture still has a client, a server, and a resource.",
+    "Because Amara needs a file, her process initiates the transaction with a request.",
+    "The server interprets the request and reads the disk file — that is the resource it manages.",
+    "The server sends the file back, then waits for the next request.",
+    "The client receives the page and displays it. The transaction is over.",
+  ];
+  let step = 0, busy = false;
+  function paint() {
+    const titles = ["idle", "1 · request", "2 · process", "3 · response", "4 · display"];
+    beat.t.textContent = titles[step];
+    beat.u.textContent = step === 0 ? "press Step" : "Figure 11.1";
+    setCls(client.r, step === 1 || step === 4 ? "sv-good" : "sv-server");
+    setCls(server.r, step === 2 || step === 3 ? "sv-good" : "sv-panel");
+    setCls(disk.r, step === 2 ? "sv-data-soft" : "sv-db");
+    K.$("#s1-pill").textContent = titles[step];
+    cap("#s1-cap", CAPS[step]);
+  }
+  const ctr = K.$("#s1-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const playB = h("button", { class: "btn", type: "button" }, "Play");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  const lock = (on) => { stepB.disabled = on || step >= 4; playB.disabled = on || step >= 4; };
+  async function go() {
+    if (busy || step >= 4) return;
+    busy = true; lock(true);
+    step++;
+    if (step === 1) {
+      const p = draw.tag("GET /");
+      layer.appendChild(p);
+      await fly(p, [client.cx, 20], [server.cx, 20], 520);
+      p.remove();
+    } else if (step === 2) {
+      const p = draw.tag("file");
+      layer.appendChild(p);
+      await fly(p, [disk.cx, 20], [server.cx, 20], 420);
+      p.remove();
+    } else if (step === 3) {
+      const p = draw.tag("200 OK");
+      layer.appendChild(p);
+      await fly(p, [server.cx, 20], [client.cx, 20], 520);
+      p.remove();
+    }
+    paint();
+    busy = false; lock(false);
+  }
+  stepB.addEventListener("click", go);
+  playB.addEventListener("click", async () => {
+    if (busy) return;
+    while (step < 4) { await go(); await sleep(280); }
+  });
+  resetB.addEventListener("click", () => { step = 0; busy = false; paint(); lock(false); });
+  ctr.append(stepB, playB, resetB);
+  paint();
+})();
+
+/* ================= 2. LAN ================= */
+(function lan() {
+  const svg = K.$("#s2-svg");
+  const hubG = s("g"), brG = s("g");
+  svg.append(hubG, brG);
+  const hA = box(hubG, 24, 28, 150, 70, "sv-server", "Host A", "adapter");
+  const hB = box(hubG, 265, 28, 150, 70, "sv-server", "Host B", "adapter");
+  const hC = box(hubG, 506, 28, 150, 70, "sv-server", "Host C", "adapter");
+  const hub = box(hubG, 220, 160, 240, 70, "sv-panel", "hub", "copies every bit");
+  hubG.append(draw.arrow(hA.cx, 98, hub.cx - 50, 160), draw.arrow(hB.cx, 98, hub.cx, 160), draw.arrow(hC.cx, 98, hub.cx + 50, 160));
+  const bA = box(brG, 24, 28, 130, 70, "sv-server", "Host A", "segment 1");
+  const bB = box(brG, 168, 28, 130, 70, "sv-server", "Host B", "segment 1");
+  const bX = box(brG, 332, 28, 130, 70, "sv-panel", "Bridge X", "learns ports");
+  const bC = box(brG, 526, 28, 130, 70, "sv-server", "Host C", "segment 2");
+  const note = s("text", { x: 340, y: 268, class: "sv-text", "text-anchor": "middle" }, "");
+  svg.appendChild(note);
+  const layer = s("g");
+  svg.appendChild(layer);
+  let mode = 0, busy = false, last = "—";
+  function showMode() {
+    vis(hubG, mode === 0);
+    vis(brG, mode === 1);
+    [sendAB, sendAC].forEach((b) => { b.style.display = ""; b.disabled = false; });
+  }
+  function resetCols() {
+    [hA, hB, hC, hub].forEach((b) => setCls(b.r, b === hub ? "sv-panel" : "sv-server"));
+    [bA, bB, bX, bC].forEach((b) => setCls(b.r, b === bX ? "sv-panel" : "sv-server"));
+  }
+  function paintIdle() {
+    resetCols();
+    note.textContent = mode === 0 ? "100 Mb/s wires  ·  48-bit adapter names" : "A and B share a segment  ·  C is across X";
+    cap("#s2-cap", mode === 0
+      ? "A hub slavishly copies every bit to every other port. Send a frame and watch all three adapters see it."
+      : "A bridge copies only when the destination lives on another port. Try A→B, then A→C.");
+  }
+  const ctr = K.$("#s2-controls");
+  const sendAB = h("button", { class: "btn primary", type: "button" }, "Send A → B");
+  const sendAC = h("button", { class: "btn", type: "button" }, "Send A → C");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  async function send(dest) {
+    if (busy) return;
+    busy = true; sendAB.disabled = true; sendAC.disabled = true;
+    resetCols();
+    const tag = draw.tag("A→" + dest);
+    layer.appendChild(tag);
+    if (mode === 0) {
+      const destBox = dest === "B" ? hB : hC;
+      setCls(hA.r, "sv-data-soft");
+      await fly(tag, [hA.cx, 18], [hub.cx, 150], 400);
+      setCls(hub.r, "sv-data-soft");
+      await fly(tag, [hub.cx, 150], [destBox.cx, 18], 400);
+      tag.remove();
+      setCls(hA.r, "sv-server");
+      setCls(hB.r, dest === "B" ? "sv-good" : "sv-data-soft");
+      setCls(hC.r, dest === "C" ? "sv-good" : "sv-data-soft");
+      setCls(hub.r, "sv-panel");
+      note.textContent = "every adapter saw the frame";
+      cap("#s2-cap", `Because the hub copies every bit, Hosts A, B, and C all see the frame. Only Host ${dest} actually reads it.`);
+    } else {
+      setCls(bA.r, "sv-data-soft");
+      await fly(tag, [bA.cx, 18], [bX.cx, 18], 420);
+      if (dest === "B") {
+        setCls(bX.r, "sv-bad");
+        setCls(bB.r, "sv-good");
+        tag.remove();
+        note.textContent = "X throws the frame away";
+        cap("#s2-cap", "A and B sit on the same segment. Because X has learned that, it discards the frame and saves the wire toward C.");
+      } else {
+        setCls(bX.r, "sv-good");
+        await fly(tag, [bX.cx, 18], [bC.cx, 18], 420);
+        tag.remove();
+        setCls(bC.r, "sv-good");
+        note.textContent = "X copies only toward C";
+        cap("#s2-cap", "C lives on another port. X forwards the frame that way only — not back onto every wire, the way a hub would.");
+      }
+    }
+    last = dest;
+    busy = false; sendAB.disabled = false; sendAC.disabled = false;
+  }
+  sendAB.addEventListener("click", () => send("B"));
+  sendAC.addEventListener("click", () => send("C"));
+  resetB.addEventListener("click", () => { busy = false; last = "—"; paintIdle(); sendAB.disabled = false; sendAC.disabled = false; });
+  ctr.append(sendAB, sendAC, resetB);
+  K.$("#s2-seg").appendChild(seg(["hub", "bridge"], 0, (i) => {
+    mode = i; busy = false; showMode(); paintIdle();
+  }, "s2-mode"));
+  showMode();
+  paintIdle();
+})();
+
+/* ================= 3. IP ================= */
+(function ip() {
+  const svg = K.$("#s3-svg");
+  const hostA = box(svg, 24, 28, 180, 64, "sv-server", "Host A", "LAN1 client");
+  const router = box(svg, 250, 28, 180, 64, "sv-panel", "Router", "strip / prepend");
+  const hostB = box(svg, 476, 28, 180, 64, "sv-good", "Host B", "LAN2 server");
+  const layers = [
+    box(svg, 90, 120, 140, 56, "sv-data-soft", "Data", "user bytes"),
+    box(svg, 270, 120, 140, 56, "sv-panel", "PH", "internet hdr"),
+    box(svg, 450, 120, 140, 56, "sv-panel", "FH", "frame hdr"),
+  ];
+  const foot = s("text", { x: 340, y: 214, class: "sv-text", "text-anchor": "middle" }, "");
+  const sub = s("text", { x: 340, y: 242, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(foot, sub);
+  const layer = s("g");
+  svg.appendChild(layer);
+  const STEPS = [
+    { who: 0, fh: "—", ph: "off", data: "on", foot: "bytes sit in a kernel buffer", sub: "system call copied them from the client", pill: "data" },
+    { who: 0, fh: "FH1", ph: "on", data: "on", foot: "LAN1 frame = FH1 + PH + Data", sub: "PH names host B  ·  FH1 names the router", pill: "wrap A" },
+    { who: 1, fh: "FH2", ph: "on", data: "on", foot: "router swaps the frame header", sub: "PH stays  ·  new FH2 names host B", pill: "hop" },
+    { who: 2, fh: "—", ph: "off", data: "on", foot: "B strips PH and FH2", sub: "read() copies Data into the server", pill: "unwrap B" },
+  ];
+  let step = 0, busy = false;
+  function paint() {
+    const st = STEPS[step];
+    [hostA, router, hostB].forEach((b, i) => setCls(b.r, i === st.who ? "sv-good" : "sv-panel"));
+    setCls(layers[0].r, "sv-data-soft");
+    layers[0].t.textContent = "Data";
+    setCls(layers[1].r, st.ph === "on" ? "sv-server" : "sv-box");
+    layers[1].t.textContent = st.ph === "on" ? "PH" : "no PH";
+    setCls(layers[2].r, st.fh === "—" ? "sv-box" : "sv-db");
+    layers[2].t.textContent = st.fh === "—" ? "no FH" : st.fh;
+    foot.textContent = st.foot;
+    sub.textContent = st.sub;
+    K.$("#s3-pill").textContent = st.pill;
+    const caps = [
+      "Host A’s client invoked a system call. The data now sit in a kernel buffer, not yet a packet.",
+      "Because LAN1 and LAN2 speak different frame formats, A wraps an internet header plus a LAN1 frame header. The packet is the payload of the frame.",
+      "The router reads the destination from PH, indexes a routing table, strips FH1, and prepends FH2 addressed to B.",
+      "B’s protocol software peels PH and FH2. A later read copies the original bytes into the server process.",
+    ];
+    cap("#s3-cap", caps[step]);
+  }
+  const ctr = K.$("#s3-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || step >= 3) return;
+    busy = true; stepB.disabled = true;
+    const p = draw.tag("pkt");
+    layer.appendChild(p);
+    const from = [hostA, hostA, router][step];
+    const to = [hostA, router, hostB][step];
+    await fly(p, [from.cx, 18], [to.cx, 18], 480);
+    p.remove();
+    step++;
+    paint();
+    busy = false; stepB.disabled = step >= 3;
+  });
+  resetB.addEventListener("click", () => { step = 0; busy = false; stepB.disabled = false; paint(); });
+  ctr.append(stepB, resetB);
+  paint();
+})();
+
+/* ================= 4. TCP ================= */
+(function tcp() {
+  const svg = K.$("#s4-svg");
+  const pairG = s("g"), streamG = s("g");
+  svg.append(pairG, streamG);
+  const cli = box(pairG, 24, 36, 220, 80, "sv-server", "128.2.194.242", ":51213 ephemeral");
+  const srv = box(pairG, 436, 36, 220, 80, "sv-good", "208.216.181.15", ":80  http");
+  pairG.appendChild(draw.arrow(244, 76, 436, 76));
+  const pairT = s("text", { x: 340, y: 160, class: "sv-text", "text-anchor": "middle" }, "");
+  const pairU = s("text", { x: 340, y: 188, class: "sv-label", "text-anchor": "middle" }, "");
+  pairG.append(pairT, pairU);
+  const src = box(streamG, 24, 28, 150, 64, "sv-server", "sender", "write bytes");
+  const wire = box(streamG, 220, 28, 240, 64, "sv-panel", "IP cloud", "may drop");
+  const dst = box(streamG, 506, 28, 150, 64, "sv-good", "receiver", "read stream");
+  const slots = [0, 1, 2, 3, 4].map((i) => box(streamG, 50 + i * 118, 130, 100, 64, "sv-panel", "·", "byte " + i));
+  const streamNote = s("text", { x: 340, y: 228, class: "sv-label", "text-anchor": "middle" }, "");
+  streamG.appendChild(streamNote);
+  const layer = s("g");
+  svg.appendChild(layer);
+  const stB = { sent: stat("sent", "0"), got: stat("arrived", "0") };
+  K.$("#s4-stats").append(stB.sent, stB.got);
+  let mode = 0, proto = 1, lost = false, arrived = [], sentN = 0, busy = false;
+  const LETTERS = ["H", "E", "L", "L", "O"];
+  function showMode() {
+    vis(pairG, mode === 0);
+    vis(streamG, mode === 1);
+    [sendB, dropB, protoB].forEach((b) => {
+      const on = mode === 1;
+      b.style.display = on ? "" : "none";
+      b.disabled = !on;
+    });
+    K.$("#s4-stats").style.display = mode === 1 ? "" : "none";
+  }
+  function paintPair() {
+    pairT.textContent = "(128.2.194.242:51213,  208.216.181.15:80)";
+    pairU.textContent = "socket pair  ·  Figure 11.11";
+    cap("#s4-cap", "Because both ends are named, this Web connection is unique. Port 80 is the well-known http door; 51213 is the ephemeral port the client kernel picked.");
+  }
+  function paintStream() {
+    LETTERS.forEach((_, i) => {
+      const got = arrived[i];
+      slots[i].t.textContent = got || "·";
+      setCls(slots[i].r, got ? "sv-good" : (lost && proto === 0 && i === 2 ? "sv-bad" : "sv-panel"));
+    });
+    setCls(wire.r, proto === 0 ? "sv-bad" : "sv-panel");
+    wire.t.textContent = proto === 0 ? "IP only" : "TCP / IP";
+    wire.u.textContent = proto === 0 ? "best effort" : "reliable stream";
+    streamNote.textContent = proto === 0 ? "datagrams may vanish" : "same bytes, same order";
+    stB.sent.set(String(sentN));
+    stB.got.set(String(arrived.filter(Boolean).length), arrived.filter(Boolean).length === 5 ? "good" : sentN ? "warn" : "");
+    protoB.textContent = proto === 0 ? "Use TCP" : "Use IP only";
+    cap("#s4-cap", proto === 1
+      ? (lost
+        ? "IP lost the third datagram. Because TCP promises a reliable stream, the missing L is sent again and HELLO arrives in order."
+        : "TCP delivers HELLO as a byte stream. Full duplex: the other process could write at the same time.")
+      : (lost
+        ? "Because IP makes no effort to recover, the third datagram is gone. The receiver sees HE·LO."
+        : "IP delivered every datagram this time. Next time a hop might drop one — there is no retry at this layer."));
+  }
+  const ctr = K.$("#s4-controls");
+  const sendB = h("button", { class: "btn primary", type: "button" }, "Send HELLO");
+  const dropB = h("button", { class: "btn", type: "button" }, "Drop byte 3");
+  const protoB = h("button", { class: "btn", type: "button" }, "Use IP only");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  sendB.addEventListener("click", async () => {
+    if (busy || mode !== 1) return;
+    busy = true; sendB.disabled = true;
+    arrived = []; sentN = 0;
+    paintStream();
+    for (let i = 0; i < 5; i++) {
+      sentN++;
+      if (lost && proto === 0 && i === 2) {
+        const p = draw.tag("L");
+        layer.appendChild(p);
+        await fly(p, [src.cx, 18], [wire.cx, 18], 280);
+        p.remove();
+        setCls(wire.r, "sv-bad");
+        paintStream();
+        await sleep(200);
+        continue;
+      }
+      const p = draw.tag(LETTERS[i]);
+      layer.appendChild(p);
+      await fly(p, [src.cx, 18], [dst.cx, 18], 320);
+      p.remove();
+      arrived[i] = LETTERS[i];
+      paintStream();
+    }
+    if (lost && proto === 1) {
+      sentN++;
+      const p = draw.tag("L");
+      layer.appendChild(p);
+      await fly(p, [src.cx, 18], [dst.cx, 18], 360);
+      p.remove();
+      arrived[2] = "L";
+      paintStream();
+    }
+    busy = false; sendB.disabled = false;
+  });
+  dropB.addEventListener("click", () => { if (mode !== 1) return; lost = !lost; dropB.textContent = lost ? "Keep all bytes" : "Drop byte 3"; arrived = []; sentN = 0; paintStream(); });
+  protoB.addEventListener("click", () => { if (mode !== 1) return; proto = proto ? 0 : 1; arrived = []; sentN = 0; paintStream(); });
+  resetB.addEventListener("click", () => {
+    arrived = []; sentN = 0; lost = false; proto = 1; busy = false;
+    dropB.textContent = "Drop byte 3";
+    if (mode === 0) paintPair(); else paintStream();
+    sendB.disabled = mode !== 1;
+  });
+  ctr.append(sendB, dropB, protoB, resetB);
+  K.$("#s4-seg").appendChild(seg(["socket pair", "byte stream"], 0, (i) => {
+    mode = i; busy = false; showMode();
+    if (mode === 0) paintPair(); else paintStream();
+  }, "s4-mode"));
+  showMode();
+  paintPair();
+})();
+
+/* ================= 5. DNS ================= */
+(function dns() {
+  const svg = K.$("#s5-svg");
+  const qBox = box(svg, 24, 28, 320, 70, "sv-server", "localhost", "query");
+  const rBox = box(svg, 360, 28, 296, 70, "sv-good", "127.0.0.1", "answer");
+  const extra = [
+    box(svg, 24, 126, 150, 64, "sv-panel", "—", "addr 1"),
+    box(svg, 186, 126, 150, 64, "sv-panel", "—", "addr 2"),
+    box(svg, 348, 126, 150, 64, "sv-panel", "—", "addr 3"),
+    box(svg, 510, 126, 146, 64, "sv-panel", "—", "addr 4"),
+  ];
+  const foot = s("text", { x: 340, y: 226, class: "sv-text", "text-anchor": "middle" }, "");
+  const sub = s("text", { x: 340, y: 254, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(foot, sub);
+  const LOOKUPS = [
+    { name: "localhost", addrs: ["127.0.0.1"], why: "Every host defines localhost. It always maps to the loopback address, so a client and server on the same machine have a portable name." },
+    { name: "whaleshark…", full: "whaleshark.ics.cs.cmu.edu", addrs: ["128.2.210.175"], why: "The simplest DNS entry: one name, one address. hostname on the book’s machine printed this name." },
+    { name: "cs.mit.edu", addrs: ["18.62.1.6"], why: "Two names, one address: eecs.mit.edu maps here too. A host entry is an equivalence class, not a single pair." },
+    { name: "twitter.com", addrs: ["199.16.156.102", "199.16.156.230", "199.16.156.6", "199.16.156.70"], why: "Four names-worth of addresses. www.twitter.com shares the same set. hostinfo walks getaddrinfo and prints each one." },
+    { name: "edu", addrs: [], why: "edu is a valid first-level domain, but it is not mapped to any IP address. nslookup prints No answer." },
+  ];
+  function show(L) {
+    qBox.t.textContent = L.name;
+    qBox.u.textContent = L.full || "domain name";
+    if (!L.addrs.length) {
+      rBox.t.textContent = "No answer";
+      rBox.u.textContent = "not an address";
+      setCls(rBox.r, "sv-bad");
+    } else {
+      rBox.t.textContent = L.addrs[0];
+      rBox.u.textContent = L.addrs.length > 1 ? L.addrs.length + " addresses" : "one address";
+      setCls(rBox.r, "sv-good");
+    }
+    extra.forEach((b, i) => {
+      const a = L.addrs[i];
+      visBox(b, L.addrs.length > 1 && !!a);
+      if (a) { b.t.textContent = a; setCls(b.r, "sv-data-soft"); }
+    });
+    foot.textContent = L.addrs.length ? L.addrs.join("   ") : "*** Can’t find edu: No answer";
+    sub.textContent = "names ↔ addresses  ·  not always 1-to-1";
+    K.$("#s5-pill").textContent = L.addrs.length ? L.addrs[0] : "no answer";
+    cap("#s5-cap", L.why);
+  }
+  const ctr = K.$("#s5-controls");
+  LOOKUPS.forEach((L) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => show(L) }, L.name));
+  });
+  show(LOOKUPS[0]);
+})();
+
+/* ================= 6. SOCK ================= */
+(function sock() {
+  const svg = K.$("#s6-svg");
+  const client = box(svg, 24, 28, 180, 70, "sv-server", "client", "active");
+  const mid = box(svg, 250, 28, 180, 70, "sv-panel", "connection", "not yet");
+  const server = box(svg, 476, 28, 180, 70, "sv-good", "server", "passive");
+  const fds = [
+    box(svg, 24, 126, 200, 64, "sv-panel", "—", "clientfd"),
+    box(svg, 240, 126, 200, 64, "sv-panel", "—", "listenfd"),
+    box(svg, 456, 126, 200, 64, "sv-panel", "—", "connfd"),
+  ];
+  const line = s("text", { x: 340, y: 226, class: "sv-text", "text-anchor": "middle" }, "");
+  const foot = s("text", { x: 340, y: 254, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(line, foot);
+  const TRACE = [
+    { c: "closed", m: "idle", s: "socket()", fd: ["—", "3 new", "—"], line: "server: socket(AF_INET, SOCK_STREAM, 0)", why: "The descriptor is only half-open. The kernel still treats it as an active (client) socket." },
+    { c: "closed", m: "idle", s: "bind+listen", fd: ["—", "3 listen", "—"], line: "listen(listenfd, 1024)  ·  passive now", why: "bind pins the well-known port. listen converts the descriptor so it can accept clients. Backlog is a hint; the book uses 1,024." },
+    { c: "socket()", m: "waiting", s: "accept…", fd: ["5 new", "3 listen", "—"], line: "server blocks in accept on listenfd 3", why: "Descriptors 0–2 are stdin, stdout, stderr. accept waits on the listening door." },
+    { c: "connect…", m: "request", s: "accept…", fd: ["5 connect", "3 listen", "—"], line: "client connect() sends a request and blocks", why: "connect tries the server address and does not return until the handshake finishes or fails." },
+    { c: "clientfd 5", m: "up", s: "connfd 4", fd: ["5 ready", "3 listen", "4 new"], line: "accept returns 4  ·  connect returns", why: "Because listenfd and connfd are different, the door stays open for the next client while this table serves Amara." },
+  ];
+  let i = 0, busy = false;
+  function paint() {
+    const t = TRACE[i];
+    client.t.textContent = t.c; client.u.textContent = "client";
+    mid.t.textContent = t.m; mid.u.textContent = "connection";
+    server.t.textContent = t.s; server.u.textContent = "server";
+    setCls(client.r, i >= 3 ? "sv-data-soft" : "sv-server");
+    setCls(mid.r, t.m === "up" ? "sv-good" : t.m === "request" ? "sv-data-soft" : "sv-panel");
+    setCls(server.r, i >= 1 ? "sv-good" : "sv-panel");
+    fds[0].t.textContent = t.fd[0];
+    fds[1].t.textContent = t.fd[1];
+    fds[2].t.textContent = t.fd[2];
+    setCls(fds[0].r, t.fd[0].includes("ready") ? "sv-good" : t.fd[0] === "—" ? "sv-box" : "sv-server");
+    setCls(fds[1].r, t.fd[1].includes("listen") ? "sv-good" : "sv-panel");
+    setCls(fds[2].r, t.fd[2].includes("4") ? "sv-good" : "sv-box");
+    line.textContent = t.line;
+    foot.textContent = "Figure 11.12 / 11.14";
+    K.$("#s6-pill").textContent = t.s;
+    cap("#s6-cap", t.why);
+  }
+  const ctr = K.$("#s6-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const playB = h("button", { class: "btn", type: "button" }, "Play");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  const lock = (on) => { stepB.disabled = on || i >= TRACE.length - 1; playB.disabled = on || i >= TRACE.length - 1; };
+  stepB.addEventListener("click", async () => {
+    if (busy || i >= TRACE.length - 1) return;
+    busy = true; lock(true);
+    i++; paint();
+    await sleep(80);
+    busy = false; lock(false);
+  });
+  playB.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; lock(true);
+    while (i < TRACE.length - 1) { i++; paint(); await sleep(480); }
+    busy = false; lock(false);
+  });
+  resetB.addEventListener("click", () => { i = 0; busy = false; paint(); lock(false); });
+  ctr.append(stepB, playB, resetB);
+  paint();
+})();
+
+/* ================= 7. ENDIAN ================= */
+(function endian() {
+  const svg = K.$("#s7-svg");
+  const hexG = s("g"), saG = s("g");
+  svg.append(hexG, saG);
+  const dotted = s("text", { x: 340, y: 36, class: "sv-title", "text-anchor": "middle" }, "128.2.194.242");
+  hexG.appendChild(dotted);
+  const BYTES = [
+    { dec: "128", hex: "80" },
+    { dec: "2", hex: "02" },
+    { dec: "194", hex: "C2" },
+    { dec: "242", hex: "F2" },
+  ];
+  const cells = BYTES.map((b, i) => box(hexG, 40 + i * 160, 56, 140, 70, "sv-data-soft", b.hex, b.dec));
+  const hexLine = s("text", { x: 340, y: 164, class: "sv-text", "text-anchor": "middle" }, "");
+  const hexFoot = s("text", { x: 340, y: 192, class: "sv-label", "text-anchor": "middle" }, "");
+  hexG.append(hexLine, hexFoot);
+  const fields = [
+    box(saG, 24, 36, 150, 70, "sv-server", "AF_INET", "sin_family"),
+    box(saG, 186, 36, 150, 70, "sv-data-soft", "00 50", "sin_port"),
+    box(saG, 348, 36, 150, 70, "sv-good", "80 02 C2 F2", "sin_addr"),
+    box(saG, 510, 36, 146, 70, "sv-box", "8 zeros", "sin_zero"),
+  ];
+  const saLine = s("text", { x: 340, y: 140, class: "sv-text", "text-anchor": "middle" }, "");
+  const saFoot = s("text", { x: 340, y: 168, class: "sv-label", "text-anchor": "middle" }, "");
+  const hostPort = box(saG, 90, 190, 220, 64, "sv-panel", "80", "host port");
+  const netPort = box(saG, 370, 190, 220, 64, "sv-good", "0x0050", "htons → wire");
+  saG.append(saLine, saFoot);
+  let mode = 0, net = true, packed = true;
+  const ctr = K.$("#s7-controls");
+  const flipB = h("button", { class: "btn primary", type: "button" }, "Show host order");
+  const packB = h("button", { class: "btn primary", type: "button" }, "Pack port 80");
+  const resetB2 = h("button", { class: "btn", type: "button" }, "Reset");
+  function showMode() {
+    vis(hexG, mode === 0);
+    vis(saG, mode === 1);
+    flipB.style.display = mode === 0 ? "" : "none";
+    flipB.disabled = mode !== 0;
+    packB.style.display = mode === 1 ? "" : "none";
+    packB.disabled = mode !== 1;
+  }
+  function paintHex() {
+    const order = net ? [0, 1, 2, 3] : [3, 2, 1, 0];
+    order.forEach((src, i) => {
+      cells[i].t.textContent = BYTES[src].hex;
+      cells[i].u.textContent = "byte " + i;
+      setCls(cells[i].r, net ? "sv-good" : "sv-data-soft");
+    });
+    hexLine.textContent = net ? "network  ·  80 02 C2 F2  =  0x8002c2f2" : "little-endian host  ·  F2 C2 02 80 in memory";
+    hexFoot.textContent = "inet_pton packs dotted decimal into s_addr";
+    flipB.textContent = net ? "Show host order" : "Show network order";
+    cap("#s7-cap", net
+      ? "Because the Internet picked big-endian, the first byte on the wire is 0x80 — the 128 in 128.2.194.242. That 32-bit value is 0x8002c2f2."
+      : "A little-endian host stores the same 0x8002c2f2 as F2 C2 02 80 in memory. htonl swaps before the address enters a packet header.");
+  }
+  function paintSa() {
+    fields[1].t.textContent = packed ? "00 50" : "50 00?";
+    setCls(fields[1].r, packed ? "sv-good" : "sv-bad");
+    hostPort.t.textContent = "80";
+    netPort.t.textContent = packed ? "00 50" : "not packed";
+    setCls(netPort.r, packed ? "sv-good" : "sv-panel");
+    saLine.textContent = packed ? "htons(80) writes 0x0050 into sin_port" : "forget htons and a big-endian peer reads port 20480";
+    saFoot.textContent = "16-byte sockaddr_in  ·  cast to SA *";
+    packB.textContent = packed ? "Forget htons" : "Pack port 80";
+    cap("#s7-cap", packed
+      ? "sin_family is AF_INET. sin_port and sin_addr stay in network byte order. sin_zero pads the struct to the size of sockaddr."
+      : "Press Pack port 80. htons writes the 16-bit value in network order so a peer does not treat 80 as 0x5000.");
+  }
+  flipB.addEventListener("click", () => { net = !net; paintHex(); });
+  packB.addEventListener("click", () => { packed = !packed; paintSa(); });
+  resetB2.addEventListener("click", () => {
+    net = true; packed = true;
+    if (mode === 0) paintHex(); else paintSa();
+  });
+  ctr.append(flipB, packB, resetB2);
+  K.$("#s7-seg").appendChild(seg(["dotted / hex", "sockaddr_in"], 0, (i) => {
+    mode = i; showMode();
+    if (mode === 0) paintHex(); else paintSa();
+  }, "s7-mode"));
+  showMode();
+  paintHex();
+})();
+
+/* ================= 8. HTTP ================= */
+(function http() {
+  const svg = K.$("#s8-svg");
+  svg.append(draw.label(174, 28, "REQUEST", "sv-label"), draw.label(506, 28, "RESPONSE", "sv-label"));
+  const reqBoxes = [0, 1, 2, 3].map((i) => box(svg, 24, 40 + i * 48, 300, 42, "sv-panel", "—", ""));
+  const resBoxes = [0, 1, 2, 3].map((i) => box(svg, 356, 40 + i * 48, 300, 42, "sv-panel", "—", ""));
+  const foot = s("text", { x: 340, y: 250, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.appendChild(foot);
+  const AOL = {
+    req: ["GET / HTTP/1.1", "Host: www.aol.com", "(blank line)", ""],
+    res: ["HTTP/1.0 200 OK", "Content-Type: text/html", "Content-Length: 42092", "<html>…"],
+    code: [
+      "<b>telnet www.aol.com 80</b>\nTrying 205.188.146.23…\nConnected to aol.com.",
+      "<b>GET / HTTP/1.1</b>\nHost: www.aol.com\n<i>blank line ends headers</i>",
+      "<b>HTTP/1.0 200 OK</b>\nContent-Type: text/html\nContent-Length: 42092",
+      "<b>&lt;html&gt;…&lt;/html&gt;</b>\n<i>42,092 bytes, then the server closes</i>",
+    ],
+    caps: [
+      "telnet opens a connection to port 80. The book’s trace reaches 205.188.146.23.",
+      "Because this is HTTP/1.1, the Host header is required. A blank line tells the server the headers are done.",
+      "The response line is a version, a three-digit status, and a short English phrase. 200 means the file was served.",
+      "Content-Type says the body is HTML. Content-Length says to expect 42,092 bytes. Then the connection closes.",
+    ],
+  };
+  const ADD = {
+    req: ["GET /cgi-bin/adder", "?15000&213 HTTP/1.0", "(blank line)", ""],
+    res: ["HTTP/1.0 200 OK", "Server: Tiny Web Server", "Content-length: 115", "15000 + 213 = 15213"],
+    code: [
+      "<b>telnet kittyhawk… 8000</b>\nTrying 128.2.194.242…\nConnected.",
+      "<b>GET /cgi-bin/adder?15000&amp;213 HTTP/1.0</b>\n<i>HTTP/1.0: no Host header required</i>",
+      "<b>HTTP/1.0 200 OK</b>\nServer: Tiny Web Server\nContent-length: 115",
+      "<b>Welcome to add.com</b>\nThe answer is: 15000 + 213 = 15213\nThanks for visiting!",
+    ],
+    caps: [
+      "A client opens port 8000 on kittyhawk.cmcl.cs.cmu.edu — 128.2.194.242 in the book.",
+      "Arguments for GET ride in the URI after ?. Spaces would be %20. The child will see QUERY_STRING=15000&213.",
+      "Tiny writes the 200 line and a Server header. The CGI program writes the rest, including Content-type and length.",
+      "Because stdout was dup2’d onto connfd, adder’s printf goes straight to the browser. 15000 + 213 = 15213.",
+    ],
+  };
+  let mode = 0, step = 0, busy = false;
+  function data() { return mode === 0 ? AOL : ADD; }
+  function paint() {
+    const D = data();
+    const n = step;
+    reqBoxes.forEach((b, i) => {
+      const on = i <= n && D.req[i];
+      visBox(b, !!on);
+      if (on) { b.t.textContent = D.req[i]; setCls(b.r, "sv-data-soft"); }
+    });
+    resBoxes.forEach((b, i) => {
+      const on = n >= 2 && i <= n - 2 && D.res[i];
+      visBox(b, !!on);
+      if (on) { b.t.textContent = D.res[i]; setCls(b.r, "sv-good"); }
+    });
+    foot.textContent = mode === 0 ? "Figure 11.24  ·  www.aol.com" : "Figure 11.28  ·  adder CGI";
+    K.$("#s8-code").innerHTML = D.code[Math.min(n, 3)];
+    cap("#s8-cap", D.caps[Math.min(n, 3)]);
+  }
+  const ctr = K.$("#s8-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || step >= 3) return;
+    busy = true; stepB.disabled = true;
+    step++;
+    paint();
+    await sleep(60);
+    busy = false; stepB.disabled = step >= 3;
+  });
+  resetB.addEventListener("click", () => { step = 0; busy = false; stepB.disabled = false; paint(); });
+  ctr.append(stepB, resetB);
+  K.$("#s8-seg").appendChild(seg(["AOL static", "adder CGI"], 0, (i) => {
+    mode = i; busy = false; stepB.disabled = false; step = 0; paint();
+  }, "s8-mode"));
+  paint();
+})();
+
+/* ================= 9. TINY ================= */
+(function tiny() {
+  const svg = K.$("#s9-svg");
+  const req = box(svg, 24, 24, 200, 70, "sv-server", "GET /", "request line");
+  const doit = box(svg, 240, 24, 200, 70, "sv-panel", "doit", "parse + check");
+  const out = box(svg, 456, 24, 200, 70, "sv-good", "—", "result");
+  const meta = [
+    box(svg, 24, 120, 200, 64, "sv-panel", "—", "filename"),
+    box(svg, 240, 120, 200, 64, "sv-panel", "—", "kind"),
+    box(svg, 456, 120, 200, 64, "sv-panel", "—", "status"),
+  ];
+  const foot = s("text", { x: 340, y: 216, class: "sv-text", "text-anchor": "middle" }, "");
+  const sub = s("text", { x: 340, y: 244, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(foot, sub);
+  const layer = s("g");
+  svg.appendChild(layer);
+  const CASES = [
+    { lab: "GET /", method: "GET", uri: "/", file: "./home.html", kind: "static", status: "200 OK", out: "serve_static", code: "<b>parse_uri(\"/\")</b>\nfilename = ./home.html\ncgiargs empty\nmmap + rio_writen", why: "A trailing slash becomes home.html. Tiny maps the file and writes HTTP/1.0 200 OK plus Server: Tiny Web Server." },
+    { lab: "GET adder", method: "GET", uri: "/cgi-bin/adder?15000&213", file: "./cgi-bin/adder", kind: "dynamic", status: "200 OK", out: "15213", code: "<b>GET /cgi-bin/adder?15000&amp;213</b>\nQUERY_STRING=15000&amp;213\nfork · dup2 · execve\n15000 + 213 = 15213", why: "cgi-bin means dynamic. Tiny writes the 200 line, then the child prints the HTML body. Figure 11.28 is this exact sum." },
+    { lab: "POST /", method: "POST", uri: "/", file: "—", kind: "rejected", status: "501", out: "clienterror", code: "<b>not GET</b>\n501 Not implemented\nTiny does not implement this method", why: "Tiny supports only GET. A POST hits clienterror and the main loop closes the connection." },
+    { lab: "GET missing", method: "GET", uri: "/nope.html", file: "./nope.html", kind: "missing", status: "404", out: "clienterror", code: "<b>stat(filename) fails</b>\n404 Not found\nTiny could not find this file", why: "parse_uri built ./nope.html. stat fails, so Tiny sends 404 and returns to accept." },
+  ];
+  let cur = 0, busy = false;
+  const reqBtns = [];
+  function idle() {
+    req.t.textContent = CASES[cur].lab;
+    req.u.textContent = "request line";
+    doit.t.textContent = "doit";
+    setCls(doit.r, "sv-panel");
+    out.t.textContent = "—";
+    out.u.textContent = "result";
+    setCls(out.r, "sv-panel");
+    meta.forEach((b) => { b.t.textContent = "—"; setCls(b.r, "sv-panel"); });
+    foot.textContent = "pick a request, then Run doit";
+    sub.textContent = "iterative  ·  one client at a time";
+    K.$("#s9-pill").textContent = "idle";
+    K.$("#s9-code").innerHTML = "<i>tiny.c · Figure 11.29–11.35</i>";
+    cap("#s9-cap", "Tiny’s main loop accepts, calls doit, and closes. Choose a request from the book and run it.");
+    reqBtns.forEach((b) => { b.style.display = ""; b.disabled = false; });
+  }
+  function paintCase() {
+    const C = CASES[cur];
+    req.t.textContent = C.method;
+    req.u.textContent = C.uri.length > 22 ? C.uri.slice(0, 20) + "…" : C.uri;
+    doit.t.textContent = "doit";
+    setCls(doit.r, "sv-data-soft");
+    out.t.textContent = C.out;
+    out.u.textContent = C.status;
+    setCls(out.r, C.status === "200 OK" ? "sv-good" : "sv-bad");
+    meta[0].t.textContent = C.file;
+    meta[1].t.textContent = C.kind;
+    meta[2].t.textContent = C.status;
+    setCls(meta[0].r, "sv-server");
+    setCls(meta[1].r, C.kind === "dynamic" ? "sv-data-soft" : C.kind === "static" ? "sv-good" : "sv-box");
+    setCls(meta[2].r, C.status === "200 OK" ? "sv-good" : "sv-bad");
+    foot.textContent = C.method + "  " + C.uri;
+    sub.textContent = C.kind === "dynamic" ? "serve_dynamic  ·  Figure 11.35" : C.kind === "static" ? "serve_static  ·  mmap" : "clienterror  ·  Figure 11.31";
+    K.$("#s9-pill").textContent = C.status;
+    K.$("#s9-code").innerHTML = C.code.replace(/\\n/g, "\n");
+    cap("#s9-cap", C.why);
+  }
+  const ctr = K.$("#s9-controls");
+  const runB = h("button", { class: "btn primary", type: "button" }, "Run doit");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  CASES.forEach((C, i) => {
+    const b = h("button", { class: "btn small", type: "button" }, C.lab);
+    b.addEventListener("click", () => { cur = i; idle(); req.t.textContent = C.lab; });
+    reqBtns.push(b);
+  });
+  runB.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; runB.disabled = true;
+    const p = draw.tag(CASES[cur].method);
+    layer.appendChild(p);
+    await fly(p, [req.cx, 14], [doit.cx, 14], 360);
+    await fly(p, [doit.cx, 14], [out.cx, 14], 360);
+    p.remove();
+    paintCase();
+    busy = false; runB.disabled = false;
+  });
+  resetB.addEventListener("click", () => { busy = false; runB.disabled = false; idle(); });
+  ctr.append(runB, resetB, ...reqBtns);
+  idle();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "In this chapter, a client and a server are…", options: ["Processes, which may share a host or sit on different hosts", "Always two different machines connected by Ethernet", "The adapter and the hub on a LAN segment", "The request line and the response line of HTTP"], answer: 0, why: "Figure 11.1’s aside: clients and servers are processes, not machines. One host can run many of each." },
+  { q: "A hub and a bridge see a frame from host A to host B on the same segment. What happens?", options: ["Both throw the frame away", "The hub copies it to every other port; the bridge discards it", "Both copy it to every port", "The bridge copies it toward C; the hub ignores it"], answer: 1, why: "A hub slavishly copies every bit. If A and B share a segment, bridge X throws the frame away to save bandwidth." },
+  { q: "128.2.194.242 in hex is…", options: ["0xC2F28002", "0xF2C20280", "0x12821942", "0x8002c2f2"], answer: 3, why: "The book’s own example: 128.2.194.242 is the dotted-decimal form of 0x8002c2f2. Network byte order stores 80 02 C2 F2." },
+  { q: "Which statement about IP versus TCP matches the book?", options: ["IP is reliable; TCP adds ports", "UDP is the only unreliable protocol; IP retransmits", "IP datagrams may be lost or duplicated; TCP gives a reliable full-duplex byte stream", "TCP names hosts; IP names processes"], answer: 2, why: "IP makes no effort to recover lost or duplicated datagrams. TCP builds reliable bidirectional connections between processes on top of IP." },
+  { q: "The book’s Web connection is uniquely identified by…", options: ["(128.2.194.242:51213, 208.216.181.15:80)", "Port 80 alone", "The client’s ephemeral port alone", "The Ethernet 48-bit addresses of the two adapters"], answer: 0, why: "Figure 11.11: a connection is a socket pair. 51213 is ephemeral; 80 is the well-known http port." },
+  { q: "Why does accept return a new descriptor instead of reusing listenfd?", options: ["The C library forbids reading a listening socket", "connfd is 16-bit and listenfd is 32-bit", "So the server can keep accepting on the door while serving this client — the seed of concurrent servers", "Because descriptors 0–2 are already taken"], answer: 2, why: "listenfd lives for the server’s lifetime. connfd lasts for one client. Chapter 12 forks a child per connfd." },
+  { q: "Which header is required in HTTP/1.1 requests but not in HTTP/1.0?", options: ["Content-Length", "Content-Type", "Host", "Server"], answer: 2, why: "Figure 11.24: Host: www.aol.com. Proxies use it to know which origin server the URI refers to." },
+  { q: "Tiny receives GET /cgi-bin/adder?15000&213 HTTP/1.0. What does it do?", options: ["Treats it as static and mmap’s a file named adder?15000&213", "Rejects it with 501 because of the question mark", "Sends 404 unless home.html exists", "parse_uri marks it dynamic, forks, sets QUERY_STRING to 15000&213, and the child prints 15213"], answer: 3, why: "Figure 11.33: cgi-bin means dynamic. Figure 11.28’s body is “The answer is: 15000 + 213 = 15213”." },
+], 11);
+</script>
+</body>
+</html>

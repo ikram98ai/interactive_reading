@@ -1,0 +1,1383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 6 · The Memory Hierarchy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .eyebrow { color: var(--mint); }
+  .toc a:hover { border-color: var(--mint); color: var(--mint); }
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box { stroke: var(--mint); }
+  .fade { transition: opacity .3s; }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .first { font-size: 15.5px; color: var(--ink-2); background: var(--mint-soft); border-radius: var(--r-m); padding: 12px 14px; }
+  .first b { color: var(--ink); }
+  .hero-stage { aspect-ratio: auto; }
+  .hero-stage svg { width: 100%; height: auto; display: block; }
+  .stage, .stage-scroll { min-width: 0; max-width: 100%; }
+  .scene-grid, .scene-grid.flip { grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 901px) {
+    .scene-grid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+    .scene-grid.flip { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); }
+  }
+  .readings { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); }
+  #s6-read { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .reading { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-s); padding: 10px 12px; }
+  .reading .k { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .reading .v { font-family: var(--f-mono); font-size: 15px; font-weight: 700; color: var(--ink); margin-top: 4px; word-break: break-all; }
+  .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  pre.code { margin: 0; padding: 12px 14px; background: var(--surface-2); border-top: 1px solid var(--line);
+             font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+             overflow-x: auto; white-space: pre-wrap; min-height: 72px; }
+  pre.code b { color: var(--ink); font-weight: 700; }
+  pre.code i { color: var(--ink-3); font-style: normal; }
+  @media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">6</span> Chapter six · Bitville</span>
+      <h1>The Memory Hierarchy</h1>
+      <p class="lede">The chip can grab a number from its pocket in no time, or wait a lifetime for one on a spinning disk. Keep the next number in the pocket, and the whole warehouse feels fast.</p>
+      <p class="first"><b>New here?</b> Read the short story, then press the buttons on the picture. You cannot break it. The book’s exact times, figure numbers, and cache geometry live under “What the book says.”</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#sram-dram">SRAM vs DRAM</a>
+        <a href="#disk">Spinning disk</a>
+        <a href="#ssd">Flash SSD</a>
+        <a href="#locality">Locality</a>
+        <a href="#pyramid">The pyramid</a>
+        <a href="#cache">Cache geometry</a>
+        <a href="#miss">Three misses</a>
+        <a href="#write">Writes</a>
+        <a href="#friendly">Cache-friendly</a>
+        <a href="#impact">The mountain</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · how far is the next byte?</span><span class="pill info" id="hero-pill"><i></i>L0</span></div>
+      <svg id="hero-svg" viewBox="0 0 680 210" role="img" aria-label="Six storage levels from CPU registers down to disk, with the access time of each"></svg>
+      <div class="caption" aria-live="polite" id="hero-cap">Each shelf is a cache for the one below. Tap to walk down.</div>
+    </div>
+  </section>
+
+  <section class="scene" id="sram-dram">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">6.1.1 · SRAM and DRAM</span>
+        <h2>A seesaw that stays, a cup that leaks</h2>
+        <p class="story">Priya has two kinds of cubbies. The fancy ones are a little <b>seesaw</b>: they only like left or right, and they stay there as long as the lights stay on. That is <b>SRAM</b> — six transistors per bit, used for cache.</p>
+        <p class="story">The cheap ones are a tiny <b>cup of charge</b>. One transistor, one capacitor. They forget in 10 to 100 milliseconds unless you pour the bit back in. That refill is called <b>refresh</b>. That is <b>DRAM</b>, used for main memory.</p>
+        <p class="imagine"><b>Try it:</b> flip the SRAM seesaw — it stays. Watch the DRAM cup drain, then press Refresh. Switch to RAS / CAS and step a read of supercell (2, 1).</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 6.2: SRAM uses 6 transistors per bit, relative access time 1×, is persistent while powered, is not sensitive to disturbance, and costs about 1,000× as much as DRAM. DRAM uses 1 transistor per bit, access 10×, is not persistent, is sensitive, and costs 1×. SRAM is for cache memory; DRAM is for main memory and frame buffers.</p>
+            <p>“Due to its bistable nature, an SRAM memory cell will retain its value indefinitely, as long as it is kept powered.” DRAM stores charge on a capacitor of about 30 femtofarads. Leakage empties it in around 10 to 100 milliseconds, so the memory system must refresh every bit by reading it out and rewriting it.</p>
+            <p>Figure 6.3 is a 16 × 8 DRAM: 16 supercells, 8 bits each, 4 rows and 4 columns. To read supercell (2, 1) the controller sends RAS = 2, which copies row 2 into an internal row buffer, then CAS = 1, which returns those 8 bits (Figure 6.4). A 64 MB DIMM can be eight 8M × 8 chips that together return a 64-bit word.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 6.2 · then Figure 6.4</span><span id="s1-seg"></span></div>
+        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 680 300" role="img" aria-label="SRAM versus DRAM cells, and a four-by-four DRAM read with RAS and CAS"></svg></div>
+        <div class="controls" id="s1-controls"></div>
+        <div class="caption" aria-live="polite" id="s1-cap">SRAM is a seesaw. DRAM is a leaky cup that the controller must refill.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="disk">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">6.1.2 · rotating disks</span>
+        <h2>Slide the arm, wait for the groove, then pour</h2>
+        <p class="story">Omar’s disk is a stack of platters. Each surface is rings called <b>tracks</b>, cut into <b>sectors</b> of typically 512 bytes. The arm <b>seeks</b> to the right track, then the platter spins until the sector arrives, then the bits stream out.</p>
+        <p class="story">Almost all the wait is the first two steps. The leftover bytes in that sector are nearly free. A 64-bit word in SRAM is about 4 ns; the same idea on disk is about 10 ms — tens of thousands of times longer.</p>
+        <p class="imagine"><b>Try it:</b> press Step access. Watch seek (9 ms), rotation (about 4 ms), then transfer (0.02 ms) on the book’s 7,200 RPM disk.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 6.9–6.10: platters, surfaces, tracks, sectors, gaps, cylinders, a spindle at 5,400 to 15,000 RPM, and a read/write head on an actuator arm. Average seek is typically 3 to 9 ms (max about 20 ms). Average rotation is half a turn. Transfer of one sector is a tiny slice of a turn.</p>
+            <p>Worked example: 7,200 RPM, Tavg seek = 9 ms, 400 sectors/track. Tavg rotation ≈ 4 ms, Tavg transfer ≈ 0.02 ms, Taccess = 13.02 ms. “The time to access the 512 bytes in a disk sector is dominated by the seek time and the rotational latency.” Twice the seek time is a handy estimate.</p>
+            <p>A 64-bit word is roughly 4 ns in SRAM and 60 ns in DRAM. Reading a 512-byte block is about 256 ns (SRAM) or 4,000 ns (DRAM). A disk access of roughly 10 ms is about 40,000 times greater than SRAM and 2,500 times greater than DRAM. The OS sees a sequence of logical blocks; the disk controller maps them to (surface, track, sector). After the CPU writes a command to a memory-mapped port, the controller can DMA the sector into memory and interrupt.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">7,200 RPM · 9 ms seek · 400 sectors</span><div class="stats" id="s2-stats"></div></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 680 320" role="img" aria-label="A disk platter, an actuator arm, and the three parts of access time"></svg></div>
+        <div class="controls" id="s2-controls"></div>
+        <div class="caption" aria-live="polite" id="s2-cap">Seek moves the arm. Rotation waits for the sector. Transfer is the short part.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="ssd">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">6.1.3 · solid state disks</span>
+        <h2>Write a page; to change it, erase the chapter</h2>
+        <p class="story">Mei’s flash chip is not a spinning platter. It is <b>pages</b> grouped into <b>blocks</b>. She can read a page quickly. She can write a page only if that whole block was just erased — every bit set to 1. A used page cannot be patched in place.</p>
+        <p class="story">So a random rewrite copies the neighbours to a fresh block, then erases the old one. Erase takes on the order of 1 ms. A block dies after roughly 100,000 writes. Reads stay faster than writes.</p>
+        <p class="imagine"><b>Try it:</b> write an erased page (fast). Then write the same page again and watch the block erase first.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 6.13: an SSD plugs into a disk slot (USB or SATA). Flash chips plus a flash translation layer pretend to be logical disk blocks. Pages are typically 512 bytes to 4 KB; a block is 32–128 pages (16 KB to 512 KB). Data move in page units. “A page can be written only after the entire block to which it belongs has been erased.” “A block wears out after roughly 100,000 repeated writes.”</p>
+            <p>Figure 6.14 (Intel SSD 730): sequential read 550 MB/s, write 470 MB/s; random 89,000 / 74,000 IOPS; average sequential access 50 μs read, 60 μs write (4 KB). Random writes are slower because erase is about 1 ms and because a write to a live page must copy sibling pages to a new erased block.</p>
+            <p>Wear-leveling spreads erasures. “SSDs are about 30 times more expensive per byte than rotating disks,” with no moving parts, less power, and much faster random reads. Intel’s endurance example for that drive is about 128 petabytes of writes.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 6.13 · pages inside blocks</span><span class="pill" id="s3-pill">erased</span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 680 300" role="img" aria-label="Two flash blocks of four pages, showing erase-before-write"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <div class="caption" aria-live="polite" id="s3-cap">A blank page accepts a write. A used page forces the whole block to be erased first.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="locality">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">6.2 · locality</span>
+        <h2>Come back soon, or knock on the next door</h2>
+        <p class="story">Aisha adds up a row of lockers. She keeps the running total in her hand and looks at it every time — same address, again and again. That is <b>temporal</b> locality. She also opens locker 0, then 1, then 2. Neighbours. That is <b>spatial</b> locality.</p>
+        <p class="story">Walking a C array along a row is stride-1: the next integer is the next address. Walking down a column hops a whole row each step. Same additions, worse spatial locality.</p>
+        <p class="imagine"><b>Try it:</b> step <code>sumvec</code>. Then switch to rows and to cols and watch the visit order on the book’s 2 × 3 picture.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>“In a program with good temporal locality, a memory location that is referenced once is likely to be referenced again multiple times in the near future.” Spatial locality is the neighbour rule: if you touch an address, you are likely to touch a nearby one soon.</p>
+            <p>Figure 6.17 <code>sumvec</code>: scalar <code>sum</code> has good temporal locality and no spatial locality; vector <code>v</code> (N = 8) is a stride-1 scan — good spatial, poor temporal (each element once). Figure 6.18 <code>sumarrayrows</code> (M = 2, N = 3) matches row-major layout. Figure 6.19 <code>sumarraycols</code> is stride-N. Loops also give the instruction stream both kinds of locality; code is rarely written at run time.</p>
+            <p>On the authors’ Core i7, matrix-multiplication kernels that do the same arithmetic but differ in locality can vary by a factor of almost 40.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figures 6.17–6.19</span><span id="s4-seg"></span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 680 280" role="img" aria-label="A vector sum and a two-by-three array visited by rows or by columns"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <pre class="code" id="s4-code"></pre>
+        <div class="caption" aria-live="polite" id="s4-cap">sum stays in hand. The array walk is either next-door or a hop of N.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="pyramid">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">6.3 · the memory hierarchy</span>
+        <h2>Each shelf is a cache for the one below</h2>
+        <p class="story">Luca’s desk holds today’s page. His locker holds this week’s books. The library holds the town. The warehouse holds everything. Go down and storage gets bigger, slower, and cheaper per byte. Go up and it shrinks and speeds up.</p>
+        <p class="story">A <b>cache</b> is just a small fast shelf that keeps copies of blocks from the bigger shelf under it. Ask the desk first. If the page is there, that is a <b>hit</b>. If not, a <b>miss</b> — fetch the block, maybe evict a victim, then try again.</p>
+        <p class="imagine"><b>Try it:</b> tap a level to read its job and latency. Press Fetch from disk and watch a block climb, leaving a copy on every shelf.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 6.21: L0 registers; L1–L3 SRAM caches; L4 DRAM main memory; L5 local disks; L6 remote disks (AFS, NFS, Web servers). “The overall effect is a large pool of memory that costs as much as the cheap storage near the bottom of the hierarchy but that serves data to programs at the rate of the fast storage near the top of the hierarchy.”</p>
+            <p>Figure 6.22: level k + 1 is blocks 0–15; level k holds four of them (4, 9, 14, 3). Transfers use the block size of that pair of levels — words between L0 and L1, tens of bytes between the SRAM caches, hundreds or thousands of bytes between disk and memory. Hardware caches often place block i in slot (i mod n). Figure 6.23: registers 0 cycles; L1 4; L2 10; L3 50; virtual memory / buffer cache 200; disk cache 100,000; network / browser on the order of 10,000,000.</p>
+            <p>Registers are managed by the compiler; L1–L3 by hardware; main memory as a disk cache by the OS plus MMU; a local disk as an AFS cache by client software. SSDs sit between DRAM and rotating disk. Some sites add tape under disk.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 6.21 · L0 to L6</span><div class="stats" id="s5-stats"></div></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 680 360" role="img" aria-label="Memory hierarchy pyramid from registers down to remote storage"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="caption" aria-live="polite" id="s5-cap">Tap a shelf. Then fetch a block from disk and watch copies land on the way up.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="cache">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">6.4.1–6.4.2 · (S, E, B, m)</span>
+        <h2>Middle bits pick the room; the tag checks the name</h2>
+        <p class="story">Noor’s mailroom has <b>S</b> rooms (sets). Each room has <b>E</b> cubbies (lines). Each cubby holds a <b>B</b>-byte packet (the block), a valid bit, and a tag. The whole cache’s data size is C = S × E × B.</p>
+        <p class="story">An address splits into tag, set index, and block offset. The index picks the room. The tag asks “is this my packet?” The offset picks a byte inside. One line per room is a <b>direct-mapped</b> cache — replacement is “kick whoever is already there.”</p>
+        <p class="imagine"><b>Try it:</b> step the book’s 4-bit toy: reads of 0, 1, 13, 8, then 0 again. Or tap an address 0–15.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 6.25–6.26: S = 2<sup>s</sup> sets, E lines per set, B = 2<sup>b</sup> bytes per block, m address bits, t = m − (s + b) tag bits, C = B × E × S (valid and tag bits not counted). Finding a word is set selection, line matching (valid and tag), then word extraction from the offset.</p>
+            <p>Worked cache (S, E, B, m) = (4, 1, 2, 4). Figure 6.30 enumerates addresses 0–15. Reads: 0 miss (load block 0 into set 0); 1 hit; 13 miss (block 6 into set 2); 8 miss (block 4 replaces block 0 in set 0); 0 miss again — a conflict miss. Middle index bits keep adjacent blocks in different sets (Figure 6.31).</p>
+            <p>Figure 6.39, Intel Core i7: L1 i-cache and d-cache each 32 KB, E = 8, B = 64 B, S = 64, 4 cycles; L2 unified 256 KB, E = 8, S = 512, 10 cycles; L3 shared 8 MB, E = 16, S = 8,192, 40–75 cycles. A 2-way cache (Figure 6.32) searches E tags in a set; a fully associative cache is one set (used for small things such as a TLB).</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">(S, E, B, m) = (4, 1, 2, 4)</span><span class="pill" id="s6-pill">cold</span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 680 340" role="img" aria-label="A four-set direct-mapped cache and the tag, index, and offset bits of an address"></svg></div>
+        <div class="controls" id="s6-controls"></div>
+        <div class="readings" id="s6-read"></div>
+        <div class="caption" aria-live="polite" id="s6-cap">Four sets, one line each, two bytes per block, four-bit addresses.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="miss">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">6.3.1 · 6.4.2 · kinds of misses</span>
+        <h2>Empty fridge, two jars, or a picnic that will not fit</h2>
+        <p class="story">Soren opens the fridge. If it is empty, the first grab always misses — a <b>cold</b> (compulsory) miss. After a few visits the fridge is warm.</p>
+        <p class="story">Two jars can keep stealing the <i>same</i> shelf even when other shelves are free. That is a <b>conflict</b> miss. And if the picnic is simply bigger than the fridge, you get <b>capacity</b> misses: the working set does not fit.</p>
+        <p class="imagine"><b>Try it:</b> run Cold (first fill), then Conflict (addresses 0 and 8 fight for set 0), then Capacity (five blocks in a four-line cache).</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>“An empty cache is sometimes referred to as a cold cache, and misses of this kind are called compulsory misses or cold misses.” A conflict miss happens when the cache is large enough but placement maps the live blocks onto the same line — in Figure 6.22, ping-ponging blocks 0 and 8 into slot (i mod 4). A capacity miss means the working set is larger than the cache.</p>
+            <p>The book’s (4, 1, 2, 4) run of address 8 then 0 is a conflict: set 0 has room in the cache as a whole, but only one line. <code>dotprod</code> of two 8-float vectors that start 32 bytes apart, with a 32-byte two-set cache and 16-byte blocks, thrashes on every x[i] and y[i]. Padding <code>x</code> to 12 floats separates the sets. LRU or LFU can choose a victim in associative caches; random is the simple policy.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Cold · conflict · capacity</span><span id="s7-seg"></span></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 680 300" role="img" aria-label="Three kinds of cache miss on a tiny cache"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="caption" aria-live="polite" id="s7-cap">Cold is an empty cache. Conflict is a traffic jam on one set. Capacity is a working set that does not fit.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="write">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">6.4.5 · writes</span>
+        <h2>Tell the warehouse now, or pin a dirty note</h2>
+        <p class="story">Yara changes a number that is already in the cubby. <b>Write-through</b> also shouts the new value down the hall right now — simple, but every store uses the bus. <b>Write-back</b> sticks a <b>dirty</b> bit on the cubby and only tells the hall when that cubby is evicted.</p>
+        <p class="story">On a write miss, <b>write-allocate</b> fetches the block first (like a read miss), then writes. <b>No-write-allocate</b> skips the cache and writes the word downstairs. Write-through caches are typically no-write-allocate; write-back caches are typically write-allocate.</p>
+        <p class="imagine"><b>Try it:</b> write the cached word both ways. Then evict. Only write-back sends a block downstairs at eviction.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Write-through updates the next lower level on every write hit and so makes bus traffic. Write-back waits until eviction and needs a dirty bit per line. Write-allocate loads the block on a write miss; no-write-allocate writes through to the next level and leaves the cache alone.</p>
+            <p>The authors tell you to assume write-back, write-allocate when you write cache-friendly code: lower levels already use write-back (virtual memory uses it exclusively), modern chips use write-back at every level, and that policy is symmetric with reads — it tries to exploit locality. Write-through can sit behind a write buffer; write-back leaves more bus bandwidth for DMA.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">One word, two policies</span><span id="s8-seg"></span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 680 280" role="img" aria-label="Write-through versus write-back with a dirty bit and a memory copy"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="caption" aria-live="polite" id="s8-cap">Write-through updates memory at once. Write-back waits for eviction.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="friendly">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">6.5 · writing cache-friendly code</span>
+        <h2>Walk the hallway, do not hop between floors</h2>
+        <p class="story">Hiro’s grid is stored row by row. A cache block is four ints wide. Walking a row is miss, hit, hit, hit — three free neighbours after you pay for the block. Walking a column jumps a whole row each time. If the grid is bigger than the cache, every hop misses.</p>
+        <p class="story">Two rules: put the hot counters in registers, and scan memory in the order it is laid out (stride-1). On the authors’ desktop, <code>sumarrayrows</code> ran 25 times faster than <code>sumarraycols</code> for large arrays.</p>
+        <p class="imagine"><b>Try it:</b> walk by rows, then by columns, on a 4 × 4 grid with 16-byte blocks and a one-block cache.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Focus on inner loops of core functions. A stride-k scan (k in words) averages min(1, (word size × k)/B) misses per iteration — best at k = 1. For <code>sumvec</code> with 4-byte words, B = 16 bytes, and a cold cache: miss, hit, hit, hit, repeat — three of four hit.</p>
+            <p><code>sumarrayrows</code> is the same pattern per row. <code>sumarraycols</code> is stride-N. If the array fits, the miss rate can still fall to 1/4 after warmup; if it does not, “each and every access of a[i][j] will miss.” On their desktop machine, <code>sumarrayrows</code> runs 25 times faster than <code>sumarraycols</code> for large array sizes.</p>
+            <p>A block is the packet that moves; a line is the container (valid, tag, block); a set is one or more lines. People often say “line size” for block size.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">4 × 4 ints · B = 16 · one-line cache</span><span id="s9-seg"></span></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 680 320" role="img" aria-label="Row-major versus column-major walks and the hits they cause"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="caption" aria-live="polite" id="s9-cap">A row shares a block. A column does not — and this cache holds only one block.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="impact">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">6.6 · caches and program performance</span>
+        <h2>A mountain of speed, and a 40-times multiply</h2>
+        <p class="story">Tomás times how fast the machine can read. Small working set, small stride: he is on a high ridge. Big set, huge stride: he is in a valley. That picture is the <b>memory mountain</b>. On a Core i7 Haswell it runs from over 14 GB/s down to 900 MB/s.</p>
+        <p class="story">Six ways to multiply matrices do the same arithmetic. The inner loop that walks B and C along rows (kij / ikj) makes 0.50 misses per iteration. The worst pair makes 2.00. For large n the fastest pair is almost 40 times faster.</p>
+        <p class="imagine"><b>Try it:</b> slide size and stride on the mountain. Then open Multiply and compare the three inner-loop classes.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 6.40–6.41: read throughput versus size (16 KB to 128 MB) and stride (1 to 12 eights of a long int) on a 2.1 GHz Core i7 Haswell with 32 KB L1 d-cache, 256 KB L2, 8 MB L3, 64 B blocks. L1 peak over 14 GB/s; main-memory floor 900 MB/s — more than an order of magnitude. A stride-1 ridge stays near 12 GB/s even past L1 and L2 because of hardware prefetch. At stride 8 (one 64-byte line per access) the L3 slope goes flat. MB/s here means 10<sup>6</sup> bytes/s.</p>
+            <p>Figure 6.44–6.46: six loop orders, doubles, B = 32. Class AB (ijk, jik) 1.25 misses/iter; AC (jki, kji) 2.00; BC (kij, ikj) 0.50. “For large values of n, the fastest version runs almost 40 times faster than the slowest version, even though each performs the same number of floating-point arithmetic operations.” Miss rate beat raw access count. Prefetch keeps the best pair flat even when the arrays dwarf SRAM.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 6.41 · then Figure 6.45</span><span id="s10-seg"></span></div>
+        <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 680 300" role="img" aria-label="Memory-mountain ridges and three matrix-multiply miss classes"></svg></div>
+        <div class="controls" id="s10-controls"></div>
+        <div class="caption" aria-live="polite" id="s10-cap">Size picks a ridge. Stride picks how steep the spatial slope is.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The seesaws from this chapter</h2><p>Each row is a choice the hardware, the disk, or your inner loop makes. Chapter 9 will treat main memory as a cache for disk.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>SRAM</h4><p>6 transistors, 1× time, 1,000× cost. Cache.</p></div><div class="vs">vs</div><div class="side"><h4>DRAM</h4><p>1 transistor, needs refresh, main memory.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Rotating disk</h4><p>Huge and cheap. Seek + spin ≈ 10 ms.</p></div><div class="vs">vs</div><div class="side"><h4>SSD</h4><p>No arm. Erase a block to rewrite a page. About 30× the price per byte.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Write-through</h4><p>Simple. Every store uses the bus.</p></div><div class="vs">vs</div><div class="side"><h4>Write-back</h4><p>Dirty bit; write downstairs only on evict.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Direct-mapped</h4><p>E = 1. Fast, easy to thrash.</p></div><div class="vs">vs</div><div class="side"><h4>Set-associative</h4><p>E &gt; 1. Fewer conflicts; slower hit logic.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Row-major walk</h4><p>Stride-1. About 1/4 misses when B = 16.</p></div><div class="vs">vs</div><div class="side"><h4>Column-major walk</h4><p>Stride-N. Can miss every time.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Bigger cache</h4><p>Higher hit rate, slower hit time.</p></div><div class="vs">vs</div><div class="side"><h4>Bigger block</h4><p>Helps spatial locality; fewer lines; fatter miss.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Class AC multiply</h4><p>2.00 misses per inner iteration.</p></div><div class="vs">vs</div><div class="side"><h4>Class BC (kij / ikj)</h4><p>0.50 misses — almost 40× faster for large n.</p></div></div>
+      </div>
+      <div class="themes" style="margin-top:18px">
+        <div class="card"><h3>What we skipped</h3><p>Enhanced DRAM names (FPM, EDO, SDRAM, DDR, VRAM), ROM / firmware / BIOS, the system-bus transaction pictures (Figures 6.6–6.8), PCI versus PCIe, USB and SCSI/SATA host adapters, DMA programming, Practice Problems 6.1–6.21, homework, the blocking web aside, and the algae / transpose drills. The machines use the book’s worked numbers, not a full Core i7 timing model.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>The chapter’s grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>SRAM</dt><dd>Six-transistor bistable cell. Fast, expensive, no refresh. Cache.</dd></div>
+        <div class="word"><dt>DRAM</dt><dd>Charge on a capacitor. Dense, cheap, must refresh every 10–100 ms.</dd></div>
+        <div class="word"><dt>supercell</dt><dd>The book’s word for one DRAM array element of w bits.</dd></div>
+        <div class="word"><dt>seek / rotation / transfer</dt><dd>The three waits to read a disk sector. The first two dominate.</dd></div>
+        <div class="word"><dt>SSD</dt><dd>Flash pages in erasable blocks, with a translation layer that looks like a disk.</dd></div>
+        <div class="word"><dt>temporal locality</dt><dd>Use the same address again soon.</dd></div>
+        <div class="word"><dt>spatial locality</dt><dd>Use a nearby address next. Stride-1 is the friendly case.</dd></div>
+        <div class="word"><dt>cache line</dt><dd>A slot: valid bit, tag, and one block.</dd></div>
+        <div class="word"><dt>set / block</dt><dd>A set is E lines. A block is the B-byte packet that moves.</dd></div>
+        <div class="word"><dt>cold / conflict / capacity</dt><dd>Empty cache; same set fights; working set too big.</dd></div>
+        <div class="word"><dt>write-through / write-back</dt><dd>Update downstairs now, or later when the dirty line is evicted.</dd></div>
+        <div class="word"><dt>miss rate</dt><dd>Misses divided by references. Hit rate is 1 minus that.</dd></div>
+        <div class="word"><dt>miss penalty</dt><dd>The extra time a miss costs — about 10, 50, or 200 cycles from L2, L3, or DRAM.</dd></div>
+        <div class="word"><dt>memory mountain</dt><dd>Read throughput versus working-set size and stride.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width:820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Eight questions. Finish all eight to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible } = K;
+K.page(6);
+const cap = (id, html) => { K.$(id).innerHTML = html; };
+
+function box(parent, x, y, w, hgt, cls, title, sub) {
+  const r = s("rect", { x, y, width: w, height: hgt, rx: 10, class: cls });
+  parent.appendChild(r);
+  const ty = sub ? y + hgt / 2 - 4 : y + hgt / 2 + 5;
+  const t = s("text", { x: x + w / 2, y: ty, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700, fontSize: "13px" } }, title || "");
+  parent.appendChild(t);
+  let u = null;
+  if (sub) {
+    u = s("text", { x: x + w / 2, y: y + hgt / 2 + 14, class: "sv-label", "text-anchor": "middle" }, sub);
+    parent.appendChild(u);
+  }
+  return { r, t, u, x, y, w, h: hgt, cx: x + w / 2, cy: y + hgt / 2 };
+}
+
+function setCls(el, cls) { el.setAttribute("class", cls); }
+
+/* ================= HERO ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const LV = [
+    { name: "Regs", lat: "0 cycles", note: "A 4- or 8-byte word, managed by the compiler." },
+    { name: "L1", lat: "4 cycles", note: "64-byte block in on-chip SRAM." },
+    { name: "L2", lat: "10 cycles", note: "Still SRAM. A bit larger, a bit further." },
+    { name: "L3", lat: "50 cycles", note: "Shared SRAM. Figure 6.23 says 50; Core i7 L3 is 40–75." },
+    { name: "DRAM", lat: "200 cycles", note: "Main memory as a cache for 4-KB pages." },
+    { name: "Disk", lat: "100,000 cycles", note: "A sector. The intro also says tens of millions if you wait on the drive itself." },
+  ];
+  svg.append(draw.label(24, 22, "LEVEL", "sv-label", "start"), draw.label(400, 22, "HIT TIME", "sv-label", "start"));
+  const rows = LV.map((lv, i) => {
+    const y = 40 + i * 26;
+    const r = s("rect", { x: 20, y: y - 16, width: 360, height: 24, rx: 6, class: "sv-panel" });
+    const t = s("text", { x: 36, y: y, class: "sv-text", style: { fontFamily: "var(--f-mono)", fontSize: "13px" } }, lv.name);
+    const b = s("text", { x: 400, y: y, class: "sv-label", "text-anchor": "start" }, lv.lat);
+    svg.append(r, t, b);
+    return { r, t, b };
+  });
+  let i = 0, vis = false;
+  function paint() {
+    rows.forEach((row, k) => {
+      setCls(row.r, k === i ? "sv-good" : "sv-panel");
+      row.t.setAttribute("style", `font-family:var(--f-mono);font-size:13px;font-weight:${k === i ? 800 : 400}`);
+    });
+    K.$("#hero-pill").innerHTML = `<i></i>L${i} · ${LV[i].name}`;
+    cap("#hero-cap", `<b>${LV[i].name}</b> serves a hit in ${LV[i].lat}. ${LV[i].note}`);
+  }
+  paint();
+  whenVisible(svg, () => (vis = true), () => (vis = false));
+  (async function auto() {
+    await sleep(800);
+    for (;;) {
+      if (vis && !K.reduced && !document.hidden) {
+        i = (i + 1) % LV.length;
+        paint();
+      }
+      await sleep(1600);
+    }
+  })();
+  svg.style.cursor = "pointer";
+  svg.addEventListener("click", () => { i = (i + 1) % LV.length; paint(); });
+})();
+
+/* ================= 1. SRAM / DRAM ================= */
+(function sramDram() {
+  const svg = K.$("#s1-svg");
+  let mode = 0, sramBit = 0, charge = 100, vis = false, busy = false;
+  const gA = s("g", {});
+  const gB = s("g", { visibility: "hidden" });
+  svg.append(gA, gB);
+  const sram = box(gA, 28, 28, 300, 100, "sv-server", "0", "SRAM · 6 transistors");
+  const dram = box(gA, 352, 28, 300, 100, "sv-db", "1", "DRAM · charge 100%");
+  sram.t.setAttribute("style", "font-weight:800;font-size:26px");
+  dram.t.setAttribute("style", "font-weight:800;font-size:26px");
+  const facts = [
+    ["access", "1×", "10×"],
+    ["keeps value?", "yes, if powered", "no — refresh"],
+    ["sensitive?", "no", "yes (light, noise)"],
+    ["cost / bit", "1,000×", "1×"],
+    ["used for", "cache", "main memory"],
+  ].map((row, i) => {
+    const y = 148 + i * 28;
+    const lab = s("text", { x: 178, y: y + 4, class: "sv-label", "text-anchor": "end" }, row[0]);
+    gA.appendChild(lab);
+    const a = box(gA, 190, y - 16, 200, 24, "sv-panel", row[1], "");
+    const b = box(gA, 404, y - 16, 248, 24, "sv-panel", row[2], "");
+    a.t.setAttribute("style", "font-weight:700;font-size:12px");
+    b.t.setAttribute("style", "font-weight:700;font-size:12px");
+    return { lab, a, b };
+  });
+  gA.append(draw.label(178, 142, "Figure 6.2", "sv-label", "end"));
+
+  const cells = [];
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      const b = box(gB, 40 + c * 72, 48 + r * 52, 64, 44, "sv-panel", r + "," + c, "");
+      b.t.setAttribute("style", "font-weight:700;font-size:12px");
+      cells.push({ r, c, b });
+    }
+  }
+  gB.append(draw.label(40, 32, "16 × 8 DRAM · rows × cols", "sv-label", "start"));
+  const ctrl = box(gB, 360, 48, 280, 70, "sv-server", "controller", "idle");
+  const buf = box(gB, 360, 140, 280, 70, "sv-db", "row buffer", "empty");
+  const pins = box(gB, 360, 232, 280, 50, "sv-panel", "data pins", "8 bits");
+
+  function paintCells(row, col, phase) {
+    cells.forEach((c) => {
+      const onRow = c.r === row && phase >= 1;
+      const onHit = c.r === row && c.c === col && phase >= 2;
+      setCls(c.b.r, onHit ? "sv-good" : onRow ? "sv-data-soft" : "sv-panel");
+    });
+  }
+  function paintA() {
+    sram.t.textContent = String(sramBit);
+    setCls(sram.r, "sv-server");
+    dram.t.textContent = charge > 15 ? "1" : "0";
+    dram.u.textContent = `DRAM · charge ${charge}%`;
+    setCls(dram.r, charge > 15 ? "sv-db" : "sv-bad");
+    cap("#s1-cap", charge > 15
+      ? `SRAM holds <b>${sramBit}</b> without refresh. DRAM still reads as 1 at ${charge}% charge — until leakage crosses the line.`
+      : `Because the capacitor leaked to <b>${charge}%</b>, the DRAM bit reads as 0. Press Refresh to rewrite it.`);
+  }
+  function showMode() {
+    gA.setAttribute("visibility", mode === 0 ? "visible" : "hidden");
+    gB.setAttribute("visibility", mode === 1 ? "visible" : "hidden");
+    [...ctr.querySelectorAll("button")].forEach((b) => {
+      const ras = b.dataset.ras === "1";
+      b.style.display = (ras === (mode === 1)) ? "" : "none";
+      b.disabled = ras !== (mode === 1);
+    });
+    if (mode === 0) paintA();
+    else {
+      paintCells(-1, -1, 0);
+      ctrl.t.textContent = "controller";
+      ctrl.u.textContent = "idle";
+      buf.t.textContent = "row buffer";
+      buf.u.textContent = "empty";
+      pins.t.textContent = "data pins";
+      cap("#s1-cap", "Figure 6.4: first RAS = 2 copies the whole row, then CAS = 1 picks supercell (2, 1).");
+    }
+  }
+  const ctr = K.$("#s1-controls");
+  const flip = h("button", { class: "btn primary", type: "button" }, "Flip SRAM");
+  const ref = h("button", { class: "btn", type: "button" }, "Refresh DRAM");
+  flip.addEventListener("click", () => { if (mode !== 0) return; sramBit ^= 1; paintA(); });
+  ref.addEventListener("click", () => { if (mode !== 0) return; charge = 100; paintA(); });
+  ctr.append(flip, ref);
+  const rasB = h("button", { class: "btn primary", type: "button" }, "Step RAS / CAS");
+  rasB.dataset.ras = "1";
+  let phase = 0;
+  rasB.addEventListener("click", async () => {
+    if (mode !== 1 || busy) return;
+    busy = true; rasB.disabled = true;
+    phase = (phase + 1) % 4;
+    if (phase === 1) {
+      ctrl.t.textContent = "RAS = 2";
+      ctrl.u.textContent = "row access strobe";
+      paintCells(2, -1, 1);
+      const p = draw.tag("row 2");
+      svg.appendChild(p);
+      await fly(p, [ctrl.cx, ctrl.cy], [buf.cx, buf.cy], 480);
+      p.remove();
+      buf.t.textContent = "2,0  2,1  2,2  2,3";
+      buf.u.textContent = "row 2 copied";
+      cap("#s1-cap", "Because the controller sent <b>RAS = 2</b>, the chip copied every supercell in row 2 into the internal row buffer.");
+    } else if (phase === 2) {
+      ctrl.t.textContent = "CAS = 1";
+      ctrl.u.textContent = "column access strobe";
+      paintCells(2, 1, 2);
+      const p = draw.tag("(2,1)");
+      svg.appendChild(p);
+      await fly(p, [buf.cx, buf.cy], [pins.cx, pins.cy], 480);
+      p.remove();
+      pins.t.textContent = "8 bits of (2, 1)";
+      setCls(pins.r, "sv-good");
+      cap("#s1-cap", "Then <b>CAS = 1</b> selects column 1. Eight data pins send supercell (2, 1) back to the controller.");
+    } else {
+      phase = 0;
+      paintCells(-1, -1, 0);
+      ctrl.t.textContent = "controller";
+      ctrl.u.textContent = "idle";
+      buf.t.textContent = "row buffer";
+      buf.u.textContent = "empty";
+      pins.t.textContent = "data pins";
+      setCls(pins.r, "sv-panel");
+      cap("#s1-cap", "The two-step address saves pins: a linear 16-supercell chip would have needed four address pins instead of two.");
+    }
+    busy = false; rasB.disabled = mode !== 1;
+  });
+  ctr.append(rasB);
+  K.$("#s1-seg").appendChild(seg(["SRAM / DRAM", "RAS / CAS"], 0, (i) => { mode = i; phase = 0; busy = false; showMode(); }, "s1-mode"));
+  whenVisible(svg, () => (vis = true), () => (vis = false));
+  (async function drain() {
+    for (;;) {
+      if (vis && mode === 0 && !document.hidden && charge > 0) { charge = Math.max(0, charge - 4); paintA(); }
+      await sleep(500);
+    }
+  })();
+  showMode();
+})();
+
+/* ================= 2. DISK ================= */
+(function disk() {
+  const svg = K.$("#s2-svg");
+  const cx = 156, cy = 162, R = 112;
+  svg.append(
+    s("circle", { cx, cy, r: R, class: "sv-box" }),
+    s("circle", { cx, cy, r: 84, class: "sv-panel" }),
+    s("circle", { cx, cy, r: 56, class: "sv-box" }),
+    s("circle", { cx, cy, r: 22, class: "sv-server" })
+  );
+  const wedge = s("path", { class: "sv-data-soft", d: "", opacity: 0.85 });
+  svg.appendChild(wedge);
+  const arm = s("line", { x1: cx, y1: cy, x2: cx + 90, y2: cy - 20, class: "sv-wire-solid" });
+  const head = s("circle", { cx: cx + 90, cy: cy - 20, r: 6, class: "sv-fill-coral" });
+  svg.append(arm, head, draw.label(cx, 28, "platter · 7,200 RPM", "sv-label"));
+  const phases = [
+    box(svg, 300, 36, 360, 70, "sv-panel", "9 ms", "seek · move the arm"),
+    box(svg, 300, 120, 360, 70, "sv-panel", "4 ms", "rotation · half a turn"),
+    box(svg, 300, 204, 360, 70, "sv-panel", "0.02 ms", "transfer · one sector"),
+  ];
+  const total = s("text", { x: 480, y: 300, class: "sv-text", "text-anchor": "middle" }, "Taccess = 13.02 ms");
+  svg.appendChild(total);
+  const st = { phase: stat("phase", "idle"), t: stat("so far", "0 ms") };
+  Object.values(st).forEach((v) => K.$("#s2-stats").appendChild(v));
+  let step = 0, busy = false, angle = -0.3;
+  function place(ang, rad) {
+    const x = cx + Math.cos(ang) * rad, y = cy + Math.sin(ang) * rad;
+    arm.setAttribute("x2", x); arm.setAttribute("y2", y);
+    head.setAttribute("cx", x); head.setAttribute("cy", y);
+  }
+  function setWedge(on) {
+    const a0 = 0.15, a1 = 0.55, r0 = 56, r1 = 112;
+    const p = (a, r) => [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+    const p0 = p(a0, r1), p1 = p(a1, r1), p2 = p(a1, r0), p3 = p(a0, r0);
+    wedge.setAttribute("d", `M${p0[0]},${p0[1]} A${r1},${r1} 0 0 1 ${p1[0]},${p1[1]} L${p2[0]},${p2[1]} A${r0},${r0} 0 0 0 ${p3[0]},${p3[1]} Z`);
+    wedge.setAttribute("opacity", on ? 0.9 : 0.12);
+  }
+  function paintIdle() {
+    place(angle, 70);
+    setWedge(false);
+    phases.forEach((p) => setCls(p.r, "sv-panel"));
+    st.phase.set("idle"); st.t.set("0 ms");
+    cap("#s2-cap", "A 512-byte sector waits behind three clocks: seek, rotation, transfer. Press Step access.");
+  }
+  place(angle, 70); setWedge(false);
+  const ctr = K.$("#s2-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step access");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; stepB.disabled = true;
+    if (step === 0) {
+      setCls(phases[0].r, "sv-data-soft");
+      st.phase.set("seek");
+      await tween(700, (t) => place(-0.3 + t * 0.7, 70 + t * 30));
+      st.t.set("9 ms");
+      cap("#s2-cap", "Because the arm had to slide to another track, we paid the book’s <b>Tavg seek = 9 ms</b> before any bit was read.");
+      step = 1;
+    } else if (step === 1) {
+      setCls(phases[0].r, "sv-good");
+      setCls(phases[1].r, "sv-data-soft");
+      st.phase.set("rotation");
+      await tween(700, (t) => { setWedge(t > 0.6); wedge.setAttribute("opacity", t > 0.6 ? 0.9 : 0.12 + t * 0.3); });
+      st.t.set("13 ms");
+      cap("#s2-cap", "Half a turn at 7,200 RPM is about <b>4 ms</b>. Worst case is a full turn. Average rotation is half of Tmax rotation.");
+      step = 2;
+    } else if (step === 2) {
+      setCls(phases[1].r, "sv-good");
+      setCls(phases[2].r, "sv-data-soft");
+      st.phase.set("transfer");
+      const p = draw.tag("512 B");
+      svg.appendChild(p);
+      await fly(p, [cx + 90, cy], [phases[2].cx, phases[2].cy], 500);
+      p.remove();
+      setCls(phases[2].r, "sv-good");
+      st.t.set("13.02 ms");
+      cap("#s2-cap", "Transfer is <b>0.02 ms</b>. Taccess = 9 + 4 + 0.02 = <b>13.02 ms</b>. The first byte is expensive; the rest of the sector is almost free.");
+      step = 3;
+    } else {
+      cap("#s2-cap", "Done. Twice the seek time (18 ms) would have been a decent back-of-the-envelope guess. Press Reset to run it again.");
+    }
+    busy = false; stepB.disabled = false;
+  });
+  resetB.addEventListener("click", () => { step = 0; busy = false; angle = -0.3; paintIdle(); stepB.disabled = false; });
+  ctr.append(stepB, resetB);
+  paintIdle();
+})();
+
+/* ================= 3. SSD ================= */
+(function ssd() {
+  const svg = K.$("#s3-svg");
+  let pages = [null, null, null, null, "C", "D", "E", "F"], busy = false, sel = 0;
+  const cells = [];
+  for (let b = 0; b < 2; b++) {
+    svg.append(draw.label(36 + b * 330, 28, "Block " + b, "sv-label", "start"));
+    for (let p = 0; p < 4; p++) {
+      const x = 36 + b * 330 + (p % 2) * 150, y = 44 + Math.floor(p / 2) * 90;
+      const boxel = box(svg, x, y, 136, 74, "sv-panel", "—", "page " + p);
+      const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": `block ${b} page ${p}` });
+      /* keep hit target on the existing rect via overlay */
+      const hit = s("rect", { x, y, width: 136, height: 74, rx: 10, fill: "transparent" });
+      g.appendChild(hit);
+      const pick = () => { sel = b * 4 + p; paint(); };
+      g.addEventListener("click", pick);
+      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+      svg.appendChild(g);
+      cells.push({ boxel, i: b * 4 + p, b, p });
+    }
+  }
+  const note = s("text", { x: 340, y: 250, class: "sv-text", "text-anchor": "middle" }, "");
+  const note2 = s("text", { x: 340, y: 276, class: "sv-label", "text-anchor": "middle" }, "Intel SSD 730 · seq 550 / 470 MB/s · 50 / 60 μs");
+  svg.append(note, note2);
+  function paint() {
+    cells.forEach((c) => {
+      const v = pages[c.i];
+      c.boxel.t.textContent = v == null ? "erased" : v;
+      c.boxel.u.textContent = "page " + c.p;
+      setCls(c.boxel.r, c.i === sel ? "sv-good" : v == null ? "sv-panel" : "sv-db");
+    });
+    const v = pages[sel];
+    K.$("#s3-pill").textContent = v == null ? "erased" : "live";
+    note.textContent = v == null ? "this page is all 1s — a write can land here" : "this page already holds data — rewrite needs erase";
+    cap("#s3-cap", v == null
+      ? `Page ${sel % 4} of block ${sel < 4 ? 0 : 1} is erased. A write is just a page program — tens of microseconds in Figure 6.14.`
+      : `Page ${sel % 4} is live. A rewrite must erase its whole block (about 1 ms) after any still-wanted neighbours are copied away.`);
+  }
+  const ctr = K.$("#s3-controls");
+  const wr = h("button", { class: "btn primary", type: "button" }, "Write page");
+  wr.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; wr.disabled = true;
+    const b0 = sel < 4 ? 0 : 1;
+    if (pages[sel] == null) {
+      const p = draw.tag("W");
+      svg.appendChild(p);
+      await fly(p, [340, 20], [cells[sel].boxel.cx, cells[sel].boxel.cy], 420);
+      p.remove();
+      pages[sel] = "W";
+      cap("#s3-cap", `Because the page was erased, the write landed at once. Sequential write on the Intel SSD 730 is about <b>60 μs</b> and 470 MB/s.`);
+    } else {
+      cells.filter((c) => c.b === b0).forEach((c) => setCls(c.boxel.r, "sv-bad"));
+      cap("#s3-cap", `The page was live, so the controller erases all of block ${b0} (order of 1 ms) after copying useful neighbours.`);
+      await sleep(500);
+      for (let i = 0; i < 4; i++) pages[b0 * 4 + i] = null;
+      paint();
+      await sleep(200);
+      pages[sel] = "W";
+      cap("#s3-cap", `Block ${b0} is clean. The new byte is programmed. That extra erase-and-copy is why random writes trail random reads.`);
+    }
+    paint();
+    busy = false; wr.disabled = false;
+  });
+  const rst = h("button", { class: "btn", type: "button" }, "Reset");
+  rst.addEventListener("click", () => { pages = [null, null, null, null, "C", "D", "E", "F"]; sel = 0; paint(); });
+  ctr.append(wr, rst);
+  paint();
+})();
+
+/* ================= 4. LOCALITY ================= */
+(function locality() {
+  const svg = K.$("#s4-svg");
+  let mode = 0, step = 0, sum = 0, busy = false;
+  const gV = s("g", {});
+  const gA = s("g", { visibility: "hidden" });
+  svg.append(gV, gA);
+  const vec = [];
+  for (let k = 0; k < 8; k++) {
+    vec.push(box(gV, 24 + k * 80, 50, 72, 64, "sv-panel", "v" + k, "addr " + (k * 4)));
+  }
+  const sumB = box(gV, 24, 150, 200, 70, "sv-server", "0", "sum  (scalar)");
+  gV.appendChild(s("text", { x: 340, y: 250, class: "sv-label", "text-anchor": "middle" }, "Figure 6.17  ·  N = 8  ·  stride-1"));
+  const grid = [];
+  for (let r = 0; r < 2; r++) {
+    for (let c = 0; c < 3; c++) {
+      grid.push(box(gA, 40 + c * 140, 40 + r * 90, 128, 74, "sv-panel", "a" + r + c, "addr " + ((r * 3 + c) * 4)));
+    }
+  }
+  const sumA = box(gA, 470, 40, 180, 74, "sv-server", "0", "sum");
+  const orderT = s("text", { x: 340, y: 250, class: "sv-label", "text-anchor": "middle" }, "");
+  gA.appendChild(orderT);
+
+  const CODE = [
+    `<b>int sumvec(int v[N])</b>   <i>Figure 6.17</i>\nfor (i = 0; i &lt; N; i++)\n  sum += v[i];`,
+    `<b>int sumarrayrows(int a[M][N])</b>   <i>Figure 6.18</i>\nfor (i = 0; i &lt; M; i++)\n  for (j = 0; j &lt; N; j++)\n    sum += a[i][j];`,
+    `<b>int sumarraycols(int a[M][N])</b>   <i>Figure 6.19</i>\nfor (j = 0; j &lt; N; j++)\n  for (i = 0; i &lt; M; i++)\n    sum += a[i][j];`,
+  ];
+  const ROW = [0, 1, 2, 3, 4, 5];
+  const COL = [0, 3, 1, 4, 2, 5];
+
+  function reset() {
+    step = 0; sum = 0;
+    vec.forEach((b) => setCls(b.r, "sv-panel"));
+    grid.forEach((b) => setCls(b.r, "sv-panel"));
+    sumB.t.textContent = "0";
+    sumA.t.textContent = "0";
+    setCls(sumB.r, "sv-server");
+    setCls(sumA.r, "sv-server");
+    orderT.textContent = mode === 1 ? "access order  1 2 3 4 5 6  ·  row-major" : "access order  1 3 5 2 4 6  ·  stride-N";
+    K.$("#s4-code").innerHTML = CODE[mode];
+    cap("#s4-cap", mode === 0
+      ? "Each step adds v[i] into sum. sum is visited every time (temporal). v walks 0,4,8… (spatial)."
+      : mode === 1
+        ? "Row-major: a00, a01, a02, then a10… Same order the ints sit in memory."
+        : "Column-major: a00, a10, a01, a11… A hop of N = 3 ints (12 bytes) each time.");
+  }
+  function showMode() {
+    gV.setAttribute("visibility", mode === 0 ? "visible" : "hidden");
+    gA.setAttribute("visibility", mode === 0 ? "hidden" : "visible");
+    reset();
+  }
+  const ctr = K.$("#s4-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const rst = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy) return;
+    const limit = mode === 0 ? 8 : 6;
+    if (step >= limit) { cap("#s4-cap", `Done. sum is <b>${sum}</b>. Press Reset to walk it again.`); return; }
+    busy = true; stepB.disabled = true;
+    if (mode === 0) {
+      vec.forEach((b, k) => setCls(b.r, k === step ? "sv-good" : k < step ? "sv-data-soft" : "sv-panel"));
+      sum += 1;
+      sumB.t.textContent = String(sum);
+      setCls(sumB.r, "sv-good");
+      cap("#s4-cap", `Because we just read <b>v[${step}]</b>, spatial locality liked the next locker. sum is reused every iteration — temporal locality, no spatial (it is a scalar).`);
+    } else {
+      const seq = mode === 1 ? ROW : COL;
+      const idx = seq[step];
+      grid.forEach((b, k) => setCls(b.r, k === idx ? "sv-good" : seq.slice(0, step).includes(k) ? "sv-data-soft" : "sv-panel"));
+      sum += 1;
+      sumA.t.textContent = String(sum);
+      const r = Math.floor(idx / 3), c = idx % 3;
+      cap("#s4-cap", mode === 1
+        ? `Visit <b>a[${r}][${c}]</b> (order ${step + 1}). The inner loop is stride-1, so the next int is the next address.`
+        : `Visit <b>a[${r}][${c}]</b> (order ${step + 1}). The inner loop walks i, so we hop N = 3 ints — Figure 6.19’s stride-N pattern.`);
+    }
+    step++;
+    await sleep(220);
+    busy = false; stepB.disabled = false;
+  });
+  rst.addEventListener("click", reset);
+  ctr.append(stepB, rst);
+  K.$("#s4-seg").appendChild(seg(["sumvec", "rows", "cols"], 0, (m) => { mode = m; showMode(); }, "s4-mode"));
+  showMode();
+})();
+
+/* ================= 5. PYRAMID ================= */
+(function pyramid() {
+  const svg = K.$("#s5-svg");
+  const LV = [
+    { name: "L0  Regs", sub: "words · 0 cycles", w: 160, hold: "" },
+    { name: "L1  SRAM", sub: "64-B lines · 4 cycles", w: 230, hold: "" },
+    { name: "L2  SRAM", sub: "64-B lines · 10 cycles", w: 300, hold: "" },
+    { name: "L3  SRAM", sub: "64-B lines · 50 cycles", w: 370, hold: "" },
+    { name: "L4  DRAM", sub: "pages · 200 cycles", w: 440, hold: "" },
+    { name: "L5  Disk", sub: "sectors · 100,000 cy", w: 510, hold: "block 12" },
+    { name: "L6  Remote", sub: "files · 10,000,000 cy", w: 580, hold: "file" },
+  ];
+  const boxes = LV.map((lv, i) => {
+    const x = (680 - lv.w) / 2, y = 20 + i * 46;
+    return { ...lv, i, b: box(svg, x, y, lv.w, 40, "sv-panel", lv.name, lv.sub) };
+  });
+  boxes.forEach((lv) => {
+    lv.b.r.classList.add("clickable");
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": lv.name });
+    const hit = s("rect", { x: lv.b.x, y: lv.b.y, width: lv.b.w, height: 40, rx: 10, fill: "transparent" });
+    g.appendChild(hit);
+    g.addEventListener("click", () => pick(lv.i));
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(lv.i); } });
+    svg.appendChild(g);
+  });
+  const st = { at: stat("looking", "L5 Disk"), lat: stat("hit time", "100,000") };
+  Object.values(st).forEach((v) => K.$("#s5-stats").appendChild(v));
+  let sel = 5, copies = { 5: "block 12", 6: "file" }, busy = false;
+  function paint() {
+    boxes.forEach((lv) => {
+      const has = copies[lv.i];
+      setCls(lv.b.r, lv.i === sel ? "sv-good" : has ? "sv-data-soft" : "sv-panel");
+      lv.b.t.textContent = lv.name;
+      lv.b.u.textContent = has ? has + " cached" : lv.sub;
+    });
+    st.at.set(LV[sel].name);
+    st.lat.set(LV[sel].sub.split("·")[1].trim());
+  }
+  function pick(i) {
+    sel = i;
+    paint();
+    cap("#s5-cap", `${LV[i].name} is a cache for the shelf below. ${LV[i].sub}. ${copies[i] ? "A copy is already here — that would be a hit." : "No copy of block 12 here yet — a miss would walk downstairs."}`);
+  }
+  const ctr = K.$("#s5-controls");
+  const fetchB = h("button", { class: "btn primary", type: "button" }, "Fetch from disk");
+  const rst = h("button", { class: "btn", type: "button" }, "Reset");
+  fetchB.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; fetchB.disabled = true;
+    copies = { 5: "block 12", 6: "file" };
+    paint();
+    for (let k = 5; k >= 0; k--) {
+      sel = k;
+      copies[k] = "block 12";
+      paint();
+      const p = draw.tag("12");
+      svg.appendChild(p);
+      await fly(p, [boxes[Math.min(k + 1, 6)].b.cx, boxes[Math.min(k + 1, 6)].b.cy], [boxes[k].b.cx, boxes[k].b.cy], 380);
+      p.remove();
+      cap("#s5-cap", `Because L${k + 1} missed (or we just copied through), block 12 is now cached at <b>${LV[k].name}</b>. Later hits stop here.`);
+    }
+    busy = false; fetchB.disabled = false;
+  });
+  rst.addEventListener("click", () => { copies = { 5: "block 12", 6: "file" }; sel = 5; paint(); cap("#s5-cap", "Desk, locker, library, warehouse. Each shelf caches the one below. Press Fetch from disk."); });
+  ctr.append(fetchB, rst);
+  paint();
+  cap("#s5-cap", "Desk, locker, library, warehouse. Each shelf caches the one below. Press Fetch from disk.");
+})();
+
+/* ================= 6. CACHE ================= */
+(function cache() {
+  const svg = K.$("#s6-svg");
+  const TRACE = [0, 1, 13, 8, 0];
+  let cache = [0, 1, 2, 3].map(() => ({ v: 0, tag: 0, b: ["—", "—"] }));
+  let seen = new Set();
+  let ti = 0, last = null, busy = false;
+  svg.append(
+    draw.label(36, 26, "set", "sv-label"),
+    draw.label(84, 26, "V", "sv-label"),
+    draw.label(156, 26, "tag", "sv-label"),
+    draw.label(250, 26, "b0", "sv-label"),
+    draw.label(358, 26, "b1", "sv-label")
+  );
+  const rows = [0, 1, 2, 3].map((i) => {
+    const y = 40 + i * 48;
+    const lab = s("text", { x: 36, y: y + 24, class: "sv-label" }, String(i));
+    const v = box(svg, 56, y, 56, 40, "sv-panel", "0", "");
+    const tg = box(svg, 120, y, 72, 40, "sv-panel", "—", "");
+    const b0 = box(svg, 200, y, 100, 40, "sv-panel", "—", "");
+    const b1 = box(svg, 308, y, 100, 40, "sv-panel", "—", "");
+    svg.appendChild(lab);
+    return { v, tg, b0, b1 };
+  });
+  const addrB = box(svg, 440, 40, 212, 88, "sv-server", "addr —", "t  s  b");
+  const decB = box(svg, 440, 148, 212, 88, "sv-panel", "tag · idx · off", "decode");
+  const hitB = box(svg, 440, 256, 212, 56, "sv-panel", "—", "result");
+  const readEl = K.$("#s6-read");
+  const tiles = ["addr", "tag", "index", "offset", "block"].map((k) => {
+    const el = h("div", { class: "reading" }, h("div", { class: "k" }, k), h("div", { class: "v", id: "s6-" + k }, "—"));
+    readEl.appendChild(el);
+    return el;
+  });
+  function dec(a) {
+    return { a, tag: (a >> 3) & 1, idx: (a >> 1) & 3, off: a & 1, blk: a >> 1 };
+  }
+  function bits(a) {
+    const d = dec(a);
+    return `${d.tag} | ${d.idx.toString(2).padStart(2, "0")} | ${d.off}`;
+  }
+  function paint(d, result) {
+    rows.forEach((row, i) => {
+      const line = cache[i];
+      row.v.t.textContent = String(line.v);
+      row.tg.t.textContent = line.v ? String(line.tag) : "—";
+      row.b0.t.textContent = line.b[0];
+      row.b1.t.textContent = line.b[1];
+      const on = d && i === d.idx;
+      setCls(row.v.r, on ? "sv-good" : "sv-panel");
+      setCls(row.tg.r, on ? "sv-good" : "sv-panel");
+      setCls(row.b0.r, on && d.off === 0 ? "sv-data-soft" : "sv-panel");
+      setCls(row.b1.r, on && d.off === 1 ? "sv-data-soft" : "sv-panel");
+    });
+    if (d) {
+      addrB.t.textContent = `addr ${d.a}`;
+      addrB.u.textContent = bits(d.a);
+      decB.t.textContent = `tag ${d.tag}  set ${d.idx}  off ${d.off}`;
+      decB.u.textContent = `block ${d.blk}`;
+      hitB.t.textContent = result || "—";
+      setCls(hitB.r, result === "hit" ? "sv-good" : result === "miss" || result === "conflict" ? "sv-bad" : "sv-panel");
+      K.$("#s6-addr").textContent = String(d.a);
+      K.$("#s6-tag").textContent = String(d.tag);
+      K.$("#s6-index").textContent = String(d.idx);
+      K.$("#s6-offset").textContent = String(d.off);
+      K.$("#s6-block").textContent = String(d.blk);
+    }
+  }
+  function access(a) {
+    const d = dec(a);
+    const line = cache[d.idx];
+    const hit = line.v && line.tag === d.tag;
+    let result = "hit";
+    const oldTag = line.tag;
+    const wasValid = !!line.v;
+    const firstTouch = !seen.has(d.blk);
+    if (!hit) {
+      result = (!wasValid || firstTouch) ? "miss" : "conflict";
+      line.v = 1;
+      line.tag = d.tag;
+      line.b = ["m[" + (d.blk * 2) + "]", "m[" + (d.blk * 2 + 1) + "]"];
+    }
+    seen.add(d.blk);
+    last = d;
+    paint(d, result);
+    K.$("#s6-pill").textContent = result;
+    K.$("#s6-pill").className = "pill " + (result === "hit" ? "good" : "warn");
+    cap("#s6-cap", hit
+      ? `Address <b>${a}</b> is ${bits(a)}. Set ${d.idx} already holds tag ${d.tag}, so this is a <b>hit</b> and we return byte ${d.off} of the block.`
+      : result === "conflict"
+        ? `Address <b>${a}</b> maps to set ${d.idx}, but tag ${oldTag} was sitting there. This block was already seen — a <b>conflict miss</b>, the book’s second miss on 0 after 8 stole the line.`
+        : firstTouch && wasValid
+          ? `Address <b>${a}</b> is a first visit to block ${d.blk}, so this miss is <b>compulsory</b>. Set ${d.idx} held tag ${oldTag}; the line is replaced. A later reread of the old block will be the conflict.`
+          : `Address <b>${a}</b> (${bits(a)}) missed: set ${d.idx} was invalid. Block ${d.blk} (bytes ${d.blk * 2} and ${d.blk * 2 + 1}) is loaded.`);
+    return result;
+  }
+  const ctr = K.$("#s6-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step book");
+  const rst = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || ti >= TRACE.length) return;
+    busy = true; stepB.disabled = true;
+    access(TRACE[ti]);
+    ti++;
+    await sleep(160);
+    busy = false; stepB.disabled = ti >= TRACE.length;
+    if (ti >= TRACE.length) cap("#s6-cap", "The last read of 0 missed because address 8 had just stolen set 0. Same cache, plenty of other empty sets — a conflict miss.");
+  });
+  rst.addEventListener("click", () => {
+    cache = [0, 1, 2, 3].map(() => ({ v: 0, tag: 0, b: ["—", "—"] }));
+    seen = new Set();
+    ti = 0; last = null;
+    paint(null);
+    addrB.t.textContent = "addr —";
+    decB.t.textContent = "tag · idx · off";
+    hitB.t.textContent = "—";
+    setCls(hitB.r, "sv-panel");
+    ["addr", "tag", "index", "offset", "block"].forEach((k) => { K.$("#s6-" + k).textContent = "—"; });
+    K.$("#s6-pill").textContent = "cold";
+    K.$("#s6-pill").className = "pill";
+    stepB.disabled = false;
+    cap("#s6-cap", "Four sets, one line each, two-byte blocks, four-bit addresses. Step the book: 0, 1, 13, 8, 0.");
+  });
+  ctr.append(stepB, rst);
+  for (let a = 0; a < 16; a++) {
+    const b = h("button", { class: "btn small", type: "button" }, String(a));
+    b.addEventListener("click", () => access(a));
+    ctr.appendChild(b);
+  }
+  paint(null);
+  cap("#s6-cap", "Four sets, one line each, two-byte blocks, four-bit addresses. Step the book: 0, 1, 13, 8, 0.");
+})();
+
+/* ================= 7. MISS ================= */
+(function miss() {
+  const svg = K.$("#s7-svg");
+  let mode = 0, busy = false;
+  const gDM = s("g", {});
+  const gFA = s("g", { visibility: "hidden" });
+  svg.append(gDM, gFA);
+  const dm = [0, 1, 2, 3].map((i) => box(gDM, 28 + i * 162, 50, 148, 90, "sv-panel", "empty", "set " + i));
+  const fa = [0, 1, 2, 3].map((i) => box(gFA, 28 + i * 162, 50, 148, 90, "sv-panel", "empty", "line " + i));
+  const story = s("text", { x: 340, y: 180, class: "sv-text", "text-anchor": "middle" }, "");
+  const foot = s("text", { x: 340, y: 210, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(story, foot);
+  let dmState, faState, clock, seenBlk;
+  function resetMode() {
+    dmState = [0, 1, 2, 3].map(() => ({ v: 0, tag: 0 }));
+    seenBlk = new Set();
+    faState = [];
+    clock = 0;
+    dm.forEach((b, i) => { b.t.textContent = "empty"; b.u.textContent = "set " + i; setCls(b.r, "sv-panel"); });
+    fa.forEach((b, i) => { b.t.textContent = "empty"; b.u.textContent = "line " + i; setCls(b.r, "sv-panel"); });
+    gDM.setAttribute("visibility", mode === 2 ? "hidden" : "visible");
+    gFA.setAttribute("visibility", mode === 2 ? "visible" : "hidden");
+    if (mode === 0) {
+      story.textContent = "cold cache · every first fill is a compulsory miss";
+      foot.textContent = "step loads 0, 2, 4, 6 into four empty sets";
+      cap("#s7-cap", "The fridge is empty. The first grab of each block misses even though nothing was fighting for space.");
+    } else if (mode === 1) {
+      story.textContent = "direct-mapped · set 0 is the only shelf those two jars like";
+      foot.textContent = "ping-pong addresses 0 and 8 (blocks 0 and 4)";
+      cap("#s7-cap", "Plenty of empty sets — but 0 and 8 both hash to set 0. The first visit to 8 is still compulsory; the reread of 0 after 8 stole the line is the conflict miss.");
+    } else {
+      story.textContent = "4-line fully associative · LRU";
+      foot.textContent = "working set is blocks 0, 2, 4, 6, 8 — five blocks, four lines";
+      cap("#s7-cap", "Any block may sit in any line. After four fills the fifth evicts the least-recent one — a capacity miss.");
+    }
+  }
+  function paintDM() {
+    dm.forEach((b, i) => {
+      const L = dmState[i];
+      b.t.textContent = L.v ? "tag " + L.tag : "empty";
+      setCls(b.r, L.v ? "sv-data-soft" : "sv-panel");
+    });
+  }
+  function paintFA() {
+    fa.forEach((b, i) => {
+      const L = faState[i];
+      b.t.textContent = L ? "blk " + L.blk : "empty";
+      b.u.textContent = L ? "used @" + L.last : "line " + i;
+      setCls(b.r, L ? "sv-data-soft" : "sv-panel");
+    });
+  }
+  const ctr = K.$("#s7-controls");
+  const go = h("button", { class: "btn primary", type: "button" }, "Step miss");
+  const rst = h("button", { class: "btn", type: "button" }, "Reset");
+  let seqi = 0;
+  go.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; go.disabled = true;
+    if (mode === 0) {
+      const addrs = [0, 2, 4, 6];
+      if (seqi >= addrs.length) { cap("#s7-cap", "Cache is warm. Further reads of those four blocks would hit. Cold misses are often transient."); busy = false; go.disabled = false; return; }
+      const a = addrs[seqi++], idx = (a >> 1) & 3, tag = (a >> 3) & 1;
+      dmState[idx] = { v: 1, tag };
+      paintDM();
+      setCls(dm[idx].r, "sv-bad");
+      cap("#s7-cap", `Read <b>${a}</b> found set ${idx} empty. Compulsory miss — we pay once, then the line is warm.`);
+    } else if (mode === 1) {
+      const a = seqi % 2 === 0 ? 0 : 8;
+      seqi++;
+      const tag = (a >> 3) & 1, blk = a >> 1;
+      const was = dmState[0];
+      const firstTouch = !seenBlk.has(blk);
+      const conflict = was.v && was.tag !== tag && !firstTouch;
+      seenBlk.add(blk);
+      dmState[0] = { v: 1, tag };
+      paintDM();
+      setCls(dm[0].r, conflict ? "sv-bad" : firstTouch && was.v ? "sv-data-soft" : "sv-good");
+      cap("#s7-cap", conflict
+        ? `Address <b>${a}</b> wants set 0, but tag ${was.tag} was sitting there. This block was already seen. The other three sets are idle. That is a <b>conflict</b>.`
+        : firstTouch && was.v
+          ? `Address <b>${a}</b> is a first visit to this block — still a <b>compulsory</b> miss, even though it evicts tag ${was.tag}. The next reread of the old block is the conflict.`
+          : `Address <b>${a}</b> fills set 0 (tag ${tag}). Next, the other address will steal the same line.`);
+    } else {
+      const blks = [0, 2, 4, 6, 8];
+      const blk = blks[seqi % blks.length];
+      seqi++;
+      clock++;
+      const hit = faState.find((L) => L.blk === blk);
+      if (hit) {
+        hit.last = clock;
+        paintFA();
+        cap("#s7-cap", `Block <b>${blk}</b> is still in the fully associative cache. Hit — the working set momentarily fits.`);
+      } else if (faState.length < 4) {
+        faState.push({ blk, last: clock });
+        paintFA();
+        setCls(fa[faState.length - 1].r, "sv-bad");
+        cap("#s7-cap", `Block <b>${blk}</b> was new and a line was free. Still filling — these first four are cold misses.`);
+      } else {
+        faState.sort((a, b) => a.last - b.last);
+        const vic = faState.shift();
+        faState.push({ blk, last: clock });
+        paintFA();
+        cap("#s7-cap", `Working set is five blocks; the cache holds four. LRU evicted block <b>${vic.blk}</b> for <b>${blk}</b> — a <b>capacity</b> miss.`);
+      }
+    }
+    await sleep(160);
+    busy = false; go.disabled = false;
+  });
+  rst.addEventListener("click", () => { seqi = 0; resetMode(); });
+  ctr.append(go, rst);
+  K.$("#s7-seg").appendChild(seg(["cold", "conflict", "capacity"], 0, (m) => { mode = m; seqi = 0; resetMode(); }, "s7-mode"));
+  resetMode();
+})();
+
+/* ================= 8. WRITE ================= */
+(function writes() {
+  const svg = K.$("#s8-svg");
+  let mode = 0, busy = false;
+  const cacheB = box(svg, 40, 36, 280, 100, "sv-server", "A", "cache  ·  clean");
+  const memB = box(svg, 360, 36, 280, 100, "sv-db", "A", "memory");
+  svg.append(draw.arrow(320, 86, 360, 86));
+  const bus = box(svg, 40, 160, 600, 70, "sv-panel", "bus idle", "no write downstairs yet");
+  function snap(cache, mem, dirty, busT, busU, busCls) {
+    cacheB.t.textContent = cache;
+    cacheB.u.textContent = dirty ? "cache  ·  DIRTY" : "cache  ·  clean";
+    setCls(cacheB.r, dirty ? "sv-data-soft" : "sv-server");
+    memB.t.textContent = mem;
+    bus.t.textContent = busT;
+    bus.u.textContent = busU;
+    setCls(bus.r, busCls);
+  }
+  function idle() {
+    snap("A", "A", false, "bus idle", mode === 0 ? "write-through will use me on every store" : "write-back waits for eviction", "sv-panel");
+    cap("#s8-cap", mode === 0
+      ? "Cache and memory both hold A. A write-through store will update both at once."
+      : "Cache and memory both hold A. A write-back store will dirty the line and leave memory alone.");
+  }
+  const ctr = K.$("#s8-controls");
+  const wr = h("button", { class: "btn primary", type: "button" }, "Write B");
+  const ev = h("button", { class: "btn", type: "button" }, "Evict line");
+  const rst = h("button", { class: "btn", type: "button" }, "Reset");
+  wr.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; wr.disabled = true;
+    const p = draw.tag("B");
+    svg.appendChild(p);
+    await fly(p, [40, 20], [cacheB.cx, cacheB.cy], 400);
+    p.remove();
+    if (mode === 0) {
+      snap("B", "A", false, "write downstairs now", "every store is bus traffic", "sv-data-soft");
+      const q = draw.tag("B");
+      svg.appendChild(q);
+      await fly(q, [cacheB.cx, cacheB.cy], [memB.cx, memB.cy], 450);
+      q.remove();
+      snap("B", "B", false, "memory updated", "write-through hit", "sv-good");
+      cap("#s8-cap", "Because this is write-through, the store wrote B into the cache <b>and</b> immediately into memory. Simple, and the bus is busy on every write.");
+    } else {
+      snap("B", "A", true, "bus idle", "dirty bit set · memory still A", "sv-panel");
+      cap("#s8-cap", "Because this is write-back, only the cache holds B. The dirty bit remembers we owe memory an update — later, at eviction.");
+    }
+    busy = false; wr.disabled = false;
+  });
+  ev.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; ev.disabled = true;
+    if (mode === 0) {
+      snap("—", memB.t.textContent, false, "evict · nothing to send", "write-through already kept memory fresh", "sv-panel");
+      cap("#s8-cap", "The evicted line is dropped. Memory already matches, so eviction is silent.");
+    } else if (cacheB.u.textContent.indexOf("DIRTY") >= 0) {
+      const q = draw.tag(cacheB.t.textContent);
+      svg.appendChild(q);
+      await fly(q, [cacheB.cx, cacheB.cy], [memB.cx, memB.cy], 450);
+      q.remove();
+      snap("—", cacheB.t.textContent === "—" ? memB.t.textContent : "B", false, "write-back on evict", "dirty line flushed", "sv-good");
+      memB.t.textContent = "B";
+      cap("#s8-cap", "Eviction found a dirty line, so the block is written downstairs now. That is the traffic write-back had deferred.");
+    } else {
+      snap("—", memB.t.textContent, false, "evict · clean", "no memory write", "sv-panel");
+      cap("#s8-cap", "The line was clean, so eviction writes nothing. Write a value first to see the flush.");
+    }
+    busy = false; ev.disabled = false;
+  });
+  rst.addEventListener("click", idle);
+  ctr.append(wr, ev, rst);
+  K.$("#s8-seg").appendChild(seg(["write-through", "write-back"], 0, (m) => { mode = m; idle(); }, "s8-mode"));
+  idle();
+})();
+
+/* ================= 9. FRIENDLY ================= */
+(function friendly() {
+  const svg = K.$("#s9-svg");
+  let mode = 0, step = 0, hits = 0, misses = 0, busy = false, cached = -1;
+  const cells = [];
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      cells.push(box(svg, 36 + c * 90, 28 + r * 58, 82, 50, "sv-panel", r + "," + c, " "));
+    }
+  }
+  const cacheB = box(svg, 420, 28, 232, 70, "sv-db", "empty", "1-line cache · B = 16");
+  const score = s("text", { x: 536, y: 140, class: "sv-text", "text-anchor": "middle" }, "0 hit   0 miss");
+  const hint = s("text", { x: 536, y: 168, class: "sv-label", "text-anchor": "middle" }, "row = one block");
+  svg.append(score, hint);
+  function idx(r, c) { return r * 4 + c; }
+  function seq() {
+    const out = [];
+    if (mode === 0) { for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) out.push([r, c]); }
+    else { for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) out.push([r, c]); }
+    return out;
+  }
+  function paintMarks() {
+    score.textContent = `${hits} hit   ${misses} miss`;
+    cacheB.t.textContent = cached < 0 ? "empty" : "row " + cached;
+    setCls(cacheB.r, cached < 0 ? "sv-db" : "sv-good");
+  }
+  function reset() {
+    step = 0; hits = 0; misses = 0; cached = -1;
+    cells.forEach((b) => { setCls(b.r, "sv-panel"); b.u.textContent = ""; });
+    paintMarks();
+    hint.textContent = mode === 0 ? "inner loop walks j  ·  stride-1" : "inner loop walks i  ·  stride-4";
+    cap("#s9-cap", mode === 0
+      ? "Four ints, 16-byte blocks: a whole row is one block. The cache holds one block. Press Walk."
+      : "A column steps 16 bytes each time — a new block every access. This cache cannot keep them.");
+  }
+  const ctr = K.$("#s9-controls");
+  const walk = h("button", { class: "btn primary", type: "button" }, "Walk next");
+  const rst = h("button", { class: "btn", type: "button" }, "Reset");
+  walk.addEventListener("click", async () => {
+    if (busy) return;
+    const order = seq();
+    if (step >= order.length) { cap("#s9-cap", `Finished. ${hits} hits, ${misses} misses. Rows ~1/4 miss; columns missed every time because 64 bytes do not fit in 16.`); return; }
+    busy = true; walk.disabled = true;
+    const [r, c] = order[step];
+    const hit = cached === r;
+    if (hit) hits++; else { misses++; cached = r; }
+    cells.forEach((b, k) => {
+      const rr = Math.floor(k / 4);
+      setCls(b.r, k === idx(r, c) ? (hit ? "sv-good" : "sv-bad") : rr === cached ? "sv-data-soft" : "sv-panel");
+    });
+    cells[idx(r, c)].u.textContent = hit ? "hit" : "miss";
+    paintMarks();
+    cap("#s9-cap", hit
+      ? `a[${r}][${c}] is still in the cached row. Hit. Stride-1 paid for the block once.`
+      : `a[${r}][${c}] needed row ${r}. The one-line cache evicted the old block — a miss. ${mode === 1 ? "A column walk does this every time." : "The next three ints in this row should hit."}`);
+    step++;
+    await sleep(180);
+    busy = false; walk.disabled = false;
+  });
+  rst.addEventListener("click", reset);
+  ctr.append(walk, rst);
+  K.$("#s9-seg").appendChild(seg(["row-major", "column"], 0, (m) => { mode = m; reset(); }, "s9-mode"));
+  reset();
+})();
+
+/* ================= 10. IMPACT ================= */
+(function impact() {
+  const svg = K.$("#s10-svg");
+  let mode = 0, sizeExp = 5, stride = 1;
+  const gM = s("g", {});
+  const gX = s("g", { visibility: "hidden" });
+  svg.append(gM, gX);
+  const ridges = [
+    { name: "L1", sub: "≤ 32 KB", y: 36, note: "peak over 14 GB/s" },
+    { name: "L2", sub: "≤ 256 KB", y: 96, note: "unified 256 KB" },
+    { name: "L3", sub: "≤ 8 MB", y: 156, note: "shared 8 MB" },
+    { name: "Mem", sub: "bigger", y: 216, note: "floor 900 MB/s" },
+  ];
+  const rBoxes = ridges.map((R) => box(gM, 28, R.y, 200, 50, "sv-panel", R.name, R.sub));
+  const bar = box(gM, 250, 36, 400, 170, "sv-panel", "ridge", "Haswell mountain · sketch");
+  const footM = s("text", { x: 450, y: 236, class: "sv-label", "text-anchor": "middle" }, "");
+  gM.appendChild(footM);
+  gM.appendChild(s("text", { x: 450, y: 268, class: "sv-label", "text-anchor": "middle" }, "book: 14 GB/s peak · 12 GB/s stride-1 · 900 MB/s floor"));
+
+  const cls = [
+    { name: "AB  ijk / jik", miss: "1.25", sub: "A row, B column" },
+    { name: "AC  jki / kji", miss: "2.00", sub: "A and C columns" },
+    { name: "BC  kij / ikj", miss: "0.50", sub: "B and C rows" },
+  ].map((c, i) => box(gX, 28 + i * 218, 40, 204, 110, i === 2 ? "sv-good" : i === 1 ? "sv-bad" : "sv-data-soft", c.miss + " miss", c.name));
+  gX.append(
+    s("text", { x: 340, y: 190, class: "sv-text", "text-anchor": "middle" }, "same arithmetic  ·  almost 40× for large n"),
+    s("text", { x: 340, y: 220, class: "sv-label", "text-anchor": "middle" }, "Figure 6.45  ·  B = 32  ·  double = 8  ·  0.25 miss per stride-1 array"),
+    s("text", { x: 340, y: 248, class: "sv-label", "text-anchor": "middle" }, "prefetch keeps kij / ikj flat even when arrays dwarf SRAM")
+  );
+
+  function ridgeOf(kb) {
+    if (kb <= 32) return 0;
+    if (kb <= 256) return 1;
+    if (kb <= 8192) return 2;
+    return 3;
+  }
+  function paintM() {
+    const kb = 2 ** sizeExp;
+    const r = ridgeOf(kb);
+    rBoxes.forEach((b, i) => setCls(b.r, i === r ? "sv-good" : "sv-panel"));
+    const sizeLab = kb >= 1024 ? (kb / 1024) + " MB" : kb + " KB";
+    let title = ridges[r].name + " ridge";
+    let extra = ridges[r].note;
+    if (stride === 1 && kb > 32) {
+      title = "stride-1 prefetch";
+      extra = "about 12 GB/s even past L1/L2";
+    } else if (stride >= 8 && r >= 2) {
+      extra = "one access per 64-B line";
+    } else if (r === 3 && stride > 1) {
+      extra = "down toward 900 MB/s";
+    } else if (r === 0) {
+      extra = stride === 1 ? "over 14 GB/s at the peak" : "about 12 GB/s in Figure 6.42";
+    }
+    bar.t.textContent = title;
+    bar.u.textContent = sizeLab + "  ·  stride " + stride;
+    footM.textContent = extra;
+    cap("#s10-cap", `Working set ${sizeLab} sits on the <b>${ridges[r].name}</b> ridge of Figure 6.41. ${extra}. ${stride === 1 ? "Small stride is the spatial slope’s high side." : "Larger stride walks downhill."}`);
+  }
+  function show() {
+    gM.setAttribute("visibility", mode === 0 ? "visible" : "hidden");
+    gX.setAttribute("visibility", mode === 1 ? "visible" : "hidden");
+    [...ctr.querySelectorAll(".slider")].forEach((el) => { el.style.display = mode === 0 ? "" : "none"; });
+    playB.style.display = mode === 0 ? "" : "none";
+    playB.disabled = mode !== 0;
+    if (mode === 0) paintM();
+    else cap("#s10-cap", "Class BC (kij / ikj) walks B and C with stride 1: 0.50 misses per inner iteration. Class AC walks two columns: 2.00. For large n the book measured almost 40×.");
+  }
+  const ctr = K.$("#s10-controls");
+  const playB = h("button", { class: "btn primary", type: "button" }, "Next ridge");
+  playB.addEventListener("click", () => {
+    sizeExp = sizeExp <= 5 ? 8 : sizeExp <= 8 ? 13 : sizeExp <= 13 ? 17 : 5;
+    const sl = K.$("#s10-sz");
+    if (sl) { sl.value = String(sizeExp); sl.dispatchEvent(new Event("input")); }
+    else paintM();
+  });
+  ctr.append(playB);
+  ctr.append(
+    slider({ id: "s10-sz", label: "size", min: 4, max: 17, value: 5, format: (v) => { const kb = 2 ** v; return kb >= 1024 ? (kb / 1024) + "M" : kb + "K"; }, onInput: (v) => { sizeExp = v; if (mode === 0) paintM(); } }),
+    slider({ id: "s10-st", label: "stride", min: 1, max: 12, value: 1, onInput: (v) => { stride = v; if (mode === 0) paintM(); } })
+  );
+  K.$("#s10-seg").appendChild(seg(["mountain", "multiply"], 0, (m) => { mode = m; show(); }, "s10-mode"));
+  show();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "How many transistors does an SRAM cell use, and how many does a DRAM cell use?", options: ["SRAM 6, DRAM 1 plus a capacitor", "SRAM 1, DRAM 6", "Both use 6; DRAM just costs less", "Both use 1; SRAM is just faster"], answer: 0, why: "Figure 6.2: SRAM is a six-transistor bistable cell. DRAM is one access transistor plus a capacitor of about 30 femtofarads." },
+  { q: "On the book’s 7,200 RPM disk (9 ms seek, 400 sectors/track), what dominates Taccess = 13.02 ms?", options: ["The 0.02 ms transfer of 512 bytes", "Refreshing the DRAM row buffer", "Seek plus rotational latency (9 ms + 4 ms)", "The DMA interrupt at the end"], answer: 2, why: "Tavg rotation ≈ 4 ms and Tavg transfer ≈ 0.02 ms. The book: the time to access the 512 bytes is dominated by seek and rotational latency." },
+  { q: "Why are random writes on an SSD slower than random reads?", options: ["The platter must seek to a new track", "A live page can be written only after its whole flash block is erased, and erase is about 1 ms", "SRAM refresh steals the bus", "The flash translation layer forbids writes"], answer: 1, why: "A page is programmed only after its block is erased. Erase is on the order of 1 ms, and siblings with useful data must be copied first. Figure 6.14’s random write numbers trail the reads." },
+  { q: "Which sentence is temporal locality?", options: ["The next locker in the row is likely to be opened", "Instructions in a loop body sit in neighbouring addresses", "A column-major walk hops N ints at a time", "A location you just used is likely to be used again soon"], answer: 3, why: "Temporal: the same address, again. Spatial: a nearby address. sum is temporal; v[i] in order is spatial (Figure 6.17)." },
+  { q: "A cache has S sets, E lines per set, and B-byte blocks. What is C, the data capacity?", options: ["S + E + B", "2^(s+b)", "S × E × B  (tags and valid bits not counted)", "m − (s + b)"], answer: 2, why: "Figure 6.26: C = B × E × S data bytes. The tag bits and valid bit are overhead, not part of C." },
+  { q: "After address 8 first loads into set 0, a later reread of 0 misses even though three sets are empty. What kind of miss is that?", options: ["A conflict miss", "A capacity miss — the working set is 16 bytes", "A cold miss only; the cache was empty", "A write miss; reads cannot conflict"], answer: 0, why: "The first visit to 8 is compulsory. The reread of 0 after 8 stole the line is the book’s conflict miss: the cache still has room, but both blocks map to set 0 and E = 1." },
+  { q: "When does a write-back cache write the block to the next lower level?", options: ["On every store, using a write buffer", "Only when the dirty line is evicted", "Never; DRAM is write-through only", "Only on read misses"], answer: 1, why: "Write-back defers the update until replacement. A dirty bit records that the line was modified. Write-through would have gone downstairs on every write." },
+  { q: "In Figure 6.45, which matrix-multiply class has 0.50 misses per inner-loop iteration?", options: ["AB (ijk and jik)", "AC (jki and kji)", "Any order, once n is large", "BC (kij and ikj) — B and C walked by rows"], answer: 3, why: "kij and ikj scan B and C stride-1. Misses 0.00 / 0.25 / 0.25. For large n that pair is almost 40× faster than the worst pair on the authors’ Core i7." },
+], 6);
+</script>
+</body>
+</html>

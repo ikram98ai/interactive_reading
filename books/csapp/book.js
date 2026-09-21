@@ -8,7 +8,7 @@ window.BOOK = {
   edition: "3rd edition",
   blurb: "What really happens between your program and the machine that runs it.",
   accent: "mint",
-  built: 2, // chapters 1..2 have pages; the rest show as "coming soon"
+  built: 12, // chapters 1..12 have pages
   chapters: [
     { n: 1, short: "The tour", title: "A Tour of Computer Systems", kid: "What happens to your program between typing it and seeing it run." },
     { n: 2, short: "Bits & numbers", title: "Representing and Manipulating Information", kid: "Everything is bits — and why computer numbers sometimes lie." },

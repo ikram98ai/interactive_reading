@@ -1,0 +1,1227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 9 · Virtual Memory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .eyebrow { color: var(--mint); }
+  .toc a:hover { border-color: var(--mint); color: var(--mint); }
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box { stroke: var(--mint); }
+  .fade { transition: opacity .3s; }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .first { font-size: 15.5px; color: var(--ink-2); background: var(--mint-soft); border-radius: var(--r-m); padding: 12px 14px; }
+  .first b { color: var(--ink); }
+  .hero-stage { aspect-ratio: auto; }
+  .hero-stage svg { width: 100%; height: auto; display: block; }
+  .stage, .stage-scroll { min-width: 0; max-width: 100%; }
+  .scene-grid, .scene-grid.flip { grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 901px) {
+    .scene-grid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+    .scene-grid.flip { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); }
+  }
+  .readings { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); }
+  .reading { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-s); padding: 10px 12px; }
+  .reading .k { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .reading .v { font-family: var(--f-mono); font-size: 15px; font-weight: 700; color: var(--ink); margin-top: 4px; word-break: break-all; }
+  .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  pre.code { margin: 0; padding: 12px 14px; background: var(--surface-2); border-top: 1px solid var(--line);
+             font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+             overflow-x: auto; white-space: pre-wrap; min-height: 72px; }
+  pre.code b { color: var(--ink); font-weight: 700; }
+  pre.code i { color: var(--ink-3); font-style: normal; }
+  @media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">9</span> Chapter nine · Bitville</span>
+      <h1>Virtual Memory</h1>
+      <p class="lede">Every program thinks it owns a huge private building. Really it holds a map. A clerk on the chip turns map numbers into real rooms — and stops anyone who walks into the wrong one.</p>
+      <p class="quote">“Virtual memory is an elegant interaction of hardware exceptions, hardware address translation, main memory, disk files, and kernel software that provides each process with a large, uniform, and private address space.”</p>
+      <p class="first"><b>New here?</b> Read the short story, then press the buttons on the picture. You cannot break it. The book’s exact terms and figure numbers live under “What the book says.”</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#addr">VA vs PA</a>
+        <a href="#spaces">Address spaces</a>
+        <a href="#cache">Pages as cache</a>
+        <a href="#protect">Protection bits</a>
+        <a href="#xlate">Translation + TLB</a>
+        <a href="#multi">Two-level walk</a>
+        <a href="#i7">Core i7 / Linux</a>
+        <a href="#mmap">Memory maps</a>
+        <a href="#malloc">malloc heap</a>
+        <a href="#bugs">C memory bugs</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · a load walks the map</span><span class="pill info" id="hero-pill"><i></i>VA</span></div>
+      <svg id="hero-svg" viewBox="0 0 680 210" role="img" aria-label="A virtual address traveling through the MMU to DRAM or disk"></svg>
+      <div class="caption" aria-live="polite" id="hero-cap">The chip never sends a map number to the memory chips. A translator in the middle writes a street number first.</div>
+    </div>
+  </section>
+
+  <section class="scene" id="addr">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 1 · physical and virtual addressing</span>
+        <h2>Street numbers, or a nickname the clerk translates</h2>
+        <p class="story">Main memory is a long row of lockers. The first locker is 0, the next is 1, and so on. That locker number is a <b>physical address</b>. On an old machine the CPU just shouts “locker 4!” down the bus.</p>
+        <p class="story">On a modern chip the CPU shouts a <b>virtual address</b> instead — a nickname from the program’s private map. Dedicated hardware called the <b>MMU</b> looks the nickname up and only then sends a real locker number to memory.</p>
+        <p class="imagine"><b>Try it:</b> Switch Physical, then press Load word. The CPU talks to locker 4 directly. Switch Virtual and load again: the CPU issues 4100, and the MMU rewrites it to 4 before the same word comes back.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Main memory is M contiguous byte-size cells, each with a unique physical address (PA). Figure 9.1: a load of the 4-byte word at PA 4. Early PCs used physical addressing; digital signal processors, embedded microcontrollers, and Cray supercomputers still do.</p>
+            <p>Figure 9.2: the CPU generates a virtual address (VA). “The task of converting a virtual address to a physical one is known as address translation.” The memory management unit (MMU) on the CPU chip translates on the fly, using a lookup table in main memory that the operating system maintains.</p>
+            <p>Address translation, like exception handling, needs hardware and the kernel working together. The rest of the chapter is that cooperation, seen from both sides.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 9.1 and 9.2 · one load</span><span id="s1-seg"></span></div>
+        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 680 300" role="img" aria-label="Physical addressing versus virtual addressing through an MMU"></svg></div>
+        <div class="controls" id="s1-controls"></div>
+        <div class="caption" aria-live="polite" id="s1-cap">Physical addressing sends 4 down the bus. Virtual addressing sends 4100 to the MMU first.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="spaces">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 2 · address spaces</span>
+        <h2>Two kids, the same locker number, different rooms</h2>
+        <p class="story">Amina and Jorge each believe they own locker 1 and locker 2 in a gigantic hallway. That hallway is a <b>virtual address space</b> — an ordered set of numbers {0, 1, 2, …}. A 32-bit space has 2<sup>32</sup> of them; a 64-bit space has 2<sup>64</sup>.</p>
+        <p class="story">The school only has a modest row of real rooms (the <b>physical address space</b>). Each child gets a private map, so Amina’s “locker 1” and Jorge’s “locker 1” can live in different rooms. Sometimes the maps point at the same room on purpose — that is how they share one copy of the library.</p>
+        <p class="imagine"><b>Try it:</b> Press Map both. Watch VP 1 and VP 2 for each process land on different physical pages, then notice the shared page that both maps may use.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A linear address space is {0, 1, 2, …}. The CPU generates addresses from a virtual address space of N = 2<sup>n</sup> addresses. A physical address space of M = 2<sup>m</sup> bytes sits underneath. Each byte of main memory therefore has both a virtual address and a physical address.</p>
+            <p>Figure 9.9: the OS keeps a separate page table per process. Process i maps VP 1 → PP 2 and VP 2 → PP 7; process j maps VP 1 → PP 7 and VP 2 → PP 10. Multiple virtual pages can share one physical page.</p>
+            <p>A private space simplifies linking (on 64-bit Linux the code segment starts at 0x400000), loading (the loader maps .text and .data and never copies; pages arrive on demand), sharing (one libc, many processes), and allocation (k contiguous virtual pages may sit on k scattered physical pages).</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 9.9 · two page tables</span><span class="pill" id="s2-pill">unmapped</span></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 680 320" role="img" aria-label="Two processes with private virtual pages mapping onto shared physical memory"></svg></div>
+        <div class="controls" id="s2-controls"></div>
+        <div class="caption" aria-live="polite" id="s2-cap">Each process has its own map. The same virtual page number can name two different rooms — or one shared room.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="cache">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 3 · VM as a cache</span>
+        <h2>Four tables, a warehouse of books</h2>
+        <p class="story">Imagine the whole program lives in a warehouse on disk, cut into same-size books called <b>virtual pages</b>. The reading room (DRAM) has only a few tables — <b>physical pages</b>, or page frames. A book on a table is cached. A book still in the warehouse is allocated but uncached. Some shelf slots were never given out at all.</p>
+        <p class="story">Ask for a word in a book that is already on a table: <b>page hit</b>. Ask for a book that is still in the warehouse: <b>page fault</b>. A clerk picks a victim table, maybe writes that book back, then wheels the missing book in. The instruction starts over and now hits. Waiting until the miss to fetch is <b>demand paging</b>.</p>
+        <p class="imagine"><b>Try it:</b> Tap VP 2 for a hit (it already sits in PP 1). Then tap VP 3. That miss evicts VP 4 from PP 3 and pages VP 3 in. Reset to put the books back.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Virtual memory is an array of N bytes on disk, cached in main memory. Transfer units are virtual pages and physical pages of P = 2<sup>p</sup> bytes. Figure 9.3 partitions pages into unallocated, cached, and uncached. SRAM cache means L1–L3; DRAM cache means this VM cache.</p>
+            <p>Misses are served from disk (about 100,000 times slower than DRAM), so pages are large — typically 4 KB to 2 MB — the DRAM cache is fully associative, replacement is sophisticated, and “DRAM caches always use write-back instead of write-through.”</p>
+            <p>Figure 9.4: a PTE holds a valid bit plus an address (PPN or disk). Figure 9.5: VP 2 cached in PP 1 is a hit. Figures 9.6–9.7: VP 3 faults; the handler victims VP 4 in PP 3, copies VP 3 in, then restarts. All modern systems use demand paging. Locality keeps a working set resident; if that set exceeds physical memory the program thrashes.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figures 9.4–9.7 · eight VPs</span><span class="pill" id="s3-pill">cached 4 / 8</span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 680 340" role="img" aria-label="Eight virtual pages, a page table, and four physical page frames"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <div class="caption" aria-live="polite" id="s3-cap">A valid PTE means the book is on a table. An invalid PTE with a disk address means a fault will fetch it.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="protect">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 4 · memory protection</span>
+        <h2>Three stamps on every page</h2>
+        <p class="story">The same lookup that finds a room can also decide whether you may enter. Each page table entry grows a few extra bits: <b>SUP</b> (grown-ups / kernel only), <b>READ</b>, and <b>WRITE</b>. A user process may read its code, write its data, and must not touch the kernel’s pages or someone else’s.</p>
+        <p class="story">Break a stamp and the CPU raises a general protection fault. The kernel sends <b>SIGSEGV</b>. A Linux shell prints “segmentation fault.”</p>
+        <p class="imagine"><b>Try it:</b> Stay in user mode. Read VP 0 (allowed). Write VP 1 (allowed). Write VP 0 or touch VP 2 — those stamps refuse, and the page goes coral.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A user process must not modify its read-only code, must not read or write kernel memory or another process’s private pages, and must not write shared pages unless every party agrees. Figure 9.10 adds SUP, READ, and WRITE bits to each PTE.</p>
+            <p>Kernel mode may access any page. User mode may access only pages with SUP = 0. Process i in user mode may read VP 0 and read or write VP 1, but “it is not allowed to access VP 2.”</p>
+            <p>A violating instruction triggers a general protection fault. The handler sends a SIGSEGV signal. Linux shells typically report this exception as a “segmentation fault.”</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 9.10 · process i</span><span id="s4-seg"></span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 680 300" role="img" aria-label="Three page table entries with supervisor, read, and write bits"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <div class="caption" aria-live="polite" id="s4-cap">The MMU checks the stamps every time the CPU names a page.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="xlate">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 5 · address translation</span>
+        <h2>Split the nickname, glue a new one</h2>
+        <p class="story">A virtual address snaps in two: the <b>VPN</b> (which book) and the <b>VPO</b> (which byte inside the book). The MMU uses the VPN as an index into the page table, reads a <b>PTE</b>, and — if the valid bit is on — glues the stored <b>PPN</b> onto the same offset. That offset is now the <b>PPO</b>. It is the same bits. Pages are the same size, so the byte-inside-the-book never changes.</p>
+        <p class="story">Doing that lookup in DRAM every time would be slow. So the MMU keeps a tiny notebook of recent PTEs: the <b>TLB</b>. A hit never leaves the chip. A miss fetches the PTE, then writes the notebook.</p>
+        <p class="imagine"><b>Try it:</b> Step the book’s load of <code>0x03d4</code>. The TLB hits in set 3 and the cache returns byte <code>0x36</code>. Switch to TLB miss to watch the extra walk through the page table.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 9.11–9.12: VA = VPN | VPO; PA = PPN | PPO; PPO is identical to VPO. The page table base register (PTBR) points at the current table. Figure 9.13(a): page hit is five hardware steps. Figure 9.13(b): a zero valid bit raises a fault; the kernel victims, pages in, updates the PTE, and restarts.</p>
+            <p>“A TLB is a small, virtually addressed cache where each line holds a block consisting of a single PTE.” TLBI is the t low bits of the VPN; TLBT is the rest. Figure 9.16: a hit stays inside the MMU; a miss fetches the PTE into the TLB.</p>
+            <p>Section 9.6.4 toy machine: n = 14, m = 12, P = 64, 4-way TLB with 16 entries. VA 0x03d4 → VPN 0x0F, VPO 0x14, TLBI 0x03, TLBT 0x03, PPN 0x0D, PA 0x354, cache byte 0x36.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Section 9.6.4 · VA 0x03d4</span><span id="s5-seg"></span></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 680 340" role="img" aria-label="VPN and VPO translated through a TLB and page table into PPN and PPO"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="caption" aria-live="polite" id="s5-cap">VPN selects a PTE. PPN concatenates with VPO. The TLB remembers the last few PTEs.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="multi">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 6 · multi-level page tables</span>
+        <h2>A slim city book, then a street book</h2>
+        <p class="story">One giant table for a 32-bit space with 4 KB pages and 4-byte PTEs would be 4 MB — and it would have to sit in RAM even if the program used a handful of pages. That is a terrible tax. So we use a <b>two-level</b> book.</p>
+        <p class="story">The first book has 1,024 lines. Each line covers a 4 MB chunk (1,024 pages). If that whole chunk is empty, the line is null and the second book does not exist. Only the first book must stay in memory. The second books can be paged like anything else.</p>
+        <p class="imagine"><b>Try it:</b> Walk a code page in chunk 0, then a stack page in chunk 8. Chunks 2–7 stay null — no level-2 tables, no wasted RAM.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A single-level table for a 32-bit address space, 4 KB pages, and 4-byte PTEs needs a 4 MB page table resident at all times. Figure 9.17 builds a two-level hierarchy instead. Each level-1 PTE maps a 4 MB chunk (1,024 pages). 1,024 such PTEs cover 4 GB. Each level-1 and level-2 table is itself 4 KB.</p>
+            <p>The example space: the first 2 K pages allocated for code and data, the next 6 K unallocated, then 1,023 unallocated, then one stack page. Level-1 PTEs 2–7 are null, so those level-2 tables do not exist. Only the level-1 table must stay in main memory.</p>
+            <p>Figure 9.18: a k-level walk splits the VA into k VPNs plus a VPO. The MMU reads k PTEs to find the PPN. The TLB caches PTEs at every level, so the extra walk is usually cheap.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 9.17 · two levels</span><span id="s6-seg"></span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 680 320" role="img" aria-label="A two-level page table with null chunks and a walk to a physical page"></svg></div>
+        <div class="controls" id="s6-controls"></div>
+        <div class="caption" aria-live="polite" id="s6-cap">A null level-1 PTE means that whole 4 MB chunk has no level-2 table at all.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="i7">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 7 · Core i7 and Linux</span>
+        <h2>Four nested drawers, then 4 KB of lockers</h2>
+        <p class="story">The book’s case study is an Intel Core i7 running Linux. The architecture could name a full 64-bit space, but the chips the book describes use a <b>48-bit</b> virtual address (256 TB) and a <b>52-bit</b> physical address (4 PB). Linux picks <b>4 KB</b> pages.</p>
+        <p class="story">Translation uses <b>four</b> page-table levels. The 36-bit VPN splits into four 9-bit indexes. Register <b>CR3</b> holds the physical address of the first table and is swapped on every context switch. Linux remembers the user’s areas as a list of <code>vm_area_struct</code>s — code, data, heap, libraries, stack — and treats a touch outside every area as a segmentation fault.</p>
+        <p class="imagine"><b>Try it:</b> Press Walk. The VA is sliced 9+9+9+9+12. Each drawer hands you the next, until a PPN is glued to the 12-bit offset.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Haswell allows full 64-bit spaces, but current Core i7 implementations support a 48-bit (256 TB) virtual address space and a 52-bit (4 PB) physical address space, plus a 32-bit (4 GB) compatibility mode. Figure 9.21: four cores, shared 8 MB 16-way L3; per core, 32 KB 8-way L1 i and d, 256 KB 8-way L2. TLBs are 4-way: L1 i-TLB 128, L1 d-TLB 64, L2 unified 512. Page size 4 KB or 4 MB; Linux uses 4 KB. Caches are physically addressed with 64-byte blocks.</p>
+            <p>“The Core i7 uses a four-level page table hierarchy.” CR3 holds the level-1 (page global directory) physical address and is part of process context. The 36-bit VPN is four 9-bit chunks; VPO is 12 bits; PTEs carry a 40-bit PPN plus P, R/W, U/S, XD, A (reference), and D (dirty) bits.</p>
+            <p>Figure 9.26: user code starts at 0x400000. Figure 9.27: <code>task_struct</code> → <code>mm_struct</code> (<code>pgd</code>, <code>mmap</code>) → <code>vm_area_struct</code> (vm_start, vm_end, vm_prot, vm_flags). Figure 9.28: a fault is illegal (no area), a protection error, or a normal page-in.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 9.25 · four-level walk</span><span class="pill" id="s7-pill">CR3</span></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 680 340" role="img" aria-label="Core i7 four-level page table walk from CR3 to a 4 KB page"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="caption" aria-live="polite" id="s7-cap">CR3 names the first table. Four 9-bit indexes walk to a 40-bit PPN. The 12-bit VPO is already the PPO.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="mmap">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 8 · memory mapping</span>
+        <h2>A photocopy, or a blank notebook of zeros</h2>
+        <p class="story">Linux fills a new stretch of virtual memory by tying it to something on disk. That tie is a <b>memory mapping</b>. Tie it to a regular file (say the <code>.text</code> of <code>a.out</code>) and the first touch copies that page of the file into RAM — demand paging again, no extra memcpy from the loader.</p>
+        <p class="story">Tie it to an <b>anonymous</b> file (a kernel-made object of zeros) and the first touch just wipes a victim page to zeros. Nothing travels from disk. Those pages are <b>demand-zero</b> — heap and stack start this way. A private map can also be <b>copy-on-write</b>: share one copy until someone writes, then duplicate that page.</p>
+        <p class="imagine"><b>Try it:</b> Switch File-backed and press Touch page. Bytes come from <code>a.out</code>. Switch Anonymous and touch: the page becomes zeros, no file read. Then press Write (CoW) to watch a shared private page split.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Linux initializes a virtual memory area by associating it with a disk object. A regular file is split into page-size pieces; pages swap in on first touch, and extra area past the file is zero-padded. An anonymous file is all zeros; first touch overwrites a victim with zeros and marks the page resident — “demand-zero pages.” After that, pages swap against a kernel swap file.</p>
+            <p>Shared maps: writes are visible to every mapper and to the file. Private maps use copy-on-write (Figure 9.30): PTEs start read-only; a write fault copies the page, then the write retries. fork copies mm_struct, area structs, and page tables and flags everything copy-on-write. execve deletes user areas, maps private .text/.data (file-backed) plus demand-zero bss/heap/stack, maps shared libc.so, and sets the PC.</p>
+            <p><code>mmap(start, length, prot, flags, fd, offset)</code> creates an area. PROT_EXEC / READ / WRITE / NONE; MAP_ANON, MAP_PRIVATE, MAP_SHARED. munmap deletes; later references segfault.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">File-backed or demand-zero</span><span id="s8-seg"></span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 680 320" role="img" aria-label="File-backed mapping versus anonymous demand-zero pages and copy-on-write"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="caption" aria-live="polite" id="s8-cap">A file-backed page is born from disk. An anonymous page is born as zeros. A CoW write finally makes a private copy.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="malloc">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 9 · dynamic allocation</span>
+        <h2>A hallway that splits and glues itself</h2>
+        <p class="story">Most programs do not call <code>mmap</code> by hand. They ask <b>malloc</b> for a piece of the <b>heap</b> — a demand-zero area that grows upward toward higher addresses as the kernel’s <b>brk</b> pointer climbs. Each piece is a block: either allocated (yours) or free (the hallway’s).</p>
+        <p class="story">A simple allocator paints a header on every block: the size, and one bit that says taken or free. Walk the hallway by adding sizes — an <b>implicit free list</b>. First free stretch that fits wins (<b>first fit</b>). If the stretch is too long, <b>split</b> it. When you <b>free</b>, glue neighbors so the hallway does not turn into unusable crumbs.</p>
+        <p class="imagine"><b>Try it:</b> Step the book’s tiny 16-word heap: malloc 4, malloc 5 (pads to 6), malloc 6, free the middle, malloc 2 (split). Then press Coalesce to glue the leftover crumbs, or Reset.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The heap begins after .bss and grows toward higher addresses; brk marks the top. malloc / free are an explicit allocator. 32-bit malloc aligns to 8; 64-bit malloc aligns to 16. calloc zeros; realloc resizes; sbrk moves brk. Implicit allocators (garbage collectors) free unused blocks themselves.</p>
+            <p>Figure 9.34: a 16-word heap. malloc(4*sizeof(int)) carves 4 words; malloc of 5 words pads to 6 for double-word alignment; free leaves p2 dangling; a later malloc(2) reuses part of that hole. Figure 9.35–9.36: header encodes size | allocated bit (low 3 bits free because size is a multiple of 8). Search is linear in the number of blocks.</p>
+            <p>Placement: first fit, next fit (Knuth), best fit. Split the remainder (Figure 9.37). Immediate coalescing fights false fragmentation (Figure 9.38); boundary tags (header + footer, Figure 9.39) make all four neighbor cases constant time. The simple allocator in 9.9.12 uses a 16-byte minimum, prologue and epilogue blocks, and CHUNKSIZE of 1&lt;&lt;12.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 9.34 · implicit free list</span><div class="stats" id="s9-stats"></div></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 680 300" role="img" aria-label="A sixteen-word heap that allocates, frees, splits, and coalesces"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="caption" aria-live="polite" id="s9-cap">Headers say size/allocated. First fit walks from the left, splits the leftover, and free glues neighbors.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="bugs">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 10 · C memory bugs</span>
+        <h2>The wrong locker, a returned locker, a pad that overflows</h2>
+        <p class="story">C lets you name any address. Name a hole in the map, or write a read-only page, and you die at once with a segmentation or protection fault. Name a locker that happens to be writable — <code>scanf("%d", val)</code> instead of <code>&amp;val</code> — and you may smash someone else’s data and crash hours later.</p>
+        <p class="story">Give a heap locker back with <code>free</code>, then read it anyway: <b>use-after-free</b>. The next <code>malloc</code> may have handed those words to someone else. Or write past a stack pad with <code>gets</code>: the return address lives next door. Forgetting to free at all is a leak — quiet, until a server has no virtual memory left.</p>
+        <p class="imagine"><b>Try it:</b> Run the scanf bug (a wild write). Switch to After free and reuse the old pointer. Switch to Overflow and type past an 8-byte pad until the return ticket dies.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>“Memory-related bugs are among the most frightening because they often manifest themselves at a distance, in both time and space, from the source of the bug.” Section 9.11 lists ten: dereferencing bad pointers (the classic scanf("%d", val) bug), reading uninitialized heap memory, stack buffer overflows (gets vs fgets), assuming pointers and objects have the same size, off-by-one errors, referencing a pointer instead of *p ((*size)-- not *size--), misunderstanding pointer arithmetic (p++ not p += sizeof(int)), referencing nonexistent stack variables, referencing data in free heap blocks, and memory leaks.</p>
+            <p>bss globals are zeroed; heap from malloc is not — use calloc. makeArray1 uses sizeof(int) instead of sizeof(int *); on a Core i7 a pointer is larger than an int, so the loop overwrites a footer and coalescing fails later. heapref frees x, then reads x[i] after y = malloc(m).</p>
+            <p>Leaks matter most in daemons and servers, which never terminate. The summary repeats the same list: bad pointers, uninitialized memory, stack overflows, size confusion, pointer-vs-object, pointer arithmetic, nonexistent variables, and leaks.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Three bugs from 9.11</span><span id="s10-seg"></span></div>
+        <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 680 320" role="img" aria-label="Wild pointer, use-after-free, and stack buffer overflow"></svg></div>
+        <div class="controls" id="s10-controls"></div>
+        <div class="caption" aria-live="polite" id="s10-cap">The same virtual memory that protects you will not save you from a pointer you aimed yourself.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The seesaws from this chapter</h2><p>Each row is a choice the hardware, the kernel, or the allocator makes. Virtual memory is the one mechanism behind all of them.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>Physical addressing</h4><p>CPU sends a locker number down the bus. Simple, used by Cray and many microcontrollers.</p></div><div class="vs">vs</div><div class="side"><h4>Virtual addressing</h4><p>CPU sends a nickname. The MMU translates, caches, and checks stamps.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>SRAM cache</h4><p>L1–L3, small blocks, misses from DRAM. Hardware replacement.</p></div><div class="vs">vs</div><div class="side"><h4>DRAM cache</h4><p>Pages of 4 KB–2 MB, fully associative, write-back, misses from disk.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>One fat page table</h4><p>32-bit, 4 KB, 4-byte PTE → 4 MB, always resident.</p></div><div class="vs">vs</div><div class="side"><h4>Multi-level tables</h4><p>Null chunks cost nothing. Only level 1 must stay in RAM.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Page-table walk</h4><p>Correct, but tens to hundreds of cycles if the PTE is in DRAM.</p></div><div class="vs">vs</div><div class="side"><h4>TLB hit</h4><p>The PTE is already on the MMU. Translation never leaves the chip.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Shared map</h4><p>One physical copy. Writes show up everywhere, and on disk.</p></div><div class="vs">vs</div><div class="side"><h4>Private CoW</h4><p>Share until a write. Then copy that page and let the write retry.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>First fit</h4><p>Fast. Leaves splinters at the front of the list.</p></div><div class="vs">vs</div><div class="side"><h4>Best fit</h4><p>Usually tighter. On an implicit list it scans every free block.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>malloc / free</h4><p>You allocate and you free. Fast, and easy to get wrong.</p></div><div class="vs">vs</div><div class="side"><h4>Garbage collection</h4><p>You allocate; the collector frees unreachable blocks.</p></div></div>
+      </div>
+      <div class="themes" style="margin-top:18px">
+        <div class="card"><h3>What we skipped</h3><p>Mark&amp;Sweep (Section 9.10) in full: a mark phase from roots, a sweep of unmarked blocks, McCarthy’s Lisp collector, and why a C collector must be conservative (an int can look like a pointer). Also skipped: explicit / segregated free lists, buddy systems, the mm.c macros, and the practice-problem worksheets. The machine above is the implicit-list idea, not the whole allocator lab.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>The chapter’s grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>virtual address</dt><dd>The nickname the CPU issues. A translator turns it into a physical address.</dd></div>
+        <div class="word"><dt>physical address</dt><dd>The real locker number in DRAM, starting at 0.</dd></div>
+        <div class="word"><dt>MMU</dt><dd>On-chip hardware that translates addresses using the current page table.</dd></div>
+        <div class="word"><dt>page / page frame</dt><dd>A fixed-size block (virtual on disk, physical in DRAM). Typical Linux size: 4 KB.</dd></div>
+        <div class="word"><dt>PTE</dt><dd>One row of the page table: valid bit, PPN or disk address, and permission bits.</dd></div>
+        <div class="word"><dt>page fault</dt><dd>A DRAM-cache miss. The kernel pages the missing page in and restarts the instruction.</dd></div>
+        <div class="word"><dt>demand paging</dt><dd>Wait for the miss, then swap. All modern systems do this.</dd></div>
+        <div class="word"><dt>working set</dt><dd>The small set of pages a program is using right now. Too big, and it thrashes.</dd></div>
+        <div class="word"><dt>TLB</dt><dd>A tiny on-chip cache of PTEs, indexed by bits of the VPN.</dd></div>
+        <div class="word"><dt>VPN / VPO</dt><dd>Virtual page number and offset. PPO equals VPO because pages are the same size.</dd></div>
+        <div class="word"><dt>mmap</dt><dd>A system call that creates a virtual area and ties it to a file or to zeros.</dd></div>
+        <div class="word"><dt>demand-zero</dt><dd>An anonymous page, born as zeros on first touch. Heap and stack start this way.</dd></div>
+        <div class="word"><dt>copy-on-write</dt><dd>Share a read-only page until someone writes; then copy and retry.</dd></div>
+        <div class="word"><dt>implicit free list</dt><dd>Heap blocks laid end to end. Size fields are the only “links.”</dd></div>
+        <div class="word"><dt>SIGSEGV</dt><dd>The signal for a protection or segmentation fault. The shell prints “segmentation fault.”</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width:820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Eight questions. Finish all eight to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible } = K;
+K.page(9);
+const cap = (id, html) => { K.$(id).innerHTML = html; };
+
+function box(parent, x, y, w, hgt, cls, title, sub) {
+  const r = s("rect", { x, y, width: w, height: hgt, rx: 10, class: cls });
+  parent.appendChild(r);
+  const ty = sub ? y + hgt / 2 - 4 : y + hgt / 2 + 5;
+  const t = s("text", { x: x + w / 2, y: ty, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700, fontSize: "13px" } }, title || "—");
+  parent.appendChild(t);
+  let u = null;
+  if (sub) {
+    u = s("text", { x: x + w / 2, y: y + hgt / 2 + 14, class: "sv-label", "text-anchor": "middle" }, sub);
+    parent.appendChild(u);
+  }
+  return { r, t, u, x, y, w, h: hgt, cx: x + w / 2, cy: y + hgt / 2 };
+}
+
+function setCls(el, cls) { el.setAttribute("class", cls); }
+function dim(el, on) { if (el) el.setAttribute("opacity", on ? "1" : "0.22"); }
+
+function modeBtns(root, mode) {
+  [...root.querySelectorAll("[data-mode]")].forEach((b) => {
+    const on = b.dataset.mode === "all" || b.dataset.mode === String(mode);
+    b.style.display = on ? "" : "none";
+    if (!on) b.disabled = true;
+    else if (b.dataset.keepDisabled !== "1") b.disabled = false;
+  });
+}
+
+/* ================= HERO ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const cpu = box(svg, 24, 48, 130, 72, "sv-server", "CPU", "issues VA");
+  const mmu = box(svg, 190, 48, 130, 72, "sv-panel", "MMU", "translate");
+  const dram = box(svg, 356, 48, 130, 72, "sv-db", "DRAM", "physical");
+  const disk = box(svg, 522, 48, 134, 72, "sv-box", "disk", "pages");
+  svg.append(
+    draw.arrow(154, 84, 190, 84),
+    draw.arrow(320, 84, 356, 84),
+    draw.arrow(486, 84, 522, 84));
+  const note = s("text", { x: 340, y: 160, class: "sv-text", "text-anchor": "middle" }, "");
+  const sub = s("text", { x: 340, y: 186, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(note, sub);
+  const STEPS = [
+    { who: cpu, pill: "VA", title: "CPU issues 0x1000", line: "A virtual address leaves the core. Memory chips never see this number.", cls: "sv-server" },
+    { who: mmu, pill: "PTE", title: "MMU reads PTE 1", line: "VPN 1 indexes the page table. Valid = 1, so PPN is already in DRAM.", cls: "sv-good" },
+    { who: dram, pill: "PA", title: "PA 0x4000, page hit", line: "Because PPO equals VPO, the MMU just glues PPN onto the same offset.", cls: "sv-db" },
+    { who: disk, pill: "fault", title: "A miss would page in", line: "If valid were 0, a page fault would swap a victim and restart the load.", cls: "sv-data-soft" },
+  ];
+  let i = 0, vis = false;
+  function paint() {
+    [cpu, mmu, dram, disk].forEach((b) => setCls(b.r, b === cpu ? "sv-server" : b === dram ? "sv-db" : "sv-panel"));
+    const st = STEPS[i];
+    setCls(st.who.r, st.cls);
+    note.textContent = st.title;
+    sub.textContent = "cache · manage · protect   —   one mechanism";
+    K.$("#hero-pill").innerHTML = `<i></i>${st.pill}`;
+    cap("#hero-cap", st.line);
+  }
+  paint();
+  whenVisible(svg, () => (vis = true), () => (vis = false));
+  (async function auto() {
+    await sleep(900);
+    for (;;) {
+      if (vis && !K.reduced && !document.hidden) {
+        i = (i + 1) % STEPS.length;
+        paint();
+      }
+      await sleep(1700);
+    }
+  })();
+  svg.style.cursor = "pointer";
+  svg.addEventListener("click", () => { i = (i + 1) % STEPS.length; paint(); });
+})();
+
+/* ================= 1. ADDR ================= */
+(function addr() {
+  const svg = K.$("#s1-svg");
+  let mode = 0, busy = false;
+  const cpu = box(svg, 24, 28, 150, 74, "sv-server", "CPU", "load");
+  const mmu = box(svg, 214, 28, 150, 74, "sv-panel", "MMU", "VA → PA");
+  const mem = box(svg, 404, 28, 252, 74, "sv-db", "main memory", "byte cells");
+  const cells = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => {
+    const x = 24 + i * 80;
+    return box(svg, x, 130, 72, 70, i === 4 ? "sv-data-soft" : "sv-panel", String((i + 1) * 11), "PA " + i);
+  });
+  const bus = s("text", { x: 340, y: 230, class: "sv-text", "text-anchor": "middle" }, "");
+  const foot = s("text", { x: 340, y: 258, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(bus, foot);
+  function paint() {
+    dim(mmu.r, mode === 1); dim(mmu.t, mode === 1); dim(mmu.u, mode === 1);
+    cells.forEach((c, i) => setCls(c.r, i === 4 ? "sv-data-soft" : "sv-panel"));
+    if (mode === 0) {
+      bus.textContent = "bus carries PA 4";
+      foot.textContent = "Figure 9.1  ·  no translator";
+      cap("#s1-cap", "Mei’s old microcontroller names locker 4 and the word comes back. There is no map, and no one to stop a wild address.");
+    } else {
+      bus.textContent = "CPU issues VA 4100   ·   MMU writes PA 4";
+      foot.textContent = "Figure 9.2  ·  address translation";
+      cap("#s1-cap", "Soren’s CPU only ever speaks virtual addresses. The MMU looks 4100 up and sends 4. Same word, different glasses.");
+    }
+  }
+  const ctr = K.$("#s1-controls");
+  const loadB = h("button", { class: "btn primary", type: "button", "data-mode": "all" }, "Load word");
+  const resetB = h("button", { class: "btn", type: "button", "data-mode": "all" }, "Reset");
+  loadB.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; loadB.disabled = true;
+    const tag = draw.tag(mode === 0 ? "PA 4" : "VA 4100");
+    svg.appendChild(tag);
+    if (mode === 0) {
+      await fly(tag, [cpu.cx, cpu.cy], [cells[4].cx, cells[4].cy], 560);
+    } else {
+      await fly(tag, [cpu.cx, cpu.cy], [mmu.cx, mmu.cy], 420);
+      tag.remove();
+      const t2 = draw.tag("PA 4");
+      svg.appendChild(t2);
+      await fly(t2, [mmu.cx, mmu.cy], [cells[4].cx, cells[4].cy], 420);
+      t2.remove();
+    }
+    tag.remove();
+    setCls(cells[4].r, "sv-good");
+    cells[4].t.textContent = "55";
+    cap("#s1-cap", mode === 0
+      ? "Because the CPU used a physical address, the 4-byte word at locker 4 returns with no lookup."
+      : "Because the MMU rewrote 4100 to 4, the same word returns. Translation happened on the chip, using a table the kernel owns.");
+    busy = false; loadB.disabled = false;
+  });
+  resetB.addEventListener("click", () => {
+    cells[4].t.textContent = "55";
+    setCls(cells[4].r, "sv-data-soft");
+    paint();
+  });
+  ctr.append(loadB, resetB);
+  K.$("#s1-seg").appendChild(seg(["physical", "virtual"], 0, (i) => {
+    mode = i; paint();
+  }, "s1-mode"));
+  paint();
+})();
+
+/* ================= 2. SPACES ================= */
+(function spaces() {
+  const svg = K.$("#s2-svg");
+  svg.append(draw.label(24, 22, "PROCESS i  Amina", "sv-label", "start"),
+    draw.label(244, 22, "PROCESS j  Jorge", "sv-label", "start"),
+    draw.label(500, 22, "PHYSICAL", "sv-label", "start"));
+  const a1 = box(svg, 24, 36, 188, 58, "sv-server", "VP 1", "Amina");
+  const a2 = box(svg, 24, 106, 188, 58, "sv-server", "VP 2", "Amina");
+  const j1 = box(svg, 244, 36, 188, 58, "sv-server", "VP 1", "Jorge");
+  const j2 = box(svg, 244, 106, 188, 58, "sv-server", "VP 2", "Jorge");
+  const p2 = box(svg, 500, 36, 156, 52, "sv-db", "PP 2", "priv i");
+  const p7 = box(svg, 500, 100, 156, 52, "sv-data-soft", "PP 7", "shared");
+  const p10 = box(svg, 500, 164, 156, 52, "sv-db", "PP 10", "priv j");
+  const note = s("text", { x: 340, y: 250, class: "sv-text", "text-anchor": "middle" }, "each process owns {0 … N−1}");
+  const foot = s("text", { x: 340, y: 278, class: "sv-label", "text-anchor": "middle" }, "Linux 64-bit code starts at 0x400000");
+  svg.append(note, foot);
+  let mapped = false;
+  function paint() {
+    [a1, a2, j1, j2].forEach((b) => setCls(b.r, mapped ? "sv-good" : "sv-server"));
+    note.textContent = mapped ? "i: 1→2, 2→7     j: 1→7, 2→10" : "each process owns {0 … N−1}";
+    K.$("#s2-pill").textContent = mapped ? "mapped" : "unmapped";
+    cap("#s2-cap", mapped
+      ? "Because each process has its own page table, Amina’s VP 1 is PP 2 while Jorge’s VP 1 is PP 7. Both maps also share PP 7 — one libc, two nicknames."
+      : "Amina and Jorge each think they own a private hallway of N addresses. Press Map both to see how those nicknames land on real pages.");
+  }
+  const ctr = K.$("#s2-controls");
+  const mapB = h("button", { class: "btn primary", type: "button" }, "Map both");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  let busy = false;
+  mapB.addEventListener("click", async () => {
+    if (busy || mapped) return;
+    busy = true; mapB.disabled = true;
+    const hops = [[a1, p2], [a2, p7], [j1, p7], [j2, p10]];
+    for (const [fr, to] of hops) {
+      const t = draw.tag("page");
+      svg.appendChild(t);
+      await fly(t, [fr.cx, fr.cy], [to.cx, to.cy], 380);
+      t.remove();
+    }
+    mapped = true; paint();
+    busy = false; mapB.disabled = false;
+  });
+  resetB.addEventListener("click", () => { mapped = false; paint(); });
+  ctr.append(mapB, resetB);
+  paint();
+})();
+
+/* ================= 3. CACHE ================= */
+(function cache() {
+  const svg = K.$("#s3-svg");
+  const init = [
+    { vp: 0, valid: 0, where: "null", kind: "none" },
+    { vp: 1, valid: 1, where: "PP 0", kind: "ram", pp: 0 },
+    { vp: 2, valid: 1, where: "PP 1", kind: "ram", pp: 1 },
+    { vp: 3, valid: 0, where: "disk", kind: "disk" },
+    { vp: 4, valid: 1, where: "PP 3", kind: "ram", pp: 3 },
+    { vp: 5, valid: 0, where: "null", kind: "none" },
+    { vp: 6, valid: 0, where: "disk", kind: "disk" },
+    { vp: 7, valid: 1, where: "PP 2", kind: "ram", pp: 2 },
+  ];
+  let pte = init.map((x) => ({ ...x }));
+  svg.append(draw.label(24, 22, "VIRTUAL", "sv-label", "start"),
+    draw.label(250, 22, "PTE  valid · dest", "sv-label", "start"),
+    draw.label(500, 22, "PHYSICAL", "sv-label", "start"));
+  const vBoxes = pte.map((row, i) => {
+    const y = 32 + i * 34;
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": "VP " + i });
+    const b = box(g, 24, y, 110, 30, "sv-panel", "VP " + i, "");
+    g.addEventListener("click", () => touch(i));
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); touch(i); } });
+    svg.appendChild(g);
+    return b;
+  });
+  const pBoxes = pte.map((row, i) => {
+    const y = 32 + i * 34;
+    return box(svg, 250, y, 200, 30, "sv-panel", row.valid ? "1 · " + row.where : row.kind === "none" ? "0 · hole" : "0 · disk", "");
+  });
+  const frames = [0, 1, 2, 3].map((i) => box(svg, 500, 32 + i * 68, 156, 56, "sv-db", "empty", "PP " + i));
+  const foot = s("text", { x: 340, y: 322, class: "sv-label", "text-anchor": "middle" }, "tap a virtual page");
+  svg.appendChild(foot);
+  function paint() {
+    pte.forEach((row, i) => {
+      pBoxes[i].t.textContent = row.valid ? "1 · " + row.where : row.kind === "none" ? "0 · hole" : "0 · disk";
+      setCls(pBoxes[i].r, row.valid ? "sv-good" : row.kind === "disk" ? "sv-data-soft" : "sv-box");
+      setCls(vBoxes[i].r, row.valid ? "sv-good" : row.kind === "disk" ? "sv-data-soft" : "sv-panel");
+    });
+    frames.forEach((f, i) => {
+      const owner = pte.find((r) => r.pp === i && r.valid);
+      f.t.textContent = owner ? "VP " + owner.vp : "empty";
+      setCls(f.r, owner ? "sv-db" : "sv-panel");
+    });
+    const n = pte.filter((r) => r.valid).length;
+    K.$("#s3-pill").textContent = `cached ${n} / 8`;
+  }
+  let busy = false;
+  async function touch(i) {
+    if (busy) return;
+    const row = pte[i];
+    if (row.kind === "none") {
+      cap("#s3-cap", `VP ${i} was never allocated. There is no disk page and no data. A touch here is a hole in the map.`);
+      setCls(vBoxes[i].r, "sv-bad");
+      return;
+    }
+    if (row.valid) {
+      setCls(frames[row.pp].r, "sv-good");
+      cap("#s3-cap", `Because PTE ${i} is valid, VP ${i} is already in ${row.where}. That is a page hit — no disk, no exception.`);
+      return;
+    }
+    busy = true;
+    const victim = pte.find((r) => r.vp === 4 && r.valid) || pte.find((r) => r.valid);
+    const pp = victim ? victim.pp : 3;
+    if (victim) { victim.valid = 0; victim.where = "disk"; victim.kind = "disk"; victim.pp = undefined; }
+    const tag = draw.tag("VP " + i);
+    svg.appendChild(tag);
+    await fly(tag, [80, 40], [frames[pp].cx, frames[pp].cy], 620);
+    tag.remove();
+    row.valid = 1; row.where = "PP " + pp; row.kind = "ram"; row.pp = pp;
+    paint();
+    cap("#s3-cap", `Because VP ${i} was on disk, the handler evicted VP ${victim ? victim.vp : "—"} from PP ${pp}, paged VP ${i} in, and restarted. That is demand paging.`);
+    busy = false;
+  }
+  const ctr = K.$("#s3-controls");
+  [["Hit VP 2", 2], ["Fault VP 3", 3], ["Hole VP 0", 0]].forEach(([lab, i]) => {
+    ctr.appendChild(h("button", { class: "btn " + (i === 2 ? "primary" : ""), type: "button", onclick: () => touch(i) }, lab));
+  });
+  ctr.appendChild(h("button", { class: "btn", type: "button", onclick: () => { pte = init.map((x) => ({ ...x })); paint(); cap("#s3-cap", "Books back on the warehouse shelves. Four tables, eight virtual pages."); } }, "Reset"));
+  paint();
+  cap("#s3-cap", "Priya has eight books and four tables. Tap VP 2 for a hit, VP 3 for a fault that evicts VP 4.");
+})();
+
+/* ================= 4. PROTECT ================= */
+(function protect() {
+  const svg = K.$("#s4-svg");
+  let mode = 0, busy = false;
+  const PAGES = [
+    { n: 0, sup: 0, r: 1, w: 0, pp: 6, lab: "code" },
+    { n: 1, sup: 0, r: 1, w: 1, pp: 4, lab: "data" },
+    { n: 2, sup: 1, r: 1, w: 1, pp: 2, lab: "kernel" },
+  ];
+  const cards = PAGES.map((p, i) => {
+    const x = 24 + i * 220;
+    const b = box(svg, x, 28, 204, 100, "sv-panel", `VP ${p.n} → PP ${p.pp}`, `SUP ${p.sup}  R ${p.r}  W ${p.w}`);
+    const k = s("text", { x: x + 102, y: 148, class: "sv-label", "text-anchor": "middle" }, p.lab);
+    svg.appendChild(k);
+    return { b, k, p };
+  });
+  const res = box(svg, 24, 176, 632, 70, "sv-panel", "pick an access", "user mode");
+  function ok(p, write) {
+    if (mode === 0 && p.sup) return false;
+    if (write && !p.w) return false;
+    if (!write && !p.r) return false;
+    return true;
+  }
+  function paint() {
+    cards.forEach((c) => setCls(c.b.r, "sv-panel"));
+    res.t.textContent = "pick an access";
+    res.u.textContent = mode === 0 ? "user mode" : "kernel mode";
+    setCls(res.r, "sv-panel");
+    cap("#s4-cap", mode === 0
+      ? "Kwame is a user process. He may read VP 0 and read or write VP 1. VP 2 is supervisor-only."
+      : "Kernel mode may touch every page. The SUP bit only fences user mode.");
+  }
+  async function access(i, write) {
+    if (busy) return;
+    busy = true;
+    const p = PAGES[i];
+    const allowed = ok(p, write);
+    const tag = draw.tag(write ? "STORE" : "LOAD");
+    svg.appendChild(tag);
+    await fly(tag, [340, 16], [cards[i].b.cx, cards[i].b.cy], 420);
+    tag.remove();
+    setCls(cards[i].b.r, allowed ? "sv-good" : "sv-bad");
+    setCls(res.r, allowed ? "sv-good" : "sv-bad");
+    res.t.textContent = allowed ? (write ? "write ok" : "read ok") : "SIGSEGV";
+    res.u.textContent = allowed ? `VP ${p.n} → PP ${p.pp}` : "general protection fault";
+    cap("#s4-cap", allowed
+      ? `Because ${mode === 0 ? "user" : "kernel"} mode ${write ? "writes" : "reads"} VP ${p.n} and the stamps allow it, the access proceeds to PP ${p.pp}.`
+      : `Because ${mode === 0 && p.sup ? "SUP is 1" : "WRITE is 0"}, the MMU raises a general protection fault. The kernel sends SIGSEGV — a segmentation fault.`);
+    busy = false;
+  }
+  const ctr = K.$("#s4-controls");
+  [
+    ["Read VP 0", 0, false, "0"],
+    ["Write VP 1", 1, true, "all"],
+    ["Write VP 0", 0, true, "0"],
+    ["Touch VP 2", 2, false, "0"],
+    ["Read VP 2", 2, false, "1"],
+  ].forEach(([lab, i, w, m]) => {
+    const b = h("button", { class: "btn " + (lab === "Write VP 1" ? "primary" : ""), type: "button", "data-mode": m }, lab);
+    b.addEventListener("click", () => access(i, w));
+    ctr.appendChild(b);
+  });
+  K.$("#s4-seg").appendChild(seg(["user", "kernel"], 0, (i) => {
+    mode = i; paint(); modeBtns(ctr, mode);
+  }, "s4-mode"));
+  modeBtns(ctr, 0);
+  paint();
+})();
+
+/* ================= 5. XLATE ================= */
+(function xlate() {
+  const svg = K.$("#s5-svg");
+  let mode = 0, step = 0, busy = false;
+  const vaBox = box(svg, 24, 24, 200, 64, "sv-server", "VA 0x03d4", "VPN 0x0F  VPO 0x14");
+  const tlbBox = box(svg, 240, 24, 200, 64, "sv-panel", "TLB set 3", "tag 03  PPN 0D");
+  const ptBox = box(svg, 456, 24, 200, 64, "sv-db", "PTE 0x0F", "valid 1  PPN 0D");
+  const paBox = box(svg, 24, 112, 200, 64, "sv-panel", "PA —", "PPN + PPO");
+  const cacheBox = box(svg, 240, 112, 200, 64, "sv-panel", "cache", "CI 5  CT 0D");
+  const dataBox = box(svg, 456, 112, 200, 64, "sv-panel", "byte —", "returned");
+  const line = s("text", { x: 340, y: 210, class: "sv-text", "text-anchor": "middle" }, "");
+  const foot = s("text", { x: 340, y: 238, class: "sv-label", "text-anchor": "middle" }, "n=14  m=12  P=64  ·  TLBI=low 2 of VPN");
+  svg.append(line, foot);
+  const HIT = [
+    { title: "split VA 0x03d4", line: "VPN 0x0F, VPO 0x14. TLBI is the low two VPN bits: 0x03. TLBT is 0x03.", pa: "PA —", data: "byte —", tlb: "sv-panel", pt: "sv-db", cache: "sv-panel", out: "sv-panel" },
+    { title: "TLB hit in set 3", line: "Set 3, second entry: tag 03 matches, valid 1, PPN 0x0D. No DRAM walk.", pa: "PA —", data: "byte —", tlb: "sv-good", pt: "sv-db", cache: "sv-panel", out: "sv-panel" },
+    { title: "glue PPN | VPO", line: "Because PPO equals VPO, PA is 0x0D concatenated with 0x14 = 0x354.", pa: "PA 0x354", data: "byte —", tlb: "sv-good", pt: "sv-db", cache: "sv-panel", out: "sv-panel" },
+    { title: "cache returns 0x36", line: "CI 0x5, CT 0x0D, CO 0x0. Tag matches: byte 0x36 comes back to the CPU.", pa: "PA 0x354", data: "byte 0x36", tlb: "sv-good", pt: "sv-db", cache: "sv-good", out: "sv-good" },
+  ];
+  const MISS = [
+    { title: "split VA 0x03d4", line: "Same VPN 0x0F. Pretend the TLB has forgotten this PTE.", pa: "PA —", data: "byte —", tlb: "sv-bad", pt: "sv-db", cache: "sv-panel", out: "sv-panel" },
+    { title: "TLB miss", line: "The MMU must fetch PTE 0x0F from the page table (maybe via L1).", pa: "PA —", data: "byte —", tlb: "sv-bad", pt: "sv-data-soft", cache: "sv-panel", out: "sv-panel" },
+    { title: "PTE fills the TLB", line: "PTE is valid, PPN 0x0D. That line is written into TLB set 3.", pa: "PA 0x354", data: "byte —", tlb: "sv-good", pt: "sv-good", cache: "sv-panel", out: "sv-panel" },
+    { title: "then the cache hit", line: "After the extra walk, PA 0x354 still hits and returns 0x36.", pa: "PA 0x354", data: "byte 0x36", tlb: "sv-good", pt: "sv-good", cache: "sv-good", out: "sv-good" },
+  ];
+  function show(row) {
+    line.textContent = row.title;
+    paBox.t.textContent = row.pa;
+    dataBox.t.textContent = row.data;
+    setCls(tlbBox.r, row.tlb);
+    setCls(ptBox.r, row.pt);
+    setCls(cacheBox.r, row.cache);
+    setCls(dataBox.r, row.out);
+    setCls(paBox.r, row.pa === "PA —" ? "sv-panel" : "sv-good");
+    cap("#s5-cap", row.line);
+  }
+  function paint() {
+    step = 0;
+    show((mode === 0 ? HIT : MISS)[0]);
+    dim(ptBox.r, mode === 1); dim(ptBox.t, mode === 1); dim(ptBox.u, mode === 1);
+    tlbBox.u.textContent = mode === 0 ? "tag 03  PPN 0D" : "cold  ·  miss";
+  }
+  const ctr = K.$("#s5-controls");
+  const stepB = h("button", { class: "btn primary", type: "button", "data-mode": "all" }, "Step");
+  const playB = h("button", { class: "btn", type: "button", "data-mode": "all" }, "Play");
+  const resetB = h("button", { class: "btn", type: "button", "data-mode": "all" }, "Reset");
+  const rows = () => (mode === 0 ? HIT : MISS);
+  stepB.addEventListener("click", async () => {
+    if (busy) return;
+    const R = rows();
+    if (step >= R.length - 1) return;
+    busy = true; stepB.disabled = true;
+    step++;
+    show(R[step]);
+    await sleep(80);
+    busy = false; stepB.disabled = step >= R.length - 1;
+  });
+  playB.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; stepB.disabled = true; playB.disabled = true;
+    const R = rows();
+    while (step < R.length - 1) {
+      step++; show(R[step]);
+      await sleep(520);
+    }
+    busy = false; playB.disabled = false; stepB.disabled = true;
+  });
+  resetB.addEventListener("click", () => { busy = false; paint(); stepB.disabled = false; playB.disabled = false; });
+  ctr.append(stepB, playB, resetB);
+  K.$("#s5-seg").appendChild(seg(["TLB hit", "TLB miss"], 0, (i) => {
+    mode = i; busy = false; paint(); stepB.disabled = false; playB.disabled = false;
+  }, "s5-mode"));
+  paint();
+})();
+
+/* ================= 6. MULTI ================= */
+(function multi() {
+  const svg = K.$("#s6-svg");
+  let mode = 0, busy = false;
+  svg.append(draw.label(24, 22, "LEVEL 1  ·  4 MB per PTE", "sv-label", "start"));
+  const l1 = [];
+  for (let i = 0; i < 9; i++) {
+    const x = 24 + i * 72;
+    const live = i === 0 || i === 1 || i === 8;
+    l1.push(box(svg, x, 32, 66, 52, live ? "sv-good" : "sv-box", "PTE " + i, live ? "L2" : "null"));
+  }
+  const l2 = box(svg, 24, 112, 300, 70, "sv-panel", "level 2 table", "1024 PTEs of 4 KB");
+  const page = box(svg, 356, 112, 300, 70, "sv-db", "physical page", "PPN | VPO");
+  const note = s("text", { x: 340, y: 220, class: "sv-text", "text-anchor": "middle" }, "");
+  const foot = s("text", { x: 340, y: 248, class: "sv-label", "text-anchor": "middle" }, "32-bit VA  ·  4 KB pages  ·  4-byte PTE");
+  svg.append(note, foot);
+  function paint() {
+    l1.forEach((b, i) => {
+      const live = i === 0 || i === 1 || i === 8;
+      const on = (mode === 0 && i === 0) || (mode === 1 && i === 8);
+      setCls(b.r, on ? "sv-data-soft" : live ? "sv-good" : "sv-box");
+    });
+    l2.t.textContent = mode === 0 ? "L2 for chunk 0" : "L2 for chunk 8";
+    l2.u.textContent = mode === 0 ? "code + data  ·  2 K pages" : "one stack page";
+    page.t.textContent = "physical page";
+    setCls(page.r, "sv-db");
+    setCls(l2.r, "sv-panel");
+    note.textContent = mode === 0 ? "chunk 0 starts at VA 0" : "chunk 8 starts at VA 32 MB";
+    cap("#s6-cap", mode === 0
+      ? "Chunk 0’s level-1 PTE points at a level-2 table for the first 4 MB — code and data. Chunks 2–7 are null, so those tables do not exist."
+      : "Chunk 8 holds the user stack (one allocated page after 1,023 holes). Only three level-2 tables exist in the book’s picture.");
+  }
+  const ctr = K.$("#s6-controls");
+  const walkB = h("button", { class: "btn primary", type: "button", "data-mode": "all" }, "Walk");
+  walkB.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; walkB.disabled = true;
+    const idx = mode === 0 ? 0 : 8;
+    const t = draw.tag("VPN1");
+    svg.appendChild(t);
+    await fly(t, [340, 16], [l1[idx].cx, l1[idx].cy], 400);
+    t.remove();
+    setCls(l2.r, "sv-data-soft");
+    const t2 = draw.tag("VPN2");
+    svg.appendChild(t2);
+    await fly(t2, [l1[idx].cx, l1[idx].cy], [l2.cx, l2.cy], 400);
+    t2.remove();
+    const t3 = draw.tag("PPN");
+    svg.appendChild(t3);
+    await fly(t3, [l2.cx, l2.cy], [page.cx, page.cy], 400);
+    t3.remove();
+    setCls(page.r, "sv-good");
+    page.t.textContent = mode === 0 ? "code page" : "stack page";
+    note.textContent = "k PTEs later, PPO is still VPO";
+    cap("#s6-cap", `Because level-1 PTE ${idx} was not null, the MMU opened that level-2 table, read the page’s PTE, and glued PPN onto VPO. A 4 MB empty chunk never paid for a table.`);
+    busy = false; walkB.disabled = false;
+  });
+  ctr.append(walkB);
+  K.$("#s6-seg").appendChild(seg(["chunk 0", "stack 8"], 0, (i) => { mode = i; paint(); }, "s6-mode"));
+  paint();
+})();
+
+/* ================= 7. I7 ================= */
+(function i7() {
+  const svg = K.$("#s7-svg");
+  const cr3 = box(svg, 24, 24, 120, 64, "sv-server", "CR3", "L1 base");
+  const lv = ["L1 9-bit", "L2 9-bit", "L3 9-bit", "L4 9-bit"].map((lab, i) =>
+    box(svg, 160 + i * 128, 24, 116, 64, "sv-panel", lab, "512 PTEs"));
+  const page = box(svg, 24, 112, 200, 70, "sv-db", "4 KB page", "PPN 40b + PPO 12");
+  const va = box(svg, 240, 112, 416, 70, "sv-server", "VA 48 bits  ·  256 TB", "9+9+9+9 + VPO 12");
+  const facts = [
+    box(svg, 24, 204, 200, 56, "sv-panel", "PA 52 bits", "4 PB"),
+    box(svg, 240, 204, 200, 56, "sv-panel", "Linux 4 KB", "not 4 MB"),
+    box(svg, 456, 204, 200, 56, "sv-panel", "code 0x400000", "user space"),
+  ];
+  const foot = s("text", { x: 340, y: 288, class: "sv-label", "text-anchor": "middle" }, "d-TLB 64 · i-TLB 128 · L2 TLB 512  ·  all 4-way");
+  svg.appendChild(foot);
+  let busy = false, walked = false;
+  function paint() {
+    lv.forEach((b) => setCls(b.r, "sv-panel"));
+    setCls(cr3.r, "sv-server");
+    setCls(page.r, "sv-db");
+    walked = false;
+    K.$("#s7-pill").textContent = "CR3";
+    cap("#s7-cap", "Nadia’s process has its own four-level tree. CR3 names the first table and is restored on every context switch. Press Walk.");
+  }
+  const ctr = K.$("#s7-controls");
+  const walkB = h("button", { class: "btn primary", type: "button" }, "Walk");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  walkB.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; walkB.disabled = true;
+    const chain = [cr3, ...lv, page];
+    for (let i = 0; i < chain.length - 1; i++) {
+      const t = draw.tag("PTE");
+      svg.appendChild(t);
+      await fly(t, [chain[i].cx, chain[i].cy], [chain[i + 1].cx, chain[i + 1].cy], 380);
+      t.remove();
+      setCls(chain[i + 1].r, "sv-good");
+      K.$("#s7-pill").textContent = i < 4 ? "VPN " + (i + 1) : "page";
+    }
+    walked = true;
+    cap("#s7-cap", "Because the 36-bit VPN is four 9-bit indexes, the MMU reads four PTEs and a 40-bit PPN. The 12-bit VPO never changes — it already names the byte inside the 4 KB page.");
+    busy = false; walkB.disabled = false;
+  });
+  resetB.addEventListener("click", () => { busy = false; paint(); });
+  ctr.append(walkB, resetB);
+  paint();
+})();
+
+/* ================= 8. MMAP ================= */
+(function mmap() {
+  const svg = K.$("#s8-svg");
+  let mode = 0, busy = false, touched = [false, false, false], cow = false;
+  const src = box(svg, 24, 28, 200, 80, "sv-db", "a.out .text", "file on disk");
+  const area = [
+    box(svg, 260, 28, 120, 80, "sv-panel", "p0", "untouched"),
+    box(svg, 396, 28, 120, 80, "sv-panel", "p1", "untouched"),
+    box(svg, 532, 28, 124, 80, "sv-panel", "p2", "untouched"),
+  ];
+  const p1 = box(svg, 24, 140, 300, 70, "sv-server", "process 1", "shared copy");
+  const p2 = box(svg, 356, 140, 300, 70, "sv-server", "process 2", "same pages");
+  const note = s("text", { x: 340, y: 242, class: "sv-text", "text-anchor": "middle" }, "");
+  const foot = s("text", { x: 340, y: 270, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(note, foot);
+  function paint() {
+    [p1.r, p1.t, p1.u, p2.r, p2.t, p2.u].forEach((el) => el.setAttribute("visibility", mode === 1 ? "visible" : "hidden"));
+    src.t.textContent = mode === 0 ? "a.out .text" : "anonymous";
+    src.u.textContent = mode === 0 ? "file on disk" : "kernel zeros";
+    setCls(src.r, mode === 0 ? "sv-db" : "sv-box");
+    area.forEach((b, i) => {
+      b.t.textContent = "p" + i;
+      b.u.textContent = touched[i] ? (mode === 0 ? "from file" : "zero page") : "untouched";
+      setCls(b.r, touched[i] ? "sv-good" : "sv-panel");
+    });
+    if (mode === 1) {
+      p1.u.textContent = cow ? "private copy" : "CoW shared";
+      p2.u.textContent = cow ? "old copy" : "CoW shared";
+      setCls(p1.r, cow ? "sv-good" : "sv-server");
+      setCls(p2.r, cow ? "sv-data-soft" : "sv-server");
+    }
+    note.textContent = mode === 0 ? "MAP_PRIVATE file-backed" : "MAP_PRIVATE | MAP_ANON";
+    foot.textContent = mode === 0 ? "loader never copied these pages" : "demand-zero  ·  heap and stack";
+    cap("#s8-cap", mode === 0
+      ? "Yuki maps .text. None of the virtual pages are in DRAM yet. Touch a page and the file supplies the bytes."
+      : "Imani maps an anonymous area. First touch writes zeros over a victim — no disk transfer. A later write can copy-on-write.");
+  }
+  const ctr = K.$("#s8-controls");
+  const touchB = h("button", { class: "btn primary", type: "button", "data-mode": "all" }, "Touch page");
+  const cowB = h("button", { class: "btn", type: "button", "data-mode": "1" }, "Write (CoW)");
+  const resetB = h("button", { class: "btn", type: "button", "data-mode": "all" }, "Reset");
+  touchB.addEventListener("click", async () => {
+    if (busy) return;
+    const i = touched.findIndex((t) => !t);
+    if (i < 0) { cap("#s8-cap", "All three pages are resident. Reset to empty the area."); return; }
+    busy = true; touchB.disabled = true;
+    const t = draw.tag(mode === 0 ? "bytes" : "0x00");
+    svg.appendChild(t);
+    await fly(t, [src.cx, src.cy], [area[i].cx, area[i].cy], 480);
+    t.remove();
+    touched[i] = true; paint();
+    cap("#s8-cap", mode === 0
+      ? `Because the CPU first named page ${i}, the kernel paged that piece of a.out in. The loader never copied it by hand.`
+      : `Because page ${i} was anonymous, the kernel zeroed a victim frame and marked the PTE resident. No file bytes moved.`);
+    busy = false; touchB.disabled = false;
+  });
+  cowB.addEventListener("click", async () => {
+    if (busy || mode !== 1) return;
+    busy = true; cowB.disabled = true;
+    const t = draw.tag("STORE");
+    svg.appendChild(t);
+    await fly(t, [p1.cx, 120], [p1.cx, p1.cy], 360);
+    t.remove();
+    cow = true; paint();
+    cap("#s8-cap", "Because the private area was copy-on-write, the store faulted, the handler copied the page for process 1, and the write retried on the new copy.");
+    busy = false; cowB.disabled = false;
+  });
+  resetB.addEventListener("click", () => { touched = [false, false, false]; cow = false; paint(); });
+  ctr.append(touchB, cowB, resetB);
+  K.$("#s8-seg").appendChild(seg(["file-backed", "anonymous"], 0, (i) => {
+    mode = i; touched = [false, false, false]; cow = false; paint(); modeBtns(ctr, mode);
+  }, "s8-mode"));
+  modeBtns(ctr, 0);
+  paint();
+})();
+
+/* ================= 9. MALLOC ================= */
+(function malloc() {
+  const svg = K.$("#s9-svg");
+  const W = 16;
+  let blocks = [{ words: 16, alloc: 0, name: "free" }];
+  const st = { used: stat("alloc words", 0), free: stat("free words", 16) };
+  Object.values(st).forEach((v) => K.$("#s9-stats").appendChild(v));
+  const barG = s("g");
+  svg.appendChild(barG);
+  const note = s("text", { x: 340, y: 150, class: "sv-text", "text-anchor": "middle" }, "");
+  const foot = s("text", { x: 340, y: 178, class: "sv-label", "text-anchor": "middle" }, "header = size | a   ·   first fit from the left");
+  svg.append(note, foot);
+  const TRACE = [
+    { lab: "malloc 4", words: 4, name: "p1" },
+    { lab: "malloc 5→6", words: 6, name: "p2" },
+    { lab: "malloc 6", words: 6, name: "p3" },
+  ];
+  let ti = 0, busy = false;
+  function totals() {
+    const a = blocks.filter((b) => b.alloc).reduce((s, b) => s + b.words, 0);
+    const f = W - a;
+    st.used.set(a, a ? "good" : "");
+    st.free.set(f, f ? "" : "bad");
+    return { a, f };
+  }
+  function drawHeap() {
+    K.clear(barG);
+    let x = 24;
+    const px = 632 / W;
+    blocks.forEach((b) => {
+      const w = Math.max(40, b.words * px - 4);
+      box(barG, x, 28, w, 80, b.alloc ? "sv-good" : "sv-panel", b.words + "/" + b.alloc, b.name);
+      x += b.words * px;
+    });
+    const { a, f } = totals();
+    note.textContent = blocks.map((b) => `${b.words}/${b.alloc}`).join("  ");
+    foot.textContent = `16 words  ·  ${a} allocated  ·  ${f} free`;
+  }
+  function firstFit(need, name) {
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i];
+      if (b.alloc || b.words < need) continue;
+      if (b.words === need) { b.alloc = 1; b.name = name; return true; }
+      const rest = b.words - need;
+      blocks.splice(i, 1, { words: need, alloc: 1, name }, { words: rest, alloc: 0, name: "free" });
+      return true;
+    }
+    return false;
+  }
+  function coalesce() {
+    const out = [];
+    blocks.forEach((b) => {
+      if (!b.alloc && out.length && !out[out.length - 1].alloc) out[out.length - 1].words += b.words;
+      else out.push({ ...b });
+    });
+    blocks = out;
+  }
+  function paintCap(msg) { drawHeap(); cap("#s9-cap", msg); }
+  const ctr = K.$("#s9-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step alloc");
+  const freeB = h("button", { class: "btn", type: "button" }, "Free p2");
+  const coalB = h("button", { class: "btn", type: "button" }, "Coalesce");
+  const twoB = h("button", { class: "btn", type: "button" }, "malloc 2");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || ti >= TRACE.length) return;
+    busy = true; stepB.disabled = true;
+    const req = TRACE[ti];
+    const tag = draw.tag(req.name);
+    svg.appendChild(tag);
+    await fly(tag, [340, 220], [40 + 20 * ti, 68], 400);
+    tag.remove();
+    firstFit(req.words, req.name);
+    ti++;
+    paintCap(`Because first fit walked from the left, ${req.name} took ${req.words} words${req.words === 6 && req.name === "p2" ? " (5 plus one pad word so the leftover stays double-word aligned)" : ""}.`);
+    busy = false; stepB.disabled = ti >= TRACE.length;
+  });
+  freeB.addEventListener("click", () => {
+    const b = blocks.find((x) => x.name === "p2" && x.alloc);
+    if (!b) { cap("#s9-cap", "p2 is not allocated. Step until the middle block exists, then free it."); return; }
+    b.alloc = 0; b.name = "p2*";
+    paintCap("Because free does not wipe the payload, p2 still points at the block. The application must not use it — that is the book’s warning after Figure 9.34(d).");
+  });
+  coalB.addEventListener("click", () => {
+    coalesce();
+    paintCap("Because neighboring free blocks were glued, one larger hole remains. That is immediate coalescing, fighting false fragmentation.");
+  });
+  twoB.addEventListener("click", () => {
+    const ok = firstFit(2, "p4");
+    paintCap(ok
+      ? "Because a free hole of 6 (or more) remained, malloc(2) split it: 2 allocated, leftover still free."
+      : "No free block of 2 words. Free p2 first, or reset.");
+  });
+  resetB.addEventListener("click", () => {
+    blocks = [{ words: 16, alloc: 0, name: "free" }]; ti = 0; busy = false;
+    stepB.disabled = false;
+    paintCap("Tomas starts with one 16-word free block — Figure 9.34 before any malloc.");
+  });
+  ctr.append(stepB, freeB, twoB, coalB, resetB);
+  paintCap("A 16-word hallway. Step to carve p1, p2 (padded), p3; free the middle; malloc 2 splits; Coalesce glues crumbs.");
+})();
+
+/* ================= 10. BUGS ================= */
+(function bugs() {
+  const svg = K.$("#s10-svg");
+  let mode = 0, busy = false, n = 0, freed = false, smashed = false;
+  const left = box(svg, 24, 28, 200, 90, "sv-server", "val = 7", "scanf dest");
+  const mid = box(svg, 240, 28, 200, 90, "sv-panel", "address 7", "wild write");
+  const right = box(svg, 456, 28, 200, 90, "sv-db", "someone else", "writable page");
+  const row = [
+    box(svg, 24, 140, 200, 70, "sv-panel", "—", "slot A"),
+    box(svg, 240, 140, 200, 70, "sv-panel", "—", "slot B"),
+    box(svg, 456, 140, 200, 70, "sv-panel", "—", "slot C"),
+  ];
+  const note = s("text", { x: 340, y: 242, class: "sv-text", "text-anchor": "middle" }, "");
+  const foot = s("text", { x: 340, y: 270, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(note, foot);
+  function layout() {
+    if (mode === 0) {
+      left.t.textContent = "val = 7"; left.u.textContent = "scanf dest";
+      mid.t.textContent = "address 7"; mid.u.textContent = "wild write";
+      right.t.textContent = smashed ? "smashed" : "someone else"; right.u.textContent = "writable page";
+      row[0].t.textContent = "hole"; row[0].u.textContent = "unmapped";
+      row[1].t.textContent = "code"; row[1].u.textContent = "read-only";
+      row[2].t.textContent = smashed ? "corrupted" : "heap word"; row[2].u.textContent = "read/write";
+      setCls(left.r, "sv-server"); setCls(mid.r, "sv-panel");
+      setCls(right.r, smashed ? "sv-bad" : "sv-db");
+      setCls(row[0].r, "sv-box"); setCls(row[1].r, "sv-data-soft"); setCls(row[2].r, smashed ? "sv-bad" : "sv-panel");
+      note.textContent = 'scanf("%d", val)  not  &val';
+      foot.textContent = "Section 9.11.1  ·  dereferencing a bad pointer";
+    } else if (mode === 1) {
+      left.t.textContent = freed ? "x  FREED" : "x  live"; left.u.textContent = "heap block";
+      mid.t.textContent = freed ? "y  reuse?" : "y  —"; mid.u.textContent = "next malloc";
+      right.t.textContent = "x[i]++"; right.u.textContent = "line 14";
+      row[0].t.textContent = freed ? "free" : "x[0]"; row[0].u.textContent = "payload";
+      row[1].t.textContent = freed ? "y[0]?" : "—"; row[1].u.textContent = "may overlap";
+      row[2].t.textContent = "later"; row[2].u.textContent = "y looks wrong";
+      setCls(left.r, freed ? "sv-bad" : "sv-good");
+      setCls(mid.r, freed ? "sv-data-soft" : "sv-panel");
+      setCls(right.r, freed ? "sv-bad" : "sv-panel");
+      setCls(row[0].r, freed ? "sv-bad" : "sv-good");
+      setCls(row[1].r, "sv-panel"); setCls(row[2].r, "sv-panel");
+      note.textContent = "heapref  ·  free(x) then y[i] = x[i]++";
+      foot.textContent = "Section 9.11.9  ·  data in a free block";
+    } else {
+      const buf = "A".repeat(Math.min(n, 8));
+      left.t.textContent = (buf + "________").slice(0, 8).split("").join(" ");
+      left.u.textContent = "buf[8]";
+      mid.t.textContent = n > 8 ? "A".repeat(Math.min(n - 8, 8)) : "unused";
+      mid.u.textContent = "gap";
+      right.t.textContent = n >= 24 ? "????" : "ret 400776";
+      right.u.textContent = "return addr";
+      row[0].t.textContent = n + " chars"; row[0].u.textContent = "gets";
+      row[1].t.textContent = n >= 24 ? "smashed" : n > 7 ? "past pad" : "fits";
+      row[1].u.textContent = "status";
+      row[2].t.textContent = "prefer fgets"; row[2].u.textContent = "bound the write";
+      setCls(left.r, n ? "sv-data-soft" : "sv-panel");
+      setCls(mid.r, n > 8 ? "sv-data-soft" : "sv-panel");
+      setCls(right.r, n >= 24 ? "sv-bad" : "sv-server");
+      setCls(row[0].r, "sv-panel");
+      setCls(row[1].r, n >= 24 ? "sv-bad" : n > 7 ? "sv-data-soft" : "sv-good");
+      setCls(row[2].r, "sv-panel");
+      note.textContent = "gets(buf)  ·  8-byte pad";
+      foot.textContent = "Section 9.11.3  ·  stack buffer overflow";
+    }
+  }
+  function caption() {
+    if (mode === 0) {
+      cap("#s10-cap", smashed
+        ? "Because val held 7, scanf treated 7 as an address and wrote a word there. If 7 is a writable page, the smash is silent — and baffling later."
+        : "Nadia meant &val. She passed val. Press Run scanf and watch the write fly at address 7.");
+    } else if (mode === 1) {
+      cap("#s10-cap", freed
+        ? "Because x was freed, the next malloc may have reused those words. x[i]++ now edits y — action at a distance."
+        : "Tomas allocates x. Press Free x, then Reuse. The pointer still names a locker that is no longer his.");
+    } else {
+      cap("#s10-cap", n >= 24
+        ? `Because ${n} bytes were written, the return address is gone. ret jumps into the fog. The book’s fix is fgets.`
+        : n > 7
+          ? "Past the pad the unused gap fills. The return ticket is still safe until character 24."
+          : "Eight characters fit. Type to walk toward the saved return address.");
+    }
+  }
+  function paint() { layout(); caption(); }
+  const ctr = K.$("#s10-controls");
+  const run0 = h("button", { class: "btn primary", type: "button", "data-mode": "0" }, "Run scanf");
+  const run1a = h("button", { class: "btn primary", type: "button", "data-mode": "1" }, "Free x");
+  const run1b = h("button", { class: "btn", type: "button", "data-mode": "1" }, "Reuse x[i]");
+  const run2 = h("button", { class: "btn primary", type: "button", "data-mode": "2" }, "Type a char");
+  const resetB = h("button", { class: "btn", type: "button", "data-mode": "all" }, "Reset");
+  run0.addEventListener("click", async () => {
+    if (busy || mode !== 0) return;
+    busy = true; run0.disabled = true;
+    const t = draw.tag("7");
+    svg.appendChild(t);
+    await fly(t, [left.cx, left.cy], [row[2].cx, row[2].cy], 520);
+    t.remove();
+    smashed = true; paint();
+    busy = false; run0.disabled = false;
+  });
+  run1a.addEventListener("click", () => { if (mode === 1) { freed = true; paint(); } });
+  run1b.addEventListener("click", async () => {
+    if (busy || mode !== 1 || !freed) { if (mode === 1 && !freed) cap("#s10-cap", "Free x first. Then the reuse is the bug."); return; }
+    busy = true;
+    const t = draw.tag("x[i]");
+    svg.appendChild(t);
+    await fly(t, [left.cx, left.cy], [mid.cx, mid.cy], 420);
+    t.remove();
+    setCls(mid.r, "sv-bad");
+    cap("#s10-cap", "Because those words may now belong to y, incrementing x[i] corrupts y. The crash, if any, is later.");
+    busy = false;
+  });
+  run2.addEventListener("click", () => { if (mode === 2 && n < 32) { n++; paint(); } });
+  resetB.addEventListener("click", () => { n = 0; freed = false; smashed = false; paint(); });
+  ctr.append(run0, run1a, run1b, run2, resetB);
+  [["hello", 5], ["24 smash", 24]].forEach(([lab, k]) => {
+    const b = h("button", { class: "btn small", type: "button", "data-mode": "2" }, lab);
+    b.addEventListener("click", () => { if (mode === 2) { n = k; paint(); } });
+    ctr.appendChild(b);
+  });
+  K.$("#s10-seg").appendChild(seg(["scanf", "after free", "overflow"], 0, (i) => {
+    mode = i; n = 0; freed = false; smashed = false; paint(); modeBtns(ctr, mode);
+  }, "s10-mode"));
+  modeBtns(ctr, 0);
+  paint();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "On a modern processor that uses virtual addressing, what does the CPU issue on a load?", options: ["A physical address, sent straight down the memory bus", "A virtual address, which the MMU translates using a page table", "A disk sector number, because pages live on disk", "A cache tag only; the MMU is not involved"], answer: 1, why: "Figure 9.2: the CPU generates a VA. The MMU translates it to a PA with a kernel-managed table before the request reaches main memory." },
+  { q: "Why is the physical page offset identical to the virtual page offset?", options: ["Virtual and physical pages are the same size, so the byte-inside-the-page bits do not change", "The TLB copies the VPO into a different field called PPO", "Linux zeros the low 12 bits of every VA", "They are identical only on a Core i7, not in general"], answer: 0, why: "Figure 9.12: both pages are P bytes, so PPO equals VPO. The MMU concatenates PPN with those same offset bits." },
+  { q: "What is a page fault, in the book’s cache language?", options: ["An SRAM miss served from L3", "A protection violation that always kills the process", "A DRAM-cache miss: the virtual page is not in main memory", "A TLB miss that cannot be filled"], answer: 2, why: "Section 9.3.4: a DRAM cache miss is a page fault. The handler pages the missing page in (demand paging) and restarts the instruction." },
+  { q: "Process i is in user mode. Figure 9.10: which access is illegal?", options: ["Read VP 0 (SUP 0, READ 1, WRITE 0)", "Write VP 1 (SUP 0, READ 1, WRITE 1)", "Read VP 1", "Access VP 2 (SUP 1)"], answer: 3, why: "User mode may only touch pages with SUP = 0. VP 2 is supervisor-only. A violation raises a general protection fault; Linux reports SIGSEGV as a segmentation fault." },
+  { q: "What does a TLB store?", options: ["Full 4 KB pages, like an extra L1", "Page table entries, so most translations never leave the MMU", "Only dirty bits for the write-back policy", "The CR3 value of every process"], answer: 1, why: "A TLB is a small, virtually addressed cache of PTEs. TLBI and TLBT come from the VPN. A hit keeps translation on-chip." },
+  { q: "A single-level page table for a 32-bit VA, 4 KB pages, and 4-byte PTEs would occupy how much memory?", options: ["4 MB, and it would have to stay resident", "4 KB, the same as one page", "256 TB, the Core i7 virtual space", "16 bytes, one PTE"], answer: 0, why: "Section 9.6.3: that combination needs a 4 MB table resident at all times. Two-level tables drop empty 4 MB chunks by leaving level-1 PTEs null." },
+  { q: "Which Core i7 / Linux facts does the book actually state?", options: ["64-bit VAs are used in full, with 16 KB pages", "A two-level page table and a 32-bit physical space only", "48-bit (256 TB) virtual addresses, 52-bit (4 PB) physical, four-level tables, Linux 4 KB pages", "A single 4 MB page table and no TLB"], answer: 2, why: "Section 9.7: current Core i7 implementations use 48-bit VAs and 52-bit PAs. Four 9-bit VPN chunks plus a 12-bit VPO. Linux uses 4 KB pages. CR3 names the level-1 table." },
+  { q: "After free(p2) in Figure 9.34(d), what is true?", options: ["p2 is automatically set to NULL", "The block’s payload is zeroed by free", "malloc now refuses any pointer that equals p2", "p2 still points at the freed block; using it is the application’s bug"], answer: 3, why: "Figure 9.34(d): after free returns, p2 still points at the freed block. The application must not use it until a new malloc reinitializes it. That is also the heapref / use-after-free bug in 9.11.9." },
+], 9);
+</script>
+</body>
+</html>

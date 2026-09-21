@@ -1,0 +1,1092 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 4 · Processor Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .eyebrow { color: var(--mint); }
+  .toc a:hover { border-color: var(--mint); color: var(--mint); }
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box { stroke: var(--mint); }
+  .fade { transition: opacity .3s; }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .first { font-size: 15.5px; color: var(--ink-2); background: var(--mint-soft); border-radius: var(--r-m); padding: 12px 14px; }
+  .first b { color: var(--ink); }
+  .hero-stage { aspect-ratio: auto; }
+  .hero-stage svg { width: 100%; height: auto; display: block; }
+  .stage, .stage-scroll { min-width: 0; max-width: 100%; }
+  .scene-grid, .scene-grid.flip { grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 901px) {
+    .scene-grid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+    .scene-grid.flip { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); }
+  }
+  .btn { display: inline-flex; }
+  .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  pre.code { margin: 0; padding: 12px 14px; background: var(--surface-2); border-top: 1px solid var(--line);
+             font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+             overflow-x: auto; white-space: pre-wrap; min-height: 72px; }
+  pre.code b { color: var(--ink); font-weight: 700; }
+  pre.code i { color: var(--ink-3); font-style: normal; }
+  @media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">4</span> Chapter four · Bitville</span>
+      <h1>Processor Architecture</h1>
+      <p class="lede">The chip looks as if it does one chore at a time. Inside, five workstations can each hold a different instruction — as long as nobody needs a number that is still being cooked.</p>
+      <p class="first"><b>New here?</b> Read the short story, then press the buttons on the picture. You cannot break it. The book’s exact Y86-64 encodings and figure numbers live under “What the book says.”</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#y86">Y86-64 state</a>
+        <a href="#encode">Bytes</a>
+        <a href="#hcl">Gates + HCL</a>
+        <a href="#seq">SEQ walk</a>
+        <a href="#clock">Clock edge</a>
+        <a href="#pipe-idea">Pipelining</a>
+        <a href="#pipe-regs">PIPE regs</a>
+        <a href="#hazard">Forwarding</a>
+        <a href="#stall">Load/use</a>
+        <a href="#control">Predict</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · five stages at once</span><span class="pill info" id="hero-pill"><i></i>cycle 1</span></div>
+      <svg id="hero-svg" viewBox="0 0 680 210" role="img" aria-label="Five pipeline stages with Y86-64 instructions walking through them"></svg>
+      <div class="caption" aria-live="polite" id="hero-cap">Fetch, decode, execute, memory, write-back. One new ticket can enter each beat.</div>
+    </div>
+  </section>
+
+  <section class="scene" id="y86">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">4.1 · The Y86-64 ISA</span>
+        <h2>Fifteen cubbies, three lamps, one bookmark</h2>
+        <p class="story">Priya’s desk is the only world her program can see. Fifteen <b>program registers</b> sit in a row — <code>%rax</code> through <code>%r14</code>. Three lamps remember the last bit of arithmetic: zero, negative, overflow. A bookmark named the <b>program counter</b> points at the next ticket. A status stamp says whether she is still working or has stopped.</p>
+        <p class="story">She does not have the x86-64 register <code>%r15</code>. That missing cubby is how the tickets stay short enough to decode. <code>%rsp</code> is the only cubby with a job: it names the top of the stack for push, pop, call, and return.</p>
+        <p class="imagine"><b>Step Figure 4.17.</b> Watch <code>irmovq $9, %rdx</code>, then <code>irmovq $21, %rbx</code>, then <code>subq %rdx, %rbx</code> write 12 and turn the three lamps off.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 4.1 is the programmer-visible state: 15 registers (<code>%rax</code>, <code>%rcx</code>, <code>%rdx</code>, <code>%rbx</code>, <code>%rsp</code>, <code>%rbp</code>, <code>%rsi</code>, <code>%rdi</code>, <code>%r8</code>–<code>%r14</code>), condition codes ZF, SF, OF, the PC, memory, and Stat. x86-64’s <code>%r15</code> is omitted to simplify encoding. Each register holds a 64-bit word. <code>%rsp</code> is the stack pointer for push, pop, call, and return; the others have no fixed meaning.</p>
+            <p>Y86-64 is a subset of x86-64: only 8-byte integer operations, fewer addressing modes, a simple byte encoding. The four moves are named by source then dest: <code>irmovq</code>, <code>rrmovq</code>, <code>mrmovq</code>, <code>rmmovq</code>. Memory uses base plus displacement only. No memory-to-memory move, and no immediate-to-memory move. OPq is <code>addq</code>, <code>subq</code>, <code>andq</code>, <code>xorq</code> — registers only — and those four set ZF, SF, OF.</p>
+            <p>Figure 4.5 status codes: 1 AOK (normal), 2 HLT (<code>halt</code>), 3 ADR (invalid address), 4 INS (invalid instruction). This design stops on any code other than AOK. Figure 4.17 is the running example: <code>irmovq $9, %rdx</code> at 0x000, <code>irmovq $21, %rbx</code> at 0x00a, <code>subq %rdx, %rbx</code> at 0x014.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 4.17 · first three</span><span class="pill" id="s1-pill">ready</span></div>
+        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 680 340" role="img" aria-label="Y86-64 programmer-visible registers, condition codes, PC, and status"></svg></div>
+        <div class="controls" id="s1-controls"></div>
+        <div class="caption" aria-live="polite" id="s1-cap">Priya’s cubbies start empty. Step to fetch the next ticket from Figure 4.17.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="encode">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">4.1.3–4.1.4 · encoding and exceptions</span>
+        <h2>A ticket is nibbles, then maybe cubbies, then a number</h2>
+        <p class="story">Mateo writes kitchen tickets as bytes. The first byte splits in half: the high nibble is <b>icode</b> (which dish, 0 through 0xB) and the low nibble is <b>ifun</b> (which extra). Some tickets then name one or two cubbies as <b>rA</b> and <b>rB</b>. Some finish with an 8-byte number <b>valC</b> — an immediate, a displacement, or a jump target.</p>
+        <p class="story">Cubbies are numbered 0 for <code>%rax</code> through 0xE for <code>%r14</code>. The number 0xF means “no cubby.” Integers are little-endian, so a printed hex dump looks backwards. A ticket that is not on the menu stamps Stat with INS and stops the kitchen.</p>
+        <p class="imagine"><b>Pick an instruction.</b> The machine splits the bytes the way the fetch stage will. Start with the book’s <code>rmmovq %rsp, 0x123456789abcd(%rdx)</code>.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Instruction encodings range between 1 and 10 bytes. “An instruction consists of a 1-byte instruction specifier, possibly a 1-byte register specifier, and possibly an 8-byte constant word.” Codes 0–0xB: halt, nop, rrmovq/cmovXX, irmovq, rmmovq, mrmovq, OPq, jXX, call, ret, pushq, popq. Function codes (Figure 4.3): addq 0, subq 1, andq 2, xorq 3; jmp 0 through jg 6; rrmovq is the unconditional move with fn 0.</p>
+            <p>Figure 4.4 register IDs match x86-64: 0 <code>%rax</code> … 7 <code>%rdi</code>, 8 <code>%r8</code> … 0xE <code>%r14</code>, 0xF no register. Branches and calls store absolute destinations, not PC-relative ones. The worked encoding: <code>rmmovq %rsp, 0x123456789abcd(%rdx)</code> is <code>40 42 cd ab 89 67 45 23 01 00</code> — icode 4, rA=4 (<code>%rsp</code>), rB=2 (<code>%rdx</code>), displacement little-endian.</p>
+            <p>Every legal byte sequence has a unique split into instructions. Y86-64 mixes CISC traits (condition codes, variable length, stack return address) with RISC traits (load/store, regular encoding, arguments in registers).</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Split the first byte</span><span class="pill" id="s2-pill">rmmovq</span></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 680 320" role="img" aria-label="Y86-64 instruction bytes split into icode, ifun, rA, rB, and valC"></svg></div>
+        <div class="controls" id="s2-controls"></div>
+        <div class="caption" aria-live="polite" id="s2-cap">The first byte is two nibbles. Everything after that is fixed once you know icode.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="hcl">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">4.2 · Logic design and HCL</span>
+        <h2>Wires that never wait, and a fork that picks a word</h2>
+        <p class="story">Yuki does not run a program. She hangs gates on wires. AND, OR, and NOT sit there all day: if an input flips, the output flips a moment later. High voltage near 1.0 volt is a 1; near 0.0 volts is a 0. A loop of gates is forbidden — the answer would argue with itself.</p>
+        <p class="story">A <b>multiplexor</b> is a polite fork: control bit <code>s</code> picks input <code>a</code> or <code>b</code>. An <b>ALU</b> is four forks in one box, with a function code that matches Y86-64’s OPq: 0 add, 1 sub, 2 and, 3 xor. HCL is just a way to write those forks as cases.</p>
+        <p class="imagine"><b>Toggle s, a, and b</b> on the mux. Then switch to the ALU and pick addq / subq / andq / xorq — subtraction is B minus A, the same order as <code>subq</code>.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Three ingredients: combinational logic, memory elements, and a clock. Logic 1 is about 1.0 volt; logic 0 is about 0.0 volts. HCL writes AND as <code>&amp;&amp;</code>, OR as <code>||</code>, NOT as <code>!</code>. Combinational networks must be acyclic, each input driven by exactly one source, and outputs not tied together. Bit equality: <code>bool eq = (a &amp;&amp; b) || (!a &amp;&amp; !b);</code> Bit mux (Figure 4.11): <code>bool out = (s &amp;&amp; a) || (!s &amp;&amp; b);</code></p>
+            <p>Word-level muxes use HCL case expressions; the first matching select wins, and a final <code>1 : default</code> is the usual last case. Figure 4.15 ALU function codes match Figure 4.3: 0 add, 1 sub, 2 and, 3 xor. For subtraction the A input is subtracted from the B input, anticipating <code>subq rA, rB</code>.</p>
+            <p>Clocked registers capture their input on the rising edge and hold it until the next rise. The register file has read ports A/B (srcA/srcB → valA/valB) and write port W (dstW, valW). ID 0xF means do not write. SEQ also clocks the PC, the condition codes, and data-memory writes.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Always-on logic</span><span id="s3-seg"></span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 680 300" role="img" aria-label="A single-bit multiplexor and a four-function ALU"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <div class="caption" aria-live="polite" id="s3-cap">Gates do not wait for a clock. Toggle a bit and the output follows.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="seq">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">4.3.1–4.3.2 · Sequential Y86-64</span>
+        <h2>One ticket through six rooms, then the next</h2>
+        <p class="story">Amina walks a single ticket through the building. <b>Fetch</b> reads the bytes at the bookmark and splits icode, ifun, maybe rA/rB, maybe valC, and computes valP (where the next sequential ticket lives). <b>Decode</b> opens up to two cubbies. <b>Execute</b> asks the ALU to add, subtract, make an address, or bump the stack pointer.</p>
+        <p class="story"><b>Memory</b> may read or write a word. <b>Write-back</b> puts results in cubbies. <b>PC update</b> moves the bookmark to valP, or to a jump/call target, or to a popped return address. SEQ does all six rooms in one long clock cycle. That is correct, and painfully slow.</p>
+        <p class="imagine"><b>Step the book’s <code>subq %rdx, %rbx</code></b> at address 0x014. The rooms fill with the exact numbers from the aside: 21 − 9 = 12.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>SEQ executes a complete instruction every cycle. The six stages: fetch, decode, execute, memory, write-back, PC update. Fetch reads icode:ifun from M1[PC], maybe rA:rB, maybe valC, and sets valP to PC plus the instruction length. Decode reads valA/valB (sometimes <code>%rsp</code>). Execute produces valE and maybe sets CC or Cnd. Memory may write or produce valM. Write-back updates the register file. PC becomes valP, valC, or valM.</p>
+            <p>The aside “Tracing the execution of a subq instruction” follows line 3 of Figure 4.17. Previous irmovqs left <code>%rdx = 9</code> and <code>%rbx = 21</code>. At PC 0x014 the bytes are 0x61 and 0x23. Fetch: icode:ifun = 6:1, rA:rB = 2:3, valP = 0x016. Decode: valA = 9, valB = 21. Execute: valE = 21 − 9 = 12; ZF, SF, OF all 0. Write-back: <code>%rbx ← 12</code>. PC ← 0x016.</p>
+            <p>Figure 4.22 draws the flow clockwise from a PC in the lower left. Hardware is shared: one ALU, one register file with ports A/B/E/M, one data memory. The book draws stages bottom to top so a pipeline listing still reads like the program.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">subq %rdx, %rbx</span><span class="pill" id="s4-pill">Fetch</span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 680 320" role="img" aria-label="SEQ stages walking through subq of rdx from rbx"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <div class="caption" aria-live="polite" id="s4-cap">One instruction, six rooms. Press Step to walk the book’s subq.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="clock">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">4.3.3 · SEQ timing</span>
+        <h2>Wires settle. Then the clock stamps.</h2>
+        <p class="story">Luca thought the six rooms happened one after another, like a recipe. The hardware is ruder: almost everything is combinational. Read the cubbies, run the ALU, pick the next PC — the wires just settle. Only four things wait for a clock edge: the PC, the condition-code register, data-memory writes, and register-file writes.</p>
+        <p class="story">At the start of a cycle the boxes still hold yesterday. By the end, new numbers sit at their inputs. When the clock rises, those numbers become the new state at once. SEQ never has to read back what it just wrote in order to finish the same instruction.</p>
+        <p class="imagine"><b>Walk Figure 4.25.</b> Cycle 3 runs <code>addq %rdx, %rbx</code>. Cycle 4 runs <code>je dest</code>, which is not taken because ZF is still 0 after the add.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Instruction memory and register-file reads act like combinational logic. The four sequenced units — PC, CC, data memory, register file — share one clock. CC updates only on OPq. Data memory writes only for rmmovq, pushq, or call. Register ID 0xF means a write port is idle.</p>
+            <p>“The processor never needs to read back the state updated by an instruction in order to complete the processing of this instruction.” That is the no-reading-back principle. <code>pushq</code> computes valE = valB − 8 and uses valE both as the store address and as the new <code>%rsp</code>, so the write and the memory update can happen together on the rising edge.</p>
+            <p>Figure 4.25: after two irmovqs, cycle 3 starts with PC = 0x014, <code>%rbx = 0x100</code>, CC = 100. By the end of the cycle combinational logic has <code>%rbx ← 0x300</code>, CC ← 000, next PC 0x016, but the state boxes still hold the old values until the clock rises. Cycle 4 fetches <code>je dest</code>; ZF is 0, so the branch is not taken and the next PC is 0x01f.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 4.25 · two cycles</span><span class="pill" id="s5-pill">cycle 3 start</span></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 680 320" role="img" aria-label="SEQ clock timing with combinational logic then a rising edge"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="caption" aria-live="polite" id="s5-cap">State holds still while the wires think. The rising edge is the only stamp.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="pipe-idea">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">4.4 · General principles of pipelining</span>
+        <h2>More shirts per hour, one shirt a little later</h2>
+        <p class="story">Fatima’s laundry has three stations: wash, dry, fold. If she waits for one load to finish before starting the next, the dryer sits cold. If she slides a wet load into the dryer and starts a new wash, she finishes more loads per hour. That rate is <b>throughput</b>. The time one shirt spends in the building is <b>latency</b>, and the extra hand-off trays can make that a bit longer.</p>
+        <p class="story">The book’s toy circuit spends 300 ps in combinational logic and 20 ps stuffing a register: 320 ps per instruction, about 3.12 GIPS. Split into three 100 ps stages plus a 20 ps register each, the clock is 120 ps and throughput jumps to about 8.33 GIPS. One instruction now takes 360 ps. The slowest stage sets the clock. Deep pipes hit a wall because those 20 ps trays eat the cycle.</p>
+        <p class="imagine"><b>Play sequential, then pipelined.</b> Watch I1, I2, I3 share the three stations — or wait in line.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Everyday pipes: a cafeteria line, a car wash. “A key feature of pipelining is that it increases the throughput of the system (i.e., the number of customers served per unit time), but it may also slightly increase the latency (i.e., the time required to service an individual customer).”</p>
+            <p>Figure 4.32 unpipelined: 300 ps combinational plus 20 ps register, delay 320 ps, throughput about 3.12 GIPS. Figure 4.33 three-stage: 100 ps + 20 ps = 120 ps clock, throughput about 8.33 GIPS, latency 360 ps. Speedup 8.33/3.12 = 2.67; latency ratio 360/320 = 1.12. Nonuniform stages (Figure 4.36) are limited by the slowest (150 + 20 = 170 ps, 5.88 GIPS). Six stages of 50 ps yield 70 ps clocks and 14.29 GIPS — not double the three-stage design, because register overhead is 28.6% of the cycle. Real processors use 15 or more stages.</p>
+            <p>Feedback is the real problem. <code>irmovq $50, %rax</code> then <code>addq %rax, %rbx</code> then <code>mrmovq 100(%rbx), %rdx</code> is a chain of data dependencies. A <code>jne</code> is a control dependency. A naive three-stage pipe would feed I1’s result to I4, not I2 — the ISA would be broken.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Wash, dry, fold</span><span id="s6-seg"></span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 680 300" role="img" aria-label="Sequential versus three-stage pipelined laundry stations"></svg></div>
+        <div class="controls" id="s6-controls"></div>
+        <div class="stats" id="s6-stats" style="padding: 0 14px 10px"></div>
+        <div class="caption" aria-live="polite" id="s6-cap">One load at a time, or three stations busy at once. Play to fill the line.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="pipe-regs">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">4.5.1–4.5.4 · SEQ+ and PIPE registers</span>
+        <h2>Trays between the rooms, bookmark first</h2>
+        <p class="story">Omar’s first trick is SEQ+: compute today’s bookmark at the <i>start</i> of the cycle, from leftovers of yesterday (pIcode, pCnd, pValC, pValM, pValP). There is not even a PC register any more — just enough saved scraps to rebuild it. That is legal, as long as programs still see a correct bookmark.</p>
+        <p class="story">Then he slides a tray between rooms: <b>F</b> (predicted PC), <b>D</b> (fetched instruction), <b>E</b> (decoded values), <b>M</b> (ALU result and branch flags), <b>W</b> (values heading home to cubbies). Five irmovqs can sit in the five rooms at once. For most tickets he can even guess the next PC: valC for jumps and call, valP otherwise. Conditional jumps are guessed taken.</p>
+        <p class="imagine"><b>Step Figure 4.42.</b> Five instructions enter, one per cycle. By cycle 5 each tray holds a different ticket.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>SEQ+ is circuit retiming: the same PC mux, now fed by pipeline-like leftovers pIcode, pCnd, pValC, pValM, pValP. The aside asks “Where is the PC in SEQ+?” — it is computed, not stored. PIPE− inserts registers F, D, E, M, W. Signals in a register get an uppercase prefix (M_stat); signals just computed in a stage get a lowercase one (m_stat). Destination register IDs travel with the instruction all the way to write-back so a write uses that instruction’s dst, not decode’s.</p>
+            <p>Figure 4.42: <code>irmovq $1, %rax</code> … <code>irmovq $4, %rdx</code>, then halt. In cycle 5 the five stages hold I1 in W through I5 in F. PIPE predicts the next PC in fetch: valC for IJXX and ICALL, else valP. Conditional branches are predicted always taken (about a 60% success rate). <code>ret</code> is not predicted; fetch stalls until ret reaches write-back. Select-PC can also take M_valA after a not-taken jump or W_valM after ret.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 4.42 · five irmovqs</span><span class="pill" id="s7-pill">cycle 0</span></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 680 320" role="img" aria-label="Five pipeline registers F D E M W filling with irmovq instructions"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="caption" aria-live="polite" id="s7-cap">Empty trays. Each Step fetches one irmovq and slides everyone forward.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="hazard">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">4.5.5 · Data hazards and forwarding</span>
+        <h2>The add reads too soon — unless a side door is open</h2>
+        <p class="story">Soren writes 10 into <code>%rdx</code> and 3 into <code>%rax</code>, then immediately <code>addq %rdx, %rax</code>. Decode opens the cubbies three beats before write-back stamps them. If the cubbies still hold 0, the add is a lie. That is a <b>data hazard</b>: a later ticket needs a number a earlier ticket has not written yet.</p>
+        <p class="story">He could freeze the add until the writes finish (stalls, like stuffing nops into the line). Better: a side door. The number sitting in execute, memory, or write-back is handed straight to decode. That is <b>forwarding</b>. Five sources can feed valA or valB: e_valE, m_valM, M_valE, W_valM, W_valE.</p>
+        <p class="imagine"><b>Run prog4 both ways.</b> Without forwarding both operands are 0. With it, decode steals 10 from memory-stage M_valE and 3 from execute-stage e_valE.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>prog1–prog4 (Figures 4.43–4.46) are <code>irmovq $10, %rdx</code>, <code>irmovq $3, %rax</code>, then zero to three nops, then <code>addq %rdx, %rax</code>. Registers start at 0. Three nops (prog1) let both writes finish before decode. Two nops (prog2): <code>%rax</code> is still in W, so add reads 0. One nop (prog3): both pending. No nops (prog4): <code>%rdx</code> is in M (M_valE = 10) and <code>%rax</code> is being born in E (e_valE = 3).</p>
+            <p>Stalling holds the consumer in D, stalls F, and injects a bubble into E — a dynamic nop. Forwarding compares srcA/srcB with destination IDs in E, M, and W and substitutes the pending value. Newer stages win when several match. PIPE (Figure 4.52) adds Sel+Fwd A and Fwd B. Most register hazards need no stall once those paths exist.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">prog4 · addq %rdx, %rax</span><span id="s8-seg"></span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 680 340" role="img" aria-label="Data hazard on addq with and without forwarding"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="caption" aria-live="polite" id="s8-cap">Decode wants %rdx and %rax. Those writes are still in M and E.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="stall">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">4.5.5 · Load/use hazards</span>
+        <h2>The locker opens one beat too late</h2>
+        <p class="story">Mei loads a word from a locker into <code>%rax</code> (<code>mrmovq</code>) and the very next ticket adds it. Decode wants that word now. The locker does not open until the memory room — one whole beat later. Forwarding cannot send a number backward in time. She must pause.</p>
+        <p class="story">The pause is a <b>load interlock</b>: hold the add in decode, freeze fetch, shove a bubble into execute. Next cycle the word is sitting in memory-stage m_valM and can be handed forward. Other pending numbers (here 10 in <code>%rbx</code>) still use the ordinary side doors.</p>
+        <p class="imagine"><b>Step prog5.</b> Watch cycle 7 refuse the add, then cycle 8 forward 3 from the locker and 10 from write-back.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 4.53 prog5: <code>irmovq $128, %rdx</code>, <code>irmovq $3, %rcx</code>, <code>rmmovq %rcx, 0(%rdx)</code>, <code>irmovq $10, %rbx</code>, <code>mrmovq 0(%rdx), %rax</code>, <code>addq %rbx, %rax</code>. In cycle 7 the add is in decode and needs <code>%rax</code>, but the load does not produce m_valM until cycle 8. The <code>%rbx</code> value 10 can already be forwarded (M_valE).</p>
+            <p>Figure 4.54: stall the add one cycle in D, inject a bubble in E, then forward valB from m_valM and valA from W_valE. Load interlocks plus forwarding cover every Y86-64 register data hazard. Only the interlock costs throughput — one bubble. PIPE control: F and D stall, E bubbles when <code>E_icode</code> is IMRMOVQ or IPOPQ and <code>E_dstM</code> matches d_srcA or d_srcB.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">prog5 · load then add</span><span class="pill" id="s9-pill">cycle 6</span></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 680 340" role="img" aria-label="Load-use hazard stall then forward from memory"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="caption" aria-live="polite" id="s9-cap">mrmovq is in execute. The add in decode wants %rax, which is not born until memory.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="control">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">4.5.4–4.5.8 · Prediction and squash</span>
+        <h2>Guess the door, throw away the wrong hallway</h2>
+        <p class="story">Kwame’s jump is guessed taken, so two tickets from the target walk in before execute even looks at the lamps. If the guess was wrong, those two have not written cubbies yet. The pipeline <b>cancels</b> them — injects bubbles into decode and execute — and fetches the real next ticket. Two beats of work vanish. That is a misprediction squash.</p>
+        <p class="story">A <code>ret</code> is worse: the return address is not known until the ticket reaches write-back. Fetch sits still and three bubbles walk through. Always-taken jumps are right about 60% of the time. On the book’s sample mix those wasted bubbles, plus load interlocks and returns, push CPI from a dream of 1.00 up to about 1.27.</p>
+        <p class="imagine"><b>Play the book’s not-taken <code>jne</code></b> after <code>xorq %rax, %rax</code>. Then switch to <code>ret</code> and watch three bubbles before the return point is fetched.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Always-taken prediction is used; studies cited in the book give about a 60% success rate (never-taken about 40%; BTFNT about 65%). Figure 4.56: <code>xorq %rax, %rax</code> then <code>jne target</code> (not taken). Fetch starts the target <code>irmovq $2, %rdx</code> and the next target instruction. In cycle 4 execute sees Cnd = 0. Cycle 5 bubbles D and E and fetches the fall-through <code>irmovq $1, %rax</code>.</p>
+            <p>Figure 4.55: <code>ret</code> is fetched in cycle 3 and reaches W in cycle 7. Decode, execute, and memory inject three bubbles. Select-PC then uses W_valM. Fetch-stage HCL: <code>f_predPC</code> is valC for jumps and call, else valP. <code>f_pc</code> prefers M_valA on a mispredicted jump, W_valM on ret, else F_predPC.</p>
+            <p>Section 4.5.9 sample mix: loads 25% and 20% of those interlock (lp = 0.05); conditional branches 20% and 40% not taken with two bubbles (mp = 0.16); ret 2% with three bubbles (rp = 0.06). CPI = 1.0 + 0.27 = 1.27. Mispredicts are the largest penalty.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Control hazards</span><span id="s10-seg"></span></div>
+        <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 680 340" role="img" aria-label="Mispredicted branch squash and ret stall bubbles"></svg></div>
+        <div class="controls" id="s10-controls"></div>
+        <div class="caption" aria-live="polite" id="s10-cap">Always taken: fetch the target. If execute disagrees, those two tickets disappear.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The seesaws from this chapter</h2><p>Each row is a choice the ISA or the pipeline makes. The sequential story stays true; the hardware cheats for speed.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>SEQ</h4><p>One instruction, six stages, one long cycle. Easy to trust.</p></div><div class="vs">vs</div><div class="side"><h4>PIPE</h4><p>Five tickets in flight. Clock is the slowest stage plus a tray.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Throughput</h4><p>8.33 GIPS once three 100 ps stages overlap.</p></div><div class="vs">vs</div><div class="side"><h4>Latency</h4><p>360 ps per instruction, worse than the 320 ps solo box.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Stall</h4><p>Safe. Inject nops. Up to three wasted cycles on a data hazard.</p></div><div class="vs">vs</div><div class="side"><h4>Forward</h4><p>Side doors from E/M/W. Most register hazards vanish.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Always taken</h4><p>Simple, about 60% right. Two bubbles when wrong.</p></div><div class="vs">vs</div><div class="side"><h4>BTFNT</h4><p>About 65%. Still not free — mispredicts dominate CPI.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>CISC leftovers</h4><p>Condition codes, variable-length tickets, stack returns.</p></div><div class="vs">vs</div><div class="side"><h4>RISC habits</h4><p>Load/store, regular encodings, arguments in registers.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Guess the PC</h4><p>Issue every cycle for jmp, call, and most others.</p></div><div class="vs">vs</div><div class="side"><h4>Wait on ret</h4><p>Three bubbles until W_valM is the return address.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>ISA story</h4><p>Each instruction finishes before the next begins.</p></div><div class="vs">vs</div><div class="side"><h4>Implementation</h4><p>Hazards, bubbles, and forwarding keep the story honest.</p></div></div>
+      </div>
+      <div class="themes" style="margin-top:18px">
+        <div class="card"><h3>What we skipped</h3><p>The full HCL of every SEQ and PIPE signal (srcB, dstM, mem_write, Stat, the combination-A/B stall/bubble tables). Homework and practice solutions. Bibliographic notes. Verilog synthesis, exception-status subtleties in the pipe, multicycle multiply/divide, and the cache/TLB memory interface. Those live in the book’s later asides and in Chapters 5, 6, and 8–9.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>The chapter’s grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>ISA</dt><dd>The contract: registers, instructions, encodings, exceptions. Programs see this, not the wiring.</dd></div>
+        <div class="word"><dt>Y86-64</dt><dd>The book’s teaching ISA: a slim, regular cousin of x86-64 with 15 registers.</dd></div>
+        <div class="word"><dt>icode / ifun</dt><dd>The two nibbles of the first instruction byte: which instruction, and which extra.</dd></div>
+        <div class="word"><dt>valC / valP</dt><dd>The 8-byte constant in the ticket; the address of the next sequential instruction.</dd></div>
+        <div class="word"><dt>HCL</dt><dd>Hardware control language: Boolean and case expressions that name control wires.</dd></div>
+        <div class="word"><dt>combinational</dt><dd>Gates with no memory. Outputs follow inputs after a delay. No loops.</dd></div>
+        <div class="word"><dt>SEQ</dt><dd>Sequential processor: all six stages in one long cycle, one instruction done.</dd></div>
+        <div class="word"><dt>SEQ+</dt><dd>Same SEQ, but the PC is computed at the start of the cycle from yesterday’s leftovers.</dd></div>
+        <div class="word"><dt>throughput</dt><dd>Finished instructions per second. Pipelining’s main prize.</dd></div>
+        <div class="word"><dt>latency</dt><dd>Time one instruction spends from fetch to write-back. Pipes can make this a bit worse.</dd></div>
+        <div class="word"><dt>hazard</dt><dd>A dependency that would make the pipe compute the wrong ISA result.</dd></div>
+        <div class="word"><dt>forwarding</dt><dd>Hand a pending result from a later stage back to decode, instead of waiting for the cubby.</dd></div>
+        <div class="word"><dt>bubble</dt><dd>A dynamic nop injected into a stage so a stalled instruction does not slide forward.</dd></div>
+        <div class="word"><dt>load interlock</dt><dd>One-cycle stall when a load’s value is needed by the next instruction.</dd></div>
+        <div class="word"><dt>branch prediction</dt><dd>Guess the next PC for a jump so fetch does not wait for execute.</dd></div>
+        <div class="word"><dt>CPI</dt><dd>Clock cycles per instruction. PIPE’s sample mix lands near 1.27, not 1.00.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width:820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Eight questions. Finish all eight to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible } = K;
+K.page(4);
+const cap = (id, html) => { K.$(id).innerHTML = html; };
+
+function box(parent, x, y, w, hgt, cls, title, sub) {
+  const r = s("rect", { x, y, width: w, height: hgt, rx: 10, class: cls });
+  parent.appendChild(r);
+  const ty = sub ? y + hgt / 2 - 4 : y + hgt / 2 + 5;
+  const t = s("text", { x: x + w / 2, y: ty, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700, fontSize: "13px" } }, title || "");
+  parent.appendChild(t);
+  let u = null;
+  if (sub) {
+    u = s("text", { x: x + w / 2, y: y + hgt / 2 + 14, class: "sv-label", "text-anchor": "middle" }, sub);
+    parent.appendChild(u);
+  }
+  return { r, t, u, x, y, w, h: hgt, cx: x + w / 2, cy: y + hgt / 2 };
+}
+
+function setCls(el, cls) { el.setAttribute("class", cls); }
+function showEl(el, on) { if (el) el.style.display = on ? "" : "none"; }
+function vis(g, on) { if (g) g.setAttribute("visibility", on ? "visible" : "hidden"); }
+
+/* ================= HERO ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const STAGES = ["F fetch", "D decode", "E execute", "M memory", "W writeback"];
+  const INS = [
+    { asm: "irmovq $9,%rdx", note: "immediate 9 into a cubby" },
+    { asm: "irmovq $21,%rbx", note: "immediate 21 into a cubby" },
+    { asm: "subq %rdx,%rbx", note: "ALU: 21 − 9 = 12, lamps 000" },
+    { asm: "rmmovq %rsp,100(%rbx)", note: "store 128 at address 112" },
+    { asm: "pushq %rdx", note: "stack pointer 128 → 120" },
+  ];
+  svg.appendChild(draw.label(24, 22, "PIPE · one ticket per beat", "sv-label", "start"));
+  const nodes = STAGES.map((name, i) => {
+    const x = 24 + i * 132;
+    const b = box(svg, x, 44, 120, 70, "sv-panel", "—", name);
+    if (i < 4) svg.appendChild(draw.arrow(x + 120, 79, x + 132, 79));
+    return b;
+  });
+  const foot = s("text", { x: 340, y: 150, class: "sv-text", "text-anchor": "middle" }, "");
+  const sub = s("text", { x: 340, y: 176, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(foot, sub);
+  let cyc = 0, visOn = false;
+  function paint() {
+    for (let i = 0; i < 5; i++) {
+      const idx = cyc - i;
+      const ins = idx >= 0 && idx < INS.length ? INS[idx] : null;
+      nodes[i].t.textContent = ins ? ins.asm.split(" ")[0] : "—";
+      setCls(nodes[i].r, ins ? (i === 2 ? "sv-good" : "sv-server") : "sv-panel");
+    }
+    const head = INS[Math.min(cyc, INS.length - 1)];
+    foot.textContent = cyc < INS.length ? head.asm : "pipe draining";
+    sub.textContent = cyc < INS.length ? head.note : "five stages, five different tickets";
+    K.$("#hero-pill").innerHTML = `<i></i>cycle ${cyc + 1}`;
+    cap("#hero-cap", cyc < INS.length
+      ? `Because a new ticket enters fetch each beat, execute is working on <b>${head.asm}</b> while older tickets finish.`
+      : "Five stages stay busy once the pipe is full. That is the whole chapter in one picture.");
+  }
+  paint();
+  whenVisible(svg, () => (visOn = true), () => (visOn = false));
+  (async function auto() {
+    await sleep(800);
+    for (;;) {
+      if (visOn && !K.reduced && !document.hidden) {
+        cyc = (cyc + 1) % (INS.length + 2);
+        paint();
+      }
+      await sleep(1500);
+    }
+  })();
+  svg.style.cursor = "pointer";
+  svg.addEventListener("click", () => { cyc = (cyc + 1) % (INS.length + 2); paint(); });
+})();
+
+/* ================= 1. Y86 STATE ================= */
+(function y86() {
+  const svg = K.$("#s1-svg");
+  const TRACE = [
+    { pc: "0x000", stat: "AOK", ir: "irmovq $9, %rdx", rdx: 9, rbx: 0, rax: 0, rsp: 0, z: 0, s: 0, o: 0, why: "Fetch at 0x000. valC is 9, rB is %rdx. Write-back stores 9. PC becomes 0x00a." },
+    { pc: "0x00a", stat: "AOK", ir: "irmovq $21, %rbx", rdx: 9, rbx: 21, rax: 0, rsp: 0, z: 0, s: 0, o: 0, why: "Same shape: 10-byte irmovq. %rbx gets 21. The lamps do not change — only OPq sets them." },
+    { pc: "0x014", stat: "AOK", ir: "subq %rdx, %rbx", rdx: 9, rbx: 12, rax: 0, rsp: 0, z: 0, s: 0, o: 0, why: "Decode reads 9 and 21. Execute does 21 − 9 = 12 and sets ZF SF OF to 0. %rbx becomes 12. PC becomes 0x016." },
+    { pc: "0x016", stat: "AOK", ir: "irmovq $128, %rsp", rdx: 9, rbx: 12, rax: 0, rsp: 128, z: 0, s: 0, o: 0, why: "%rsp is just another cubby until push, pop, call, or ret. It now holds 128 (line 4 of Figure 4.17)." },
+    { pc: "0x020", stat: "AOK", ir: "rmmovq %rsp, 100(%rbx)", rdx: 9, rbx: 12, rax: 0, rsp: 128, z: 0, s: 0, o: 0, why: "Address is 12 + 100 = 112. Memory writes 128 there. Cubbies stay put. PC becomes 0x02a." },
+  ];
+  svg.append(
+    draw.label(24, 22, "REGISTERS", "sv-label", "start"),
+    draw.label(420, 22, "CC · PC · STAT", "sv-label", "start"));
+  const regs = [
+    ["%rax", 24, 36], ["%rdx", 154, 36], ["%rbx", 284, 36], ["%rsp", 24, 112],
+  ].map(([name, x, y]) => ({ name, b: box(svg, x, y, 120, 58, "sv-server", "0", name) }));
+  const lamps = ["ZF", "SF", "OF"].map((n, i) => box(svg, 420 + i * 82, 36, 74, 58, "sv-panel", "0", n));
+  const pcB = box(svg, 420, 112, 120, 58, "sv-db", "0x000", "PC");
+  const stB = box(svg, 552, 112, 104, 58, "sv-good", "AOK", "Stat");
+  const irB = box(svg, 24, 196, 632, 64, "sv-panel", "press Step", "current instruction");
+  svg.appendChild(draw.label(24, 298, "15 registers · no %r15 · lamps only on OPq", "sv-label", "start"));
+  let i = -1, busy = false;
+  function paint() {
+    const t = i < 0 ? { pc: "0x000", stat: "AOK", ir: "—", rdx: 0, rbx: 0, rax: 0, rsp: 0, z: 0, s: 0, o: 0 } : TRACE[i];
+    const vals = { "%rax": t.rax, "%rdx": t.rdx, "%rbx": t.rbx, "%rsp": t.rsp };
+    regs.forEach((r) => {
+      r.b.t.textContent = String(vals[r.name]);
+      setCls(r.b.r, i >= 0 && ((r.name === "%rdx" && t.rdx) || (r.name === "%rbx" && t.ir.includes("%rbx")) || (r.name === "%rsp" && t.rsp)) ? "sv-good" : "sv-server");
+    });
+    [t.z, t.s, t.o].forEach((bit, k) => {
+      lamps[k].t.textContent = String(bit);
+      setCls(lamps[k].r, bit ? "sv-bad" : "sv-good");
+    });
+    pcB.t.textContent = t.pc;
+    stB.t.textContent = t.stat;
+    irB.t.textContent = t.ir;
+    K.$("#s1-pill").textContent = i < 0 ? "ready" : `step ${i + 1} / 5`;
+    cap("#s1-cap", i < 0
+      ? "Empty cubbies, PC at 0x000, Stat AOK. Figure 4.17 starts with irmovq $9, %rdx."
+      : t.why);
+  }
+  const ctr = K.$("#s1-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || i >= TRACE.length - 1) return;
+    busy = true; stepB.disabled = true;
+    i++;
+    const p = draw.tag(TRACE[i].ir.split(" ")[0]);
+    svg.appendChild(p);
+    await fly(p, [irB.cx, 40], [irB.cx, irB.cy], 420);
+    p.remove();
+    paint();
+    busy = false;
+    stepB.disabled = i >= TRACE.length - 1;
+  });
+  resetB.addEventListener("click", () => { i = -1; busy = false; stepB.disabled = false; paint(); });
+  ctr.append(stepB, resetB);
+  paint();
+})();
+
+/* ================= 2. ENCODE ================= */
+(function encode() {
+  const svg = K.$("#s2-svg");
+  const INS = [
+    { name: "halt", bytes: ["00"], fields: { icode: "0", ifun: "0", rA: "—", rB: "—", valC: "—" }, why: "One byte. icode 0 stops the processor and sets Stat to HLT." },
+    { name: "nop", bytes: ["10"], fields: { icode: "1", ifun: "0", rA: "—", rB: "—", valC: "—" }, why: "icode 1. Fetch still computes valP = PC + 1, then nothing else happens." },
+    { name: "rrmovq %rbx,%rcx", bytes: ["20", "31"], fields: { icode: "2", ifun: "0", rA: "3 %rbx", rB: "1 %rcx", valC: "—" }, why: "icode 2, ifun 0 is the unconditional move. rA=3, rB=1. Same icode as cmovXX." },
+    { name: "irmovq $15,%rbx", bytes: ["30", "f3", "0f", "00", "00", "00", "00", "00", "00", "00"], fields: { icode: "3", ifun: "0", rA: "F none", rB: "3 %rbx", valC: "15" }, why: "10 bytes. rA is 0xF because there is no source register. valC is 15, little-endian 0f 00…00." },
+    { name: "rmmovq %rsp,D(%rdx)", bytes: ["40", "42", "cd", "ab", "89", "67", "45", "23", "01", "00"], fields: { icode: "4", ifun: "0", rA: "4 %rsp", rB: "2 %rdx", valC: "0x123…abcd" }, why: "The book’s worked example: 4042cdab896745230100. Displacement 0x0123456789abcd reversed." },
+    { name: "addq %rbx,%rcx", bytes: ["60", "31"], fields: { icode: "6", ifun: "0", rA: "3 %rbx", rB: "1 %rcx", valC: "—" }, why: "OPq icode 6, ifun 0 is addq. ifun 1/2/3 would be subq, andq, xorq." },
+    { name: "je 0x040", bytes: ["73", "40", "00", "00", "00", "00", "00", "00", "00"], fields: { icode: "7", ifun: "3", rA: "—", rB: "—", valC: "0x040" }, why: "jXX icode 7, ifun 3 is je. No register byte. valC is an absolute destination, not PC-relative." },
+    { name: "call 0x041", bytes: ["80", "41", "00", "00", "00", "00", "00", "00", "00"], fields: { icode: "8", ifun: "0", rA: "—", rB: "—", valC: "0x041" }, why: "icode 8. Pushes valP, then PC becomes valC. Figure 4.17’s call proc lives at 0x037." },
+  ];
+  const slots = ["icode", "ifun", "rA", "rB", "valC"].map((lab, i) => {
+    const x = i < 4 ? 24 + i * 100 : 424;
+    const w = i < 4 ? 90 : 232;
+    return { lab, b: box(svg, x, 40, w, 70, "sv-panel", "—", lab) };
+  });
+  const hexT = s("text", { x: 340, y: 150, class: "sv-text", "text-anchor": "middle", style: { fontFamily: "var(--f-mono)", fontSize: "14px", fontWeight: 700 } }, "");
+  const nameT = s("text", { x: 340, y: 186, class: "sv-title", "text-anchor": "middle" }, "");
+  const hint = s("text", { x: 340, y: 220, class: "sv-label", "text-anchor": "middle" }, "1 to 10 bytes  ·  little-endian valC");
+  const ids = s("text", { x: 340, y: 250, class: "sv-label", "text-anchor": "middle" }, "IDs  0=%rax … E=%r14  F=none");
+  svg.append(hexT, nameT, hint, ids);
+  function show(ins) {
+    const f = ins.fields;
+    slots[0].b.t.textContent = f.icode;
+    slots[1].b.t.textContent = f.ifun;
+    slots[2].b.t.textContent = f.rA;
+    slots[3].b.t.textContent = f.rB;
+    slots[4].b.t.textContent = f.valC;
+    setCls(slots[0].b.r, "sv-server");
+    setCls(slots[1].b.r, "sv-data-soft");
+    setCls(slots[2].b.r, f.rA === "—" ? "sv-panel" : "sv-good");
+    setCls(slots[3].b.r, f.rB === "—" ? "sv-panel" : "sv-good");
+    setCls(slots[4].b.r, f.valC === "—" ? "sv-panel" : "sv-db");
+    hexT.textContent = ins.bytes.join(" ");
+    nameT.textContent = ins.name;
+    K.$("#s2-pill").textContent = ins.name.split(" ")[0];
+    cap("#s2-cap", ins.why);
+  }
+  const ctr = K.$("#s2-controls");
+  INS.forEach((ins) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => show(ins) }, ins.name.split(" ")[0]));
+  });
+  show(INS[4]);
+})();
+
+/* ================= 3. HCL ================= */
+(function hcl() {
+  const svg = K.$("#s3-svg");
+  let mode = 0, bitS = 1, bitA = 1, bitB = 0, fn = 0, aluA = 9, aluB = 21;
+  const muxG = s("g", { id: "s3-mux" });
+  const aluG = s("g", { id: "s3-alu" });
+  svg.append(muxG, aluG);
+  const sBox = box(muxG, 40, 36, 100, 70, "sv-server", "1", "s");
+  const aBox = box(muxG, 180, 36, 100, 70, "sv-data-soft", "1", "a");
+  const bBox = box(muxG, 320, 36, 100, 70, "sv-data-soft", "0", "b");
+  const oBox = box(muxG, 500, 36, 140, 70, "sv-good", "1", "out");
+  muxG.appendChild(draw.arrow(440, 71, 500, 71));
+  const muxF = s("text", { x: 340, y: 150, class: "sv-text", "text-anchor": "middle" }, "bool out = (s && a) || (!s && b)");
+  const muxH = s("text", { x: 340, y: 186, class: "sv-label", "text-anchor": "middle" }, "Figure 4.11 · single-bit MUX");
+  muxG.append(muxF, muxH);
+  [["s", sBox, () => { bitS ^= 1; }], ["a", aBox, () => { bitA ^= 1; }], ["b", bBox, () => { bitB ^= 1; }]].forEach(([lab, bx, tog]) => {
+    [bx.r, bx.t, bx.u].forEach((el) => {
+      el.classList.add("clickable");
+      el.setAttribute("tabindex", "0");
+      el.setAttribute("role", "button");
+      el.setAttribute("aria-label", "toggle " + lab);
+      const go = () => { tog(); paint(); };
+      el.addEventListener("click", go);
+      el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+    });
+  });
+  const fnBox = box(aluG, 40, 36, 160, 70, "sv-server", "addq  0", "alufun");
+  const aa = box(aluG, 220, 36, 120, 70, "sv-data-soft", "9", "A  valA");
+  const bb = box(aluG, 360, 36, 120, 70, "sv-data-soft", "21", "B  valB");
+  const ee = box(aluG, 500, 36, 140, 70, "sv-good", "12", "valE");
+  const aluF = s("text", { x: 340, y: 150, class: "sv-text", "text-anchor": "middle" }, "valE ← valB OP valA");
+  const aluH = s("text", { x: 340, y: 186, class: "sv-label", "text-anchor": "middle" }, "Figure 4.15 · ifun 0 add, 1 sub, 2 and, 3 xor");
+  aluG.append(aluF, aluH);
+  const FN = ["addq  0", "subq  1", "andq  2", "xorq  3"];
+  function aluOut() {
+    if (fn === 0) return aluB + aluA;
+    if (fn === 1) return aluB - aluA;
+    if (fn === 2) return aluB & aluA;
+    return aluB ^ aluA;
+  }
+  function paint() {
+    vis(muxG, mode === 0);
+    vis(aluG, mode === 1);
+    if (mode === 0) {
+      sBox.t.textContent = String(bitS);
+      aBox.t.textContent = String(bitA);
+      bBox.t.textContent = String(bitB);
+      const out = (bitS && bitA) || (!bitS && bitB) ? 1 : 0;
+      oBox.t.textContent = String(out);
+      setCls(oBox.r, out ? "sv-good" : "sv-panel");
+      cap("#s3-cap", `Because s is <b>${bitS}</b>, the mux ${bitS ? "passes a" : "passes b"}. out = (${bitS} &amp;&amp; ${bitA}) || (!${bitS} &amp;&amp; ${bitB}) = <b>${out}</b>.`);
+    } else {
+      fnBox.t.textContent = FN[fn];
+      aa.t.textContent = String(aluA);
+      bb.t.textContent = String(aluB);
+      const v = aluOut();
+      ee.t.textContent = String(v);
+      cap("#s3-cap", `ifun ${fn} is ${FN[fn].split("  ")[0]}. The ALU does B OP A, so ${aluB} ${["+", "−", "&amp;", "^"][fn]} ${aluA} = <b>${v}</b>. Subtraction is B minus A, the same order as <code>subq rA, rB</code>.`);
+    }
+    fnBtns.forEach((b, i) => showEl(b, mode === 1));
+    showEl(slA, mode === 1);
+    showEl(slB, mode === 1);
+    muxBtns.forEach((b) => showEl(b, mode === 0));
+  }
+  const ctr = K.$("#s3-controls");
+  const muxBtns = [
+    h("button", { class: "btn small", type: "button", onclick: () => { bitS ^= 1; paint(); } }, "Toggle s"),
+    h("button", { class: "btn small", type: "button", onclick: () => { bitA ^= 1; paint(); } }, "Toggle a"),
+    h("button", { class: "btn small", type: "button", onclick: () => { bitB ^= 1; paint(); } }, "Toggle b"),
+  ];
+  const fnBtns = FN.map((lab, i) => h("button", { class: "btn small", type: "button", onclick: () => { fn = i; paint(); } }, lab.split("  ")[0]));
+  const slA = slider({ id: "s3-a", label: "A", min: 0, max: 31, value: aluA, onInput: (v) => { aluA = v; paint(); } });
+  const slB = slider({ id: "s3-b", label: "B", min: 0, max: 31, value: aluB, onInput: (v) => { aluB = v; paint(); } });
+  muxBtns.concat(fnBtns).forEach((b) => ctr.appendChild(b));
+  ctr.append(slA, slB);
+  K.$("#s3-seg").appendChild(seg(["mux", "ALU"], 0, (i) => { mode = i; paint(); }, "s3-mode"));
+  paint();
+})();
+
+/* ================= 4. SEQ WALK ================= */
+(function seq() {
+  const svg = K.$("#s4-svg");
+  const STAGES = [
+    { n: "Fetch", note: "6:1  2:3  valP=0x016" },
+    { n: "Decode", note: "valA=9  valB=21" },
+    { n: "Execute", note: "21 − 9 = 12  CC=000" },
+    { n: "Memory", note: "idle for OPq" },
+    { n: "Write-back", note: "%rbx ← 12" },
+    { n: "PC update", note: "PC ← 0x016" },
+  ];
+  const nodes = STAGES.map((st, i) => {
+    const x = 24 + (i % 3) * 220;
+    const y = i < 3 ? 36 : 150;
+    return box(svg, x, y, 200, 88, "sv-panel", st.n, "—");
+  });
+  const foot = s("text", { x: 340, y: 280, class: "sv-label", "text-anchor": "middle" }, "subq %rdx, %rbx   at  0x014   bytes 61 23");
+  svg.appendChild(foot);
+  const DETAIL = [
+    "icode:ifun ← M1[0x014] = 6:1. rA:rB ← 2:3. valP ← 0x014 + 2 = 0x016.",
+    "valA ← R[%rdx] = 9. valB ← R[%rbx] = 21.",
+    "valE ← 21 − 9 = 12. Set CC: ZF=0, SF=0, OF=0.",
+    "OPq does not touch memory. The room is still there so every ticket walks the same hallway.",
+    "R[%rbx] ← valE = 12. Port E writes the ALU result.",
+    "PC ← valP = 0x016. The next ticket is the irmovq at line 4.",
+  ];
+  let step = 0, busy = false;
+  function paint() {
+    nodes.forEach((n, i) => {
+      setCls(n.r, i === step ? "sv-good" : i < step ? "sv-server" : "sv-panel");
+      n.u.textContent = i <= step ? STAGES[i].note : "—";
+    });
+    K.$("#s4-pill").textContent = STAGES[step].n;
+    cap("#s4-cap", DETAIL[step]);
+  }
+  const ctr = K.$("#s4-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || step >= 5) return;
+    busy = true; stepB.disabled = true;
+    const from = nodes[step], to = nodes[step + 1];
+    const p = draw.tag("12");
+    svg.appendChild(p);
+    await fly(p, [from.cx, from.cy], [to.cx, to.cy], 480);
+    p.remove();
+    step++;
+    paint();
+    busy = false;
+    stepB.disabled = step >= 5;
+  });
+  resetB.addEventListener("click", () => { step = 0; busy = false; stepB.disabled = false; paint(); });
+  ctr.append(stepB, resetB);
+  paint();
+})();
+
+/* ================= 5. CLOCK ================= */
+(function clock() {
+  const svg = K.$("#s5-svg");
+  const PHASES = [
+    { pill: "cycle 3 start", pc: "0x014", rbx: "0x100", cc: "100", combo: "settling…", cls: "sv-panel",
+      why: "State still holds the second irmovq: PC 0x014, %rbx = 0x100, CC = 100. Combinational logic has not reacted yet." },
+    { pill: "cycle 3 end", pc: "0x014", rbx: "0x100", cc: "100", combo: "%rbx=0x300   CC=000   next PC=0x016", cls: "sv-data-soft",
+      why: "Wires finished addq %rdx, %rbx. New values sit at the inputs. The boxes still show yesterday until the clock rises." },
+    { pill: "clock rises", pc: "0x016", rbx: "0x300", cc: "000", combo: "stamped", cls: "sv-good",
+      why: "Rising edge writes PC, %rbx, and CC together. Cycle 4 begins with the addq’s result as the new state." },
+    { pill: "cycle 4 end", pc: "0x016", rbx: "0x300", cc: "000", combo: "je not taken  next=0x01f", cls: "sv-data-soft",
+      why: "je dest sees ZF=0, so Cnd=0. Combinational logic picks valP = 0x01f. State still holds the addq until the next rise." },
+  ];
+  const pcB = box(svg, 24, 36, 150, 80, "sv-db", "0x014", "PC");
+  const rbB = box(svg, 194, 36, 150, 80, "sv-server", "0x100", "%rbx");
+  const ccB = box(svg, 364, 36, 150, 80, "sv-panel", "100", "CC ZF SF OF");
+  const ckB = box(svg, 534, 36, 122, 80, "sv-box", "low", "clock");
+  const combo = box(svg, 24, 140, 632, 90, "sv-panel", "settling…", "combinational logic");
+  const foot = s("text", { x: 340, y: 268, class: "sv-label", "text-anchor": "middle" }, "Figure 4.25  ·  addq then je dest");
+  svg.appendChild(foot);
+  let step = 0, busy = false;
+  function paint() {
+    const p = PHASES[step];
+    pcB.t.textContent = p.pc;
+    rbB.t.textContent = p.rbx;
+    ccB.t.textContent = p.cc;
+    ckB.t.textContent = step === 2 ? "rise" : "low";
+    setCls(ckB.r, step === 2 ? "sv-good" : "sv-box");
+    combo.t.textContent = p.combo;
+    setCls(combo.r, p.cls);
+    K.$("#s5-pill").textContent = p.pill;
+    cap("#s5-cap", p.why);
+  }
+  const ctr = K.$("#s5-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || step >= PHASES.length - 1) return;
+    busy = true; stepB.disabled = true;
+    step++;
+    paint();
+    await sleep(80);
+    busy = false;
+    stepB.disabled = step >= PHASES.length - 1;
+  });
+  resetB.addEventListener("click", () => { step = 0; busy = false; stepB.disabled = false; paint(); });
+  ctr.append(stepB, resetB);
+  paint();
+})();
+
+/* ================= 6. PIPE IDEA ================= */
+(function pipeIdea() {
+  const svg = K.$("#s6-svg");
+  let mode = 0, busy = false;
+  const seqG = s("g", { id: "s6-seq" });
+  const pipeG = s("g", { id: "s6-pipe" });
+  svg.append(seqG, pipeG);
+  const STATS = { thru: stat("throughput", "—"), lat: stat("latency", "—") };
+  Object.values(STATS).forEach((v) => K.$("#s6-stats").appendChild(v));
+  const seqRow = [0, 1, 2].map((i) => box(seqG, 40 + i * 210, 50, 190, 80, "sv-panel", "I" + (i + 1), "waiting"));
+  const seqNote = s("text", { x: 340, y: 180, class: "sv-text", "text-anchor": "middle" }, "300 ps logic + 20 ps register = 320 ps");
+  const seqHint = s("text", { x: 340, y: 210, class: "sv-label", "text-anchor": "middle" }, "one instruction finishes before the next begins");
+  seqG.append(seqNote, seqHint);
+  const STATIONS = ["A wash", "B dry", "C fold"].map((n, i) => box(pipeG, 40 + i * 210, 50, 190, 80, "sv-panel", "—", n));
+  const pipeNote = s("text", { x: 340, y: 180, class: "sv-text", "text-anchor": "middle" }, "100 ps + 20 ps register  ·  clock 120 ps");
+  const pipeHint = s("text", { x: 340, y: 210, class: "sv-label", "text-anchor": "middle" }, "a new ticket enters wash every beat");
+  pipeG.append(pipeNote, pipeHint);
+  function resetPaint() {
+    vis(seqG, mode === 0);
+    vis(pipeG, mode === 1);
+    seqRow.forEach((b, i) => { b.t.textContent = "I" + (i + 1); b.u.textContent = "waiting"; setCls(b.r, "sv-panel"); });
+    STATIONS.forEach((b) => { b.t.textContent = "—"; setCls(b.r, "sv-panel"); });
+    if (mode === 0) {
+      STATS.thru.set("3.12 GIPS"); STATS.lat.set("320 ps");
+      cap("#s6-cap", "Sequential: I1 occupies the whole 320 ps box. I2 cannot start. Play to run three tickets in a line.");
+    } else {
+      STATS.thru.set("8.33 GIPS"); STATS.lat.set("360 ps");
+      cap("#s6-cap", "Three 100 ps stages plus 20 ps trays. A new ticket can enter every 120 ps. Play to fill wash, dry, and fold.");
+    }
+    showEl(playB, true);
+  }
+  const ctr = K.$("#s6-controls");
+  const playB = h("button", { class: "btn primary", type: "button" }, "Play");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  playB.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; playB.disabled = true;
+    if (mode === 0) {
+      for (let i = 0; i < 3; i++) {
+        seqRow.forEach((b, k) => {
+          setCls(b.r, k === i ? "sv-good" : k < i ? "sv-server" : "sv-panel");
+          b.u.textContent = k === i ? "320 ps" : k < i ? "done" : "waiting";
+        });
+        cap("#s6-cap", `I${i + 1} owns the 320 ps box. Throughput stays 3.12 GIPS because the next ticket is still outside.`);
+        await sleep(520);
+      }
+    } else {
+      const fill = [
+        ["I1", "", ""],
+        ["I2", "I1", ""],
+        ["I3", "I2", "I1"],
+      ];
+      for (let t = 0; t < 3; t++) {
+        STATIONS.forEach((b, c) => {
+          b.t.textContent = fill[t][c] || "—";
+          setCls(b.r, fill[t][c] ? (c === 2 ? "sv-good" : "sv-server") : "sv-panel");
+        });
+        cap("#s6-cap", t < 2
+          ? `Cycle ${t + 1}: I1 has moved on, so I${t + 2} can enter wash. Latency for I1 will be 3 × 120 = 360 ps.`
+          : "Steady state: all three stations busy. Throughput 8.33 GIPS — about 2.67× the sequential box.");
+        await sleep(560);
+      }
+    }
+    busy = false; playB.disabled = false;
+  });
+  resetB.addEventListener("click", () => { busy = false; playB.disabled = false; resetPaint(); });
+  ctr.append(playB, resetB);
+  K.$("#s6-seg").appendChild(seg(["sequential", "pipelined"], 0, (i) => { mode = i; busy = false; playB.disabled = false; resetPaint(); }, "s6-mode"));
+  resetPaint();
+})();
+
+/* ================= 7. PIPE REGS ================= */
+(function pipeRegs() {
+  const svg = K.$("#s7-svg");
+  const INS = [
+    { asm: "irmovq $1,%rax", short: "I1 $1" },
+    { asm: "irmovq $2,%rbx", short: "I2 $2" },
+    { asm: "irmovq $3,%rcx", short: "I3 $3" },
+    { asm: "irmovq $4,%rdx", short: "I4 $4" },
+    { asm: "halt", short: "I5 hlt" },
+  ];
+  const NAMES = ["F predPC", "D fetch", "E decode", "M execute", "W memory"];
+  const nodes = NAMES.map((n, i) => box(svg, 20 + i * 132, 50, 124, 80, "sv-panel", "—", n));
+  nodes.forEach((n, i) => { if (i < 4) svg.appendChild(draw.arrow(n.x + n.w, n.cy, n.x + n.w + 8, n.cy)); });
+  const line = s("text", { x: 340, y: 170, class: "sv-text", "text-anchor": "middle" }, "SEQ+ computed the PC at the start; trays hold the rest");
+  const foot = s("text", { x: 340, y: 200, class: "sv-label", "text-anchor": "middle" }, "Figure 4.42  ·  cycle 5 has I1 in W … I5 in F");
+  svg.append(line, foot);
+  let cyc = 0, busy = false;
+  function occupant(stage) {
+    const idx = cyc - 1 - stage;
+    return idx >= 0 && idx < INS.length ? INS[idx] : null;
+  }
+  function paint() {
+    nodes.forEach((n, i) => {
+      const ins = occupant(i);
+      n.t.textContent = ins ? ins.short : "—";
+      setCls(n.r, ins ? (i === 4 ? "sv-good" : "sv-server") : "sv-panel");
+    });
+    K.$("#s7-pill").textContent = "cycle " + cyc;
+    if (cyc === 0) cap("#s7-cap", "Empty F D E M W trays. Each Step fetches one instruction and slides everyone toward write-back.");
+    else if (cyc === 5) cap("#s7-cap", "Cycle 5: I1 is in W, I2 in M, I3 in E, I4 in D, I5 in F — the book’s snapshot.");
+    else cap("#s7-cap", `Cycle ${cyc}: a new ticket entered F. Older tickets each advanced one tray. Writes happen only when a ticket reaches W.`);
+  }
+  const ctr = K.$("#s7-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || cyc >= 5) return;
+    busy = true; stepB.disabled = true;
+    cyc++;
+    paint();
+    await sleep(80);
+    busy = false;
+    stepB.disabled = cyc >= 5;
+  });
+  resetB.addEventListener("click", () => { cyc = 0; busy = false; stepB.disabled = false; paint(); });
+  ctr.append(stepB, resetB);
+  paint();
+})();
+
+/* ================= 8. HAZARD ================= */
+(function hazard() {
+  const svg = K.$("#s8-svg");
+  let mode = 0, busy = false;
+  const noneG = s("g", { id: "s8-none" });
+  const fwdG = s("g", { id: "s8-fwd" });
+  svg.append(noneG, fwdG);
+  function row(g, y, lab) {
+    const stages = ["F", "D", "E", "M", "W"].map((n, i) => box(g, 150 + i * 100, y, 88, 52, "sv-panel", "—", n));
+    g.appendChild(s("text", { x: 24, y: y + 32, class: "sv-label", "text-anchor": "start" }, lab));
+    return stages;
+  }
+  const n1 = row(noneG, 36, "irmovq $10");
+  const n2 = row(noneG, 104, "irmovq $3");
+  const n3 = row(noneG, 172, "addq");
+  const nVal = s("text", { x: 340, y: 258, class: "sv-text", "text-anchor": "middle" }, "valA=0  valB=0   (wrong)");
+  const nHint = s("text", { x: 340, y: 286, class: "sv-label", "text-anchor": "middle" }, "decode reads the cubbies  ·  writes are still in M and E");
+  noneG.append(nVal, nHint);
+  const f1 = row(fwdG, 36, "irmovq $10");
+  const f2 = row(fwdG, 104, "irmovq $3");
+  const f3 = row(fwdG, 172, "addq");
+  const fVal = s("text", { x: 340, y: 258, class: "sv-text", "text-anchor": "middle" }, "valA=M_valE=10   valB=e_valE=3");
+  const fHint = s("text", { x: 340, y: 286, class: "sv-label", "text-anchor": "middle" }, "side doors from M and E  ·  cubbies still hold 0");
+  fwdG.append(fVal, fHint);
+  function place(rows, cycle) {
+    rows.forEach((st, r) => st.forEach((b, c) => {
+      const stage = cycle - 1 - r;
+      const on = stage === c && stage >= 0 && stage <= 4;
+      b.t.textContent = on ? ["F", "D", "E", "M", "W"][c] : "—";
+      const hot = on && ((r === 0 && c === 3) || (r === 1 && c === 2) || (r === 2 && c === 1));
+      setCls(b.r, !on ? "sv-panel" : hot ? "sv-good" : "sv-server");
+    }));
+  }
+  function paintIdle() {
+    vis(noneG, mode === 0);
+    vis(fwdG, mode === 1);
+    place([n1, n2, n3], 0);
+    place([f1, f2, f3], 0);
+    nVal.textContent = "press Run  ·  cycle 4 decode";
+    fVal.textContent = "press Run  ·  cycle 4 decode";
+    if (mode === 0) cap("#s8-cap", "prog4 has no nops. Without forwarding, addq in decode reads 0 and 0. Run to see the lie.");
+    else cap("#s8-cap", "Same cycle, side doors open. Decode takes 10 from M_valE and 3 from e_valE.");
+  }
+  function paintRun() {
+    place([n1, n2, n3], 4);
+    place([f1, f2, f3], 4);
+    if (mode === 0) {
+      nVal.textContent = "valA=0  valB=0   (wrong)";
+      cap("#s8-cap", "Because the write to %rdx is still in M and the write to %rax is still in E, decode reads the old zeros. The add would compute 0.");
+    } else {
+      fVal.textContent = "valA=M_valE=10   valB=e_valE=3";
+      cap("#s8-cap", "Because srcA matches M_dstE and srcB matches E_dstE, decode steals 10 and 3. The add will compute 13 — the ISA answer.");
+    }
+  }
+  const ctr = K.$("#s8-controls");
+  const runB = h("button", { class: "btn primary", type: "button" }, "Run cycle 4");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  runB.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; runB.disabled = true;
+    paintRun();
+    await sleep(80);
+    busy = false; runB.disabled = false;
+  });
+  resetB.addEventListener("click", () => { busy = false; runB.disabled = false; paintIdle(); });
+  ctr.append(runB, resetB);
+  K.$("#s8-seg").appendChild(seg(["no forward", "forward"], 0, (i) => { mode = i; busy = false; runB.disabled = false; paintIdle(); }, "s8-mode"));
+  paintIdle();
+})();
+
+/* ================= 9. STALL ================= */
+(function stall() {
+  const svg = K.$("#s9-svg");
+  const ROWS = ["irmovq $10,%rbx", "mrmovq 0(%rdx)", "addq %rbx,%rax"];
+  const stages = ROWS.map((lab, r) => {
+    svg.appendChild(s("text", { x: 24, y: 56 + r * 78, class: "sv-label", "text-anchor": "start" }, lab.length > 16 ? lab.slice(0, 16) : lab));
+    return ["F", "D", "E", "M", "W"].map((n, c) => box(svg, 160 + c * 100, 24 + r * 78, 88, 58, "sv-panel", "—", n));
+  });
+  const note = s("text", { x: 340, y: 270, class: "sv-text", "text-anchor": "middle" }, "");
+  const hint = s("text", { x: 340, y: 300, class: "sv-label", "text-anchor": "middle" }, "load interlock  ·  one bubble  ·  then m_valM");
+  svg.append(note, hint);
+  const SNAPS = [
+    { cyc: 7, mark: [[1, 2], [2, 1]], val: "valB needs %rax  ·  m_valM not born yet",
+      why: "Cycle 7: mrmovq is in execute, addq is in decode. %rax’s new value is a memory read that happens next cycle. Forwarding would have to go backward in time." },
+    { cyc: 7, mark: [[1, 2], [2, 1]], bubble: true, val: "stall D  ·  bubble into E",
+      why: "Load interlock: hold addq in decode, freeze fetch, inject a bubble into execute. The load slides into memory." },
+    { cyc: 8, mark: [[1, 3], [2, 1]], val: "valB ← m_valM=3   valA ← W_valE=10",
+      why: "Cycle 8: the locker opened. Decode takes 3 from m_valM and 10 from W_valE. One wasted beat, then the ISA add happens." },
+  ];
+  let i = 0, busy = false;
+  function paint() {
+    const sn = SNAPS[i];
+    stages.forEach((row, r) => row.forEach((b, c) => {
+      b.t.textContent = "—";
+      b.u.textContent = ["F", "D", "E", "M", "W"][c];
+      setCls(b.r, "sv-panel");
+    }));
+    if (i === 0) {
+      stages[0][4].t.textContent = "W"; setCls(stages[0][4].r, "sv-server");
+      stages[1][2].t.textContent = "E"; setCls(stages[1][2].r, "sv-data-soft");
+      stages[2][1].t.textContent = "D"; setCls(stages[2][1].r, "sv-bad");
+    } else if (i === 1) {
+      stages[0][4].t.textContent = "W"; setCls(stages[0][4].r, "sv-server");
+      stages[1][3].t.textContent = "M"; setCls(stages[1][3].r, "sv-good");
+      stages[2][1].t.textContent = "D"; setCls(stages[2][1].r, "sv-data-soft");
+      stages[1][2].t.textContent = "bubble"; setCls(stages[1][2].r, "sv-box");
+    } else {
+      stages[1][3].t.textContent = "M"; setCls(stages[1][3].r, "sv-good");
+      stages[2][1].t.textContent = "D"; setCls(stages[2][1].r, "sv-good");
+      stages[0][4].t.textContent = "W"; setCls(stages[0][4].r, "sv-server");
+    }
+    note.textContent = sn.val;
+    K.$("#s9-pill").textContent = "cycle " + sn.cyc;
+    cap("#s9-cap", sn.why);
+  }
+  const ctr = K.$("#s9-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || i >= SNAPS.length - 1) return;
+    busy = true; stepB.disabled = true;
+    i++;
+    paint();
+    await sleep(80);
+    busy = false;
+    stepB.disabled = i >= SNAPS.length - 1;
+  });
+  resetB.addEventListener("click", () => { i = 0; busy = false; stepB.disabled = false; paint(); });
+  ctr.append(stepB, resetB);
+  paint();
+})();
+
+/* ================= 10. CONTROL ================= */
+(function control() {
+  const svg = K.$("#s10-svg");
+  let mode = 0, busy = false, step = 0;
+  const brG = s("g", { id: "s10-br" });
+  const retG = s("g", { id: "s10-ret" });
+  svg.append(brG, retG);
+  const brSlots = ["F", "D", "E", "M", "W"].map((n, i) => box(brG, 24 + i * 132, 40, 120, 70, "sv-panel", "—", n));
+  const brLine = s("text", { x: 340, y: 150, class: "sv-text", "text-anchor": "middle" }, "");
+  const brHint = s("text", { x: 340, y: 182, class: "sv-label", "text-anchor": "middle" }, "xorq · jne target · (not taken) · fall-through irmovq $1");
+  const brTwo = s("text", { x: 340, y: 214, class: "sv-label", "text-anchor": "middle" }, "");
+  brG.append(brLine, brHint, brTwo);
+  const retSlots = ["F", "D", "E", "M", "W"].map((n, i) => box(retG, 24 + i * 132, 40, 120, 70, "sv-panel", "—", n));
+  const retLine = s("text", { x: 340, y: 150, class: "sv-text", "text-anchor": "middle" }, "");
+  const retHint = s("text", { x: 340, y: 182, class: "sv-label", "text-anchor": "middle" }, "ret at 0x020  ·  return point irmovq $10 at 0x013");
+  const retTwo = s("text", { x: 340, y: 214, class: "sv-label", "text-anchor": "middle" }, "three bubbles while ret walks D, E, M");
+  retG.append(retLine, retHint, retTwo);
+  const BR = [
+    { fill: ["jne", "xorq", "—", "—", "—"], t: "Predict taken: fetch jne, then the target.", c: "Fetch starts the target because always-taken says valC." },
+    { fill: ["irm $2", "jne", "xorq", "—", "—"], t: "Target irmovq $2 walks in. Cnd unknown.", c: "A second target ticket is fetched. Execute has not seen the lamps yet." },
+    { fill: ["irm $3", "irm $2", "jne", "xorq", "—"], t: "Execute: Cnd=0. Mispredict.", c: "xorq set ZF=1, so jne is not taken. Two wrong tickets are in F and D." },
+    { fill: ["irm $1", "bubble", "bubble", "jne", "xorq"], t: "Squash D and E. Fetch fall-through.", c: "Bubbles cancel the two target irmovqs. Fetch uses M_valA = 0x00b for irmovq $1, %rax." },
+  ];
+  const RET = [
+    { fill: ["ret", "call", "—", "—", "—"], t: "ret enters fetch.", c: "The return address is still on the stack. Fetch cannot guess it, so the pipe will wait." },
+    { fill: ["bubble", "ret", "call", "—", "—"], t: "Bubble in F while ret is in D.", c: "One bubble injected. ret is decoding; the stack pop has not happened." },
+    { fill: ["bubble", "bubble", "ret", "call", "—"], t: "Second bubble. ret in execute.", c: "ALU computes %rsp + 8. Still no return address for fetch." },
+    { fill: ["bubble", "bubble", "bubble", "ret", "call"], t: "Third bubble. ret in memory.", c: "valM is read from the stack. Next cycle ret reaches W and Select-PC uses W_valM." },
+    { fill: ["irm $10", "bubble", "bubble", "bubble", "ret"], t: "W_valM = 0x013. Fetch the return point.", c: "Three wasted cycles, then irmovq $10, %rdx at the return point — Figure 4.55." },
+  ];
+  function apply(slots, fill) {
+    slots.forEach((b, i) => {
+      const v = fill[i];
+      b.t.textContent = v;
+      setCls(b.r, v === "—" ? "sv-panel" : v === "bubble" ? "sv-box" : (i === 2 ? "sv-good" : "sv-server"));
+      b.u.textContent = ["F", "D", "E", "M", "W"][i];
+    });
+  }
+  function paint() {
+    vis(brG, mode === 0);
+    vis(retG, mode === 1);
+    if (mode === 0) {
+      const p = BR[step];
+      apply(brSlots, p.fill);
+      brLine.textContent = p.t;
+      brTwo.textContent = step === 3 ? "two tickets canceled  ·  two cycles wasted" : "always taken  ·  about 60% right";
+      cap("#s10-cap", p.c);
+    } else {
+      const p = RET[step];
+      apply(retSlots, p.fill);
+      retLine.textContent = p.t;
+      cap("#s10-cap", p.c);
+    }
+    const max = mode === 0 ? BR.length - 1 : RET.length - 1;
+    stepB.disabled = step >= max;
+    showEl(stepB, true);
+    showEl(resetB, true);
+  }
+  const ctr = K.$("#s10-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    const max = mode === 0 ? BR.length - 1 : RET.length - 1;
+    if (busy || step >= max) return;
+    busy = true; stepB.disabled = true;
+    step++;
+    paint();
+    await sleep(80);
+    busy = false;
+    stepB.disabled = step >= max;
+  });
+  resetB.addEventListener("click", () => { step = 0; busy = false; paint(); });
+  ctr.append(stepB, resetB);
+  K.$("#s10-seg").appendChild(seg(["jne squash", "ret stall"], 0, (i) => { mode = i; step = 0; busy = false; paint(); }, "s10-mode"));
+  paint();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "How many program registers does Y86-64 give you?", options: ["8, leftover from IA32", "15 — %rax through %r14, omitting %r15", "16, the full x86-64 set", "32, like an early RISC"], answer: 1, why: "Figure 4.1: fifteen 64-bit registers. %r15 is omitted so the 4-bit register ID field can use 0xF as “no register.”" },
+  { q: "What is the first byte of irmovq?", options: ["30 — icode 3, ifun 0", "40, the rmmovq code", "60, the OPq code", "00, the halt code"], answer: 0, why: "Figure 4.2: irmovq has instruction code 3. Combined with function code 0 that is byte 0x30. A 0xF plus rB follows, then an 8-byte valC." },
+  { q: "Which Stat code means the processor executed halt?", options: ["1 AOK", "3 ADR", "4 INS", "2 HLT"], answer: 3, why: "Figure 4.5: 1 AOK, 2 HLT, 3 ADR, 4 INS. This design stops on any code other than AOK." },
+  { q: "In SEQ, the subq at 0x014 does 21 − 9. Where does 12 get written?", options: ["Only into memory", "Only into the PC", "Into %rbx during write-back; PC becomes 0x016", "Into %rdx, because rA is the destination"], answer: 2, why: "The book’s subq trace: valE = 12, R[%rbx] ← 12, CC all 0, PC ← valP = 0x016. ATT order is source then dest, so rB is the destination." },
+  { q: "Unpipelined 300 ps logic plus a 20 ps register is how fast?", options: ["320 ps per instruction, about 3.12 GIPS", "300 GIPS, ignoring the register", "120 ps, same as the three-stage pipe", "8.33 GIPS"], answer: 0, why: "Figure 4.32: delay 320 ps, throughput ≈ 3.12 GIPS. The three-stage design (Figure 4.33) is the one that reaches 8.33 GIPS." },
+  { q: "How does PIPE predict conditional jumps?", options: ["Never taken (about 40% right)", "A two-level predictor like a real Intel core", "Always taken — about a 60% success rate", "It stalls fetch until execute computes Cnd"], answer: 2, why: "Section 4.5.4: always taken, so the predicted PC is valC. Studies cited in the book give about 60%. Mispredicts squash two instructions." },
+  { q: "Why can’t forwarding alone fix a load/use hazard?", options: ["Because the register file has only one write port", "The load’s value is not born until the memory stage, one cycle after decode needs it", "Because Y86-64 forbids mrmovq next to addq", "Because Stat would become ADR"], answer: 1, why: "Figure 4.53: addq in decode needs %rax in cycle 7; mrmovq produces m_valM in cycle 8. That would be forwarding backward in time. A one-cycle load interlock, then forward." },
+  { q: "A mispredicted branch in PIPE cancels how many instructions?", options: ["None — they write cubbies anyway", "One, the fetch-stage ticket only", "Five, the whole pipe", "Two — bubbles go into D and E, and fetch redirects"], answer: 3, why: "Figure 4.56: two misfetched target instructions are canceled by bubbling decode and execute. They have not yet updated programmer-visible state. Two cycles of work are wasted." },
+], 4);
+</script>
+</body>
+</html>
+ 

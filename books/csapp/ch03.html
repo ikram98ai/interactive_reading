@@ -1,0 +1,1176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 3 · Machine-Level Representation of Programs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .eyebrow { color: var(--mint); }
+  .toc a:hover { border-color: var(--mint); color: var(--mint); }
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box { stroke: var(--mint); }
+  .fade { transition: opacity .3s; }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .first { font-size: 15.5px; color: var(--ink-2); background: var(--mint-soft); border-radius: var(--r-m); padding: 12px 14px; }
+  .first b { color: var(--ink); }
+  .hero-stage { aspect-ratio: auto; }
+  .hero-stage svg { width: 100%; height: auto; display: block; }
+  .stage, .stage-scroll { min-width: 0; max-width: 100%; }
+  .scene-grid, .scene-grid.flip { grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 901px) {
+    .scene-grid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+    .scene-grid.flip { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); }
+  }
+  .readings { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); }
+  .reading { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-s); padding: 10px 12px; }
+  .reading .k { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .reading .v { font-family: var(--f-mono); font-size: 15px; font-weight: 700; color: var(--ink); margin-top: 4px; word-break: break-all; }
+  .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  pre.code { margin: 0; padding: 12px 14px; background: var(--surface-2); border-top: 1px solid var(--line);
+             font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+             overflow-x: auto; white-space: pre-wrap; min-height: 72px; }
+  pre.code b { color: var(--ink); font-weight: 700; }
+  pre.code i { color: var(--ink-3); font-style: normal; }
+  @media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">3</span> Chapter three · Bitville</span>
+      <h1>Machine-Level Representation of Programs</h1>
+      <p class="lede">Your C program becomes a list of tiny chores the chip already knows how to do. Each chore is just a few bytes — and those bytes are the only thing the machine ever sees.</p>
+      <p class="quote">“The program executed by the machine is simply a sequence of bytes encoding a series of instructions.”</p>
+      <p class="first"><b>New here?</b> Read the short story, then press the buttons on the picture. You cannot break it. The book’s exact assembly and figure numbers live under “What the book says.”</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#encode">C to bytes</a>
+        <a href="#regs">Registers</a>
+        <a href="#mov">Move + stack</a>
+        <a href="#arith">leaq + math</a>
+        <a href="#flags">Flags + jumps</a>
+        <a href="#loops">Loops + switch</a>
+        <a href="#call">Procedures</a>
+        <a href="#arrays">Arrays</a>
+        <a href="#struct">Structs</a>
+        <a href="#smash">Buffer overflow</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · fetch the next instruction</span><span class="pill info" id="hero-pill"><i></i>PC</span></div>
+      <svg id="hero-svg" viewBox="0 0 680 210" role="img" aria-label="The program counter walking through the six instructions of multstore"></svg>
+      <div class="caption" aria-live="polite" id="hero-cap">The chip only sees bytes. The names on the right are for us.</div>
+    </div>
+  </section>
+
+  <section class="scene" id="encode">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">3.1–3.2 · history and encodings</span>
+        <h2>English recipe, kitchen tickets, then dots on a card</h2>
+        <p class="story">Amara writes a C function. The compiler turns it into <b>assembly</b> — one line per tiny job, with names like <code>%rbx</code>. The assembler then turns those lines into bytes. That pile of bytes is <b>machine code</b>. The chip never sees her variable names.</p>
+        <p class="story">Intel’s line started as the 16-bit 8086 in 1978 and grew, always able to run yesterday’s programs. That is why the names look like a family attic: <code>%ax</code> inside <code>%eax</code> inside <code>%rax</code>. We will stay with the subset <code>gcc</code> and Linux actually use on <b>x86-64</b>.</p>
+        <p class="imagine"><b>Step the translation</b> of the book’s <code>multstore</code>. Watch the same six instructions become a 14-byte object file, then a linked program whose <code>call</code> finally knows where <code>mult2</code> lives.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Compile with <code>gcc -Og</code> so the machine code still follows the C. “Invoking higher levels of optimization can generate code that is so heavily transformed that the relationship between the generated machine code and the original source code is difficult to understand.”</p>
+            <p>Figure for <code>multstore</code>: object bytes <code>53 48 89 d3 e8 00 00 00 00 48 89 03 5b c3</code> — 14 bytes inside a 1,368-byte <code>mstore.o</code>. “x86-64 instructions can range in length from 1 to 15 bytes.” After linking, the <code>call</code> target is filled in and two <code>nop</code>s pad the function to 16 bytes.</p>
+            <p>The book uses ATT format (source then destination, <code>%</code> on registers). Intel format reverses the operands. The <b>ISA</b> says each instruction finishes before the next begins, even though the hardware overlaps them. Memory uses <b>virtual addresses</b>; current x86-64 implementations keep the upper 16 bits zero, so an address can name a byte in a range of 2<sup>48</sup>, or 64 terabytes.</p>
+            <p>Aside: transistors have doubled about every 26 months on the Intel line; Moore’s original 1965 guess was every year, and the industry average over 50 years is about every 18 months.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stack">
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">gcc -Og · mstore.c</span><span class="pill" id="s1-pill">C source</span></div>
+          <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 680 300" role="img" aria-label="Four translation stages from C to a linked executable"></svg></div>
+          <div class="controls" id="s1-controls"></div>
+          <pre class="code" id="s1-code"></pre>
+          <div class="caption" aria-live="polite" id="s1-cap">Four programs in a line: preprocessor, compiler, assembler, linker.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="regs">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">3.3–3.4.1 · formats, registers, operands</span>
+        <h2>Sixteen cubbies, and three ways to name a value</h2>
+        <p class="story">Intel still calls 2 bytes a <b>word</b>, 4 bytes a <b>double word</b>, 8 bytes a <b>quad word</b>. That is why <code>movq</code> moves 8 bytes and <code>movl</code> moves 4 — the ‘l’ is “long word,” a leftover 32-bit name. A <code>long</code> and a pointer are both 8 bytes here.</p>
+        <p class="story">The CPU has 16 integer registers. An instruction can take a constant (<b>immediate</b>, written <code>$0x1F</code>), a register, or a <b>memory</b> address. The most general address is <code>Imm(%rb,%ri,s)</code> — offset + base + index × scale, and scale is only 1, 2, 4, or 8.</p>
+        <p class="imagine"><b>Pick an operand</b> from the book’s Practice 3.1. The machine computes the address, then reads the byte. Same memory, different glasses.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 3.1: <code>char</code> 1 / b, <code>short</code> 2 / w, <code>int</code> 4 / l, <code>long</code> 8 / q, <code>char *</code> 8 / q, <code>float</code> 4 / s, <code>double</code> 8 / l. Avoid <code>long double</code> (the old 80-bit x87 format): “It is not portable to other classes of machines.”</p>
+            <p>Figure 3.2: 16 registers, each readable as 1, 2, 4, or 8 bytes in the low end. A 4-byte write zeros the high 4 bytes; a 1- or 2-byte write leaves the rest alone. <code>%rsp</code> is the stack pointer. Roles: <code>%rax</code> return; <code>%rdi %rsi %rdx %rcx %r8 %r9</code> arguments 1–6; <code>%rbx %rbp %r12–%r15</code> callee-saved.</p>
+            <p>Figure 3.3: the general form is <code>Imm(rb, ri, s)</code> with effective address Imm + R[rb] + R[ri] · s. Practice 3.1 stores 0xFF, 0xAB, 0x13, 0x11 at 0x100–0x10C, with <code>%rax = 0x100</code>, <code>%rcx = 0x1</code>, <code>%rdx = 0x3</code>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Practice 3.1 · operand values</span><span class="pill" id="s2-pill">pick one</span></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 680 320" role="img" aria-label="Memory cells, three registers, and the value of a chosen operand"></svg></div>
+        <div class="controls" id="s2-controls"></div>
+        <div class="caption" aria-live="polite" id="s2-cap">An operand is a constant, a register, or a computed street address in memory.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="mov">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">3.4.2–3.4.4 · mov, exchange, push and pop</span>
+        <h2>Copy a note, or stack the plates</h2>
+        <p class="story"><code>movq</code> copies 8 bytes. Source can be a constant, a register, or memory. Destination can be a register or memory — <b>not both memory</b>. To move house to house you go via a register. <code>movl</code> to a register also zeros the top half. There is no <code>movzlq</code>; <code>movl</code> already does that job.</p>
+        <p class="story">The book’s <code>exchange</code> is three instructions: read <code>*xp</code> into <code>%rax</code> (that is the return value), write <code>y</code> to <code>*xp</code>, <code>ret</code>. A C pointer is just an address.</p>
+        <p class="story">The stack grows toward <b>lower</b> addresses. <code>pushq</code> subtracts 8 from <code>%rsp</code> then writes. <code>popq</code> reads then adds 8. We draw it upside down, so the “top” sits at the bottom of the picture.</p>
+        <p class="imagine"><b>Run exchange</b>, then <b>push and pop</b> the book’s Figure 3.9: <code>%rsp = 0x108</code>, <code>%rax = 0x123</code>.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>“x86-64 imposes the restriction that a move instruction cannot have both operands refer to memory locations.” <code>movq</code> immediates are 32-bit sign-extended; <code>movabsq</code> is the 64-bit immediate into a register. Aside: <code>movb</code> leaves the other bytes; <code>movsbq</code> sign-extends; <code>movzbq</code> zero-extends.</p>
+            <p>Figure 3.7: <code>exchange(long *xp, long y)</code> — <code>xp</code> in <code>%rdi</code>, <code>y</code> in <code>%rsi</code>. The example <code>a = 4; b = exchange(&amp;a, 3)</code> prints <code>a = 3, b = 4</code>.</p>
+            <p>Figure 3.8–3.9: <code>pushq</code> is <code>%rsp ← %rsp − 8; M[%rsp] ← S</code>. After <code>pushq %rax</code> then <code>popq %rdx</code>, 0x123 sits in <code>%rdx</code> and <code>%rsp</code> is back at 0x108, but 0x123 still lingers in memory until something overwrites it.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Copy, then stack</span><span id="s3-seg"></span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 680 300" role="img" aria-label="The exchange function and a push-pop stack"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <div class="caption" aria-live="polite" id="s3-cap">A pointer is an address. The stack pointer names the plate on top.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="arith">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">3.5 · arithmetic and leaq</span>
+        <h2>Add without touching the house</h2>
+        <p class="story"><code>leaq</code> looks like a memory read, but it never knocks. It just writes the <b>effective address</b> into a register. Compilers love it as a free <code>5x + 7</code>: if <code>%rdx</code> holds x, then <code>leaq 7(%rdx,%rdx,4), %rax</code> stores 5x + 7.</p>
+        <p class="story">Most other ops use ATT’s “backwards” order: <code>subq %rax, %rdx</code> means “subtract %rax from %rdx.” Shifts take the count in an immediate or in <code>%cl</code>. <code>xorq %rcx, %rcx</code> is a compact way to write zero.</p>
+        <p class="imagine"><b>Slide x</b> and watch <code>leaq</code> compute 5x + 7. Then step the book’s <code>scale</code>: x + 4y + 12z in three <code>leaq</code>s.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 3.10: <code>leaq</code>, unary <code>inc/dec/neg/not</code>, binary <code>add/sub/imul/xor/or/and</code>, shifts <code>sal/shl/sar/shr</code>. “If register %rdx contains value x, then the instruction leaq 7(%rdx,%rdx,4), %rax will set register %rax to 5x + 7.”</p>
+            <p><code>scale</code>: three <code>leaq</code>s compute x + 4y + 12z. Figure 3.11 <code>arith</code> turns z*48 into <code>leaq</code> plus <code>salq $4</code>, and uses <code>andl $252645135</code> for the mask 0x0F0F0F0F.</p>
+            <p>Figure 3.12: one-operand <code>mulq</code>/<code>imulq</code> put a 128-bit product in <code>%rdx:%rax</code>. <code>idivq</code> takes that oct word as the dividend; <code>cqto</code> sign-extends <code>%rax</code> into <code>%rdx</code> first. Two-operand <code>imulq</code> keeps only 64 bits and matches unsigned and two’s-complement bits.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Effective address as arithmetic</span><span id="s4-seg"></span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 680 280" role="img" aria-label="leaq computing 5x plus 7, and the three-leaq scale function"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <div class="caption" aria-live="polite" id="s4-cap">leaq never reads memory. It writes the address it would have used.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="flags">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">3.6.1–3.6.6 · condition codes, jumps, cmov</span>
+        <h2>Four lamps, then a fork or a quiet swap</h2>
+        <p class="story">After most arithmetic, four 1-bit lamps update: <b>CF</b> (unsigned carry), <b>ZF</b> (zero), <b>SF</b> (negative), <b>OF</b> (signed overflow). <code>cmp</code> subtracts without storing; <code>test</code> ANDs without storing. Then you either <code>set*</code> a byte, <code>j*</code> to a label, or <code>cmov*</code> a value.</p>
+        <p class="story">A jump can be a guess. Modern chips keep a pipeline full by predicting the fork. A wrong guess throws away 15–30 cycles of work. So for a simple <code>absdiff</code>, gcc computes <i>both</i> y−x and x−y, then <code>cmovge</code> picks one. No fork, no guess.</p>
+        <p class="imagine"><b>Add two 4-bit numbers</b> and watch the lamps. Then run the book’s <code>absdiff</code> both ways: a jump, and a conditional move.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 3.13–3.15: <code>cmp</code> is subtract; <code>test</code> is AND. Jump and set suffixes: <code>e/ne</code>, signed <code>g/ge/l/le</code>, unsigned <code>a/ae/b/be</code> (“above/below”). Jumps are often <b>PC-relative</b>: the offset is from the <i>next</i> instruction. Conditional jumps are direct only.</p>
+            <p>Figure 3.16 <code>absdiff_se</code> uses <code>jge</code> because the branches have side effects (<code>lt_cnt</code> / <code>ge_cnt</code>). Figure 3.17 <code>absdiff</code> uses <code>cmovge</code>. On Haswell the jump version was about 8 cycles when predictable and 17.50 when random — a misprediction penalty near 19 cycles. The <code>cmov</code> version stayed near 8.</p>
+            <p><code>cread</code> cannot use <code>cmov</code>: evaluating <code>*xp</code> when <code>xp</code> is NULL would fault. gcc only emits <code>cmov</code> when both sides are cheap.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Lamps, then a choice</span><span id="s5-seg"></span></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 680 300" role="img" aria-label="Condition-code lamps and a comparison of jump versus conditional move"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="caption" aria-live="polite" id="s5-cap">The same four bits decide set, jump, and cmov.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="loops">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">3.6.7–3.6.8 · loops and switch</span>
+        <h2>A doorbell at the end, or a hotel directory</h2>
+        <p class="story">There is no <code>while</code> instruction. A <b>do-while</b> is “do the body, then jump back if the test holds.” A <b>while</b> is the same loop plus either a jump to the test first (<code>-Og</code>, “jump to middle”) or a skip-over if the first test fails (<code>-O1</code>, “guarded do”). A <code>for</code> is a <code>while</code> with init and update filled in.</p>
+        <p class="story">A <b>switch</b> with several nearby cases becomes a <b>jump table</b>: an array of code addresses. Subtract the lowest case, reject anything outside 0…6 as unsigned (so negatives become huge), then <code>jmp *table(,%index,8)</code>. Missing cases point at <code>default</code>. Fall-through is just “no jump at the end of that block.” Time does not grow with the number of cases.</p>
+        <p class="imagine"><b>Step factorial</b> as a do-while. Then pick a <code>switch</code> index and watch the table pick a door.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 3.19 <code>fact_do</code>: <code>imulq</code>, <code>subq $1</code>, <code>cmpq $1</code>, <code>jg .L2</code>. Figure 3.20 jump-to-middle inserts <code>jmp</code> to the test. Figure 3.21 guarded-do uses <code>jle</code> to skip; gcc even rewrote the back-edge as <code>n != 1</code>.</p>
+            <p>Figure 3.22–3.23 <code>switch_eg</code>: cases 100, 102–104, 106. Index = n − 100; <code>ja .L8</code> if index &gt; 6; table <code>.L4</code> holds seven quad words. Case 102 falls through into 103. “Even if we had a switch statement with hundreds of cases, they could be handled by a single jump table access.” gcc uses a table when there are about four or more cases in a small range.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Loop or jump table</span><span id="s6-seg"></span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 680 320" role="img" aria-label="A do-while factorial loop and a seven-entry jump table"></svg></div>
+        <div class="controls" id="s6-controls"></div>
+        <div class="caption" aria-live="polite" id="s6-cap">Loops are jumps. A switch is an array of jumps.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="call">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">3.7 · procedures</span>
+        <h2>Leave a bookmark, pass the first six in cubbies</h2>
+        <p class="story"><code>call Q</code> pushes the address of the <i>next</i> instruction — the <b>return address</b> — then jumps to Q. <code>ret</code> pops that address into the program counter. That is why a stack (last in, first out) matches nested calls, including recursion.</p>
+        <p class="story">The first six integer or pointer arguments travel in <code>%rdi %rsi %rdx %rcx %r8 %r9</code>. The return value comes back in <code>%rax</code>. Argument 7 and up sit on the stack. If Q will smash a register that P still needs, the rule is: <code>%rbx %rbp %r12–%r15</code> are <b>callee-saved</b> (Q must restore them). The others are caller-saved.</p>
+        <p class="imagine"><b>Step Figure 3.27</b>: <code>main</code> calls <code>top(100)</code>, which calls <code>leaf(95)</code>. Watch <code>%rsp</code> drop 8 bytes per call and climb back.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 3.25: a stack frame can hold the return address, saved registers, locals, and an “argument build area.” Many functions need none of it — a <b>leaf</b> that fits in registers allocates nothing.</p>
+            <p>Figure 3.27: <code>top(100)</code> does <code>x-5</code>, calls <code>leaf</code>, doubles the 97 it gets back, returns 194. <code>call</code> at 0x40055b pushes 0x400560. Figure 3.28 lists the six argument registers by size. Figure 3.29 <code>proc</code> has eight arguments: a4 and a4p arrive at <code>8(%rsp)</code> and <code>16(%rsp)</code>.</p>
+            <p>Figure 3.31: taking <code>&amp;arg1</code> forces a stack slot. Figure 3.34: P saves <code>%rbp</code> and <code>%rbx</code> around two calls to Q. Figure 3.35: recursive <code>rfact</code> keeps n in <code>%rbx</code> across the recursive call — the same conventions work for recursion.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 3.27 · top and leaf</span><div class="stats" id="s7-stats"></div></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 680 320" role="img" aria-label="Call and return between main, top, and leaf with a live stack"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="caption" aria-live="polite" id="s7-cap">Each call pushes a return ticket. Each ret uses the latest ticket.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="arrays">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">3.8 · arrays</span>
+        <h2>A row of lockers, then a block of rows</h2>
+        <p class="story"><code>T A[N]</code> is N lockers of L bytes each, starting at address x<sub>A</sub>. Locker i lives at x<sub>A</sub> + L·i. In assembly that is often <code>(%rdx,%rcx,4)</code> for an <code>int</code> array — scale 4 is the locker width. Pointer math scales too: <code>p+i</code> means “i lockers further,” not “i bytes.” And <code>A[i]</code> is exactly <code>*(A+i)</code>.</p>
+        <p class="story">A nested <code>int A[5][3]</code> is five rows of three ints, stored <b>row-major</b>: all of row 0, then row 1. Element [i][j] sits at x<sub>A</sub> + 4(3i + j). A variable-size <code>A[n][n]</code> needs a real multiply for n·i; a fixed 16×16 can become pointer walking with <code>+4</code> and <code>+64</code>.</p>
+        <p class="imagine"><b>Tap a cell</b> in the book’s 5×3 picture. The address formula updates. Then step along a row.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Array element i is stored at address xA + L · i. Examples: <code>char A[12]</code> total 12; <code>int C[6]</code> total 24; pointer arrays use 8-byte elements. “The array reference A[i] is identical to the expression *(A+i).”</p>
+            <p>Equation 3.1: <code>&amp;D[i][j] = xD + L(C · i + j)</code>. Figure 3.36 is the 5×3 row-major layout, 60 bytes. Figure 3.37: gcc -O1 turns a fixed 16×16 inner product into pointers <code>Aptr++</code> and <code>Bptr += N</code> with <code>Bend = &amp;B[N][k]</code>. Figure 3.38 keeps an index j for the variable-n case and increments <code>Bptr</code> by n.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 3.36 · int A[5][3]</span><span class="pill" id="s8-pill">tap a cell</span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 680 320" role="img" aria-label="A five-by-three integer array in row-major order"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="caption" aria-live="polite" id="s8-cap">Row 0 is three ints in a row. Row 1 starts 12 bytes later.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="struct">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">3.9 · structs, unions, alignment</span>
+        <h2>A labelled suitcase, or one pocket with many names</h2>
+        <p class="story">A <b>struct</b> lays different fields end to end. The compiler remembers each field’s byte offset and writes <code>4(%rdi)</code> instead of the name <code>j</code>. The machine code has no field names left. A <b>union</b> gives several names to the <i>same</i> bytes — handy, and a way to leak past the type system.</p>
+        <p class="story">Hardware likes addresses that are multiples of the object’s size: a 4-byte <code>int</code> at a multiple of 4. The compiler inserts <b>padding</b> so that happens, and more padding at the end so an array of structs stays aligned. x86-64 still <i>works</i> if you ignore this; Intel just asks you not to, for speed. Some SSE 16-byte moves are the exception: they fault if unaligned.</p>
+        <p class="imagine"><b>Tap fields</b> of the book’s <code>struct rec</code>. Then compare struct S3 with union U3, and watch the 3-byte gap appear in struct S1.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><code>struct rec { int i; int j; int a[2]; int *p; }</code> is 24 bytes: offsets 0, 4, 8, 16. <code>r-&gt;p = &amp;r-&gt;a[r-&gt;i + r-&gt;j]</code> becomes add, <code>cltq</code>, <code>leaq 8(%rdi,%rax,4)</code>, <code>movq</code> to offset 16. “The machine code contains no information about the field declarations or the names of the fields.”</p>
+            <p>struct S3 vs union U3: S3 offsets c=0, i=4, v=16, size 24; U3 all at 0, size 8. “The overall size of a union equals the maximum size of any of its fields.”</p>
+            <p>“The x86-64 hardware will work correctly regardless of the alignment of data.” The rule: “any primitive object of K bytes must have an address that is a multiple of K.” struct S1 { int i; char c; int j; } gets a 3-byte gap so j sits at 8, size 12. struct S2 pads to 12 so an array steps by 12. malloc returns 16-byte-aligned blocks; most stack frames are 16-byte aligned because of SSE.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Layout in bytes</span><span id="s9-seg"></span></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 680 280" role="img" aria-label="Structure fields, a union overlay, and alignment padding"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="caption" aria-live="polite" id="s9-cap">Names are compile-time. The chip only sees offsets.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="smash">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">3.10 · combining control and data</span>
+        <h2>Write past the pad and you move the bookmark</h2>
+        <p class="story">C does not check array bounds. Locals live on the same stack as the return address. So a tiny <code>char buf[8]</code> plus the old <code>gets</code> is enough: type 24 characters and you overwrite the return address. <code>ret</code> then jumps into the fog. That is a <b>buffer overflow</b>. The 1988 Internet worm used one against <code>fingerd</code>.</p>
+        <p class="story">Defences the book walks through: move the stack each run (<b>ASLR</b>), plant a random <b>canary</b> between the buffer and the saved state, and mark the stack <b>NX</b> (readable, writable, not executable). A long “nop sled” still helps a determined attacker. Prefer <code>fgets</code>.</p>
+        <p class="imagine"><b>Type into echo’s 8-byte pad.</b> At 24 characters the return address dies. Turn the canary on and the same write is caught.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>“C does not perform any bounds checking for array references, and that local variables are stored on the stack along with state information such as saved register values and return addresses.” Figure 3.40: <code>echo</code> does <code>subq $24, %rsp</code>; <code>buf</code> is at <code>%rsp</code>. Typed characters: 0–7 safe; 9–23 unused; 24–31 the return address; 32+ the caller’s frame.</p>
+            <p>Also dangerous: <code>strcpy</code>, <code>strcat</code>, <code>sprintf</code>. Attack string = exploit bytes + a forged return address. The November 1988 Internet worm overflowed <code>fingerd</code>.</p>
+            <p>Stack randomization / ASLR: 64-bit Linux samples of a local in <code>main</code> spanned nearly 2<sup>32</sup>. A 256-byte nop sled vs 2<sup>23</sup> of randomization is about 2<sup>15</sup> guesses. Figure 3.42: canary between <code>buf</code> and the return address, loaded from <code>%fs:40</code>. gcc skipped it for the demo only with <code>-fno-stack-protector</code>. AMD’s <b>NX</b> bit lets the stack be writable but not executable.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 3.40 · echo</span><span class="pill" id="s10-pill">empty</span></div>
+        <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 680 340" role="img" aria-label="A stack buffer that can overwrite the return address"></svg></div>
+        <div class="controls" id="s10-controls"></div>
+        <div class="caption" aria-live="polite" id="s10-cap">Eight characters fit. The return ticket sits 24 bytes up the stack.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The seesaws from this chapter</h2><p>Each row is a choice the compiler, the ISA, or the defender makes. Chapter 4 will open the processor that runs these instructions.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>-Og</h4><p>Assembly still looks like the C. Use it to learn.</p></div><div class="vs">vs</div><div class="side"><h4>-O1 / -O2</h4><p>Faster, but the puzzle pieces move.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>ATT</h4><p>Source, then dest. gcc and objdump default.</p></div><div class="vs">vs</div><div class="side"><h4>Intel syntax</h4><p>Operands reversed, no % on registers.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Jump</h4><p>General, but a wrong guess costs ~15–30 cycles.</p></div><div class="vs">vs</div><div class="side"><h4>cmov</h4><p>No guess — only if both sides are cheap and safe.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>if-else chain</h4><p>Time grows with the number of cases.</p></div><div class="vs">vs</div><div class="side"><h4>Jump table</h4><p>One indirect jump, if the cases sit close together.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Callee-saved</h4><p>Q restores %rbx %rbp %r12–%r15.</p></div><div class="vs">vs</div><div class="side"><h4>Caller-saved</h4><p>P must stash anything it still needs.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>struct</h4><p>Fields get their own bytes, plus padding.</p></div><div class="vs">vs</div><div class="side"><h4>union</h4><p>Same bytes, several types. Smaller, less safe.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>gets / strcpy</h4><p>No length. The return address is next door.</p></div><div class="vs">vs</div><div class="side"><h4>fgets + canary + NX</h4><p>Bound the write; detect smash; refuse to run stack bytes.</p></div></div>
+      </div>
+      <div class="themes" style="margin-top:18px">
+        <div class="card"><h3>What we skipped</h3><p>gdb’s command list (Figure 3.39), variable-size frames / <code>%rbp</code> as frame pointer (3.10.5), and most of 3.11. Floating-point today lives in XMM/YMM registers (SSE2 / AVX). The first eight float arguments travel in <code>%xmm0–%xmm7</code>; the result comes back in <code>%xmm0</code>. All XMM registers are caller-saved. The old x87 stack is history for gcc’s x86-64 output.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>The chapter’s grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>ISA</dt><dd>The contract: what the registers are, what each instruction does, as if they ran one after another.</dd></div>
+        <div class="word"><dt>assembly</dt><dd>A readable spelling of machine code. One line, one instruction.</dd></div>
+        <div class="word"><dt>PC / %rip</dt><dd>The address of the next instruction. Jumps and calls write a new one.</dd></div>
+        <div class="word"><dt>word / dword / qword</dt><dd>Intel: 2, 4, and 8 bytes. That is why the suffixes are w, l, and q.</dd></div>
+        <div class="word"><dt>immediate</dt><dd>A constant baked into the instruction, written with a $ in ATT syntax.</dd></div>
+        <div class="word"><dt>effective address</dt><dd>Imm + base + index × scale. <code>leaq</code> computes it without reading memory.</dd></div>
+        <div class="word"><dt>condition codes</dt><dd>CF, ZF, SF, OF — four bits updated by arithmetic, read by set / j / cmov.</dd></div>
+        <div class="word"><dt>PC-relative</dt><dd>A jump stores “how far from the next instruction,” so the bytes still work after linking.</dd></div>
+        <div class="word"><dt>cmov</dt><dd>Copy a register only if a flag test holds. No pipeline guess.</dd></div>
+        <div class="word"><dt>stack frame</dt><dd>The slice of stack one call owns: return address, saved regs, locals, extra args.</dd></div>
+        <div class="word"><dt>callee-saved</dt><dd>%rbx, %rbp, %r12–%r15. The called function must give them back as it found them.</dd></div>
+        <div class="word"><dt>jump table</dt><dd>An array of code addresses. A switch indexes it in constant time.</dd></div>
+        <div class="word"><dt>row-major</dt><dd>A[i][j] stores a whole row before the next row. Address x + L(C·i + j).</dd></div>
+        <div class="word"><dt>alignment</dt><dd>Put a K-byte object at a multiple of K. Padding makes that true inside structs.</dd></div>
+        <div class="word"><dt>canary</dt><dd>A random guard word between a buffer and the return address. Changed? Abort.</dd></div>
+        <div class="word"><dt>ASLR / NX</dt><dd>Randomize where the stack lives; refuse to execute bytes that are only data.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width:820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Eight questions. Finish all eight to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible } = K;
+K.page(3);
+const cap = (id, html) => { K.$(id).innerHTML = html; };
+
+function box(parent, x, y, w, hgt, cls, title, sub) {
+  const r = s("rect", { x, y, width: w, height: hgt, rx: 10, class: cls });
+  parent.appendChild(r);
+  const ty = sub ? y + hgt / 2 - 4 : y + hgt / 2 + 5;
+  const t = s("text", { x: x + w / 2, y: ty, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700, fontSize: "13px" } }, title || "");
+  parent.appendChild(t);
+  let u = null;
+  if (sub) {
+    u = s("text", { x: x + w / 2, y: y + hgt / 2 + 14, class: "sv-label", "text-anchor": "middle" }, sub);
+    parent.appendChild(u);
+  }
+  return { r, t, u, x, y, w, h: hgt, cx: x + w / 2, cy: y + hgt / 2 };
+}
+
+function setCls(el, cls) { el.setAttribute("class", cls); }
+
+/* ================= HERO ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const INS = [
+    { asm: "pushq  %rbx", bytes: "53", note: "save callee-saved %rbx" },
+    { asm: "movq   %rdx, %rbx", bytes: "48 89 d3", note: "keep dest across the call" },
+    { asm: "call   mult2", bytes: "e8 00 00 00 00", note: "linker will fill the target" },
+    { asm: "movq   %rax, (%rbx)", bytes: "48 89 03", note: "store product at *dest" },
+    { asm: "popq   %rbx", bytes: "5b", note: "restore %rbx" },
+    { asm: "ret", bytes: "c3", note: "pop the return address" },
+  ];
+  svg.append(
+    draw.label(24, 22, "multstore", "sv-label", "start"),
+    draw.label(520, 22, "OBJECT BYTES", "sv-label", "start"));
+  const rows = INS.map((ins, i) => {
+    const y = 40 + i * 26;
+    const r = s("rect", { x: 20, y: y - 16, width: 360, height: 24, rx: 6, class: "sv-panel" });
+    const t = s("text", { x: 36, y: y, class: "sv-text", style: { fontFamily: "var(--f-mono)", fontSize: "13px" } }, ins.asm);
+    const b = s("text", { x: 520, y: y, class: "sv-label", "text-anchor": "start" }, ins.bytes);
+    svg.append(r, t, b);
+    return { r, t, b };
+  });
+  let i = 0, vis = false;
+  function paint() {
+    rows.forEach((row, k) => {
+      setCls(row.r, k === i ? "sv-good" : "sv-panel");
+      row.t.setAttribute("style", `font-family:var(--f-mono);font-size:13px;font-weight:${k === i ? 800 : 400}`);
+    });
+    K.$("#hero-pill").innerHTML = `<i></i>PC · instr ${i + 1} / 6`;
+    cap("#hero-cap", `<b>${INS[i].asm}</b> encodes as <span class="mono">${INS[i].bytes}</span>. ${INS[i].note}.`);
+  }
+  paint();
+  whenVisible(svg, () => (vis = true), () => (vis = false));
+  (async function auto() {
+    await sleep(800);
+    for (;;) {
+      if (vis && !K.reduced && !document.hidden) {
+        i = (i + 1) % INS.length;
+        paint();
+      }
+      await sleep(1600);
+    }
+  })();
+  svg.style.cursor = "pointer";
+  svg.addEventListener("click", () => { i = (i + 1) % INS.length; paint(); });
+})();
+
+/* ================= 1. ENCODE ================= */
+(function encode() {
+  const svg = K.$("#s1-svg");
+  const STAGES = [
+    { k: "C", title: "mstore.c", sub: "source" },
+    { k: ".s", title: "mstore.s", sub: "assembly" },
+    { k: ".o", title: "mstore.o", sub: "14 bytes" },
+    { k: "exe", title: "prog", sub: "linked" },
+  ];
+  const nodes = STAGES.map((st, i) => {
+    const x = 28 + i * 164;
+    const b = box(svg, x, 36, 140, 72, "sv-panel", st.title, st.sub);
+    if (i < 3) svg.appendChild(draw.arrow(x + 140, 72, x + 164, 72));
+    return b;
+  });
+  const byteStr = s("text", { x: 340, y: 150, class: "sv-text", "text-anchor": "middle", style: { fontFamily: "var(--f-mono)", fontSize: "13px", fontWeight: 700 } }, "");
+  const hint = s("text", { x: 340, y: 178, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(byteStr, hint);
+  const CODE = [
+    `<b>void multstore(long x, long y, long *dest)</b>\n{\n  long t = mult2(x, y);\n  *dest = t;\n}`,
+    `<b>multstore:</b>\n  pushq %rbx          <i>save %rbx</i>\n  movq  %rdx, %rbx    <i>dest</i>\n  call  mult2\n  movq  %rax, (%rbx)  <i>*dest = t</i>\n  popq  %rbx\n  ret`,
+    `<b>objdump -d mstore.o</b>\n53                  push  %rbx\n48 89 d3            mov   %rdx,%rbx\ne8 00 00 00 00      callq  (unfilled)\n48 89 03            mov   %rax,(%rbx)\n5b                  pop   %rbx\nc3                  retq`,
+    `<b>objdump -d prog</b>   <i>linker filled the call</i>\n400540: 53                 push  %rbx\n400544: e8 42 00 00 00     callq 40058b &lt;mult2&gt;\n40054e: 90 90              nop nop   <i>pad to 16 bytes</i>`,
+  ];
+  const CAPS = [
+    "Amara’s C still has names. The chip will never see them.",
+    "<code>gcc -Og -S</code> stops after the compiler. Each indented line is one instruction.",
+    "The 14-byte sequence is the whole function. <code>e8 00 00 00 00</code> is a <code>call</code> whose target the linker has not filled yet.",
+    "The linker slides the code to 0x400540, writes the real <code>mult2</code> offset, and pads with nops so the next function starts on a 16-byte boundary.",
+  ];
+  let step = 0, busy = false;
+  function paint() {
+    nodes.forEach((n, i) => setCls(n.r, i === step ? "sv-good" : i < step ? "sv-server" : "sv-panel"));
+    byteStr.textContent = step >= 2 ? "53 48 89 d3 e8 … 5b c3" : "";
+    hint.textContent = step === 2 ? "14 bytes  ·  1 to 15 bytes per instruction" : step === 3 ? "call target filled  ·  two nops" : "";
+    K.$("#s1-code").innerHTML = CODE[step];
+    K.$("#s1-pill").textContent = STAGES[step].title;
+    cap("#s1-cap", CAPS[step]);
+  }
+  const ctr = K.$("#s1-controls");
+  const btns = [];
+  const add = (lab, cls, fn) => { const b = h("button", { class: "btn " + cls, type: "button" }, lab); b.addEventListener("click", fn); btns.push(b); ctr.appendChild(b); };
+  add("Step", "primary", async () => {
+    if (busy || step >= 3) return;
+    busy = true; btns.forEach((b) => (b.disabled = true));
+    const p = draw.tag(STAGES[step].k);
+    svg.appendChild(p);
+    await fly(p, [nodes[step].cx, 20], [nodes[step + 1].cx, 20], 520);
+    p.remove();
+    step++;
+    paint();
+    busy = false; btns.forEach((b) => (b.disabled = step >= 3 && b.textContent === "Step" ? true : false));
+    if (step < 3) btns.forEach((b) => (b.disabled = false));
+    if (step >= 3) btns[0].disabled = true;
+  });
+  add("Reset", "", () => { step = 0; busy = false; btns.forEach((b) => (b.disabled = false)); paint(); });
+  paint();
+})();
+
+/* ================= 2. REGS / OPERANDS ================= */
+(function regs() {
+  const svg = K.$("#s2-svg");
+  const MEM = { 0x100: 0xFF, 0x104: 0xAB, 0x108: 0x13, 0x10C: 0x11 };
+  const R = { rax: 0x100, rcx: 0x1, rdx: 0x3 };
+  const addrs = [0x100, 0x104, 0x108, 0x10C];
+  svg.append(draw.label(24, 24, "MEMORY", "sv-label", "start"), draw.label(24, 124, "REGISTERS", "sv-label", "start"));
+  const cells = addrs.map((a, i) => {
+    const x = 24 + i * 96;
+    const b = box(svg, x, 40, 84, 56, "sv-db", "0x" + MEM[a].toString(16).toUpperCase(), "0x" + a.toString(16));
+    return { a, b };
+  });
+  const regs = [
+    ["%rax", "rax", 24],
+    ["%rcx", "rcx", 160],
+    ["%rdx", "rdx", 296],
+  ].map(([lab, k, x]) => {
+    const b = box(svg, x, 138, 120, 56, "sv-server", "0x" + R[k].toString(16).toUpperCase(), lab);
+    return { k, b };
+  });
+  const res = box(svg, 24, 220, 632, 56, "sv-panel", "pick an operand", "");
+  const OPS = [
+    { lab: "%rax", kind: "reg", val: () => R.rax, why: "Register operand: the value sitting in %rax." },
+    { lab: "0x104", kind: "abs", val: () => MEM[0x104], why: "Absolute memory: M[0x104]." },
+    { lab: "$0x108", kind: "imm", val: () => 0x108, why: "Immediate: the constant itself, not a load." },
+    { lab: "(%rax)", kind: "mem", val: () => MEM[R.rax], why: "Indirect: M[R[%rax]] = M[0x100]." },
+    { lab: "4(%rax)", kind: "mem", val: () => MEM[R.rax + 4], why: "Base + displacement: M[0x100 + 4] = M[0x104]." },
+    { lab: "9(%rax,%rdx)", kind: "mem", val: () => MEM[9 + R.rax + R.rdx], why: "Imm + base + index: 9 + 0x100 + 3 = 0x10C." },
+    { lab: "260(%rcx,%rdx)", kind: "mem", val: () => MEM[260 + R.rcx + R.rdx], why: "260 + 1 + 3 = 264 = 0x108." },
+    { lab: "0xFC(,%rcx,4)", kind: "mem", val: () => MEM[0xFC + R.rcx * 4], why: "Scaled index: 0xFC + 1×4 = 0x100." },
+    { lab: "(%rax,%rdx,4)", kind: "mem", val: () => MEM[R.rax + R.rdx * 4], why: "0x100 + 3×4 = 0x10C." },
+  ];
+  function hex(n) { return "0x" + n.toString(16).toUpperCase(); }
+  function show(op) {
+    const v = op.val();
+    res.t.textContent = `${op.lab}  →  ${hex(v)}`;
+    cells.forEach((c) => setCls(c.b.r, "sv-db"));
+    regs.forEach((r) => setCls(r.b.r, "sv-server"));
+    if (op.kind === "reg") setCls(regs[0].b.r, "sv-good");
+    if (op.lab.includes("rcx")) setCls(regs[1].b.r, "sv-good");
+    if (op.lab.includes("rdx") || op.lab.includes("%rdx")) setCls(regs[2].b.r, "sv-good");
+    const hit = Object.keys(MEM).map(Number).find((a) => MEM[a] === v && op.kind === "mem");
+    if (op.kind === "abs") setCls(cells[1].b.r, "sv-good");
+    else if (hit != null) {
+      const c = cells.find((x) => x.a === hit);
+      if (c) setCls(c.b.r, "sv-good");
+    }
+    K.$("#s2-pill").textContent = hex(v);
+    cap("#s2-cap", `${op.why} Value <b>${hex(v)}</b>. Figure 3.3 is just these forms.`);
+  }
+  const ctr = K.$("#s2-controls");
+  OPS.forEach((op) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => show(op) }, op.lab));
+  });
+  show(OPS[3]);
+})();
+
+/* ================= 3. MOV + STACK ================= */
+(function mov() {
+  const svg = K.$("#s3-svg");
+  let mode = 0;
+  const memBox = box(svg, 40, 36, 160, 80, "sv-db", "4", "a  at  xp");
+  const yBox = box(svg, 260, 36, 160, 80, "sv-server", "3", "y  in  %rsi");
+  const retBox = box(svg, 480, 36, 160, 80, "sv-panel", "—", "return %rax");
+  svg.append(draw.arrow(200, 76, 260, 76), draw.arrow(420, 76, 480, 76));
+  const stackX = [80, 280, 480];
+  const stackL = ["before", "pushq %rax", "popq %rdx"].map((lab, i) =>
+    s("text", { x: stackX[i] + 50, y: 150, class: "sv-label", "text-anchor": "middle" }, lab));
+  svg.append(...stackL);
+  const slots = [0, 1, 2].map((col) => {
+    const top = box(svg, stackX[col], 164, 100, 48, "sv-panel", "", "0x108");
+    const bot = box(svg, stackX[col], 220, 100, 48, "sv-panel", "", "0x100");
+    return { top, bot };
+  });
+  const note = s("text", { x: 340, y: 288, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.appendChild(note);
+  function dim(el, on) { if (el) el.setAttribute("opacity", on ? "1" : "0.18"); }
+  function paint() {
+    [memBox, yBox, retBox].forEach((b) => { dim(b.r, mode === 0); dim(b.t, mode === 0); dim(b.u, mode === 0); });
+    stackL.forEach((t) => dim(t, mode === 1));
+    slots.forEach((sl) => { dim(sl.top.r, mode === 1); dim(sl.top.t, mode === 1); dim(sl.top.u, mode === 1); dim(sl.bot.r, mode === 1); dim(sl.bot.t, mode === 1); dim(sl.bot.u, mode === 1); });
+    if (mode === 0) {
+      memBox.t.textContent = "4";
+      yBox.t.textContent = "3";
+      retBox.t.textContent = "—";
+      setCls(memBox.r, "sv-db"); setCls(retBox.r, "sv-panel");
+      slots.forEach((sl) => { sl.top.t.textContent = ""; sl.bot.t.textContent = ""; setCls(sl.top.r, "sv-panel"); setCls(sl.bot.r, "sv-panel"); });
+      note.textContent = "exchange(long *xp, long y)   xp in %rdi, y in %rsi";
+      cap("#s3-cap", "Kenji has a box holding 4. Lucia hands him 3 and asks for whatever was in the box. Press Run exchange.");
+    } else {
+      note.textContent = "Figure 3.9  ·  %rax = 0x123   %rsp starts at 0x108";
+      cap("#s3-cap", "The stack grows toward lower addresses. Press Push then pop to watch 0x123 drop to 0x100 and come back in %rdx.");
+    }
+  }
+  let busy = false;
+  const ctr = K.$("#s3-controls");
+  const runEx = h("button", { class: "btn primary", type: "button" }, "Run exchange");
+  const runSt = h("button", { class: "btn primary", type: "button" }, "Push then pop");
+  const reset = h("button", { class: "btn", type: "button" }, "Reset");
+  async function exchange() {
+    if (busy || mode !== 0) return;
+    busy = true; runEx.disabled = true;
+    const p = draw.tag("4");
+    svg.appendChild(p);
+    await fly(p, [memBox.cx, memBox.cy], [retBox.cx, retBox.cy], 500);
+    p.remove();
+    retBox.t.textContent = "4";
+    setCls(retBox.r, "sv-good");
+    const q = draw.tag("3");
+    svg.appendChild(q);
+    await fly(q, [yBox.cx, yBox.cy], [memBox.cx, memBox.cy], 500);
+    q.remove();
+    memBox.t.textContent = "3";
+    setCls(memBox.r, "sv-good");
+    cap("#s3-cap", "Because X, Y: the load into <code>%rax</code> both keeps the old 4 and sets the return value. Then y overwrites *xp. The book’s printout is <b>a = 3, b = 4</b>.");
+    busy = false; runEx.disabled = false;
+  }
+  async function stack() {
+    if (busy || mode !== 1) return;
+    busy = true; runSt.disabled = true;
+    slots[0].top.t.textContent = ""; slots[0].bot.t.textContent = "";
+    slots[1].top.t.textContent = ""; slots[1].bot.t.textContent = "0x123";
+    setCls(slots[1].bot.r, "sv-data-soft");
+    const p = draw.tag("0x123");
+    svg.appendChild(p);
+    await fly(p, [330, 40], [slots[1].bot.cx, slots[1].bot.cy], 480);
+    p.remove();
+    await sleep(280);
+    slots[2].top.t.textContent = "";
+    slots[2].bot.t.textContent = "0x123";
+    setCls(slots[2].bot.r, "sv-good");
+    cap("#s3-cap", "<b>pushq</b> does %rsp ← %rsp − 8, then writes. <b>popq %rdx</b> reads, then %rsp ← %rsp + 8. The 0x123 still sits at 0x100 until something else writes there.");
+    busy = false; runSt.disabled = false;
+  }
+  runEx.addEventListener("click", exchange);
+  runSt.addEventListener("click", stack);
+  reset.addEventListener("click", () => { busy = false; paint(); runEx.disabled = mode !== 0; runSt.disabled = mode !== 1; });
+  ctr.append(runEx, runSt, reset);
+  K.$("#s3-seg").appendChild(seg(["exchange", "push / pop"], 0, (i) => {
+    mode = i; paint();
+    runEx.disabled = mode !== 0;
+    runSt.disabled = mode !== 1;
+  }, "s3-mode"));
+  runSt.disabled = true;
+  paint();
+})();
+
+/* ================= 4. ARITH / LEAQ ================= */
+(function arith() {
+  const svg = K.$("#s4-svg");
+  let mode = 0, x = 3, y = 2, z = 1;
+  const formula = s("text", { x: 340, y: 40, class: "sv-title", "text-anchor": "middle" }, "");
+  const parts = s("text", { x: 340, y: 72, class: "sv-text", "text-anchor": "middle" }, "");
+  svg.append(formula, parts);
+  const slots = [0, 1, 2].map((i) => box(svg, 40 + i * 210, 100, 190, 90, "sv-panel", "—", "—"));
+  const foot = s("text", { x: 340, y: 230, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.appendChild(foot);
+  function paintLea() {
+    const r = 5 * x + 7;
+    formula.textContent = `leaq  7(%rdx,%rdx,4), %rax`;
+    parts.textContent = `Imm + R[%rdx] + R[%rdx] × 4   =   7 + ${x} + ${x}×4`;
+    slots[0].t.textContent = `%rdx = ${x}`; slots[0].u.textContent = "x";
+    slots[1].t.textContent = `${x} × 5`; slots[1].u.textContent = "rdx + rdx*4";
+    slots[2].t.textContent = String(r); slots[2].u.textContent = "+ 7  →  %rax";
+    setCls(slots[2].r, "sv-good"); setCls(slots[0].r, "sv-server"); setCls(slots[1].r, "sv-data-soft");
+    foot.textContent = "never a memory read  ·  destination must be a register";
+    cap("#s4-cap", `Because %rdx holds <b>${x}</b>, the effective address is 7 + ${x} + ${x}×4 = <b>${r}</b>. Compilers use leaq as a three-operand adder / limited multiply.`);
+  }
+  function paintScale() {
+    const t = x + 4 * y + 12 * z;
+    formula.textContent = `scale  ·  x + 4y + 12z  =  ${t}`;
+    parts.textContent = "three leaqs, no add, no imul";
+    slots[0].t.textContent = `${x} + 4×${y}`; slots[0].u.textContent = "(%rdi,%rsi,4)";
+    slots[1].t.textContent = `${z} + 2×${z} = ${3 * z}`; slots[1].u.textContent = "(%rdx,%rdx,2)";
+    slots[2].t.textContent = `${x + 4 * y} + 4×${3 * z}`; slots[2].u.textContent = "(%rax,%rdx,4)";
+    setCls(slots[0].r, "sv-server"); setCls(slots[1].r, "sv-data-soft"); setCls(slots[2].r, "sv-good");
+    foot.textContent = "leaq (%rdi,%rsi,4) → leaq (%rdx,%rdx,2) → leaq (%rax,%rdx,4)";
+    cap("#s4-cap", `The book’s <code>scale</code>: first x+4y = <b>${x + 4 * y}</b>, then 3z = <b>${3 * z}</b>, then add 4×(3z). Total <b>${t}</b>.`);
+  }
+  function paint() { mode === 0 ? paintLea() : paintScale(); }
+  K.$("#s4-seg").appendChild(seg(["5x + 7", "scale()"], 0, (i) => { mode = i; paint(); }, "s4-mode"));
+  const ctr = K.$("#s4-controls");
+  ctr.append(
+    slider({ id: "s4-x", label: "x", min: 0, max: 12, value: x, onInput: (v) => { x = v; paint(); } }),
+    slider({ id: "s4-y", label: "y", min: 0, max: 8, value: y, onInput: (v) => { y = v; paint(); } }),
+    slider({ id: "s4-z", label: "z", min: 0, max: 6, value: z, onInput: (v) => { z = v; paint(); } }));
+  paint();
+})();
+
+/* ================= 5. FLAGS + CMOV ================= */
+(function flags() {
+  const svg = K.$("#s5-svg");
+  let mode = 0, a = 9, b = 12, xv = 3, yv = 8;
+  const sumL = s("text", { x: 340, y: 36, class: "sv-title", "text-anchor": "middle" }, "");
+  svg.appendChild(sumL);
+  const lamps = ["CF", "ZF", "SF", "OF"].map((name, i) => {
+    const x = 60 + i * 150;
+    const r = box(svg, x, 56, 120, 70, "sv-panel", "0", name);
+    return { name, r };
+  });
+  const left = box(svg, 40, 160, 260, 90, "sv-panel", "y − x", "then-expr");
+  const right = box(svg, 380, 160, 260, 90, "sv-panel", "x − y", "else-expr");
+  const pick = s("text", { x: 340, y: 276, class: "sv-text", "text-anchor": "middle" }, "");
+  svg.appendChild(pick);
+  function flags4(x, y) {
+    const t = (x + y) & 15;
+    const xs = x >= 8 ? x - 16 : x, ys = y >= 8 ? y - 16 : y, ts = xs + ys;
+    return {
+      t, u: (x + y) >= 16, z: t === 0, s: (t & 8) !== 0,
+      o: ts < -8 || ts > 7,
+    };
+  }
+  function paint() {
+    if (mode === 0) {
+      const f = flags4(a, b);
+      sumL.textContent = `${a} + ${b}  →  stored ${f.t}   (4-bit)`;
+      const bits = [f.u, f.z, f.s, f.o];
+      lamps.forEach((L, i) => {
+        L.r.t.textContent = bits[i] ? "1" : "0";
+        setCls(L.r.r, bits[i] ? "sv-bad" : "sv-good");
+      });
+      left.t.textContent = "unsigned overflow"; left.u.textContent = f.u ? "CF = 1" : "CF = 0";
+      right.t.textContent = "signed overflow"; right.u.textContent = f.o ? "OF = 1" : "OF = 0";
+      setCls(left.r, f.u ? "sv-bad" : "sv-panel");
+      setCls(right.r, f.o ? "sv-bad" : "sv-panel");
+      pick.textContent = "leaq does not touch these lamps";
+      cap("#s5-cap", `Add sets CF when the unsigned sum leaves 0…15 (${f.u}), ZF when the stored bits are 0 (${f.z}), SF when bit 3 is on (${f.s}), OF when the true signed sum leaves −8…+7 (${f.o}).`);
+    } else {
+      const ge = xv >= yv;
+      const thenV = yv - xv, elseV = xv - yv, out = ge ? elseV : thenV;
+      const zf = xv === yv, sf = xv < yv;
+      lamps[0].r.t.textContent = xv < yv ? "1" : "0";
+      lamps[1].r.t.textContent = zf ? "1" : "0";
+      lamps[2].r.t.textContent = sf ? "1" : "0";
+      lamps[3].r.t.textContent = "0";
+      setCls(lamps[0].r.r, xv < yv ? "sv-bad" : "sv-good");
+      setCls(lamps[1].r.r, zf ? "sv-bad" : "sv-good");
+      setCls(lamps[2].r.r, sf ? "sv-bad" : "sv-good");
+      setCls(lamps[3].r.r, "sv-good");
+      sumL.textContent = `absdiff(${xv}, ${yv})`;
+      left.t.textContent = String(thenV); left.u.textContent = "y − x  (always)";
+      right.t.textContent = String(elseV); right.u.textContent = "x − y  (always)";
+      setCls(left.r, ge ? "sv-panel" : "sv-good");
+      setCls(right.r, ge ? "sv-good" : "sv-panel");
+      pick.textContent = ge ? "cmovge copies x−y into %rax" : "condition fails · keep y−x";
+      cap("#s5-cap", `Both differences are computed. Then <code>cmpq</code> + <code>cmovge</code> keep <b>${out}</b>. No jump, so the pipeline never guesses. The book’s jump version of this idea paid about 19 extra cycles on a wrong guess.`);
+    }
+  }
+  K.$("#s5-seg").appendChild(seg(["4-bit add", "absdiff cmov"], 0, (i) => { mode = i; paint(); }, "s5-mode"));
+  const ctr = K.$("#s5-controls");
+  ctr.append(
+    slider({ id: "s5-a", label: "a / x", min: 0, max: 15, value: a, onInput: (v) => { a = v; xv = v; paint(); } }),
+    slider({ id: "s5-b", label: "b / y", min: 0, max: 15, value: b, onInput: (v) => { b = v; yv = v; paint(); } }));
+  [["9 + 12", 9, 12], ["7 + 1", 7, 1], ["8 + 8", 8, 8], ["0 + 0", 0, 0]].forEach(([lab, p, q]) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => {
+      a = xv = p; b = yv = q;
+      const sa = K.$("#s5-a"), sb = K.$("#s5-b");
+      sa.value = p; sb.value = q;
+      sa.dispatchEvent(new Event("input")); sb.dispatchEvent(new Event("input"));
+    } }, lab));
+  });
+  paint();
+})();
+
+/* ================= 6. LOOPS + SWITCH ================= */
+(function loops() {
+  const svg = K.$("#s6-svg");
+  let mode = 0, n0 = 4, n = 4, result = 1, busy = false;
+  const nBox = box(svg, 40, 36, 140, 70, "sv-server", "4", "n  %rdi");
+  const rBox = box(svg, 220, 36, 140, 70, "sv-good", "1", "result  %rax");
+  const body = box(svg, 400, 36, 240, 70, "sv-panel", "result *= n; n--", "then cmp / jg");
+  const CASES = [100, 101, 102, 103, 104, 105, 106];
+  const LABELS = ["loc_A", "def", "loc_B", "loc_C", "loc_D", "def", "loc_D"];
+  const ACT = ["x*13", "0", "x+10+11", "x+11", "x*x", "0", "x*x"];
+  const tabG = s("g", { id: "s6-tabs" });
+  svg.appendChild(tabG);
+  const tabs = CASES.map((c, i) => {
+    const x = 24 + i * 92;
+    return box(tabG, x, 140, 84, 70, "sv-panel", String(c), LABELS[i]);
+  });
+  const out = s("text", { x: 340, y: 246, class: "sv-text", "text-anchor": "middle" }, "");
+  const foot = s("text", { x: 340, y: 274, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(out, foot);
+  function showTabs(on) {
+    tabG.setAttribute("visibility", on ? "visible" : "hidden");
+  }
+  function factReset() {
+    n = n0; result = 1;
+    nBox.t.textContent = String(n);
+    nBox.u.textContent = "n  %rdi";
+    rBox.t.textContent = String(result);
+    rBox.u.textContent = "result  %rax";
+    body.t.textContent = "result *= n; n--";
+    body.u.textContent = "then cmp / jg";
+    setCls(body.r, "sv-panel");
+    showTabs(false);
+    out.textContent = "do { … } while (n > 1)";
+    foot.textContent = "Figure 3.19  ·  fact_do";
+    cap("#s6-cap", `Start with n = <b>${n0}</b> and result = 1. Each Step multiplies, decrements, and jumps back while n &gt; 1.`);
+  }
+  function switchPaint(idx) {
+    showTabs(true);
+    nBox.t.textContent = String(CASES[idx]);
+    nBox.u.textContent = "n";
+    rBox.t.textContent = String(idx);
+    rBox.u.textContent = "index = n−100";
+    body.t.textContent = ACT[idx];
+    body.u.textContent = "goto *jt[index]";
+    tabs.forEach((t, i) => setCls(t.r, i === idx ? "sv-good" : LABELS[i] === "def" ? "sv-box" : "sv-panel"));
+    const x = 5;
+    const val = idx === 0 ? x * 13 : idx === 2 ? x + 21 : idx === 3 ? x + 11 : (idx === 4 || idx === 6) ? x * x : 0;
+    out.textContent = `x = 5   →   val = ${val}    ${idx === 2 ? "(102 falls through into 103)" : ""}`;
+    foot.textContent = "ja default if index > 6   ·   missing 101 and 105 point at default";
+    cap("#s6-cap", `n = <b>${CASES[idx]}</b> becomes unsigned index <b>${idx}</b>. One memory-indirect jump picks <b>${LABELS[idx]}</b> and computes <b>${ACT[idx]}</b>. Time does not grow with the number of cases.`);
+  }
+  const ctr = K.$("#s6-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step loop");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (mode !== 0 || busy) return;
+    if (n <= 1) { cap("#s6-cap", `n is ${n}, so <code>jg</code> fails and we <code>ret</code> with <b>${result}</b>.`); return; }
+    busy = true; stepB.disabled = true;
+    setCls(body.r, "sv-data-soft");
+    result *= n; n -= 1;
+    rBox.t.textContent = String(result);
+    nBox.t.textContent = String(n);
+    await sleep(360);
+    setCls(body.r, n > 1 ? "sv-good" : "sv-panel");
+    cap("#s6-cap", n > 1
+      ? `result is now <b>${result}</b>, n is <b>${n}</b>. <code>cmpq $1, %rdi</code> then <code>jg .L2</code> goes around again.`
+      : `n is 1, so the jump is not taken. Factorial of ${n0} is <b>${result}</b>.`);
+    busy = false; stepB.disabled = false;
+  });
+  resetB.addEventListener("click", () => { if (mode === 0) factReset(); });
+  ctr.append(stepB, resetB);
+  [3, 4, 5, 6].forEach((v) => {
+    const b = h("button", { class: "btn small", type: "button", onclick: () => { n0 = v; if (mode === 0) factReset(); } }, `n=${v}`);
+    b.dataset.n = "1";
+    ctr.appendChild(b);
+  });
+  CASES.forEach((c, i) => {
+    const b = h("button", { class: "btn small", type: "button", onclick: () => { if (mode === 1) switchPaint(i); } }, String(c));
+    b.dataset.sw = "1";
+    ctr.appendChild(b);
+  });
+  function modeButtons() {
+    [...ctr.querySelectorAll("button")].forEach((b) => {
+      const loopBtn = b === stepB || b === resetB || b.dataset.n;
+      const swBtn = !!b.dataset.sw;
+      if (loopBtn) {
+        b.style.display = mode === 0 ? "" : "none";
+        b.disabled = mode !== 0;
+      }
+      if (swBtn) {
+        b.style.display = mode === 1 ? "" : "none";
+        b.disabled = mode !== 1;
+      }
+    });
+  }
+  K.$("#s6-seg").appendChild(seg(["fact_do", "switch_eg"], 0, (i) => {
+    mode = i;
+    if (mode === 0) factReset(); else switchPaint(0);
+    modeButtons();
+  }, "s6-mode"));
+  modeButtons();
+  factReset();
+})();
+
+/* ================= 7. CALL / RET ================= */
+(function callret() {
+  const svg = K.$("#s7-svg");
+  const TRACE = [
+    { lab: "M1", pc: "40055b", ins: "call top", rdi: 100, rax: "—", rsp: "e820", top: "—", why: "main is about to call top(100)." },
+    { lab: "T1", pc: "400545", ins: "sub $5,%rdi", rdi: 100, rax: "—", rsp: "e818", top: "400560", why: "call pushed 0x400560. We are in top." },
+    { lab: "T2", pc: "400549", ins: "call leaf", rdi: 95, rax: "—", rsp: "e818", top: "400560", why: "top computed x−5 = 95 and calls leaf." },
+    { lab: "L1", pc: "400540", ins: "lea 2(%rdi)", rdi: 95, rax: "—", rsp: "e810", top: "40054e", why: "leaf’s return ticket is 0x40054e, the add in top." },
+    { lab: "L2", pc: "400544", ins: "ret", rdi: 95, rax: 97, rsp: "e810", top: "40054e", why: "leaf returns 97. ret pops 0x40054e." },
+    { lab: "T3", pc: "40054e", ins: "add %rax,%rax", rdi: 95, rax: 97, rsp: "e818", top: "400560", why: "Back in top. Double 97." },
+    { lab: "T4", pc: "400551", ins: "ret", rdi: 95, rax: 194, rsp: "e818", top: "400560", why: "top returns 194. ret pops 0x400560." },
+    { lab: "M2", pc: "400560", ins: "mov %rax,%rdx", rdi: 95, rax: 194, rsp: "e820", top: "—", why: "main resumes. Stack pointer is back where it started." },
+  ];
+  const funs = [
+    box(svg, 24, 28, 140, 64, "sv-panel", "main", "caller"),
+    box(svg, 188, 28, 140, 64, "sv-panel", "top", "x then x-5"),
+    box(svg, 352, 28, 140, 64, "sv-panel", "leaf", "y + 2"),
+  ];
+  const stk = box(svg, 516, 28, 140, 64, "sv-db", "—", "%rsp top");
+  const meta = [
+    ["PC", 24, 120],
+    ["%rdi", 188, 120],
+    ["%rax", 352, 120],
+    ["*%rsp", 516, 120],
+  ].map(([lab, x, y]) => {
+    const b = box(svg, x, y, 140, 64, "sv-panel", "—", lab);
+    return b;
+  });
+  const line = s("text", { x: 340, y: 220, class: "sv-text", "text-anchor": "middle" }, "");
+  const who = s("text", { x: 340, y: 248, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(line, who);
+  const st = {
+    i: stat("step", "0 / 8"),
+    rax: stat("%rax", "—"),
+  };
+  Object.values(st).forEach((v) => K.$("#s7-stats").appendChild(v));
+  let i = 0, busy = false;
+  function paint() {
+    const t = TRACE[i];
+    funs.forEach((f, k) => {
+      const on = (t.lab[0] === "M" && k === 0) || (t.lab[0] === "T" && k === 1) || (t.lab[0] === "L" && k === 2);
+      setCls(f.r, on ? "sv-good" : "sv-panel");
+    });
+    stk.t.textContent = t.top === "—" ? "empty" : t.top;
+    setCls(stk.r, t.top === "—" ? "sv-db" : "sv-data-soft");
+    meta[0].t.textContent = t.pc;
+    meta[1].t.textContent = String(t.rdi);
+    meta[2].t.textContent = String(t.rax);
+    meta[3].t.textContent = t.top;
+    line.textContent = `${t.lab}   ${t.ins}`;
+    who.textContent = `%rsp …${t.rsp}`;
+    st.i.set(`${i + 1} / 8`);
+    st.rax.set(t.rax);
+    cap("#s7-cap", t.why);
+  }
+  const ctr = K.$("#s7-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const playB = h("button", { class: "btn", type: "button" }, "Play");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  const lock = (on) => { stepB.disabled = on || i >= TRACE.length - 1; playB.disabled = on; };
+  stepB.addEventListener("click", async () => {
+    if (busy || i >= TRACE.length - 1) return;
+    busy = true; lock(true);
+    i++;
+    paint();
+    await sleep(80);
+    busy = false; lock(false);
+    if (i >= TRACE.length - 1) stepB.disabled = true;
+  });
+  playB.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; lock(true);
+    while (i < TRACE.length - 1) {
+      i++; paint();
+      await sleep(520);
+    }
+    busy = false; lock(false); stepB.disabled = true;
+  });
+  resetB.addEventListener("click", () => { i = 0; busy = false; paint(); lock(false); });
+  ctr.append(stepB, playB, resetB);
+  paint();
+})();
+
+/* ================= 8. ARRAYS ================= */
+(function arrays() {
+  const svg = K.$("#s8-svg");
+  const R = 5, C = 3, L = 4, XA = 0x100;
+  let sel = 0;
+  svg.append(draw.label(24, 22, "A[5][3]  row-major", "sv-label", "start"));
+  const cells = [];
+  for (let i = 0; i < R; i++) {
+    for (let j = 0; j < C; j++) {
+      const x = 40 + j * 120, y = 36 + i * 42;
+      const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": `A[${i}][${j}]` },
+        s("rect", { x, y, width: 108, height: 34, rx: 8, class: "sv-panel" }),
+        s("text", { x: x + 54, y: y + 22, class: "sv-text", "text-anchor": "middle", style: { fontFamily: "var(--f-mono)", fontSize: "13px", fontWeight: 700 } }, `A[${i}][${j}]`));
+      const pick = () => { sel = i * C + j; paint(); };
+      g.addEventListener("click", pick);
+      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+      svg.appendChild(g);
+      cells.push({ g, i, j });
+    }
+  }
+  const info = s("text", { x: 500, y: 80, class: "sv-text" }, "");
+  const info2 = s("text", { x: 500, y: 108, class: "sv-label" }, "");
+  const info3 = s("text", { x: 500, y: 136, class: "sv-label" }, "");
+  svg.append(info, info2, info3);
+  function paint() {
+    const i = Math.floor(sel / C), j = sel % C;
+    const addr = XA + L * (C * i + j);
+    cells.forEach((c, k) => setCls(c.g.firstChild, k === sel ? "sv-good" : c.i === i ? "sv-data-soft" : "sv-panel"));
+    info.textContent = `addr  0x${addr.toString(16)}`;
+    info2.textContent = `xA + 4(3·${i} + ${j})`;
+    info3.textContent = `offset ${L * (C * i + j)} bytes`;
+    K.$("#s8-pill").textContent = `A[${i}][${j}]`;
+    cap("#s8-cap", `Row ${i} starts at 0x${(XA + 12 * i).toString(16)}. Column ${j} adds ${4 * j} more. That is Equation 3.1: xA + L(C·i + j). The yellow row is the one C would walk first.`);
+  }
+  const ctr = K.$("#s8-controls");
+  [["A[0][0]", 0], ["A[1][2]", 5], ["A[4][2]", 14]].forEach(([lab, idx]) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => { sel = idx; paint(); } }, lab));
+  });
+  let busy = false;
+  ctr.appendChild(h("button", { class: "btn primary", type: "button", onclick: async function () {
+    if (busy) return; busy = true; this.disabled = true;
+    for (let j = 0; j < C; j++) { sel = 2 * C + j; paint(); await sleep(380); }
+    busy = false; this.disabled = false;
+  } }, "Walk row 2"));
+  paint();
+})();
+
+/* ================= 9. STRUCTS ================= */
+(function structs() {
+  const svg = K.$("#s9-svg");
+  let mode = 0, sel = 0;
+  const rec = [
+    { n: "i", off: 0, w: 4, cls: "sv-server" },
+    { n: "j", off: 4, w: 4, cls: "sv-good" },
+    { n: "a[0]", off: 8, w: 4, cls: "sv-data-soft" },
+    { n: "a[1]", off: 12, w: 4, cls: "sv-data-soft" },
+    { n: "p", off: 16, w: 8, cls: "sv-db" },
+  ];
+  const s3f = [
+    { n: "c", off: 0, w: 1, cls: "sv-good" },
+    { n: "gap", off: 1, w: 3, cls: "sv-box" },
+    { n: "i[2]", off: 4, w: 8, cls: "sv-server" },
+    { n: "gap", off: 12, w: 4, cls: "sv-box" },
+    { n: "v", off: 16, w: 8, cls: "sv-db" },
+  ];
+  const s1 = [
+    { n: "i", off: 0, w: 4, cls: "sv-server" },
+    { n: "c", off: 4, w: 1, cls: "sv-good" },
+    { n: "pad", off: 5, w: 3, cls: "sv-box" },
+    { n: "j", off: 8, w: 4, cls: "sv-data-soft" },
+  ];
+  const bars = [];
+  function drawBar(fields, total) {
+    K.clear(svg);
+    bars.length = 0;
+    svg.appendChild(draw.label(24, 24, mode === 0 ? "struct rec   24 bytes" : mode === 1 ? "S3 vs U3" : "struct S1   padding", "sv-label", "start"));
+    const PX = 600 / total;
+    fields.forEach((f, i) => {
+      const x = 24 + f.off * PX, w = Math.max(36, f.w * PX - 4);
+      const r = s("rect", { x, y: 48, width: w, height: 70, rx: 8, class: f.cls });
+      const t = s("text", { x: x + w / 2, y: 80, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700, fontSize: "13px" } }, f.n);
+      const o = s("text", { x: x + w / 2, y: 102, class: "sv-label", "text-anchor": "middle" }, "+" + f.off);
+      const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": f.n }, r, t, o);
+      g.addEventListener("click", () => { sel = i; paint(); });
+      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sel = i; paint(); } });
+      svg.appendChild(g);
+      bars.push({ g, r, f });
+    });
+    const note = s("text", { x: 340, y: 160, class: "sv-text", "text-anchor": "middle", id: "s9-note" }, "");
+    const note2 = s("text", { x: 340, y: 188, class: "sv-label", "text-anchor": "middle", id: "s9-note2" }, "");
+    svg.append(note, note2);
+    if (mode === 1) {
+      box(svg, 40, 200, 280, 56, "sv-panel", "S3  size 24", "c@0  i@4  v@16");
+      box(svg, 360, 200, 280, 56, "sv-db", "U3  size 8", "c, i, v all at 0");
+    }
+  }
+  function paint() {
+    const fields = mode === 2 ? s1 : mode === 1 ? s3f : rec;
+    if (!bars.length || bars.length !== fields.length) drawBar(fields, mode === 2 ? 12 : 24);
+    const f = fields[Math.min(sel, fields.length - 1)];
+    bars.forEach((b, i) => b.r.setAttribute("class", i === Math.min(sel, fields.length - 1) ? "sv-good" : b.f.cls));
+    const note = svg.querySelector("#s9-note");
+    const note2 = svg.querySelector("#s9-note2");
+    if (mode === 0) {
+      note.textContent = `r->${f.n}  lives at  r + ${f.off}`;
+      note2.textContent = f.n === "p" ? "leaq 8(%rdi,%rax,4) can make &r->a[k]" : "movl / movq with that displacement";
+      cap("#s9-cap", `Field <b>${f.n}</b> is ${f.w} bytes at offset ${f.off}. The compiler already did the naming. The chip just adds ${f.off} to the pointer in %rdi.`);
+    } else if (mode === 1) {
+      note.textContent = "union: one pocket, three names";
+      note2.textContent = "struct S3 wastes space so double v sits at 16";
+      cap("#s9-cap", "S3 is 24 bytes because alignment parks <code>double v</code> at offset 16. U3 is 8 bytes — the size of its largest field. Same syntax, opposite meaning.");
+    } else {
+      note.textContent = f.n === "pad" ? "3-byte gap so j sits at 8" : `${f.n} at +${f.off}`;
+      note2.textContent = "size 12  ·  pointer must be 4-aligned";
+      cap("#s9-cap", f.n === "pad"
+        ? "Without the gap, j would sit at offset 5 and miss its 4-byte alignment. The compiler inserts 3 unused bytes. An array of these structs then steps by 12."
+        : `<b>${f.n}</b> at offset ${f.off}. Intel’s rule: a K-byte object wants an address multiple of K. The hardware still works if you ignore it; some SSE 16-byte moves do not.`);
+    }
+  }
+  K.$("#s9-seg").appendChild(seg(["struct rec", "union U3", "align S1"], 0, (i) => { mode = i; sel = 0; bars.length = 0; paint(); }, "s9-mode"));
+  const ctr = K.$("#s9-controls");
+  [["i / first", 0], ["next field", 1], ["last field", 4]].forEach(([lab, idx]) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => { sel = idx; paint(); } }, lab));
+  });
+  paint();
+})();
+
+/* ================= 10. BUFFER OVERFLOW ================= */
+(function smash() {
+  const svg = K.$("#s10-svg");
+  let canary = false, chars = "", busy = false;
+  const CAN = "A7";
+  const rows = [
+    { y: 36, lab: "buf[0..7]", kind: "buf" },
+    { y: 86, lab: "unused / canary", kind: "mid" },
+    { y: 136, lab: "unused", kind: "gap" },
+    { y: 186, lab: "return addr", kind: "ret" },
+  ];
+  const boxes = rows.map((r) => {
+    const b = box(svg, 160, r.y, 360, 42, "sv-panel", "", r.lab);
+    svg.appendChild(s("text", { x: 140, y: r.y + 26, class: "sv-label", "text-anchor": "end" }, r.lab === "return addr" ? "%rsp+24" : r.lab === "buf[0..7]" ? "%rsp" : ""));
+    return { ...r, b };
+  });
+  const countT = s("text", { x: 340, y: 250, class: "sv-text", "text-anchor": "middle" }, "");
+  const warnT = s("text", { x: 340, y: 278, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(countT, warnT);
+  function paint() {
+    const n = chars.length;
+    const buf = (chars + "________").slice(0, 8);
+    boxes[0].b.t.textContent = buf.split("").join(" ");
+    setCls(boxes[0].b.r, n > 0 ? "sv-data-soft" : "sv-panel");
+    if (canary) {
+      const smashed = n >= 16;
+      boxes[1].b.t.textContent = smashed ? "DEAD" : CAN;
+      boxes[1].b.u.textContent = "canary  8(%rsp)";
+      setCls(boxes[1].b.r, smashed ? "sv-bad" : "sv-good");
+      boxes[2].b.t.textContent = n > 16 ? chars.slice(16, 24) : "";
+      setCls(boxes[2].b.r, n > 16 ? "sv-bad" : "sv-panel");
+    } else {
+      boxes[1].b.t.textContent = n > 8 ? chars.slice(8, 16) : "";
+      boxes[1].b.u.textContent = "unused";
+      setCls(boxes[1].b.r, n > 8 ? "sv-data-soft" : "sv-panel");
+      boxes[2].b.t.textContent = n > 16 ? chars.slice(16, 24) : "";
+      setCls(boxes[2].b.r, n > 16 ? "sv-data-soft" : "sv-panel");
+    }
+    const retHit = n >= 24;
+    boxes[3].b.t.textContent = retHit ? chars.slice(24, 32) || "????" : "400776";
+    setCls(boxes[3].b.r, retHit ? "sv-bad" : "sv-server");
+    countT.textContent = `${n} characters typed`;
+    const deadCan = canary && n >= 16;
+    warnT.textContent = retHit ? "ret will jump into the fog" : deadCan ? "__stack_chk_fail" : n > 7 ? "past the pad" : "fits in buf[8]";
+    K.$("#s10-pill").textContent = retHit ? "smashed" : deadCan ? "canary dead" : n ? `${n} chars` : "empty";
+    K.$("#s10-pill").className = "pill " + (retHit || deadCan ? "bad" : n ? "warn" : "");
+    cap("#s10-cap", retHit
+      ? `Because ${n} bytes were written, the saved return address is gone. <code>ret</code> pops junk. ${canary ? "The canary should have aborted first." : "That is how exploit code gets the PC."}`
+      : deadCan
+        ? "The write walked onto the canary. Before <code>ret</code>, gcc compares it to <code>%fs:40</code> and calls <code>__stack_chk_fail</code>."
+        : n <= 7
+          ? `gets copies into an 8-byte pad. ${n} characters plus a NUL still fit. The return address at %rsp+24 is untouched.`
+          : `Past seven characters the unused gap fills. The return address is still safe until character 24.`);
+  }
+  const ctr = K.$("#s10-controls");
+  const typeB = h("button", { class: "btn primary", type: "button" }, "Type a char");
+  typeB.addEventListener("click", () => {
+    if (chars.length >= 32) return;
+    chars += "A";
+    paint();
+  });
+  ctr.append(typeB);
+  [["hello", "hello"], ["23 chars (gap)", "A".repeat(23)], ["24 smash ret", "A".repeat(24)], ["Reset", ""]].forEach(([lab, s0]) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => { chars = s0; paint(); } }, lab));
+  });
+  ctr.appendChild(h("button", { class: "btn", type: "button", onclick: () => { canary = !canary; paint(); } }, "Toggle canary"));
+  paint();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "How many general-purpose integer registers does x86-64 give you?", options: ["8, leftover from the 8086", "16", "32, one per XMM lane", "64, one per virtual-address bit"], answer: 1, why: "Figure 3.2: the original eight were widened to 64 bits and eight new ones (%r8–%r15) were added." },
+  { q: "Which movq is illegal?", options: ["movq (%rax), (%rbx)  — memory to memory", "movq $8, %rax", "movq %rax, 8(%rsp)", "movq (%rdi), %rax"], answer: 0, why: "A move cannot have both operands in memory. Copy via a register. Immediates, register–register, and register–memory are fine." },
+  { q: "If %rdx holds x, what does leaq 7(%rdx,%rdx,4), %rax write?", options: ["M[5x+7]", "x + 7", "5x + 7", "7x + 4"], answer: 2, why: "Effective address Imm + R[rb] + R[ri]·s = 7 + x + 4x. leaq does not read memory." },
+  { q: "Where does argument 7 of an x86-64 function live?", options: ["%r10", "On the stack, at the top of the argument build area", "%xmm7", "In the same register as the return address"], answer: 1, why: "Figure 3.28: the first six integral arguments use %rdi…%r9. The rest are pushed, with argument 7 at the lowest address of those slots." },
+  { q: "Which registers must a callee restore before it returns?", options: ["%rax and %rdi", "%r10 and %r11", "%rbx, %rbp, and %r12–%r15", "All sixteen"], answer: 2, why: "Those six are callee-saved. Everything else except %rsp is caller-saved — the caller must stash what it still needs." },
+  { q: "int A[5][3] is stored row-major. Where is A[i][j]?", options: ["xA + 4(5i + j)", "xA + 4(3i + j)", "xA + 3i + j", "xA + 12j + 4i"], answer: 1, why: "Equation 3.1: &D[i][j] = xD + L(C·i + j). L = 4, C = 3. Figure 3.36 is the picture." },
+  { q: "Which way does the x86-64 stack grow?", options: ["Toward higher addresses, like a pile of plates drawn right-side up", "Toward lower addresses; push subtracts 8 from %rsp", "It does not grow; frames are allocated in the heap", "Toward lower addresses on Linux, higher on Windows"], answer: 1, why: "Figure 3.9: stacks grow toward lower addresses. pushq decrements %rsp, then writes. The book draws the top at the bottom of the figure." },
+  { q: "Where does gcc plant a stack-protector canary in echo?", options: ["Inside buf[0]", "Over the saved %rbx", "Between the local buffer and the rest of the stack state, including the return address", "In the caller’s frame only"], answer: 2, why: "Figure 3.42: the random canary sits between buf and the saved state. A write that reaches the return address hits the canary first. gcc loads it from %fs:40." },
+], 3);
+</script>
+</body>
+</html>

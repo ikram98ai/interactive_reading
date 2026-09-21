@@ -1,0 +1,1428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ch 7 · Linking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="../../assets/style.css">
+<style>
+  .eyebrow { color: var(--mint); }
+  .toc a:hover { border-color: var(--mint); color: var(--mint); }
+  .clickable { cursor: pointer; }
+  .clickable:hover .sv-box, .clickable:focus-visible .sv-box { stroke: var(--mint); }
+  .fade { transition: opacity .3s; }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+  .first { font-size: 15.5px; color: var(--ink-2); background: var(--mint-soft); border-radius: var(--r-m); padding: 12px 14px; }
+  .first b { color: var(--ink); }
+  .hero-stage { aspect-ratio: auto; }
+  .hero-stage svg { width: 100%; height: auto; display: block; }
+  .stage, .stage-scroll { min-width: 0; max-width: 100%; }
+  .scene-grid, .scene-grid.flip { grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 901px) {
+    .scene-grid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+    .scene-grid.flip { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); }
+  }
+  .readings { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); }
+  .reading { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-s); padding: 10px 12px; }
+  .reading .k { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .reading .v { font-family: var(--f-mono); font-size: 15px; font-weight: 700; color: var(--ink); margin-top: 4px; word-break: break-all; }
+  .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  pre.code { margin: 0; padding: 12px 14px; background: var(--surface-2); border-top: 1px solid var(--line);
+             font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+             overflow-x: auto; white-space: pre-wrap; min-height: 72px; }
+  pre.code b { color: var(--ink); font-weight: 700; }
+  pre.code i { color: var(--ink-3); font-style: normal; }
+  @media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
+</style>
+</head>
+<body>
+<header id="topbar"></header>
+
+<main>
+  <section class="wrap hero">
+    <div>
+      <span class="ch-tag"><span class="num">7</span> Chapter seven · Bitville</span>
+      <h1>Linking</h1>
+      <p class="lede">Two notebooks become one running program. A quiet program called the linker does the gluing — and if two pages claim the same name, the glue can go wrong without a peep.</p>
+      <p class="quote">“Linking is the process of collecting and combining various pieces of code and data into a single file that can be loaded (copied) into memory and executed.”</p>
+      <p class="first"><b>New here?</b> Read the short story, then press the buttons on the picture. You cannot break it. The book’s exact file names and figure numbers live under “What the book says.”</p>
+      <nav class="toc" aria-label="Scenes in this chapter">
+        <a href="#driver">gcc driver</a>
+        <a href="#static">Static linking</a>
+        <a href="#elf">ELF sections</a>
+        <a href="#symbols">Symbols</a>
+        <a href="#resolve">Resolution</a>
+        <a href="#reloc">Relocation</a>
+        <a href="#exec-load">Load the exe</a>
+        <a href="#shared">Shared libraries</a>
+        <a href="#pic">PIC + GOT</a>
+        <a href="#interpose">Interpositioning</a>
+      </nav>
+    </div>
+    <div class="stage hero-stage">
+      <div class="stage-head"><span class="stage-title">Live · two files become one program</span><span class="pill info" id="hero-pill"><i></i>cpp</span></div>
+      <svg id="hero-svg" viewBox="0 0 680 210" role="img" aria-label="The gcc driver walking main.c and sum.c through cpp, cc1, as, ld, then the loader"></svg>
+      <div class="caption" aria-live="polite" id="hero-cap">Mei types one command. Four specialists, then a loader, do the rest.</div>
+    </div>
+  </section>
+
+  <section class="scene" id="driver">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 1 · compiler drivers</span>
+        <h2>A receptionist who calls four specialists</h2>
+        <p class="story">Mei types one line: <code>gcc -Og -o prog main.c sum.c</code>. She thinks one program did everything. Really a <b>compiler driver</b> is a receptionist. It calls the preprocessor, the compiler, the assembler, and the linker, in that order, then goes home.</p>
+        <p class="story">Each specialist leaves a new file on the desk. <code>main.c</code> becomes <code>main.i</code>, then <code>main.s</code>, then a binary <code>main.o</code>. The same walk happens for <code>sum.c</code>. Only then does the linker glue the object files into <code>prog</code>.</p>
+        <p class="story">When she types <code>./prog</code>, the shell asks the operating system’s <b>loader</b> to copy that file into memory and start it. Linking already happened. Loading is a later trip.</p>
+        <p class="imagine"><b>Try it:</b> Press Step. Watch Figure 7.1’s <code>main.c</code> walk through cpp, cc1, and as, then meet <code>sum.o</code> at ld.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 7.1 is the running example: <code>main.c</code> declares <code>int sum(int *a, int n)</code>, defines <code>int array[2] = {1, 2}</code>, and returns <code>sum(array, 2)</code>. <code>sum.c</code> adds the <code>n</code> elements. The discussion is x86-64 Linux using ELF-64 (called ELF in the chapter). Concepts are the same on other systems; details vary.</p>
+            <p>The driver command is <code>gcc -Og -o prog main.c sum.c</code>. It runs <code>cpp</code> to make <code>/tmp/main.i</code>, then <code>cc1 … -Og … -o /tmp/main.s</code>, then <code>as … -o /tmp/main.o /tmp/main.s</code>, the same path for <code>sum.o</code>, then <code>ld -o prog [system object files and args] /tmp/main.o /tmp/sum.o</code>. In some versions of gcc the preprocessor lives inside the driver.</p>
+            <p><code>./prog</code> is not a built-in shell command, so the shell invokes the loader, which copies code and data into memory and transfers control to the start of the program. Run <code>gcc -v</code> if you want to see the real argument lists.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stack">
+        <div class="stage">
+          <div class="stage-head"><span class="stage-title">gcc -Og -o prog main.c sum.c</span><span class="pill" id="s1-pill">main.c</span></div>
+          <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 680 300" role="img" aria-label="The gcc driver calling cpp, cc1, as, and ld on main.c and sum.c"></svg></div>
+          <div class="controls" id="s1-controls"></div>
+          <pre class="code" id="s1-code"></pre>
+          <div class="caption" aria-live="polite" id="s1-cap">Four programs in a line: preprocessor, compiler, assembler, linker.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="static">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 2 · static linking</span>
+        <h2>Two notebooks glued into one book</h2>
+        <p class="story">Amara compiled <code>main.c</code> on Monday and <code>sum.c</code> on Tuesday. Each <code>.o</code> file is a notebook of <b>sections</b> — one run of bytes for instructions, one for initialized globals, one for zeros. The static linker <code>ld</code> reads those notebooks and writes a single executable.</p>
+        <p class="story">It has two jobs. First it matches every name that is used with exactly one place that defines it — <b>symbol resolution</b>. Then it slides the sections to real addresses and rewrites the blanks the assembler left — <b>relocation</b>.</p>
+        <p class="story">The linker is not a second compiler. It concatenates blocks of bytes and patches a few numbers. The compilers and assemblers already did the thinking.</p>
+        <p class="imagine"><b>Try it:</b> Press Step. First the <code>sum</code> name finds its definition. Then the sections get run-time addresses from Figure 7.12.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Static linkers such as Linux <code>ld</code> take relocatable object files and command-line arguments and emit a fully linked executable. Instructions live in one section, initialized globals in another, uninitialized variables in a third.</p>
+            <p>Step 1, symbol resolution: each symbol is a function, a global variable, or a C <code>static</code> variable, and each reference is associated with exactly one definition. Step 2, relocation: compilers and assemblers emit sections that start at address 0. The linker assigns a memory location to each definition and rewrites references. “The linker blindly performs these relocations using detailed instructions, generated by the assembler, called relocation entries.”</p>
+            <p>“Object files are merely collections of blocks of bytes.” A linker concatenates blocks, chooses run-time locations, and modifies locations inside the code and data. “Linkers have minimal understanding of the target machine.”</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">main.o + sum.o → prog</span><span class="pill" id="s2-pill">two .o files</span></div>
+        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 680 300" role="img" aria-label="Static linker merging main.o and sum.o into prog"></svg></div>
+        <div class="controls" id="s2-controls"></div>
+        <div class="caption" aria-live="polite" id="s2-cap">The linker glues blocks of bytes. It barely understands the chip.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="elf">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 3 · object files</span>
+        <h2>A sandwich with a label on each filling</h2>
+        <p class="story">Diego opens <code>main.o</code>. It is not a text file. It is an <b>ELF</b> sandwich: a header that says “this is a relocatable x86-64 object,” then fillings, then a table that says where each filling starts. Three kinds of sandwich exist — relocatable, executable, and shared.</p>
+        <p class="story">Instructions sit in <code>.text</code>. Initialized globals sit in <code>.data</code>. Uninitialized globals, and anything initialized to zero, sit in <code>.bss</code>. That last filling is a trick: it takes <i>no</i> disk space. The file just promises “leave me this many zero bytes in memory.”</p>
+        <p class="story">A roster of names lives in <code>.symtab</code>. Notes for the linker — “please patch this call later” — live in <code>.rel.text</code>. Local C variables do not appear. They will live on the stack when the program runs.</p>
+        <p class="imagine"><b>Try it:</b> Tap a section, or press Next section. Read what that filling is for. Notice that <code>.bss</code> is a placeholder.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Three forms: a relocatable object file can be combined at compile time; an executable can be copied into memory and run; a shared object can be loaded and linked at load time or run time. Compilers and assemblers emit relocatable files (including shared objects); linkers emit executables. Early Unix used a.out (the name stuck); Windows uses PE; Mac OS-X uses Mach-O; modern x86-64 Linux and Unix use ELF.</p>
+            <p>Figure 7.3: the ELF header begins with a 16-byte sequence for word size and byte ordering, then type, machine, and the section-header-table offset. Typical sections: <code>.text</code>, <code>.rodata</code> (printf format strings, switch jump tables), <code>.data</code>, <code>.bss</code>, <code>.symtab</code>, <code>.rel.text</code>, <code>.rel.data</code>, <code>.debug</code> and <code>.line</code> (only with <code>-g</code>), and <code>.strtab</code>. “This section occupies no actual space in the object file; it is merely a placeholder.”</p>
+            <p><code>.bss</code> was the IBM 704 “block started by symbol” directive, circa 1957. A mnemonic: “Better Save Space!” Every relocatable file has a <code>.symtab</code> unless someone ran <code>strip</code>; it does not list ordinary local variables, and you do not need <code>-g</code> to get it.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 7.3 · ELF relocatable</span><span class="pill" id="s3-pill">ELF header</span></div>
+        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 680 340" role="img" aria-label="Typical ELF relocatable sections from header through the section header table"></svg></div>
+        <div class="controls" id="s3-controls"></div>
+        <div class="caption" aria-live="polite" id="s3-cap">Tap a filling. The header and the table at the end tell the linker how to parse the file.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="symbols">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 4 · symbols and symbol tables</span>
+        <h2>The class roster is not the same as the lockers</h2>
+        <p class="story">Kenji writes <code>swap.c</code>. Lucia writes <code>m.c</code> with a global <code>buf[2] = {1, 2}</code> and calls <code>swap</code>. The linker’s roster for Kenji’s file has public names, names he borrowed, and names he marked <code>static</code> so they stay in his classroom.</p>
+        <p class="story">Those <b>local linker symbols</b> are not the same as a local variable like <code>temp</code>. <code>temp</code> lives on the stack. It never gets a row in <code>.symtab</code>. But if two functions in one file each write <code>static int x</code>, the compiler invents unique roster names — <code>x.1</code> and <code>x.2</code> — and parks them in <code>.data</code> or <code>.bss</code>.</p>
+        <p class="imagine"><b>Try it:</b> Tap a name from Practice Problem 7.1. Switch to static locals to see <code>x.1</code> and <code>x.2</code>. <code>temp</code> has no row.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Three kinds of linker symbols in module <code>m</code>: globals defined by <code>m</code> (nonstatic C functions and globals); externals referenced by <code>m</code> but defined elsewhere; and local linker symbols (C functions and globals declared <code>static</code>). “It is good programming practice to protect your variables and functions with the static attribute wherever possible.”</p>
+            <p>Figure 7.4 <code>Elf64_Symbol</code>: <code>name</code> (string-table offset), 4-bit <code>type</code> and <code>binding</code>, <code>section</code>, <code>value</code> (section offset in a relocatable file, absolute address in an executable), <code>size</code>. Pseudosections: ABS, UNDEF, COMMON (value = alignment, size = minimum). Modern gcc: COMMON = uninitialized globals; <code>.bss</code> = uninitialized statics and globals or statics initialized to zero. That split exists because of the resolution rules in Section 7.6.</p>
+            <p><code>readelf</code> on <code>main.o</code>: <code>main</code> is a 24-byte FUNC GLOBAL in Ndx=1 (<code>.text</code>) at value 0; <code>array</code> is an 8-byte OBJECT GLOBAL in Ndx=3 (<code>.data</code>) at value 0; <code>sum</code> is NOTYPE GLOBAL UND. Figure 7.5 / Practice 7.1: in <code>swap.o</code>, <code>buf</code> is extern from <code>m.o</code> <code>.data</code>; <code>bufp0</code> global <code>.data</code>; <code>bufp1</code> global COMMON; <code>swap</code> global <code>.text</code>; <code>temp</code> has no entry.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Practice 7.1 · swap.o roster</span><span id="s4-seg"></span></div>
+        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 680 320" role="img" aria-label="Symbol table rows for swap.o and a pair of static local variables"></svg></div>
+        <div class="controls" id="s4-controls"></div>
+        <div class="caption" aria-live="polite" id="s4-cap">The linker’s roster lists functions and globals. A stack local like temp is not invited.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="resolve">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 5 · symbol resolution</span>
+        <h2>Two lockers, one name — or a librarian who skips unread books</h2>
+        <p class="story">Omar writes <code>int x = 15213</code>. Priya writes a bare <code>int x</code> in another file and, in <code>f</code>, stores 15212. The compiler is fine. The linker sees one <b>strong</b> name (initialized) and one <b>weak</b> name (uninitialized), quietly keeps Omar’s, and Priya’s write still hits that same <code>x</code>. The printout is 15212. No error in the default case.</p>
+        <p class="story">Two strong names with the same spelling — two <code>main</code>s, or two <code>int x = 15213</code>s — is a hard error. Two weaks: the linker picks either. Different types make it nastier: an <code>int x</code> next to a <code>double x</code> can smear a neighbour.</p>
+        <p class="story">Libraries are a second trap. A <code>.a</code> archive is a shelf of object files. The linker walks the command line left to right and only pulls a member that defines a name it still needs. Put the archive <i>before</i> the file that uses <code>addvec</code>, and the shelf is empty of requests — so nothing is pulled, and <code>addvec</code> stays undefined.</p>
+        <p class="imagine"><b>Try it:</b> On strong / weak, pick a pair of modules and press Link. On archive, Step the left-to-right walk, then flip the order and watch it fail.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Functions and initialized globals are strong; uninitialized globals are weak. Rule 1: multiple strong symbols with the same name are not allowed. Rule 2: strong plus weaks → choose the strong. Rule 3: several weaks → choose any. <code>foo3.c</code> / <code>bar3.c</code> print <code>x = 15212</code> with no multiply-defined warning. <code>foo5.c</code> (<code>int y = 15212; int x = 15213</code>) plus <code>bar5.c</code> (<code>double x; x = -0.0</code>) can print <code>x = 0x0 y = 0x80000000</code> after an alignment warning. Use <code>-fno-common</code> or <code>-Werror</code>.</p>
+            <p>ISO C99’s <code>atoi</code>, <code>printf</code>, <code>strcpy</code>, <code>rand</code> live in <code>libc.a</code> (about 5 MB); <code>sin</code>, <code>cos</code>, <code>sqrt</code> live in <code>libm.a</code> (about 2 MB). A single <code>libc.o</code> would waste disk and memory. Figure 7.6–7.8: <code>ar rcs libvector.a addvec.o multvec.o</code>, then <code>gcc -static -o prog2c main2.o ./libvector.a</code> (or <code>-L. -lvector</code>). Only <code>addvec.o</code> is copied; <code>multvec.o</code> is not. The driver already passes <code>libc.a</code>.</p>
+            <p>Left-to-right scan: sets E (files to merge), U (unresolved), D (defined). An archive member is pulled only if it resolves something in U, iterating to a fixed point. “The general rule for libraries is to place them at the end of the command line.” <code>gcc -static ./libvector.a main2.c</code> fails: U is empty while the archive is scanned, so <code>addvec</code> is never resolved.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Strong, weak, then a .a walk</span><span id="s5-seg"></span></div>
+        <div class="stats" id="s5-stats" style="padding: 0 14px 10px"></div>
+        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 680 320" role="img" aria-label="Strong versus weak symbols and a static archive scan"></svg></div>
+        <div class="controls" id="s5-controls"></div>
+        <div class="caption" aria-live="polite" id="s5-cap">A strong name beats a weak one. An archive only donates members that settle a name the linker still needs.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="reloc">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 6 · relocation</span>
+        <h2>Fill in the street number once you know the block</h2>
+        <p class="story">Soren’s assembler wrote <code>callq</code> with four zero bytes after the opcode. It did not know where <code>sum</code> would live. It left a sticky note: “this is a 32-bit PC-relative reference to <code>sum</code>, starting at offset 0xf, addend −4.”</p>
+        <p class="story">After resolution, the linker knows the run-time addresses. It merges same-named sections, assigns each a home, then patches every sticky note. For a PC-relative call the new number is <code>ADDR(sum) + addend − refaddr</code>. Here that is 0x5, so the CPU will land on <code>sum</code>.</p>
+        <p class="story">An absolute reference is simpler: write <code>ADDR(array)</code> itself. That is how <code>%edi</code> gets <code>&amp;array</code> at 0x601018.</p>
+        <p class="imagine"><b>Try it:</b> Press Relocate on the <code>sum</code> call. Switch to the <code>array</code> move and do it again. The formula sits in the picture.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Relocation: (1) merge sections of the same type and assign run-time addresses; (2) rewrite references using relocation entries (<code>.rel.text</code>, <code>.rel.data</code>). Figure 7.9 <code>Elf64_Rela</code>: <code>offset</code>, <code>type</code>, <code>symbol</code>, <code>addend</code>. ELF defines 32 relocation types; the chapter uses two. <code>R_X86_64_PC32</code> is a 32-bit PC-relative address (PC is the next instruction). <code>R_X86_64_32</code> is a 32-bit absolute address. Both support the small code model (code plus data smaller than 2 GB), gcc’s default.</p>
+            <p>Figure 7.10: <code>*refptr = ADDR(r.symbol) + r.addend - refaddr</code> for PC32, with <code>refaddr = ADDR(s) + r.offset</code>; for type 32, <code>*refptr = ADDR(r.symbol) + r.addend</code>. Figure 7.11 <code>main.o</code>: call at offset 0xe, opcode 0xe8, <code>r.offset = 0xf</code>, symbol <code>sum</code>, PC32, addend −4. With <code>ADDR(.text) = 0x4004d0</code> and <code>ADDR(sum) = 0x4004e8</code>, <code>refaddr = 0x4004df</code> and the field becomes 0x5. At run time PC is 0x4004e3; PC + 0x5 = 0x4004e8.</p>
+            <p>The <code>array</code> move: opcode 0xbf, <code>r.offset = 0xa</code>, type 32, addend 0, <code>ADDR(array) = 0x601018</code>. Figure 7.12 is the relocated <code>.text</code> and <code>.data</code>. After that, the loader can copy the bytes with no further patches.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 7.10 · patch a reference</span><span id="s6-seg"></span></div>
+        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 680 300" role="img" aria-label="PC-relative relocation of call sum and absolute relocation of array"></svg></div>
+        <div class="controls" id="s6-controls"></div>
+        <div class="readings" id="s6-read"></div>
+        <div class="caption" aria-live="polite" id="s6-cap">The assembler left zeros. The linker writes a real offset once every section has an address.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="exec-load">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 7 · executables and loading</span>
+        <h2>A moving truck with a packing list</h2>
+        <p class="story">Yara’s <code>prog</code> is a finished book. The ELF header now stores an <b>entry point</b>. There is a new <b>program header table</b> — a packing list that maps file chunks onto memory <b>segments</b>. Relocation notes are gone. The file is meant to be copied, not patched again.</p>
+        <p class="story">The list has two LOAD rows. Code (read and execute) starts at 0x400000. Data (read and write) starts at 0x600df8. Eight extra bytes in memory are <code>.bss</code> zeros that were never stored on disk.</p>
+        <p class="story">The loader builds a memory picture: code, data, a heap that grows up, a hole for shared libraries, a stack that grows down from just below 2<sup>48</sup> − 1, and the kernel above 2<sup>48</sup>. Then it jumps not to <code>main</code> but to <code>_start</code>.</p>
+        <p class="imagine"><b>Try it:</b> Press Step. Watch the two LOAD segments land, then the jump to <code>_start</code>. The other mode is the packing list itself.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 7.13: an executable looks like a relocatable file plus a segment header table, an <code>.init</code> section (<code>_init</code>), and no <code>.rel</code> sections. The ELF header includes the entry point. Figure 7.14 for <code>prog</code>: code LOAD off 0, vaddr 0x400000, filesz = memsz = 0x69c, flags r-x, align 2<sup>21</sup>. Data LOAD off 0xdf8, vaddr 0x600df8, filesz 0x228, memsz 0x230, flags rw-. The extra 8 bytes are <code>.bss</code>. The linker chooses <code>vaddr</code> so <code>vaddr mod align = off mod align</code> (here both sides are 0xdf8). That helps virtual memory map file pages.</p>
+            <p>Figure 7.15: on Linux x86-64 the code segment starts at 0x400000, then data, then the heap via <code>malloc</code>, then a region for shared modules. The user stack starts below 2<sup>48</sup> − 1 and grows down. Kernel memory starts at 2<sup>48</sup>. The picture hides alignment gaps and ASLR; the linker randomizes stack, shared-library, and heap addresses, but relative order stays the same.</p>
+            <p>The shell runs <code>./prog</code> via the loader (<code>execve</code>). The loader copies chunks using the program header table, then jumps to <code>_start</code> in <code>crt1.o</code> — the same for every C program. <code>_start</code> calls <code>__libc_start_main</code> in <code>libc.so</code>, which sets up the environment, calls <code>main</code>, and handles the return. The book’s “copy” story is the conceptual one; Chapter 9 will replace it with page mapping.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 7.14–7.15 · pack and load</span><span id="s7-seg"></span></div>
+        <div class="stats" id="s7-stats" style="padding: 0 14px 10px"></div>
+        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 680 340" role="img" aria-label="ELF program headers and the Linux x86-64 run-time memory image"></svg></div>
+        <div class="controls" id="s7-controls"></div>
+        <div class="caption" aria-live="polite" id="s7-cap">Two LOAD rows become two memory segments. Control starts at _start, not at main.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="shared">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 8 · shared libraries</span>
+        <h2>One cookbook on a public shelf</h2>
+        <p class="story">If every kitchen photocopies the whole standard cookbook, the house runs out of shelves. A <b>shared library</b> (<code>.so</code> on Linux, DLL on Windows) is one book on a public shelf. Executables keep a note, not a copy. At load time a <b>dynamic linker</b> finishes the glue.</p>
+        <p class="story">Nadia builds <code>libvector.so</code> with <code>-shared -fpic</code>, then <code>prog2l</code> from <code>main2.c</code>. None of the library’s code is copied into <code>prog2l</code>. The loader sees a <code>.interp</code> path — <code>ld-linux.so</code> — and runs that first. It parks <code>libc.so</code> and <code>libvector.so</code> in memory and patches <code>prog2l</code>’s references. After that the addresses stay put.</p>
+        <p class="story">A running program can also fetch a library later: <code>dlopen</code>, <code>dlsym</code>, call, <code>dlclose</code>. Web servers use that to add a page-builder without restarting.</p>
+        <p class="imagine"><b>Try it:</b> Step the load-time walk for <code>prog2l</code>. Switch to dll.c and Step <code>dlopen</code> → <code>dlsym</code> → <code>addvec</code> → <code>dlclose</code>.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Static libraries still waste memory (every process copies <code>printf</code>) and need a relink after an update. A shared library can be loaded at an arbitrary address at load time or run time. Linux suffix <code>.so</code>; Microsoft DLLs. One <code>.so</code> file is shared by every executable that references it, and one in-memory <code>.text</code> can be shared by processes (Chapter 9).</p>
+            <p>Build: <code>gcc -shared -fpic -o libvector.so addvec.c multvec.c</code>. Link: <code>gcc -o prog2l main2.c ./libvector.so</code>. No code or data from the <code>.so</code> is copied into <code>prog2l</code> — only relocation and symbol-table info. The loader maps <code>prog2l</code>, sees <code>.interp</code> (e.g. <code>ld-linux.so</code>), and runs the dynamic linker, which relocates <code>libc.so</code>, <code>libvector.so</code>, and references in <code>prog2l</code>, then passes control to the app.</p>
+            <p>Figure 7.17 <code>dll.c</code>: <code>dlopen("./libvector.so", RTLD_LAZY)</code>, <code>dlsym(handle, "addvec")</code>, call, <code>dlclose</code>. Flags: <code>RTLD_NOW</code> or <code>RTLD_LAZY</code>, optionally or-ed with <code>RTLD_GLOBAL</code>; <code>-rdynamic</code> exports the executable’s globals. Also <code>dlerror</code>. Uses the book names: Windows updates, high-performance Web servers (versus fork/execve CGI), and Java Native Interface (JNI) via a similar <code>dlopen</code>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 7.16–7.17 · .so then dlopen</span><span id="s8-seg"></span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 680 300" role="img" aria-label="Load-time dynamic linking of libvector.so and run-time dlopen from dll.c"></svg></div>
+        <div class="controls" id="s8-controls"></div>
+        <div class="caption" aria-live="polite" id="s8-cap">The executable keeps notes, not a photocopy. ld-linux.so finishes the addresses when the program is loaded — or when Nadia calls dlopen.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="pic">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">Big idea 9 · position-independent code</span>
+        <h2>A library that works at any street number</h2>
+        <p class="story">If every shared cookbook needed a reserved address, the city map would fragment. So the code is compiled to sit <i>anywhere</i> without being rewritten. That is <b>position-independent code</b> (PIC). <code>-fpic</code> is required for shared libraries.</p>
+        <p class="story">Hiro’s trick: no matter where you drop the module, the data segment stays a fixed distance from the code. A <b>global offset table</b> (GOT) at the start of data holds 8-byte addresses. <code>addvec</code> loads <code>&amp;addcnt</code> from <code>GOT[3]</code> with a PC-relative offset — 0x2008b9 in the book’s picture — then increments through that pointer.</p>
+        <p class="story">Calls into another shared module must not patch the code either. A <b>procedure linkage table</b> (PLT) plus lazy binding waits until the first call. The first time, <code>GOT[4]</code> still points back into the PLT, and the dynamic linker fills in <code>&amp;addvec</code>. After that, one indirect jump is enough.</p>
+        <p class="imagine"><b>Try it:</b> On GOT, press Step to increment <code>addcnt</code> through the table. On PLT, Step the first call (four hops), then the next call (two hops).</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Reserved address chunks for each library waste space and fragment. PIC code needs no load-time patches in the code segment, so many processes can share one copy (each still gets its own data). Same-module references can use PC-relative addressing and be relocated by the static linker. External procedures and globals in shared modules need GOT / PLT.</p>
+            <p>Figure 7.18: the GOT sits at the beginning of the data segment; one 8-byte entry per referenced global; the dynamic linker fills absolute addresses at load time. <code>addvec</code> does <code>mov 0x2008b9(%rip), %rax</code> then <code>addl $0x1, (%rax)</code>. The compiler uses the GOT even for <code>addcnt</code> defined in the same <code>.so</code>, as the general solution.</p>
+            <p>Figure 7.19: the PLT is 16-byte code entries in the code segment. <code>PLT[0]</code> jumps into the dynamic linker; <code>PLT[1]</code> is <code>__libc_start_main</code>; <code>PLT[2]</code> is <code>addvec</code>. <code>GOT[2]</code> is the dynamic-linker entry; <code>GOT[4]</code> matches <code>PLT[2]</code> and initially points at the second instruction of that PLT entry. First call: call PLT[2] → jmp *GOT[4] (back into PLT[2]) → push id 0x1 → PLT[0] → linker overwrites GOT[4]. Later calls: jmp *GOT[4] goes straight to <code>addvec</code>.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 7.18–7.19 · GOT and PLT</span><span id="s9-seg"></span></div>
+        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 680 320" role="img" aria-label="GOT reference to addcnt and lazy PLT binding of addvec"></svg></div>
+        <div class="controls" id="s9-controls"></div>
+        <div class="caption" aria-live="polite" id="s9-cap">Code never moves its own bytes. The GOT holds addresses; the PLT fills one of them on the first call.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="interpose">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">Big idea 10 · library interpositioning</span>
+        <h2>Stand in the doorway and take a note</h2>
+        <p class="story">Fatima wants a trace of every <code>malloc(32)</code> and <code>free</code> in the book’s tiny <code>int.c</code>. She writes a <b>wrapper</b> with the same prototype, does her own work, then calls the real function. The trick is making the system knock on <i>her</i> door first.</p>
+        <p class="story">Three doors. At compile time a local <code>malloc.h</code> <code>#define</code>s the names, and <code>-I.</code> makes the preprocessor see that header first. At link time <code>--wrap malloc</code> turns calls into <code>__wrap_malloc</code> and lets her reach the real one as <code>__real_malloc</code>. At run time she builds <code>mymalloc.so</code> and sets <code>LD_PRELOAD</code> so the dynamic linker searches her library first — even for <code>/usr/bin/uptime</code>.</p>
+        <p class="imagine"><b>Try it:</b> Pick compile, link, or run, then press Call malloc. The wrapper always prints; only the doorway changes.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 7.20 <code>int.c</code> calls <code>malloc(32)</code> and <code>free</code>. Compile-time: local <code>malloc.h</code> maps those names to <code>mymalloc</code> / <code>myfree</code>; <code>gcc -DCOMPILETIME -c mymalloc.c</code> then <code>gcc -I. -o intc int.c mymalloc.o</code>. Trace: <code>malloc(32)=0x9ee010</code> then <code>free(0x9ee010)</code>.</p>
+            <p>Link-time: <code>--wrap f</code> resolves <code>f</code> as <code>__wrap_f</code> and <code>__real_f</code> as <code>f</code>. <code>gcc -Wl,--wrap,malloc -Wl,--wrap,free -o intl int.o mymalloc.o</code> (<code>-Wl,</code> passes options, commas become spaces). Trace: <code>malloc(32) = 0x18cf010</code>.</p>
+            <p>Run-time: <code>LD_PRELOAD</code> is a space- or colon-separated list of <code>.so</code> pathnames searched first by <code>ld-linux.so</code>. Build <code>gcc -DRUNTIME -shared -fpic -o mymalloc.so mymalloc.c -ldl</code>; run <code>LD_PRELOAD="./mymalloc.so" ./intr</code> (bash) or the <code>setenv</code> form in csh/tcsh. Wrappers use <code>dlsym(RTLD_NEXT, "malloc")</code>. The same preload traces <code>/usr/bin/uptime</code>. Compile-time needs source; link-time needs <code>.o</code> files; run-time needs only the executable.</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 7.20–7.22 · wrap malloc</span><span id="s10-seg"></span></div>
+        <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 680 300" role="img" aria-label="Compile-time, link-time, and LD_PRELOAD interpositioning on malloc"></svg></div>
+        <div class="controls" id="s10-controls"></div>
+        <div class="caption" aria-live="polite" id="s10-cap">Same wrapper idea, three doorways. Compile rewrites the source; link renames symbols; run time puts a .so first in line.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="summary">
+    <div class="wrap">
+      <div class="section-title"><h2>The seesaws from this chapter</h2><p>Each row is a choice the driver, the static linker, or the dynamic linker makes. Chapter 8 will interrupt this running program.</p></div>
+      <div class="tradeoffs">
+        <div class="tradeoff"><div class="side"><h4>One giant .c</h4><p>Simple, but one edit recompiles everything.</p></div><div class="vs">vs</div><div class="side"><h4>Separate .o files</h4><p>Recompile the one you changed, then relink.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Two strong names</h4><p>Linker error. You find the clash today.</p></div><div class="vs">vs</div><div class="side"><h4>Strong + weak</h4><p>Silent pick. foo3 prints 15212.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Archive last</h4><p>U is full, so addvec.o is pulled.</p></div><div class="vs">vs</div><div class="side"><h4>Archive first</h4><p>U is empty. The member is discarded.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Static .a</h4><p>Needed members are copied into the exe.</p></div><div class="vs">vs</div><div class="side"><h4>Shared .so</h4><p>One file, one .text, patched at load time.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Reserved address</h4><p>Simple load, fragmented map.</p></div><div class="vs">vs</div><div class="side"><h4>PIC + GOT</h4><p>Code sits anywhere; data looks up names.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Eager bind</h4><p>Every imported function relocated at load.</p></div><div class="vs">vs</div><div class="side"><h4>Lazy PLT</h4><p>First call pays; the rest are one jump.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>Compile wrap</h4><p>Needs source and a local header.</p></div><div class="vs">vs</div><div class="side"><h4>LD_PRELOAD</h4><p>Needs only the executable — even uptime.</p></div></div>
+      </div>
+      <div class="themes" style="margin-top:18px">
+        <div class="card"><h3>What we skipped</h3><p>Section 7.14’s tool list (<code>ar</code>, <code>strings</code>, <code>strip</code>, <code>nm</code>, <code>size</code>, <code>readelf</code>, <code>objdump</code>, <code>ldd</code>) is a card, not a machine. Also skipped: C++ / Java name mangling (<code>bar__3Fooil</code>), the JNI aside, medium and large code models, and the Chapter 9 preview that loading is page mapping rather than a literal copy.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="words">
+    <div class="wrap">
+      <div class="section-title"><h2>Words to know</h2><p>The chapter’s grown-up words, in plain language.</p></div>
+      <dl class="words">
+        <div class="word"><dt>compiler driver</dt><dd>The front desk (gcc) that runs cpp, cc1, as, and ld for you.</dd></div>
+        <div class="word"><dt>relocatable .o</dt><dd>Code and data that can be combined with other .o files at compile time.</dd></div>
+        <div class="word"><dt>executable</dt><dd>A fully linked file the loader can copy into memory and run.</dd></div>
+        <div class="word"><dt>shared object</dt><dd>A .so (or Windows DLL) loaded and linked at load time or run time.</dd></div>
+        <div class="word"><dt>ELF</dt><dd>The object-file format on modern x86-64 Linux and Unix.</dd></div>
+        <div class="word"><dt>.text / .data / .bss</dt><dd>Instructions; initialized globals; zeros that take no disk space.</dd></div>
+        <div class="word"><dt>strong / weak</dt><dd>Initialized functions and globals vs uninitialized globals. Three clash rules.</dd></div>
+        <div class="word"><dt>COMMON</dt><dd>A relocatable-file parking spot for uninitialized globals, until the linker picks a winner.</dd></div>
+        <div class="word"><dt>relocation entry</dt><dd>The assembler’s sticky note: offset, type, symbol, addend.</dd></div>
+        <div class="word"><dt>PC-relative</dt><dd>An offset from the next instruction. R_X86_64_PC32 uses this.</dd></div>
+        <div class="word"><dt>GOT</dt><dd>A table of 8-byte addresses at the start of the data segment.</dd></div>
+        <div class="word"><dt>PLT</dt><dd>16-byte trampolines in the code segment that lazy-bind calls.</dd></div>
+        <div class="word"><dt>PIC</dt><dd>Code that can be loaded at any address without rewriting its bytes.</dd></div>
+        <div class="word"><dt>loader</dt><dd>OS code (via execve) that maps the executable and jumps to _start.</dd></div>
+        <div class="word"><dt>interpositioning</dt><dd>A wrapper that runs instead of a library function, then often calls it.</dd></div>
+        <div class="word"><dt>LD_PRELOAD</dt><dd>Shared libraries the dynamic linker searches before libc.so.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="scene" id="quiz">
+    <div class="wrap" style="max-width:820px">
+      <div class="section-title"><h2>Check yourself</h2><p>Eight questions. Finish all eight to mark the chapter explored.</p></div>
+      <div class="quiz" id="quiz-root"></div>
+    </div>
+  </section>
+</main>
+
+<footer id="chapter-end"></footer>
+
+<script src="book.js"></script>
+<script src="../../assets/kit.js"></script>
+<script>
+const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible } = K;
+K.page(7);
+const cap = (id, html) => { K.$(id).innerHTML = html; };
+
+function box(parent, x, y, w, hgt, cls, title, sub) {
+  const r = s("rect", { x, y, width: w, height: hgt, rx: 10, class: cls });
+  parent.appendChild(r);
+  const ty = sub ? y + hgt / 2 - 4 : y + hgt / 2 + 5;
+  const t = s("text", { x: x + w / 2, y: ty, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700, fontSize: "13px" } }, title || "");
+  parent.appendChild(t);
+  let u = null;
+  if (sub) {
+    u = s("text", { x: x + w / 2, y: y + hgt / 2 + 14, class: "sv-label", "text-anchor": "middle" }, sub);
+    parent.appendChild(u);
+  }
+  return { r, t, u, x, y, w, h: hgt, cx: x + w / 2, cy: y + hgt / 2 };
+}
+
+function setCls(el, cls) { el.setAttribute("class", cls); }
+function vis(g, on) {
+  g.setAttribute("visibility", on ? "visible" : "hidden");
+  g.style.pointerEvents = on ? "auto" : "none";
+}
+
+/* ================= HERO ================= */
+(function hero() {
+  const svg = K.$("#hero-svg");
+  const STEPS = [
+    { title: "main.c", sub: "source", cls: "sv-panel", note: "Mei starts with Figure 7.1: main.c and, off to the side, sum.c." },
+    { title: "cpp", sub: "main.i", cls: "sv-server", note: "The driver runs cpp. ASCII source becomes an intermediate main.i." },
+    { title: "cc1", sub: "main.s", cls: "sv-server", note: "cc1 -Og writes assembly. The chip still has not seen a byte of machine code." },
+    { title: "as", sub: "main.o", cls: "sv-data-soft", note: "as emits a relocatable object file. Addresses still start at 0." },
+    { title: "ld", sub: "prog", cls: "sv-good", note: "ld combines main.o, sum.o, and system files into a fully linked prog." },
+    { title: "loader", sub: "./prog", cls: "sv-db", note: "The shell invokes the loader. Code and data are copied into memory and run." },
+  ];
+  const nodes = STEPS.map((st, i) => {
+    const x = 20 + i * 108;
+    const b = box(svg, x, 50, 100, 70, "sv-panel", st.title, st.sub);
+    if (i < STEPS.length - 1) svg.appendChild(draw.arrow(x + 100, 85, x + 108, 85));
+    return b;
+  });
+  svg.appendChild(draw.label(24, 28, "gcc driver · Figure 7.2", "sv-label", "start"));
+  const foot = s("text", { x: 340, y: 160, class: "sv-text", "text-anchor": "middle" }, "separate compilation");
+  const foot2 = s("text", { x: 340, y: 186, class: "sv-label", "text-anchor": "middle" }, "change sum.c → recompile sum, relink");
+  svg.append(foot, foot2);
+  let i = 0, visOn = false;
+  function paint() {
+    nodes.forEach((n, k) => setCls(n.r, k === i ? STEPS[i].cls : k < i ? "sv-server" : "sv-panel"));
+    K.$("#hero-pill").innerHTML = `<i></i>${STEPS[i].title}`;
+    cap("#hero-cap", STEPS[i].note);
+  }
+  paint();
+  whenVisible(svg, () => (visOn = true), () => (visOn = false));
+  (async function auto() {
+    await sleep(800);
+    for (;;) {
+      if (visOn && !K.reduced && !document.hidden) {
+        i = (i + 1) % STEPS.length;
+        paint();
+      }
+      await sleep(1600);
+    }
+  })();
+  svg.style.cursor = "pointer";
+  svg.addEventListener("click", () => { i = (i + 1) % STEPS.length; paint(); });
+})();
+
+/* ================= 1. DRIVER ================= */
+(function driver() {
+  const svg = K.$("#s1-svg");
+  const TOOLS = [
+    { title: "cpp", sub: "preprocessor" },
+    { title: "cc1", sub: "compiler" },
+    { title: "as", sub: "assembler" },
+    { title: "ld", sub: "linker" },
+  ];
+  const tools = TOOLS.map((st, i) => box(svg, 24 + i * 164, 28, 148, 64, "sv-panel", st.title, st.sub));
+  const fileB = box(svg, 24, 120, 310, 70, "sv-data-soft", "main.c", "ASCII source");
+  const outB = box(svg, 346, 120, 310, 70, "sv-panel", "—", "output");
+  svg.appendChild(draw.arrow(334, 155, 346, 155));
+  const note = s("text", { x: 340, y: 222, class: "sv-text", "text-anchor": "middle" }, "");
+  const note2 = s("text", { x: 340, y: 248, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.append(note, note2);
+  const FLOW = [
+    { tool: -1, file: "main.c", fout: "waiting", fsub: "ASCII source", osub: "driver ready", pill: "main.c",
+      code: `<b>linux&gt; gcc -Og -o prog main.c sum.c</b>\n<i>Figure 7.1 · main.c calls sum(array, 2)</i>`,
+      cap: "Mei types one line. The driver will call four programs, then stop. sum.c waits its turn." },
+    { tool: 0, file: "main.c", fout: "main.i", fsub: "source", osub: "preprocessed", pill: "cpp",
+      code: `<b>cpp [args] main.c /tmp/main.i</b>\n<i>ASCII to ASCII · macros expanded</i>`,
+      cap: "Because the driver ran <code>cpp</code>, <code>main.c</code> became <code>/tmp/main.i</code>. Still text. Still not for the chip." },
+    { tool: 1, file: "main.i", fout: "main.s", fsub: "preprocessed", osub: "assembly", pill: "cc1",
+      code: `<b>cc1 /tmp/main.i -Og -o /tmp/main.s</b>\nint main() { … sum(array, 2); }`,
+      cap: "Because <code>cc1 -Og</code> ran, the recipe is now assembly in <code>main.s</code>. Names like <code>sum</code> are still spelled out." },
+    { tool: 2, file: "main.s", fout: "main.o", fsub: "assembly", osub: "relocatable", pill: "as",
+      code: `<b>as -o /tmp/main.o /tmp/main.s</b>\n<i>binary ELF · addresses start at 0</i>`,
+      cap: "Because <code>as</code> ran, we have a relocatable <code>main.o</code>. The call to <code>sum</code> is still a blank for the linker." },
+    { tool: 2, file: "sum.c", fout: "sum.o", fsub: "same walk", osub: "relocatable", pill: "sum.o",
+      code: `<b>cpp → cc1 → as on sum.c</b>\nint sum(int *a, int n) { … }`,
+      cap: "The driver repeats the walk for <code>sum.c</code>. Now two notebooks sit on the desk: <code>main.o</code> and <code>sum.o</code>." },
+    { tool: 3, file: "main.o + sum.o", fout: "prog", fsub: "relocatable pair", osub: "executable", pill: "ld",
+      code: `<b>ld -o prog [system files] main.o sum.o</b>\nlinux&gt; ./prog   <i>shell → loader</i>`,
+      cap: "Because <code>ld</code> combined the object files with system files, <code>prog</code> is fully linked. <code>./prog</code> is a later loading step." },
+  ];
+  let step = 0, busy = false;
+  function paint() {
+    const f = FLOW[step];
+    tools.forEach((t, i) => setCls(t.r, i === f.tool ? "sv-good" : "sv-panel"));
+    fileB.t.textContent = f.file;
+    fileB.u.textContent = f.fsub;
+    outB.t.textContent = f.fout;
+    outB.u.textContent = f.osub;
+    setCls(outB.r, step === 0 ? "sv-panel" : step === FLOW.length - 1 ? "sv-good" : "sv-data-soft");
+    note.textContent = step === 0 ? "driver has not called anyone yet" : `called ${TOOLS[Math.max(f.tool, 0)].title}`;
+    note2.textContent = "same four programs for every C file on the line";
+    K.$("#s1-code").innerHTML = f.code;
+    K.$("#s1-pill").textContent = f.pill;
+    cap("#s1-cap", f.cap);
+  }
+  const ctr = K.$("#s1-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || step >= FLOW.length - 1) return;
+    busy = true; stepB.disabled = true;
+    const nxt = FLOW[step + 1];
+    const p = draw.tag(nxt.fout);
+    svg.appendChild(p);
+    const src = nxt.tool >= 0 ? tools[nxt.tool] : fileB;
+    await fly(p, [src.cx, 20], [outB.cx, 20], 480);
+    p.remove();
+    step++;
+    paint();
+    busy = false;
+    stepB.disabled = step >= FLOW.length - 1;
+  });
+  resetB.addEventListener("click", () => { step = 0; busy = false; stepB.disabled = false; paint(); });
+  ctr.append(stepB, resetB);
+  paint();
+})();
+
+/* ================= 2. STATIC ================= */
+(function staticLink() {
+  const svg = K.$("#s2-svg");
+  const main = box(svg, 24, 36, 190, 96, "sv-server", "main.o", ".text main  .data array");
+  const sum = box(svg, 246, 36, 190, 96, "sv-server", "sum.o", ".text sum");
+  const prog = box(svg, 468, 36, 188, 96, "sv-panel", "prog", "not linked yet");
+  svg.append(draw.arrow(214, 84, 246, 84), draw.arrow(436, 84, 468, 84));
+  const jobs = [
+    box(svg, 24, 160, 300, 70, "sv-panel", "1. resolve", "sum → sum.o"),
+    box(svg, 356, 160, 300, 70, "sv-panel", "2. relocate", "addresses still 0"),
+  ];
+  const foot = s("text", { x: 340, y: 262, class: "sv-label", "text-anchor": "middle" }, "ld  ·  system object files also join");
+  svg.appendChild(foot);
+  const CAPS = [
+    "Amara has two relocatable notebooks. Sections start at address 0. Press Step to resolve names.",
+    "Because <code>main.o</code> referenced <code>sum</code> and <code>sum.o</code> defined it, the linker binds that pair. One definition each.",
+    "Because resolution finished, the linker assigns homes: <code>main</code> at 0x4004d0, <code>sum</code> at 0x4004e8, <code>array</code> at 0x601018.",
+    "Because both jobs finished, <code>prog</code> is a fully linked executable. The loader can copy it without further patches.",
+  ];
+  let step = 0, busy = false;
+  function paint() {
+    setCls(main.r, step >= 1 ? "sv-good" : "sv-server");
+    setCls(sum.r, step >= 1 ? "sv-good" : "sv-server");
+    prog.t.textContent = step >= 3 ? "prog" : step >= 2 ? "prog" : "prog";
+    prog.u.textContent = step >= 3 ? "fully linked" : step >= 2 ? "addresses assigned" : step >= 1 ? "names bound" : "not linked yet";
+    setCls(prog.r, step >= 3 ? "sv-good" : step > 0 ? "sv-data-soft" : "sv-panel");
+    jobs[0].t.textContent = step >= 1 ? "1. resolve  ✓" : "1. resolve";
+    jobs[0].u.textContent = step >= 1 ? "sum → exactly one def" : "sum still unbound";
+    setCls(jobs[0].r, step >= 1 ? "sv-good" : "sv-panel");
+    jobs[1].t.textContent = step >= 2 ? "2. relocate  ✓" : "2. relocate";
+    jobs[1].u.textContent = step >= 2 ? "0x4004d0 · 0x4004e8" : "addresses still 0";
+    setCls(jobs[1].r, step >= 2 ? "sv-good" : "sv-panel");
+    K.$("#s2-pill").textContent = ["two .o files", "resolved", "relocated", "executable"][step];
+    cap("#s2-cap", CAPS[step]);
+  }
+  const ctr = K.$("#s2-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || step >= 3) return;
+    busy = true; stepB.disabled = true;
+    const p = draw.tag(step === 0 ? "sum" : step === 1 ? "addr" : "exe");
+    svg.appendChild(p);
+    const from = step === 0 ? sum : step === 1 ? jobs[1] : main;
+    const to = step === 0 ? jobs[0] : prog;
+    await fly(p, [from.cx, from.cy], [to.cx, to.cy], 480);
+    p.remove();
+    step++;
+    paint();
+    busy = false;
+    stepB.disabled = step >= 3;
+  });
+  resetB.addEventListener("click", () => { step = 0; busy = false; stepB.disabled = false; paint(); });
+  ctr.append(stepB, resetB);
+  paint();
+})();
+
+/* ================= 3. ELF ================= */
+(function elf() {
+  const svg = K.$("#s3-svg");
+  const SECTS = [
+    { n: "ELF header", sub: "16-byte ident", why: "The first 16 bytes name the word size and byte order. The rest of the header stores type (relocatable, executable, or shared), machine (x86-64), and where the section header table lives." },
+    { n: ".text", sub: "machine code", why: "The compiled instructions. In main.o this is the 24-byte main. Calls to other modules still have blanks." },
+    { n: ".rodata", sub: "printf / jumps", why: "Read-only data: format strings for printf, and jump tables for switch. The chip will treat this as data, not as a stack local." },
+    { n: ".data", sub: "array = {1,2}", why: "Initialized global and static variables. Figure 7.1’s array[2] = {1, 2} lives here. Ordinary locals do not." },
+    { n: ".bss", sub: "no disk bytes", why: "Uninitialized globals and statics, plus anything initialized to zero. The file stores a size, not the zeros. Better Save Space." },
+    { n: ".symtab", sub: "roster", why: "Functions and globals defined or referenced here. Not ordinary locals. Present even without -g, unless someone ran strip." },
+    { n: ".rel.text", sub: "sticky notes", why: "Locations in .text the linker must patch — a call to an external function, a reference to a global. Local calls often need no entry." },
+    { n: "section hdrs", sub: "map of fillings", why: "A fixed-size row per section: name, file offset, size. The linker parses the sandwich from this table and the ELF header." },
+  ];
+  const rows = SECTS.map((sec, i) => {
+    const y = 20 + i * 38;
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": sec.n });
+    const b = box(g, 20, y, 200, 34, "sv-panel", sec.n, "");
+    b.u && b.u.remove();
+    svg.appendChild(g);
+    const pick = () => { sel = i; paint(); };
+    g.addEventListener("click", pick);
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+    return { g, b, sec };
+  });
+  const detail = box(svg, 244, 20, 416, 88, "sv-good", "ELF header", "16-byte ident");
+  const fact = box(svg, 244, 124, 416, 88, "sv-panel", "word size and byte order", "then type, machine, table offset");
+  const line2 = s("text", { x: 452, y: 246, class: "sv-label", "text-anchor": "middle" }, "relocatable · executable · shared");
+  const line3 = s("text", { x: 452, y: 270, class: "sv-label", "text-anchor": "middle" }, "Linux ELF · Windows PE · Mac Mach-O");
+  const line4 = s("text", { x: 452, y: 294, class: "sv-label", "text-anchor": "middle" }, "a.out is still the nickname for an exe");
+  svg.append(line2, line3, line4);
+  const FACTS = [
+    ["word size and byte order", "then type, machine, table offset"],
+    ["24-byte main in main.o", "external calls still blank"],
+    ["printf strings, switch tables", "read-only at run time"],
+    ["array[2] = {1, 2}", "initialized globals only"],
+    ["size only · no disk bytes", "zeros appear in memory"],
+    ["functions and globals", "no -g needed · no stack locals"],
+    ["call / global to patch", "local calls often skip this"],
+    ["offset and size per filling", "how the linker parses the file"],
+  ];
+  let sel = 0;
+  function paint() {
+    const sec = SECTS[sel];
+    rows.forEach((row, i) => setCls(row.b.r, i === sel ? "sv-good" : "sv-panel"));
+    detail.t.textContent = sec.n;
+    detail.u.textContent = sec.sub;
+    setCls(detail.r, sel === 4 ? "sv-data-soft" : "sv-good");
+    fact.t.textContent = FACTS[sel][0];
+    fact.u.textContent = FACTS[sel][1];
+    setCls(fact.r, "sv-panel");
+    K.$("#s3-pill").textContent = sec.n;
+    cap("#s3-cap", sec.why);
+  }
+  const ctr = K.$("#s3-controls");
+  const nextB = h("button", { class: "btn primary", type: "button" }, "Next section");
+  nextB.addEventListener("click", () => { sel = (sel + 1) % SECTS.length; paint(); });
+  ctr.append(nextB);
+  SECTS.forEach((sec, i) => {
+    ctr.appendChild(h("button", { class: "btn small", type: "button", onclick: () => { sel = i; paint(); } }, sec.n));
+  });
+  paint();
+})();
+
+/* ================= 4. SYMBOLS ================= */
+(function symbols() {
+  const svg = K.$("#s4-svg");
+  const gA = s("g", {});
+  const gB = s("g", {});
+  svg.append(gA, gB);
+  const ROWS = [
+    { n: "buf", yes: "yes", typ: "extern", mod: "m.o", sec: ".data", why: "Kenji wrote extern int buf[]. The definition lives in Lucia’s m.o .data as buf[2] = {1, 2}." },
+    { n: "bufp0", yes: "yes", typ: "global", mod: "swap.o", sec: ".data", why: "int *bufp0 = &buf[0] is initialized, so it is a global in swap.o .data. Its initial value needs a relocation toward buf." },
+    { n: "bufp1", yes: "yes", typ: "global", mod: "swap.o", sec: "COMMON", why: "int *bufp1 has no initializer, so gcc parks it in COMMON. The linker will choose .bss later if this definition wins." },
+    { n: "swap", yes: "yes", typ: "global", mod: "swap.o", sec: ".text", why: "void swap() is a nonstatic function — a global in .text. Lucia’s main can call it." },
+    { n: "temp", yes: "no", typ: "—", mod: "—", sec: "stack", why: "int temp is an ordinary local. It lives on the stack at run time. .symtab does not get a row." },
+  ];
+  const heads = ["name", "entry?", "type", "module", "section"];
+  const xs = [24, 150, 260, 390, 520];
+  const ws = [114, 98, 118, 118, 136];
+  heads.forEach((hd, i) => gA.appendChild(draw.label(xs[i] + ws[i] / 2, 28, hd, "sv-label", "middle")));
+  const rowBoxes = ROWS.map((row, i) => {
+    const y = 42 + i * 46;
+    const g = s("g", { class: "clickable", tabindex: "0", role: "button", "aria-label": row.n });
+    const cells = heads.map((_, c) => {
+      const keys = ["n", "yes", "typ", "mod", "sec"];
+      return box(g, xs[c], y, ws[c] - 8, 38, "sv-panel", row[keys[c]], "");
+    });
+    gA.appendChild(g);
+    const pick = () => { sel = i; paint(); };
+    g.addEventListener("click", pick);
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+    return { g, cells, row };
+  });
+  const fBox = box(gB, 24, 50, 300, 90, "sv-server", "f()  x.1 = 0", "static int x  ·  local");
+  const gBox = box(gB, 356, 50, 300, 90, "sv-server", "g()  x.2 = 1", "static int x  ·  local");
+  const both = box(gB, 24, 170, 632, 70, "sv-data-soft", "same spelling in C, two roster names", "compiler exports x.1 and x.2");
+  const gNote = s("text", { x: 340, y: 270, class: "sv-label", "text-anchor": "middle" }, "not the same as a stack local named x");
+  gB.appendChild(gNote);
+  let mode = 0, sel = 0;
+  function paint() {
+    vis(gA, mode === 0);
+    vis(gB, mode === 1);
+    if (mode === 0) {
+      rowBoxes.forEach((rb, i) => {
+        const on = i === sel;
+        rb.cells.forEach((c) => setCls(c.r, on ? (rb.row.yes === "no" ? "sv-bad" : "sv-good") : "sv-panel"));
+      });
+      cap("#s4-cap", ROWS[sel].why);
+    } else {
+      setCls(fBox.r, "sv-server");
+      setCls(gBox.r, "sv-good");
+      cap("#s4-cap", "Because both functions declared <code>static int x</code>, the compiler cannot put one stack slot. It allocates <code>.data</code> or <code>.bss</code> and exports local linker symbols <code>x.1</code> and <code>x.2</code>.");
+    }
+  }
+  K.$("#s4-seg").appendChild(seg(["swap.o roster", "static x.1 / x.2"], 0, (i) => { mode = i; paint(); modeButtons(); }, "s4-mode"));
+  const ctr = K.$("#s4-controls");
+  const nextB = h("button", { class: "btn primary", type: "button" }, "Next symbol");
+  nextB.addEventListener("click", () => {
+    if (mode !== 0) return;
+    sel = (sel + 1) % ROWS.length;
+    paint();
+  });
+  ctr.append(nextB);
+  ROWS.forEach((row, i) => {
+    const b = h("button", { class: "btn small", type: "button", onclick: () => { if (mode === 0) { sel = i; paint(); } } }, row.n);
+    b.dataset.sym = "1";
+    ctr.appendChild(b);
+  });
+  const showB = h("button", { class: "btn primary", type: "button" }, "Show x.1 / x.2");
+  showB.dataset.loc = "1";
+  showB.addEventListener("click", () => { if (mode === 1) paint(); });
+  ctr.appendChild(showB);
+  function modeButtons() {
+    nextB.style.display = mode === 0 ? "" : "none";
+    nextB.disabled = mode !== 0;
+    showB.style.display = mode === 1 ? "" : "none";
+    showB.disabled = mode !== 1;
+    [...ctr.querySelectorAll("button")].forEach((b) => {
+      if (b.dataset.sym) {
+        b.style.display = mode === 0 ? "" : "none";
+        b.disabled = mode !== 0;
+      }
+    });
+  }
+  modeButtons();
+  paint();
+})();
+
+/* ================= 5. RESOLVE ================= */
+(function resolve() {
+  const svg = K.$("#s5-svg");
+  const gA = s("g", {});
+  const gB = s("g", {});
+  svg.append(gA, gB);
+  const left = box(gA, 24, 28, 300, 100, "sv-server", "foo3.c", "int x = 15213  strong");
+  const right = box(gA, 356, 28, 300, 100, "sv-server", "bar3.c", "int x   weak");
+  const verdict = box(gA, 24, 154, 632, 80, "sv-panel", "not linked yet", "press Link");
+  const footA = s("text", { x: 340, y: 264, class: "sv-label", "text-anchor": "middle" }, "rule 1 error · rule 2 choose strong · rule 3 choose any weak");
+  gA.appendChild(footA);
+
+  const cmd = box(gB, 24, 24, 632, 52, "sv-box", "gcc -static main2.o libvector.a", "left → right");
+  const eBox = box(gB, 24, 96, 200, 80, "sv-panel", "E  empty", "to merge");
+  const uBox = box(gB, 240, 96, 200, 80, "sv-panel", "U  empty", "unresolved");
+  const dBox = box(gB, 456, 96, 200, 80, "sv-panel", "D  empty", "defined");
+  const shelf = box(gB, 24, 198, 300, 70, "sv-db", "libvector.a", "addvec.o  multvec.o");
+  const resultB = box(gB, 356, 198, 300, 70, "sv-panel", "scan not started", "Step the walk");
+
+  const CASES = [
+    { id: "mains", L: "foo1.c", Ls: "int main()  strong", R: "bar1.c", Rs: "int main()  strong",
+      vt: "multiple definition", vs: "rule 1  ·  two strong mains", cls: "sv-bad",
+      cap: "Because both modules define a strong <code>main</code>, the linker stops. Rule 1 forbids two strong symbols with the same name." },
+    { id: "foo3", L: "foo3.c", Ls: "int x = 15213  strong", R: "bar3.c", Rs: "int x   weak",
+      vt: "x = 15212", vs: "rule 2  ·  keep strong, f() writes it", cls: "sv-good",
+      cap: "Because Omar’s <code>x</code> is strong and Priya’s is weak, the linker keeps 15213 and says nothing. Then <code>f</code> writes 15212 into that same <code>x</code>." },
+    { id: "foo5", L: "foo5.c", Ls: "int x = 15213  strong", R: "bar5.c", Rs: "double x   weak",
+      vt: "x=0x0  y=0x80000000", vs: "rule 2  ·  8-byte write smears y", cls: "sv-bad",
+      cap: "Because the strong <code>int x</code> wins, Priya’s <code>double x = -0.0</code> still writes 8 bytes. On this layout that clobbers neighbouring <code>y</code>. The linker only warned about alignment." },
+  ];
+  const FILES_OK = [
+    { kind: "obj", name: "main2.o", defs: ["main", "x", "y", "z"], refs: ["addvec", "printf"] },
+    { kind: "ar", name: "libvector.a", members: [
+      { name: "addvec.o", defs: ["addvec", "addcnt"], refs: [] },
+      { name: "multvec.o", defs: ["multvec", "multcnt"], refs: [] },
+    ] },
+    { kind: "ar", name: "libc.a", members: [
+      { name: "printf.o", defs: ["printf"], refs: [] },
+    ] },
+  ];
+  const FILES_BAD = [FILES_OK[1], FILES_OK[0], FILES_OK[2]];
+
+  const st = {
+    u: stat("U", "—"),
+    e: stat("E", "—"),
+    out: stat("result", "—"),
+  };
+  Object.values(st).forEach((v) => K.$("#s5-stats").appendChild(v));
+
+  let mode = 0, which = 1, busy = false, arOrder = 0, arStep = 0, arSnap = [];
+
+  function snapshot(files) {
+    const snaps = [];
+    const E = [], U = new Set(), D = new Set();
+    snaps.push({ who: "start", E: [], U: [], D: [], extra: "E, U, D empty" });
+    for (const f of files) {
+      if (f.kind === "obj") {
+        E.push(f.name);
+        f.refs.forEach((r) => { if (!D.has(r)) U.add(r); });
+        f.defs.forEach((d) => { D.add(d); U.delete(d); });
+        snaps.push({ who: f.name, E: E.slice(), U: [...U], D: [...D], extra: "object file added to E" });
+      } else {
+        const pulled = [];
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (const m of f.members) {
+            if (pulled.includes(m.name)) continue;
+            if (m.defs.some((d) => U.has(d))) {
+              pulled.push(m.name);
+              E.push(m.name);
+              m.refs.forEach((r) => { if (!D.has(r)) U.add(r); });
+              m.defs.forEach((d) => { D.add(d); U.delete(d); });
+              changed = true;
+              snaps.push({ who: m.name, E: E.slice(), U: [...U], D: [...D], extra: "archive member resolves U" });
+            }
+          }
+        }
+        const discarded = f.members.filter((m) => !pulled.includes(m.name)).map((m) => m.name);
+        snaps.push({ who: f.name, E: E.slice(), U: [...U], D: [...D], extra: discarded.length ? "discarded " + discarded.join(", ") : "archive done", discarded });
+      }
+    }
+    snaps.push({ who: "end", E: E.slice(), U: [...U], D: [...D], extra: U.size ? "U nonempty → error" : "merge E and relocate", error: U.size > 0 });
+    return snaps;
+  }
+
+  function paintStrong() {
+    const c = CASES[which];
+    left.t.textContent = c.L; left.u.textContent = c.Ls;
+    right.t.textContent = c.R; right.u.textContent = c.Rs;
+    setCls(left.r, "sv-server"); setCls(right.r, "sv-server");
+    verdict.t.textContent = "not linked yet";
+    verdict.u.textContent = "press Link";
+    setCls(verdict.r, "sv-panel");
+    st.u.set("—"); st.e.set("—"); st.out.set("ready");
+    cap("#s5-cap", "Omar and Priya compiled separately. Press Link to apply the three Linux rules.");
+  }
+  function paintArchive() {
+    cmd.t.textContent = arOrder === 0
+      ? "gcc -static main2.o libvector.a"
+      : "gcc -static libvector.a main2.o";
+    cmd.u.textContent = "driver also passes libc.a · left → right";
+    const snap = arSnap[arStep] || arSnap[0];
+    eBox.t.textContent = snap.E.length ? "E  " + snap.E.length : "E  empty";
+    eBox.u.textContent = snap.E[0] || "to merge";
+    uBox.t.textContent = snap.U.length ? "U  " + snap.U.join(",") : "U  empty";
+    uBox.u.textContent = "unresolved";
+    dBox.t.textContent = snap.D.length ? "D  " + snap.D.length : "D  empty";
+    dBox.u.textContent = "defined";
+    setCls(uBox.r, snap.U.length ? "sv-data-soft" : "sv-good");
+    setCls(eBox.r, snap.E.length ? "sv-server" : "sv-panel");
+    resultB.t.textContent = snap.who;
+    resultB.u.textContent = snap.extra;
+    setCls(resultB.r, snap.error ? "sv-bad" : snap.who === "end" ? "sv-good" : "sv-panel");
+    if (snap.who === "libc.a" || snap.who === "printf.o") shelf.t.textContent = "libc.a";
+    else shelf.t.textContent = "libvector.a";
+    shelf.u.textContent = (snap.discarded && snap.discarded.length) ? "discarded " + snap.discarded.join(", ") : (snap.who === "libc.a" || snap.who === "printf.o" ? "printf.o" : "addvec.o  multvec.o");
+    st.u.set(String(snap.U.length));
+    st.e.set(String(snap.E.length));
+    st.out.set(snap.error ? "error" : snap.who === "end" ? "ok" : snap.who, snap.error ? "bad" : snap.who === "end" ? "good" : "");
+    cap("#s5-cap", snap.error
+      ? (snap.U.includes("addvec")
+        ? "Because <code>libvector.a</code> was scanned while U was empty, <code>addvec.o</code> was never pulled. <code>libc.a</code> can still supply <code>printf</code>, but <code>addvec</code> stays unresolved and ld stops."
+        : "U is still nonempty, so ld stops.")
+      : snap.who === "end"
+        ? "U is empty. The driver-supplied <code>libc.a</code> resolved <code>printf</code>, so <code>gcc -static main2.o libvector.a</code> succeeds — the book’s working command."
+        : snap.who === "addvec.o"
+          ? "Because U held <code>addvec</code>, the archive donates <code>addvec.o</code>. <code>multvec.o</code> defines nothing in U, so it is discarded."
+          : snap.who === "printf.o" || snap.who === "libc.a"
+            ? (arOrder === 0
+              ? "Because U still held <code>printf</code>, the driver already passing <code>libc.a</code> donates <code>printf.o</code>. That is why the book’s command works."
+              : "Because U still held <code>printf</code>, <code>libc.a</code> donates <code>printf.o</code>. That does not help <code>addvec</code> — <code>libvector.a</code> was already scanned.")
+            : snap.who === "main2.o"
+              ? "Because this is an object file, it always joins E. Its refs go into U; its defs go into D."
+              : `Scan at <b>${snap.who}</b>. ${snap.extra}.`);
+  }
+  function paint() {
+    vis(gA, mode === 0);
+    vis(gB, mode === 1);
+    if (mode === 0) paintStrong();
+    else paintArchive();
+  }
+  function resetArchive() {
+    arSnap = snapshot(arOrder === 0 ? FILES_OK : FILES_BAD);
+    arStep = 0;
+  }
+  resetArchive();
+
+  K.$("#s5-seg").appendChild(seg(["strong / weak", "archive walk"], 0, (i) => {
+    mode = i; busy = false; paint(); modeButtons();
+  }, "s5-mode"));
+
+  const ctr = K.$("#s5-controls");
+  const linkB = h("button", { class: "btn primary", type: "button" }, "Link");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  linkB.dataset.sw = "1";
+  stepB.dataset.ar = "1";
+  linkB.addEventListener("click", async () => {
+    if (mode !== 0 || busy) return;
+    busy = true; linkB.disabled = true;
+    const c = CASES[which];
+    const p = draw.tag("x");
+    svg.appendChild(p);
+    await fly(p, [left.cx, left.cy], [verdict.cx, verdict.cy], 420);
+    p.remove();
+    verdict.t.textContent = c.vt;
+    verdict.u.textContent = c.vs;
+    setCls(verdict.r, c.cls);
+    setCls(left.r, "sv-good");
+    setCls(right.r, c.cls === "sv-bad" && which === 0 ? "sv-bad" : "sv-data-soft");
+    st.out.set(which === 0 ? "error" : which === 1 ? "15212" : "smear", which === 1 ? "good" : "bad");
+    cap("#s5-cap", c.cap);
+    busy = false; linkB.disabled = false;
+  });
+  stepB.addEventListener("click", async () => {
+    if (mode !== 1 || busy || arStep >= arSnap.length - 1) return;
+    busy = true; stepB.disabled = true;
+    arStep++;
+    paintArchive();
+    await sleep(80);
+    busy = false;
+    stepB.disabled = arStep >= arSnap.length - 1;
+  });
+  resetB.addEventListener("click", () => {
+    busy = false;
+    if (mode === 0) paintStrong();
+    else { resetArchive(); paintArchive(); }
+    modeButtons();
+  });
+  const caseBtns = CASES.map((c, i) => {
+    const b = h("button", { class: "btn small", type: "button", onclick: () => { which = i; if (mode === 0) paintStrong(); } }, c.id);
+    b.dataset.sw = "1";
+    return b;
+  });
+  const ord0 = h("button", { class: "btn small", type: "button", onclick: () => { arOrder = 0; resetArchive(); if (mode === 1) paintArchive(); modeButtons(); } }, "main2 then .a");
+  const ord1 = h("button", { class: "btn small", type: "button", onclick: () => { arOrder = 1; resetArchive(); if (mode === 1) paintArchive(); modeButtons(); } }, ".a then main2");
+  ord0.dataset.ar = "1";
+  ord1.dataset.ar = "1";
+  ctr.append(linkB, stepB, resetB, ...caseBtns, ord0, ord1);
+  function modeButtons() {
+    [...ctr.querySelectorAll("button")].forEach((b) => {
+      const sw = b.dataset.sw, ar = b.dataset.ar;
+      if (sw) { b.style.display = mode === 0 ? "" : "none"; b.disabled = mode !== 0; }
+      if (ar) { b.style.display = mode === 1 ? "" : "none"; b.disabled = mode !== 1 || (b === stepB && arStep >= arSnap.length - 1); }
+    });
+    resetB.style.display = "";
+    resetB.disabled = false;
+  }
+  modeButtons();
+  paint();
+})();
+
+/* ================= 6. RELOC ================= */
+(function reloc() {
+  const svg = K.$("#s6-svg");
+  const gA = s("g", {});
+  const gB = s("g", {});
+  svg.append(gA, gB);
+  const insA = box(gA, 24, 24, 632, 56, "sv-box", "e8  00 00 00 00", "callq  ·  placeholder");
+  const a1 = box(gA, 24, 100, 200, 70, "sv-server", "0x4004d0", "ADDR(.text)");
+  const a2 = box(gA, 240, 100, 200, 70, "sv-server", "0x4004e8", "ADDR(sum)");
+  const a3 = box(gA, 456, 100, 200, 70, "sv-data-soft", "0x4004df", "refaddr");
+  const outA = box(gA, 24, 190, 632, 64, "sv-panel", "*refptr = 0x5", "ADDR(sum) + (−4) − refaddr");
+  const insB = box(gB, 24, 24, 632, 56, "sv-box", "bf  00 00 00 00", "mov $0, %edi  ·  placeholder");
+  const b1 = box(gB, 24, 100, 300, 70, "sv-server", "0x601018", "ADDR(array)");
+  const b2 = box(gB, 356, 100, 300, 70, "sv-data-soft", "addend 0", "R_X86_64_32");
+  const outB = box(gB, 24, 190, 632, 64, "sv-panel", "*refptr = 0x601018", "write the address itself");
+  const read = K.$("#s6-read");
+  const cells = [
+    { k: "type", v: "PC32" },
+    { k: "offset", v: "0xf" },
+    { k: "addend", v: "−4" },
+    { k: "field", v: "00 00 00 00" },
+  ].map((c) => {
+    const el = h("div", { class: "reading" }, h("div", { class: "k" }, c.k), h("div", { class: "v" }, c.v));
+    read.appendChild(el);
+    return el;
+  });
+  let mode = 0, done = false, busy = false;
+  function paint() {
+    vis(gA, mode === 0);
+    vis(gB, mode === 1);
+    done = false;
+    if (mode === 0) {
+      insA.t.textContent = "e8  00 00 00 00";
+      insA.u.textContent = "callq  ·  placeholder";
+      setCls(insA.r, "sv-box");
+      setCls(outA.r, "sv-panel");
+      outA.t.textContent = "*refptr = ?";
+      cells[0].lastChild.textContent = "PC32";
+      cells[1].lastChild.textContent = "0xf";
+      cells[2].lastChild.textContent = "−4";
+      cells[3].lastChild.textContent = "00 00 00 00";
+      cap("#s6-cap", "The assembler left four zero bytes after opcode 0xe8. Press Relocate to run Figure 7.10 on <code>sum</code>.");
+    } else {
+      insB.t.textContent = "bf  00 00 00 00";
+      insB.u.textContent = "mov $0, %edi  ·  placeholder";
+      setCls(insB.r, "sv-box");
+      setCls(outB.r, "sv-panel");
+      outB.t.textContent = "*refptr = ?";
+      cells[0].lastChild.textContent = "ABS32";
+      cells[1].lastChild.textContent = "0xa";
+      cells[2].lastChild.textContent = "0";
+      cells[3].lastChild.textContent = "00 00 00 00";
+      cap("#s6-cap", "This <code>mov</code> wants <code>&amp;array</code> as a 32-bit immediate. Press Relocate to write the absolute address.");
+    }
+  }
+  K.$("#s6-seg").appendChild(seg(["call sum", "mov array"], 0, (i) => { mode = i; paint(); }, "s6-mode"));
+  const ctr = K.$("#s6-controls");
+  const goB = h("button", { class: "btn primary", type: "button" }, "Relocate");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  goB.addEventListener("click", async () => {
+    if (busy || done) return;
+    busy = true; goB.disabled = true;
+    const src = mode === 0 ? a2 : b1;
+    const dst = mode === 0 ? outA : outB;
+    const p = draw.tag(mode === 0 ? "0x5" : "0x601018");
+    svg.appendChild(p);
+    await fly(p, [src.cx, src.cy], [dst.cx, dst.cy], 480);
+    p.remove();
+    if (mode === 0) {
+      insA.t.textContent = "e8  05 00 00 00";
+      insA.u.textContent = "callq  4004e8  sum";
+      setCls(insA.r, "sv-good");
+      outA.t.textContent = "*refptr = 0x5";
+      setCls(outA.r, "sv-good");
+      cells[3].lastChild.textContent = "05 00 00 00";
+      cap("#s6-cap", "Because refaddr is 0x4004d0 + 0xf = 0x4004df, the field is 0x4004e8 + (−4) − 0x4004df = <b>0x5</b>. At run time PC is 0x4004e3; PC + 5 lands on sum.");
+    } else {
+      insB.t.textContent = "bf  18 10 60 00";
+      insB.u.textContent = "mov $0x601018, %edi";
+      setCls(insB.r, "sv-good");
+      outB.t.textContent = "*refptr = 0x601018";
+      setCls(outB.r, "sv-good");
+      cells[3].lastChild.textContent = "18 10 60 00";
+      cap("#s6-cap", "Because the type is <code>R_X86_64_32</code> and the addend is 0, the linker writes <code>ADDR(array)</code> = <b>0x601018</b>. Little-endian bytes are 18 10 60 00.");
+    }
+    done = true;
+    busy = false;
+    goB.disabled = true;
+  });
+  resetB.addEventListener("click", () => { busy = false; done = false; goB.disabled = false; paint(); });
+  ctr.append(goB, resetB);
+  paint();
+})();
+
+/* ================= 7. EXEC + LOAD ================= */
+(function execload() {
+  const svg = K.$("#s7-svg");
+  const gA = s("g", {});
+  const gB = s("g", {});
+  svg.append(gA, gB);
+  const hdr = box(gA, 24, 20, 300, 64, "sv-box", "ELF header", "entry = _start");
+  const ph1 = box(gA, 24, 100, 300, 80, "sv-server", "LOAD code  r-x", "vaddr 0x400000  0x69c");
+  const ph2 = box(gA, 24, 196, 300, 80, "sv-db", "LOAD data  rw-", "vaddr 0x600df8  0x230");
+  const noteA = s("text", { x: 174, y: 306, class: "sv-label", "text-anchor": "middle" }, "filesz 0x228 + 8 .bss");
+  gA.appendChild(noteA);
+  const MEM = [
+    { n: "kernel", sub: "2^48 and up", cls: "sv-box" },
+    { n: "stack", sub: "grows down", cls: "sv-panel" },
+    { n: "shared libs", sub: "mapped region", cls: "sv-data-soft" },
+    { n: "heap", sub: "malloc / brk", cls: "sv-panel" },
+    { n: ".data .bss", sub: "0x600df8", cls: "sv-db" },
+    { n: ".init .text", sub: "0x400000", cls: "sv-server" },
+  ];
+  const mem = MEM.map((m, i) => box(gA, 356, 20 + i * 48, 300, 42, m.cls, m.n, m.sub));
+  const fileB = box(gB, 24, 36, 280, 90, "sv-box", "prog on disk", "two LOAD rows");
+  const codeM = box(gB, 376, 36, 280, 90, "sv-panel", "code segment", "empty");
+  const dataM = box(gB, 376, 150, 280, 90, "sv-panel", "data segment", "empty");
+  const startB = box(gB, 24, 150, 280, 90, "sv-panel", "_start", "crt1.o  not main");
+  gB.appendChild(draw.arrow(304, 81, 376, 81));
+  gB.appendChild(draw.arrow(304, 195, 376, 195));
+  const st = { step: stat("step", "0 / 4"), pc: stat("jump", "—") };
+  Object.values(st).forEach((v) => K.$("#s7-stats").appendChild(v));
+  let mode = 0, step = 0, busy = false;
+  const CAPS = [
+    "Yara typed ./prog. The loader has not copied anything yet. Press Step.",
+    "Because the first LOAD row says r-x at 0x400000, the loader maps 0x69c bytes of header, .init, .text, and .rodata.",
+    "Because the second LOAD row says rw- at 0x600df8, 0x228 file bytes land there and 8 extra bytes of .bss become zeros.",
+    "Because the entry point is _start in crt1.o, control goes there. _start calls __libc_start_main, which calls main.",
+  ];
+  function paintMem() {
+    mem.forEach((b, i) => {
+      const hit = (step >= 1 && i === 5) || (step >= 2 && i === 4) || (step >= 3 && i === 1);
+      setCls(b.r, hit ? "sv-good" : MEM[i].cls);
+    });
+    setCls(ph1.r, step >= 1 ? "sv-good" : "sv-server");
+    setCls(ph2.r, step >= 2 ? "sv-good" : "sv-db");
+    setCls(hdr.r, step >= 3 ? "sv-good" : "sv-box");
+  }
+  function paintLoad() {
+    codeM.t.textContent = step >= 1 ? "code  0x400000" : "code segment";
+    codeM.u.textContent = step >= 1 ? "r-x  0x69c bytes" : "empty";
+    setCls(codeM.r, step >= 1 ? "sv-good" : "sv-panel");
+    dataM.t.textContent = step >= 2 ? "data  0x600df8" : "data segment";
+    dataM.u.textContent = step >= 2 ? "rw-  + 8 bss zeros" : "empty";
+    setCls(dataM.r, step >= 2 ? "sv-good" : "sv-panel");
+    startB.t.textContent = step >= 3 ? "→ _start" : "_start";
+    startB.u.textContent = step >= 3 ? "__libc_start_main → main" : "crt1.o  not main";
+    setCls(startB.r, step >= 3 ? "sv-good" : "sv-panel");
+  }
+  function paint() {
+    vis(gA, mode === 0);
+    vis(gB, mode === 1);
+    paintMem();
+    paintLoad();
+    st.step.set(`${step} / 3`);
+    st.pc.set(step >= 3 ? "_start" : "—");
+    cap("#s7-cap", CAPS[step]);
+  }
+  K.$("#s7-seg").appendChild(seg(["memory map", "copy segments"], 0, (i) => { mode = i; paint(); }, "s7-mode"));
+  const ctr = K.$("#s7-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const playB = h("button", { class: "btn", type: "button" }, "Play");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  function lock(on) { stepB.disabled = on || step >= 3; playB.disabled = on; }
+  stepB.addEventListener("click", async () => {
+    if (busy || step >= 3) return;
+    busy = true; lock(true);
+    if (mode === 1) {
+      const p = draw.tag(step === 0 ? "code" : step === 1 ? "data" : "jmp");
+      svg.appendChild(p);
+      const from = step === 2 ? startB : fileB;
+      const to = step === 0 ? codeM : step === 1 ? dataM : startB;
+      await fly(p, [from.cx, from.cy], [to.cx, to.cy], 420);
+      p.remove();
+    } else {
+      await sleep(160);
+    }
+    step++;
+    paint();
+    busy = false; lock(false);
+  });
+  playB.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; lock(true);
+    while (step < 3) {
+      step++;
+      paint();
+      await sleep(480);
+    }
+    busy = false; lock(false);
+  });
+  resetB.addEventListener("click", () => { step = 0; busy = false; paint(); lock(false); });
+  ctr.append(stepB, playB, resetB);
+  paint();
+})();
+
+/* ================= 8. SHARED ================= */
+(function shared() {
+  const svg = K.$("#s8-svg");
+  const gA = s("g", {});
+  const gB = s("g", {});
+  svg.append(gA, gB);
+  const main2 = box(gA, 24, 28, 150, 70, "sv-server", "main2.o", "refs addvec");
+  const so = box(gA, 198, 28, 150, 70, "sv-db", "libvector.so", "not copied");
+  const part = box(gA, 372, 28, 150, 70, "sv-panel", "prog2l", "partial exe");
+  const dyn = box(gA, 546, 28, 110, 70, "sv-data-soft", "ld-linux", ".interp");
+  const mem1 = box(gA, 24, 130, 200, 80, "sv-panel", "prog2l", "in memory");
+  const mem2 = box(gA, 240, 130, 200, 80, "sv-panel", "libc.so", "relocated");
+  const mem3 = box(gA, 456, 130, 200, 80, "sv-panel", "libvector.so", "relocated");
+  const footA = s("text", { x: 340, y: 246, class: "sv-label", "text-anchor": "middle" }, "none of the .so code is copied into prog2l");
+  gA.appendChild(footA);
+  const app = box(gB, 24, 28, 200, 80, "sv-server", "dll.c", "x={1,2} y={3,4}");
+  const hnd = box(gB, 246, 28, 200, 80, "sv-panel", "handle", "dlopen");
+  const fn = box(gB, 468, 28, 188, 80, "sv-panel", "addvec *", "dlsym");
+  const zB = box(gB, 24, 140, 310, 80, "sv-panel", "z = [ ?  ? ]", "after the call");
+  const clB = box(gB, 356, 140, 300, 80, "sv-panel", "dlclose", "unload if unused");
+  let mode = 0, step = 0, busy = false;
+  const CAPA = [
+    "Nadia compiled a shared library with -shared -fpic. prog2l is only partially linked. Press Step.",
+    "Because ld wrote relocation notes instead of code, prog2l stays small. The .so file is still on disk.",
+    "Because the loader saw .interp, it runs ld-linux.so instead of jumping to the app.",
+    "Because the dynamic linker finished, libc.so and libvector.so sit in memory and prog2l’s refs point at them. Addresses now stay put.",
+  ];
+  const CAPB = [
+    "dll.c never named libvector at compile time. Press Step to dlopen it with RTLD_LAZY.",
+    "Because dlopen succeeded, we have a handle. Next dlsym looks up the name addvec.",
+    "Because dlsym returned a pointer, the call is an ordinary function call. z should become [4 6].",
+    "Because we called addvec(x, y, z, 2), z is [4 6]. dlclose unloads the library if nothing else still holds it.",
+  ];
+  function paintA() {
+    setCls(main2.r, step >= 0 ? "sv-server" : "sv-panel");
+    setCls(so.r, step >= 1 ? "sv-db" : "sv-panel");
+    part.t.textContent = step >= 1 ? "prog2l" : "prog2l";
+    part.u.textContent = step >= 1 ? "notes only" : "partial exe";
+    setCls(part.r, step >= 1 ? "sv-data-soft" : "sv-panel");
+    setCls(dyn.r, step >= 2 ? "sv-good" : "sv-data-soft");
+    setCls(mem1.r, step >= 3 ? "sv-good" : "sv-panel");
+    setCls(mem2.r, step >= 3 ? "sv-good" : "sv-panel");
+    setCls(mem3.r, step >= 3 ? "sv-good" : "sv-panel");
+    mem3.u.textContent = step >= 3 ? "addvec lives here" : "relocated";
+    cap("#s8-cap", CAPA[step]);
+  }
+  function paintB() {
+    hnd.t.textContent = step >= 1 ? "handle ok" : "handle";
+    hnd.u.textContent = step >= 1 ? "./libvector.so" : "dlopen";
+    setCls(hnd.r, step >= 1 ? "sv-good" : "sv-panel");
+    fn.t.textContent = step >= 2 ? "addvec *" : "addvec *";
+    fn.u.textContent = step >= 2 ? "dlsym found it" : "dlsym";
+    setCls(fn.r, step >= 2 ? "sv-good" : "sv-panel");
+    zB.t.textContent = step >= 3 ? "z = [4  6]" : "z = [ ?  ? ]";
+    zB.u.textContent = step >= 3 ? "1+3 and 2+4" : "after the call";
+    setCls(zB.r, step >= 3 ? "sv-good" : "sv-panel");
+    clB.t.textContent = step >= 3 ? "dlclose 0" : "dlclose";
+    setCls(clB.r, step >= 3 ? "sv-good" : "sv-panel");
+    cap("#s8-cap", CAPB[step]);
+  }
+  function paint() {
+    vis(gA, mode === 0);
+    vis(gB, mode === 1);
+    if (mode === 0) paintA(); else paintB();
+  }
+  K.$("#s8-seg").appendChild(seg(["load-time .so", "dll.c dlopen"], 0, (i) => { mode = i; step = 0; busy = false; paint(); modeButtons(); }, "s8-mode"));
+  const ctr = K.$("#s8-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy || step >= 3) return;
+    busy = true; stepB.disabled = true;
+    const p = draw.tag(mode === 0 ? [".so", "interp", "map"][step] : ["open", "sym", "call"][step]);
+    svg.appendChild(p);
+    const from = mode === 0 ? (step === 0 ? so : step === 1 ? part : dyn) : (step === 0 ? app : step === 1 ? hnd : fn);
+    const to = mode === 0 ? (step === 0 ? part : step === 1 ? dyn : mem3) : (step === 0 ? hnd : step === 1 ? fn : zB);
+    await fly(p, [from.cx, from.cy], [to.cx, to.cy], 420);
+    p.remove();
+    step++;
+    paint();
+    busy = false;
+    stepB.disabled = step >= 3;
+  });
+  resetB.addEventListener("click", () => { step = 0; busy = false; stepB.disabled = false; paint(); });
+  ctr.append(stepB, resetB);
+  function modeButtons() { stepB.disabled = step >= 3; }
+  paint();
+})();
+
+/* ================= 9. PIC ================= */
+(function pic() {
+  const svg = K.$("#s9-svg");
+  const gA = s("g", {});
+  const gB = s("g", {});
+  svg.append(gA, gB);
+  const codeA = box(gA, 24, 28, 280, 90, "sv-server", "addvec  .text", "mov 0x2008b9(%rip)");
+  const gotA = box(gA, 356, 28, 300, 90, "sv-data-soft", "GOT[3]  &addcnt", "data segment start");
+  const cntA = box(gA, 24, 148, 280, 80, "sv-db", "addcnt = 0", "global in this .so");
+  const dist = box(gA, 356, 148, 300, 80, "sv-panel", "distance  0x2008b9", "run-time constant");
+  const plt0 = box(gB, 24, 24, 200, 64, "sv-panel", "PLT[0]", "dynamic linker");
+  const plt2 = box(gB, 246, 24, 200, 64, "sv-server", "PLT[2]", "addvec trampoline");
+  const addv = box(gB, 468, 24, 188, 64, "sv-db", "addvec", "real function");
+  const got4 = box(gB, 24, 116, 310, 70, "sv-data-soft", "GOT[4] → PLT[2]+6", "first call");
+  const got2 = box(gB, 356, 116, 300, 70, "sv-panel", "GOT[2]  linker", "ld-linux.so");
+  const flow = s("text", { x: 340, y: 220, class: "sv-text", "text-anchor": "middle" }, "");
+  const flow2 = s("text", { x: 340, y: 248, class: "sv-label", "text-anchor": "middle" }, "16-byte PLT entries  ·  8-byte GOT entries");
+  gB.append(flow, flow2);
+  let mode = 0, step = 0, cnt = 0, busy = false;
+  function paintA() {
+    cntA.t.textContent = "addcnt = " + cnt;
+    setCls(cntA.r, cnt ? "sv-good" : "sv-db");
+    setCls(gotA.r, step ? "sv-good" : "sv-data-soft");
+    cap("#s9-cap", cnt
+      ? `Because the PC-relative offset to GOT[3] never changes, addvec can increment <code>addcnt</code> to <b>${cnt}</b> no matter where the .so was loaded.`
+      : "Hiro’s library can sit at any address. Press Step to load &amp;addcnt from GOT[3] and increment it.");
+  }
+  function paintB() {
+    const first = step < 4;
+    const labels = [
+      "call  →  PLT[2]",
+      "jmp *GOT[4]  back into PLT[2]",
+      "push $0x1  →  PLT[0]",
+      "PLT[0]  →  linker  →  write GOT[4]",
+      "call  →  PLT[2]  →  addvec",
+    ];
+    flow.textContent = labels[Math.min(step, 4)];
+    got4.t.textContent = step >= 4 ? "GOT[4]  &addvec" : "GOT[4] → PLT[2]+6";
+    got4.u.textContent = step >= 4 ? "later calls" : "first call";
+    setCls(got4.r, step >= 4 ? "sv-good" : "sv-data-soft");
+    setCls(plt2.r, step >= 1 ? "sv-good" : "sv-server");
+    setCls(plt0.r, step === 3 ? "sv-good" : "sv-panel");
+    setCls(addv.r, step >= 4 ? "sv-good" : "sv-db");
+    cap("#s9-cap", step === 0
+      ? "The program calls PLT[2], not addvec. Press Step to walk Figure 7.19(a)."
+      : step < 4
+        ? `Step ${step} of the first call. GOT[4] still points at the second instruction of PLT[2], so the jump is a detour into the linker.`
+        : "Because the linker overwrote GOT[4], later calls do <code>jmp *GOT[4]</code> and land on addvec. That is lazy binding.");
+  }
+  function paint() {
+    vis(gA, mode === 0);
+    vis(gB, mode === 1);
+    if (mode === 0) paintA(); else paintB();
+  }
+  K.$("#s9-seg").appendChild(seg(["GOT addcnt", "PLT addvec"], 0, (i) => { mode = i; step = 0; busy = false; paint(); modeButtons(); }, "s9-mode"));
+  const ctr = K.$("#s9-controls");
+  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  stepB.addEventListener("click", async () => {
+    if (busy) return;
+    if (mode === 0) {
+      busy = true; stepB.disabled = true;
+      const p = draw.tag("&cnt");
+      svg.appendChild(p);
+      await fly(p, [gotA.cx, gotA.cy], [cntA.cx, cntA.cy], 420);
+      p.remove();
+      cnt += 1;
+      step = 1;
+      paintA();
+      busy = false; stepB.disabled = false;
+    } else {
+      if (step >= 5) return;
+      busy = true; stepB.disabled = true;
+      step++;
+      paintB();
+      await sleep(200);
+      busy = false;
+      stepB.disabled = step >= 5;
+    }
+  });
+  resetB.addEventListener("click", () => {
+    step = 0; cnt = 0; busy = false; stepB.disabled = false; paint();
+  });
+  ctr.append(stepB, resetB);
+  function modeButtons() { stepB.disabled = mode === 1 && step >= 5; }
+  paint();
+})();
+
+/* ================= 10. INTERPOSE ================= */
+(function interpose() {
+  const svg = K.$("#s10-svg");
+  const app = box(svg, 24, 28, 180, 80, "sv-server", "int.c", "malloc(32)");
+  const wrap = box(svg, 250, 28, 180, 80, "sv-data-soft", "wrapper", "not yet");
+  const libc = box(svg, 476, 28, 180, 80, "sv-db", "libc malloc", "real heap");
+  svg.append(draw.arrow(204, 68, 250, 68), draw.arrow(430, 68, 476, 68));
+  const door = box(svg, 24, 132, 300, 70, "sv-panel", "doorway", "pick a mode");
+  const trace = box(svg, 356, 132, 300, 70, "sv-panel", "trace", "no call yet");
+  const foot = s("text", { x: 340, y: 236, class: "sv-label", "text-anchor": "middle" }, "");
+  svg.appendChild(foot);
+  const DOOR = [
+    { w: "mymalloc", d: "-I.  malloc.h #define", t: "malloc(32)=0x9ee010", f: "compile-time  ·  needs source" },
+    { w: "__wrap_malloc", d: "--wrap malloc", t: "malloc(32) = 0x18cf010", f: "link-time  ·  needs the .o files" },
+    { w: "malloc in .so", d: "LD_PRELOAD first", t: "malloc(32) = 0x1bf7010", f: "run-time  ·  even /usr/bin/uptime" },
+  ];
+  let mode = 0, done = false, busy = false;
+  function paint() {
+    const d = DOOR[mode];
+    wrap.t.textContent = d.w;
+    wrap.u.textContent = "same prototype";
+    setCls(wrap.r, done ? "sv-good" : "sv-data-soft");
+    door.t.textContent = d.d;
+    door.u.textContent = ["#define", "__real_malloc", "RTLD_NEXT"][mode];
+    setCls(door.r, "sv-panel");
+    trace.t.textContent = done ? d.t : "trace";
+    trace.u.textContent = done ? "then free(…)" : "no call yet";
+    setCls(trace.r, done ? "sv-good" : "sv-panel");
+    setCls(libc.r, done ? "sv-good" : "sv-db");
+    foot.textContent = d.f;
+    cap("#s10-cap", done
+      ? `Because the ${["preprocessor", "static linker", "dynamic linker"][mode]} sent the call through Fatima’s wrapper, the real malloc still ran and the trace printed <b>${d.t}</b>.`
+      : `int.c still says malloc(32). Press Call malloc. The ${["local header", "--wrap flag", "LD_PRELOAD library"][mode]} stands in the doorway.`);
+  }
+  K.$("#s10-seg").appendChild(seg(["compile", "link", "run"], 0, (i) => { mode = i; done = false; paint(); }, "s10-mode"));
+  const ctr = K.$("#s10-controls");
+  const goB = h("button", { class: "btn primary", type: "button" }, "Call malloc");
+  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
+  goB.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true; goB.disabled = true;
+    const p = draw.tag("32");
+    svg.appendChild(p);
+    await fly(p, [app.cx, app.cy], [wrap.cx, wrap.cy], 380);
+    await fly(p, [wrap.cx, wrap.cy], [libc.cx, libc.cy], 380);
+    p.remove();
+    const q = draw.tag("ptr");
+    svg.appendChild(q);
+    await fly(q, [libc.cx, libc.cy], [trace.cx, trace.cy], 380);
+    q.remove();
+    done = true;
+    paint();
+    busy = false; goB.disabled = false;
+  });
+  resetB.addEventListener("click", () => { done = false; busy = false; goB.disabled = false; paint(); });
+  ctr.append(goB, resetB);
+  paint();
+})();
+
+/* ================= QUIZ ================= */
+K.quiz(K.$("#quiz-root"), [
+  { q: "When you type gcc -Og -o prog main.c sum.c, who actually writes the executable?",
+    options: ["cc1, the C compiler, as its last step", "the loader, while it copies bytes into memory", "ld, after the driver has already run cpp, cc1, and as on each file", "cpp, once every #include is expanded"],
+    answer: 2,
+    why: "gcc is a compiler driver. It runs cpp, then cc1, then as, for each source file, and finally ld. The loader runs later, when you type ./prog." },
+  { q: "Why does the .bss section take no space in the object file?",
+    options: ["Uninitialized and zero-initialized globals are just a placeholder; zeros are supplied in memory.", "The linker deletes .bss after it assigns addresses.", "ELF stores those bytes inside .debug instead.", "The assembler already filled them with the value 0 on disk."],
+    answer: 0,
+    why: "The book’s mnemonic is Better Save Space. .bss occupies no actual disk space; at run time those variables are allocated and set to zero." },
+  { q: "In swap.o from Figure 7.5 / Practice 7.1, which name has no .symtab entry?",
+    options: ["buf", "bufp0", "bufp1", "temp"],
+    answer: 3,
+    why: "temp is an ordinary local on the stack. The linker’s symbol table lists functions and globals (and statics), not stack locals." },
+  { q: "foo3.c defines int x = 15213 and bar3.c defines int x. What happens?",
+    options: ["A multiple-definition error, because both files name x.", "The linker silently keeps the strong x. After f() runs, the program prints 15212.", "The linker picks the weak x and the program prints 0.", "Both copies of x live in the executable, at different addresses."],
+    answer: 1,
+    why: "Initialized x is strong; uninitialized x is weak. Rule 2 chooses the strong symbol with no warning. f() then writes 15212 into that one x." },
+  { q: "Why does gcc -static ./libvector.a main2.c fail to find addvec?",
+    options: ["While the archive is scanned, U is empty, so no member is pulled; the later reference is never resolved.", "addvec is a weak symbol, so archives ignore it.", "libvector.a does not contain addvec.o.", "-static forbids the use of .a files."],
+    answer: 0,
+    why: "The linker scans left to right. An archive member is copied only if it resolves a name already in U. Put libraries last." },
+  { q: "For the call to sum, ADDR(.text)=0x4004d0, ADDR(sum)=0x4004e8, offset 0xf, addend −4. What 32-bit value is written?",
+    options: ["0x4004e8, the absolute address of sum", "0x4004df, the run-time address of the reference", "0x5", "0"],
+    answer: 2,
+    why: "refaddr = 0x4004d0 + 0xf = 0x4004df. The PC-relative field is 0x4004e8 + (−4) − 0x4004df = 0x5. Figure 7.12 shows e8 05 00 00 00." },
+  { q: "After the loader maps prog, where does it jump first?",
+    options: ["main in .text", "_start, defined in crt1.o, which later calls __libc_start_main", "the first byte of the ELF header at 0x400000", "__libc_start_main directly, skipping _start"],
+    answer: 1,
+    why: "The entry point is always _start in crt1.o. That function calls __libc_start_main in libc.so, which calls the user’s main." },
+  { q: "The first time addvec is called through the PLT, what does GOT[4] initially contain?",
+    options: ["The run-time address of addvec", "Zero, until the static linker fills it", "The path name of ld-linux.so", "The address of the second instruction in PLT[2]"],
+    answer: 3,
+    why: "Each GOT entry starts by pointing at the second instruction of its PLT slot, so the first indirect jump falls back into the trampoline and then into the dynamic linker." },
+], 7);
+</script>
+</body>
+</html>

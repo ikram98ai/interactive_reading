@@ -423,7 +423,7 @@
         <h2>Juggler, four cooks, conveyor belt, eight spoons</h2>
         <p class="story"><b>Concurrency</b> means many activities at once. <b>Parallelism</b> is using that to go faster. The book stacks three levels.</p>
         <p class="story"><b>Thread-level:</b> a uniprocessor <i>simulates</i> concurrency by juggling. A <b>multi-core</b> chip puts several cores on one package (each with its own L1/L2; L3 and memory are shared). <b>Hyperthreading</b> gives one core extra PCs and register files so it can switch threads every cycle — a Core i7 core runs 2 threads, so 4 cores run 8.</p>
-        <p class="story"><b>Instruction-level:</b> old chips needed 3–10 cycles per instruction. Modern ones keep 2–4 in flight per cycle using a <b>pipeline</b>. <b>Superscalar</b> designs go past 1 instruction/cycle.</p>
+        <p class="story"><b>Instruction-level:</b> old chips needed 3–10 cycles per instruction. A simple <b>pipeline</b> can finish about 1 instruction per cycle. <b>Superscalar</b> designs issue several at once and can sustain 2–4 instructions per cycle.</p>
         <p class="story"><b>SIMD:</b> one instruction adds 8 floats at once. Handy for pictures, sound, and video.</p>
         <p class="imagine"><b>Switch the model.</b> Same idea, five hardware stories. Nothing in these pictures sits on top of anything else — each piece has its own lane.</p>
         <details class="book">
@@ -723,15 +723,15 @@ function box(parent, x, y, w, h, cls, title, sub) {
     `<b>hello.c</b>  <i>— text, 79 bytes, written by you</i>\n\n#include &lt;stdio.h&gt;\n\nint main()\n{\n    printf("hello, world\\n");\n    return 0;\n}`,
     `<b>hello.i</b>  <i>— still C, but much bigger</i>\n\n<i>… the whole contents of stdio.h pasted in …</i>\nextern int printf(const char *, ...);\n\nint main()\n{\n    printf("hello, world\\n");\n    return 0;\n}`,
     `<b>hello.s</b>  <i>— assembly language</i>\n\nmain:\n    subq    $8, %rsp\n    movl    $.LC0, %edi\n    call    puts\n    movl    $0, %eax\n    addq    $8, %rsp\n    ret`,
-    `<b>hello.o</b>  <i>— binary: 17 bytes encode main</i>\n\n48 83 ec 08  bf 00 00 00 00  e8 00 00 00 00  b8 00 00\n\n<i>printf is still a blank: “find it later”.</i>`,
-    `<b>hello</b>  <i>— executable, ready to run</i>\n\n<i>your main + the library’s printf, merged and addressed</i>\n\nlinux&gt; ./hello\nhello, world`,
+    `<b>hello.o</b>  <i>— binary: 17 bytes encode main</i>\n\n48 83 ec 08  bf 00 00 00 00  e8 00 00 00 00  b8 00 00\n\n<i>puts is still a blank: “find it later”.</i>`,
+    `<b>hello</b>  <i>— executable, ready to run</i>\n\n<i>your main + the library’s puts, merged and addressed</i>\n\nlinux&gt; ./hello\nhello, world`,
   ];
   const CAPS = [
     "Nothing has happened yet. <b>hello.c</b> is plain text a person can read.",
     "<b>Preprocessing.</b> Lines starting with <span class='mono'>#</span> get acted on: <span class='mono'>#include &lt;stdio.h&gt;</span> is replaced by the header. Still C, just longer.",
     "<b>Compiling.</b> The C becomes <b>assembly</b> — one line per machine instruction. Notice: printf became <span class='mono'>puts</span>.",
-    "<b>Assembling.</b> Each line becomes actual bytes. This is a <b>relocatable object</b>: real machine code, but <span class='mono'>printf</span> is still an unfilled blank.",
-    "<b>Linking.</b> The linker finds <span class='mono'>printf.o</span> in the C library, merges it in, and fills in the blanks. The result is an <b>executable</b>.",
+    "<b>Assembling.</b> Each line becomes actual bytes. This is a <b>relocatable object</b>: real machine code, but <span class='mono'>puts</span> is still an unfilled blank.",
+    "<b>Linking.</b> The linker finds <span class='mono'>puts</span> in the C library (the book’s <span class='mono'>printf.o</span>), merges it in, and fills in the blanks. The result is an <b>executable</b>.",
   ];
   const code = K.$("#s2-code");
   let step = 0, busy = false, haveLib = true;
@@ -757,8 +757,8 @@ function box(parent, x, y, w, h, cls, title, sub) {
     if (i === 3 && !haveLib) {
       p.firstChild.setAttribute("class", "sv-fill-coral");
       toolEls[3].r.setAttribute("class", "sv-bad sv-shake");
-      code.innerHTML = `<b>ld</b>  <i>— the linker gives up</i>\n\n/usr/bin/ld: hello.o: in function \`main':\nhello.c:(.text+0x9): <b>undefined reference to \`printf'</b>\ncollect2: error: ld returned 1 exit status`;
-      cap("#s2-cap", "Without the library there is no <span class='mono'>printf</span> to merge in. The linker reports an <b>undefined reference</b>. No executable is produced. These errors are Chapter 7.");
+      code.innerHTML = `<b>ld</b>  <i>— the linker gives up</i>\n\n/usr/bin/ld: hello.o: in function \`main':\nhello.c:(.text+0x9): <b>undefined reference to \`puts'</b>\ncollect2: error: ld returned 1 exit status`;
+      cap("#s2-cap", "Without the library there is no <span class='mono'>puts</span> to merge in — that is the name the compiler actually left in <span class='mono'>hello.o</span>. The linker reports an <b>undefined reference</b>. No executable is produced. These errors are Chapter 7.");
       p.remove(); setWire(srcWire, false); wires.forEach((w) => setWire(w, false));
       busy = false; lock(false); return;
     }
@@ -1108,12 +1108,12 @@ function box(parent, x, y, w, h, cls, title, sub) {
   const memCells = Array.from({ length: N }, (_, i) =>
     s("rect", { x: 20 + i * CW, y: 32, width: CW - 6, height: 34, rx: 6, class: "sv-panel" }));
   memCells.forEach((c) => svg.appendChild(c));
-  svg.appendChild(draw.label(20, 92, "CACHE · ROOM FOR 4 LINES OF 4", "sv-label", "start"));
-  const lineEls = Array.from({ length: 4 }, (_, i) => {
-    const x = 20 + i * 162;
+  svg.appendChild(draw.label(20, 92, "CACHE · ROOM FOR 2 LINES OF 4", "sv-label", "start"));
+  const lineEls = Array.from({ length: 2 }, (_, i) => {
+    const x = 20 + i * 330;
     const g = s("g",
-      s("rect", { x, y: 104, width: 150, height: 40, rx: 8, class: "sv-box" }),
-      s("text", { x: x + 75, y: 129, class: "sv-text", "text-anchor": "middle", style: { fontFamily: "var(--f-mono)", fontSize: "12px" } }, "empty"));
+      s("rect", { x, y: 104, width: 310, height: 40, rx: 8, class: "sv-box" }),
+      s("text", { x: x + 155, y: 129, class: "sv-text", "text-anchor": "middle", style: { fontFamily: "var(--f-mono)", fontSize: "12px" } }, "empty"));
     svg.appendChild(g); return g;
   });
   svg.appendChild(draw.label(20, 168, "TIME TAKEN", "sv-label", "start"));
@@ -1140,7 +1140,7 @@ function box(parent, x, y, w, h, cls, title, sub) {
   runBtn.addEventListener("click", async () => {
     if (busy) return; busy = true; runBtn.disabled = true; reset();
     const order = mode === 0 ? [...Array(N).keys()] : [...Array(N).keys()].sort(() => Math.random() - 0.5);
-    const lines = [null, null, null, null];
+    const lines = [null, null];
     let hits = 0, miss = 0, time = 0, next = 0;
     for (const idx of order) {
       const line = Math.floor(idx / 4);
@@ -1151,7 +1151,7 @@ function box(parent, x, y, w, h, cls, title, sub) {
         lineEls[slot].firstChild.setAttribute("class", "sv-good");
       } else {
         miss++; time += 25;
-        const use = next % 4; next++;
+        const use = next % 2; next++;
         lines[use] = line;
         lineEls[use].firstChild.setAttribute("class", "sv-bad");
         lineEls[use].lastChild.textContent = `bytes ${line * 4}–${line * 4 + 3}`;
