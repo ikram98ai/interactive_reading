@@ -117,8 +117,8 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
 
   <!-- ============ 3. LSM ============ -->
   <section class="scene" id="lsm">
-    <div class="wrap scene-grid full">
-      <div class="copy" style="max-width:760px">
+    <div class="wrap scene-grid">
+      <div class="copy">
         <span class="eyebrow">Big idea 2 · log-structured storage</span>
         <h2>The tidy-up crew at the toy library</h2>
         <p class="story">Sorted files are great to read but awkward to write: you can't just add to the end without spoiling the order. So log-structured engines cheat. New writes go into a small sorted pile <i>in memory</i> called the <b>memtable</b>. When it gets full, the whole pile is written out to disk in sorted order as a brand-new <b>SSTable segment</b>, and it is never changed again.</p>
@@ -207,8 +207,8 @@ db_get () { grep "^$1," database | tail -n 1 }</div>
 
   <!-- ============ 6. COMPARE ============ -->
   <section class="scene" id="compare">
-    <div class="wrap scene-grid full">
-      <div class="copy" style="max-width:760px">
+    <div class="wrap scene-grid">
+      <div class="copy">
         <span class="eyebrow">Big idea 5 · which one should you use?</span>
         <h2>Ink on the page, or a fresh sheet every time?</h2>
         <p class="story">A B-tree rubs out and rewrites the same pages, wherever they happen to sit on the disk: lots of small scattered <b>random writes</b>. An LSM engine writes whole files at a time in one long stroke: fewer, bigger <b>sequential writes</b>. Disks — spinning ones especially, but SSDs too — are happier with the long strokes.</p>

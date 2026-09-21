@@ -243,22 +243,24 @@
 
   <!-- ============ 7. GRAPH ============ -->
   <section class="scene" id="graph">
-    <div class="wrap scene-grid full">
-      <div class="copy" style="max-width:760px">
-        <span class="eyebrow">Big idea 6 · graph data models</span>
-        <h2>Follow the arrows until you get there</h2>
-        <p class="story">When almost everything is connected to everything, a graph fits best. <b>Vertices</b> are things (people, places, web pages); <b>edges</b> are arrows between them, each with a label like <code>BORN_IN</code> or <code>WITHIN</code>.</p>
-        <p class="story">Here's a question that graphs are brilliant at: <b>which people were born in the United States but now live in Europe?</b> The tricky part is that “inside the US” could be a state, a county or a city — you don't know how many arrows you'll have to follow.</p>
-        <p class="imagine"><b>Step through it.</b> Watch the two sets grow outwards from “United States” and “Europe”, then meet in the middle. Switch the language panel to see the very same question in five different languages.</p>
-      </div>
+    <div class="wrap">
       <div class="stack">
-        <div class="stage">
-          <div class="stage-head"><span class="stage-title">Who emigrated from the US to Europe?</span><div class="stats" id="g-stats"></div></div>
-          <div class="stage-scroll"><svg id="g-svg" viewBox="0 0 680 400" role="img" aria-label="A graph of people and nested places, with a step-by-step query traversal"></svg></div>
-          <div class="controls" id="g-controls"></div>
-          <div class="caption" id="g-cap" aria-live="polite">Press Step to run the query one move at a time.</div>
+        <div class="scene-grid">
+          <div class="copy">
+            <span class="eyebrow">Big idea 6 · graph data models</span>
+            <h2>Follow the arrows until you get there</h2>
+            <p class="story">When almost everything is connected to everything, a graph fits best. <b>Vertices</b> are things (people, places, web pages); <b>edges</b> are arrows between them, each with a label like <code>BORN_IN</code> or <code>WITHIN</code>.</p>
+            <p class="story">Here's a question that graphs are brilliant at: <b>which people were born in the United States but now live in Europe?</b> The tricky part is that “inside the US” could be a state, a county or a city — you don't know how many arrows you'll have to follow.</p>
+            <p class="imagine"><b>Step through it.</b> Watch the two sets grow outwards from “United States” and “Europe”, then meet in the middle. Switch the language panel to see the very same question in five different languages.</p>
+          </div>
+          <div class="stage">
+            <div class="stage-head"><span class="stage-title">Who emigrated from the US to Europe?</span><div class="stats" id="g-stats"></div></div>
+            <div class="stage-scroll"><svg id="g-svg" viewBox="0 0 680 400" role="img" aria-label="A graph of people and nested places, with a step-by-step query traversal"></svg></div>
+            <div class="controls" id="g-controls"></div>
+            <div class="caption" id="g-cap" aria-live="polite">Press Step to run the query one move at a time.</div>
+          </div>
         </div>
-        <div class="scene-grid" style="padding:0">
+        <div class="scene-grid flip">
           <div class="copy">
             <h3 style="font-size:24px">Five languages, one question</h3>
             <p class="story">In <b>Cypher</b>, <code>:WITHIN*0..</code> means “follow a WITHIN edge zero or more times”, like <code>*</code> in a search pattern. Four lines.</p>

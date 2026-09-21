@@ -200,21 +200,23 @@
   </section>
   <!-- ============ 6. MONOTONIC + CONSISTENT PREFIX ============ -->
   <section class="scene" id="order">
-    <div class="wrap scene-grid full">
-      <div class="copy" style="max-width: 760px">
-        <span class="eyebrow">Big idea 6 · replication lag, part two</span>
-        <h2>Time running backwards, and answers before questions</h2>
-        <p class="story">Two more strange things happen when copies are out of step. First: you refresh a page and each refresh lands on a different follower. One is fresh, one is behind — so a comment appears, then <i>disappears</i>. You just watched time run backwards.</p>
-        <p class="story"><b>Monotonic reads</b> promises that won't happen: you may see old data, but never <i>older</i> data than you already saw. The simple trick is to send each user to the same replica every time, picked from a hash of their user ID.</p>
-      </div>
+    <div class="wrap">
       <div class="stack">
-        <div class="stage">
-          <div class="stage-head"><span class="stage-title">Refreshing the page · monotonic reads</span><span id="s6-seg"></span></div>
-          <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 660 270" role="img" aria-label="A reader refreshing a page that is served by a fresh replica and a lagging replica"></svg></div>
-          <div class="controls" id="s6-controls"></div>
-          <div class="caption" id="s6-cap" aria-live="polite">User 1234 just posted a comment. Only the fast follower has it so far.</div>
+        <div class="scene-grid">
+          <div class="copy">
+            <span class="eyebrow">Big idea 6 · replication lag, part two</span>
+            <h2>Time running backwards, and answers before questions</h2>
+            <p class="story">Two more strange things happen when copies are out of step. First: you refresh a page and each refresh lands on a different follower. One is fresh, one is behind — so a comment appears, then <i>disappears</i>. You just watched time run backwards.</p>
+            <p class="story"><b>Monotonic reads</b> promises that won't happen: you may see old data, but never <i>older</i> data than you already saw. The simple trick is to send each user to the same replica every time, picked from a hash of their user ID.</p>
+          </div>
+          <div class="stage">
+            <div class="stage-head"><span class="stage-title">Refreshing the page · monotonic reads</span><span id="s6-seg"></span></div>
+            <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 660 270" role="img" aria-label="A reader refreshing a page that is served by a fresh replica and a lagging replica"></svg></div>
+            <div class="controls" id="s6-controls"></div>
+            <div class="caption" id="s6-cap" aria-live="polite">User 1234 just posted a comment. Only the fast follower has it so far.</div>
+          </div>
         </div>
-        <div class="scene-grid" style="padding:0">
+        <div class="scene-grid flip">
           <div class="copy">
             <h3 style="font-size:24px">Mrs. Cake answers before Mr. Poons asks</h3>
             <p class="story">Second: a question and its answer are stored in different <b>shards</b> (different piles of data), and one shard is slower to copy than the other. An onlooker hears the answer arrive first — as if Mrs. Cake could see into the future.</p>
@@ -272,21 +274,23 @@
 
   <!-- ============ 8. CONFLICTS ============ -->
   <section class="scene" id="conflicts">
-    <div class="wrap scene-grid full">
-      <div class="copy" style="max-width: 760px">
-        <span class="eyebrow">Big idea 8 · dealing with conflicting writes</span>
-        <h2>Two people edit the same page</h2>
-        <p class="story">Two leaders, two edits to the same word, neither knowing about the other. When the two changes finally meet, the database has a <b>conflict</b>. Note that “concurrent” has nothing to do with clocks: two writes are concurrent if neither one knew about the other — even if they were days apart.</p>
-        <p class="story">You can keep the one with the biggest timestamp (<b>last write wins</b>) and quietly bin the other. You can keep both as <b>siblings</b> and ask a human. Or you can <b>merge</b> them properly, which is what CRDTs and operational transformation do in collaborative apps.</p>
-      </div>
+    <div class="wrap">
       <div class="stack">
-        <div class="stage">
-          <div class="stage-head"><span class="stage-title">“ice” becomes “nice” and “ice!” at once</span><span id="s9-seg"></span></div>
-          <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 660 300" role="img" aria-label="Two devices editing the same text and three ways of resolving the conflict"></svg></div>
-          <div class="controls" id="s9-controls"></div>
-          <div class="caption" id="s9-cap" aria-live="polite">Both devices start from the same word.</div>
+        <div class="scene-grid">
+          <div class="copy">
+            <span class="eyebrow">Big idea 8 · dealing with conflicting writes</span>
+            <h2>Two people edit the same page</h2>
+            <p class="story">Two leaders, two edits to the same word, neither knowing about the other. When the two changes finally meet, the database has a <b>conflict</b>. Note that “concurrent” has nothing to do with clocks: two writes are concurrent if neither one knew about the other — even if they were days apart.</p>
+            <p class="story">You can keep the one with the biggest timestamp (<b>last write wins</b>) and quietly bin the other. You can keep both as <b>siblings</b> and ask a human. Or you can <b>merge</b> them properly, which is what CRDTs and operational transformation do in collaborative apps.</p>
+          </div>
+          <div class="stage">
+            <div class="stage-head"><span class="stage-title">“ice” becomes “nice” and “ice!” at once</span><span id="s9-seg"></span></div>
+            <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 660 300" role="img" aria-label="Two devices editing the same text and three ways of resolving the conflict"></svg></div>
+            <div class="controls" id="s9-controls"></div>
+            <div class="caption" id="s9-cap" aria-live="polite">Both devices start from the same word.</div>
+          </div>
         </div>
-        <div class="scene-grid" style="padding:0">
+        <div class="scene-grid flip">
           <div class="copy">
             <h3 style="font-size:24px">The shopping cart that refills itself</h3>
             <p class="story">Merging badly is its own kind of bug. Amazon's old cart merged siblings by keeping every item that appeared in <i>any</i> copy. So if you deleted a book on your laptop and a DVD on your phone, the merge politely put both back in.</p>

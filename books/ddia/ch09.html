@@ -196,22 +196,24 @@
 
   <!-- ============ 6. CLOCK SKEW / LWW ============ -->
   <section class="scene" id="skew">
-    <div class="wrap scene-grid full">
-      <div class="copy" style="max-width: 760px">
-        <span class="eyebrow">Big idea 6 · timestamps for ordering events</span>
-        <h2>“Whoever has the newest sticker wins”</h2>
-        <p class="story">Three friends keep copies of the same number. Whenever someone changes it, they stick a time sticker on it, and the copy with the newest sticker wins. That rule is called <b>last write wins</b>.</p>
-        <p class="story">It only works if everybody's watch agrees. Here node 1's clock is three milliseconds fast — less skew than you'd get in real life — and that tiny lie is enough to make a write silently disappear.</p>
-        <p class="imagine"><b>Step through it</b> with time-of-day stickers, then switch to <b>logical clocks</b> (plain counters that only say “this came after that”) and watch the same story end correctly.</p>
-      </div>
+    <div class="wrap">
       <div class="stack">
-        <div class="stage">
-          <div class="stage-head"><span class="stage-title">Three nodes, one number, two lost milliseconds</span><span id="s6-seg"></span></div>
-          <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 680 390" role="img" aria-label="Timelines of three nodes replicating two writes with timestamps"></svg></div>
-          <div class="controls" id="s6-controls"></div>
-          <div class="caption" id="s6-cap" aria-live="polite">Press Step to watch the writes travel between nodes.</div>
+        <div class="scene-grid">
+          <div class="copy">
+            <span class="eyebrow">Big idea 6 · timestamps for ordering events</span>
+            <h2>“Whoever has the newest sticker wins”</h2>
+            <p class="story">Three friends keep copies of the same number. Whenever someone changes it, they stick a time sticker on it, and the copy with the newest sticker wins. That rule is called <b>last write wins</b>.</p>
+            <p class="story">It only works if everybody's watch agrees. Here node 1's clock is three milliseconds fast — less skew than you'd get in real life — and that tiny lie is enough to make a write silently disappear.</p>
+            <p class="imagine"><b>Step through it</b> with time-of-day stickers, then switch to <b>logical clocks</b> (plain counters that only say “this came after that”) and watch the same story end correctly.</p>
+          </div>
+          <div class="stage">
+            <div class="stage-head"><span class="stage-title">Three nodes, one number, two lost milliseconds</span><span id="s6-seg"></span></div>
+            <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 680 390" role="img" aria-label="Timelines of three nodes replicating two writes with timestamps"></svg></div>
+            <div class="controls" id="s6-controls"></div>
+            <div class="caption" id="s6-cap" aria-live="polite">Press Step to watch the writes travel between nodes.</div>
+          </div>
         </div>
-        <div class="scene-grid" style="padding:0">
+        <div class="scene-grid flip">
           <div class="copy">
             <h3 style="font-size:24px">A clock reading is a fuzzy blob, not a point</h3>
             <p class="story">Your computer will happily tell you the time down to the nanosecond. That doesn't mean it <i>knows</i> the time that precisely. It's more honest to say “somewhere between 10.3 and 10.5 seconds past the minute”.</p>
@@ -297,21 +299,23 @@
 
   <!-- ============ 9. TRUTH / BYZANTINE ============ -->
   <section class="scene" id="truth">
-    <div class="wrap scene-grid full">
-      <div class="copy" style="max-width: 760px">
-        <span class="eyebrow">Big idea 9 · knowledge, truth and lies</span>
-        <h2>The vote, and the general who lies</h2>
-        <p class="story">A node can't trust its own opinion of itself. If four out of five classmates say you left the game, you left the game — even if you're standing right there shouting “I'm not dead!”. Decisions belong to a <b>quorum</b>: more than half. There can only ever be one group with more than half, which is exactly why it's safe.</p>
-        <p class="story">All of that assumes the nodes are honest — slow or confused, maybe, but never lying. If a node can send two different answers to two different friends, you have a <b>Byzantine fault</b>, and the puzzle gets much harder.</p>
-      </div>
+    <div class="wrap">
       <div class="stack">
-        <div class="stage">
-          <div class="stage-head"><span class="stage-title">“I'm not dead!” · a majority vote</span><span class="pill" id="s10-pill"><i></i>all healthy</span></div>
-          <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 660 310" role="img" aria-label="Five nodes vote on whether node E is dead"></svg></div>
-          <div class="controls" id="s10-controls"></div>
-          <div class="caption" id="s10-cap" aria-live="polite">Break node E's outgoing messages — it can still hear everyone, but nobody can hear it.</div>
+        <div class="scene-grid">
+          <div class="copy">
+            <span class="eyebrow">Big idea 9 · knowledge, truth and lies</span>
+            <h2>The vote, and the general who lies</h2>
+            <p class="story">A node can't trust its own opinion of itself. If four out of five classmates say you left the game, you left the game — even if you're standing right there shouting “I'm not dead!”. Decisions belong to a <b>quorum</b>: more than half. There can only ever be one group with more than half, which is exactly why it's safe.</p>
+            <p class="story">All of that assumes the nodes are honest — slow or confused, maybe, but never lying. If a node can send two different answers to two different friends, you have a <b>Byzantine fault</b>, and the puzzle gets much harder.</p>
+          </div>
+          <div class="stage">
+            <div class="stage-head"><span class="stage-title">“I'm not dead!” · a majority vote</span><span class="pill" id="s10-pill"><i></i>all healthy</span></div>
+            <div class="stage-scroll"><svg id="s10-svg" viewBox="0 0 660 310" role="img" aria-label="Five nodes vote on whether node E is dead"></svg></div>
+            <div class="controls" id="s10-controls"></div>
+            <div class="caption" id="s10-cap" aria-live="polite">Break node E's outgoing messages — it can still hear everyone, but nobody can hear it.</div>
+          </div>
         </div>
-        <div class="scene-grid" style="padding:0">
+        <div class="scene-grid flip">
           <div class="copy">
             <h3 style="font-size:24px">Four generals, and a traitor or two</h3>
             <p class="story">Four generals must agree: attack or retreat? Loyal generals say the same thing to everyone. A traitor whispers “attack” to one and “retreat” to another, hoping the loyal ones end up doing different things.</p>
