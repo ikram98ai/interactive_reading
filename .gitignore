@@ -6,3 +6,5 @@ tools/node_modules/
 tools/.venv/
 tools/.shots/
 tools/.text/
+
+__pycache__/

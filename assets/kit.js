@@ -2,6 +2,23 @@
    Usage: <script src="book.js"></script><script src="../../assets/kit.js"></script> then K.page(3) and build sims with K.h / K.s / K.tween. */
 (function () {
   const NS = "http://www.w3.org/2000/svg";
+  const THEME_KEY = "datatown-theme";
+  function activeTheme() {
+    return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  }
+  function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+    document.querySelectorAll("[data-theme-switch] button").forEach((b) => {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-theme") === theme));
+    });
+  }
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    document.documentElement.setAttribute("data-theme", saved === "dark" ? "dark" : "light");
+  } catch (e) {
+    document.documentElement.setAttribute("data-theme", "light");
+  }
   const reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* The book manifest (books/<slug>/book.js) sets window.BOOK before this file loads. */
@@ -90,6 +107,34 @@
   }
 
   /* ---- UI bits ---- */
+  function sunIcon() {
+    return s("svg", { viewBox: "0 0 24 24", "aria-hidden": "true" },
+      s("circle", { cx: 12, cy: 12, r: 4, class: "theme-ico" }),
+      s("path", { class: "theme-ico", d: "M12 2.4v2.3M12 19.3v2.3M2.4 12h2.3M19.3 12h2.3M5.05 5.05l1.6 1.6M17.35 17.35l1.6 1.6M18.95 5.05l-1.6 1.6M6.65 17.35l-1.6 1.6" }));
+  }
+  function moonIcon() {
+    return s("svg", { viewBox: "0 0 24 24", "aria-hidden": "true" },
+      s("path", { class: "theme-moon", d: "M15.2 3.1a8.1 8.1 0 1 0 5.6 13.9A6.7 6.7 0 0 1 15.2 3.1z" }));
+  }
+  /** Sun and crescent. Light is the default; the choice is remembered. */
+  function themeSwitch() {
+    const theme = activeTheme();
+    const wrap = h("div", { class: "theme-switch", role: "group", "aria-label": "Color theme", "data-theme-switch": "1" });
+    [["light", "Light mode", sunIcon()], ["dark", "Dark mode", moonIcon()]].forEach(([name, label, icon]) => {
+      const b = h("button", { type: "button", "data-theme": name, "aria-label": label, "aria-pressed": String(name === theme) }, icon);
+      b.addEventListener("click", () => applyTheme(name));
+      wrap.appendChild(b);
+    });
+    return wrap;
+  }
+  function mountTheme() {
+    $$(".topbar .wrap").forEach((wrap) => {
+      if (wrap.querySelector("[data-theme-switch]")) return;
+      if (!$(".spacer", wrap)) wrap.appendChild(h("span", { class: "spacer" }));
+      wrap.appendChild(themeSwitch());
+    });
+  }
+
   /** Segmented control: seg(['A','B'], 0, i => ...) */
   function seg(labels, active, onChange, id) {
     const wrap = h("div", { class: "seg", role: "group", id });
@@ -192,7 +237,8 @@
         h("span", { class: "spacer" }),
         h("nav", { class: "dots", "aria-label": "Chapters" }),
         h("a", { class: "navbtn", href: prev ? file(prev.n) : "#", "aria-label": "Previous chapter", "aria-disabled": String(!prev) }, "←"),
-        h("a", { class: "navbtn", href: next ? file(next.n) : "#", "aria-label": "Next chapter", "aria-disabled": String(!next) }, "→")));
+        h("a", { class: "navbtn", href: next ? file(next.n) : "#", "aria-label": "Next chapter", "aria-disabled": String(!next) }, "→"),
+        themeSwitch()));
       renderDots(n);
     }
     const end = $("#chapter-end");
@@ -294,5 +340,6 @@
     },
   };
 
-  window.K = { BOOK, CHAPTERS, BUILT, h, s, $, $$, clear, tween, fly, path, loop, sleep, lerp, ease, speed, reduced, whenVisible, seg, slider, stat, toast, quiz, page, getProgress, setDone, file, draw };
+  mountTheme();
+  window.K = { BOOK, CHAPTERS, BUILT, h, s, $, $$, clear, tween, fly, path, loop, sleep, lerp, ease, speed, reduced, whenVisible, seg, slider, stat, toast, quiz, page, themeSwitch, applyTheme, getProgress, setDone, file, draw };
 })();

@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<script>try{var t=localStorage.getItem("datatown-theme");document.documentElement.setAttribute("data-theme",t==="dark"?"dark":"light")}catch(e){document.documentElement.setAttribute("data-theme","light")}</script>
 <link rel="stylesheet" href="assets/style.css">
 <style>
   .lib-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 40px; align-items: end; padding-block: 56px 26px; }
@@ -29,7 +30,7 @@
 <main class="wrap">
   <section class="lib-hero">
     <div>
-      <span class="ch-tag"><span class="num" id="book-count">1</span> book on the shelf</span>
+      <span class="ch-tag"><span class="num" id="book-count">2</span> <span id="book-word">books</span> on the shelf</span>
       <h1 style="margin-top:18px">My reading, <span>running</span></h1>
       <p class="lede">Every book I read gets turned into a set of small interactive machines: one page per chapter, built so the ideas are clear.</p>
     </div>
@@ -39,6 +40,7 @@
     <div class="section-title"><h2>The shelf</h2><p>Open a book to see its chapter map.</p></div>
     <div class="shelf" id="shelf"></div>
   </section>
+
 </main>
 
 <script src="books/books.js"></script>
@@ -48,6 +50,7 @@
   const { h, s } = K;
   const LIB = window.LIBRARY || [];
   K.$("#book-count").textContent = String(LIB.length);
+  K.$("#book-word").textContent = LIB.length === 1 ? "book" : "books";
   const shelf = K.$("#shelf");
 
   const progress = (slug) => {
