@@ -1,7 +1,7 @@
 # Interactive Reading
 
 Books I read, turned into interactive explainers — one page per chapter, built so the
-ideas are clear even to a ten-year-old. Every chapter page is a set of little machines
+ideas are clear even to anyone. Every chapter page is a set of little machines
 you can operate: press buttons, drag sliders, crash computers, watch what happens.
 
 ## Layout

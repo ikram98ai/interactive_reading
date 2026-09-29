@@ -12,31 +12,63 @@
 <style>
   .eyebrow { color: var(--mint); }
   .toc a:hover { border-color: var(--mint); color: var(--mint); }
+  .toc a .n { font-family: var(--f-mono); font-size: 11.5px; color: var(--ink-3); margin-right: 6px; }
   .clickable { cursor: pointer; }
-  .clickable:hover .sv-box, .clickable:focus-visible .sv-box { stroke: var(--mint); }
+  .clickable:hover > rect:first-child, .clickable:focus-visible > rect:first-child { stroke: var(--mint); stroke-width: 2.5; }
+  .clickable:focus { outline: none; }
   .fade { transition: opacity .3s; }
-  .stack { display: flex; flex-direction: column; gap: 18px; }
   .first { font-size: 15.5px; color: var(--ink-2); background: var(--mint-soft); border-radius: var(--r-m); padding: 12px 14px; }
   .first b { color: var(--ink); }
   .hero-stage { aspect-ratio: auto; }
-  .hero-stage svg { width: 100%; height: auto; display: block; }
-  .stage, .stage-scroll { min-width: 0; max-width: 100%; }
-  .scene-grid, .scene-grid.flip { grid-template-columns: minmax(0, 1fr); }
-  @media (min-width: 901px) {
-    .scene-grid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
-    .scene-grid.flip { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); }
-  }
-  .readings { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); }
-  .reading { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-s); padding: 10px 12px; }
-  .reading .k { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
-  .reading .v { font-family: var(--f-mono); font-size: 15px; font-weight: 700; color: var(--ink); margin-top: 4px; word-break: break-all; }
+  .stage [hidden] { display: none !important; }
+  .stage svg text, .hero-stage svg text { pointer-events: none; }
+  .statrow { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--surface); }
+  .statrow .stat { min-width: 88px; }
+  .statrow:empty { display: none; }
+
+  .codepane { border-top: 1px solid var(--line); background: var(--surface-2); }
+  .cp-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 14px; }
+  .cp-k { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+  .cp-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .cp-tab { appearance: none; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-2); font: 700 12.5px/1 var(--f-mono); padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+  .cp-tab[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .cp-file { font: 700 12.5px/1 var(--f-mono); color: var(--ink); padding: 6px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); }
+  .cp-cmd { font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); }
+  .cp-body { overflow: auto; max-height: 340px; background: var(--surface); border-top: 1px solid var(--line); position: relative; }
+  .cp-body:focus-visible { outline-offset: -3px; }
+  .cp-body ol { font-variant-ligatures: none; list-style: none; margin: 0; padding: 8px 0; min-width: 100%; width: max-content; font-family: var(--f-mono); font-size: 12.5px; line-height: 1.62; color: var(--ink); }
+  .cp-body li { position: relative; white-space: pre; padding: 0 18px 0 46px; transition: background-color .18s; }
+  .cp-body li::before { content: attr(data-n); position: absolute; left: 0; width: 32px; text-align: right; color: var(--ink-3); }
+  .cp-body li.on { background: var(--sun-soft); box-shadow: inset 3px 0 0 var(--sun); }
+  .cp-body li.on2 { background: var(--blue-soft); box-shadow: inset 3px 0 0 var(--blue); }
+  .cp-body li.dim { background: color-mix(in srgb, var(--line) 55%, transparent); box-shadow: inset 3px 0 0 var(--line-strong); }
+  .cp-body li.good { background: var(--mint-soft); box-shadow: inset 3px 0 0 var(--mint); }
+  .cp-body li.bad { background: var(--coral-soft); box-shadow: inset 3px 0 0 var(--coral); }
+  .cp-note { margin-left: 14px; padding: 1px 7px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--ink); font-size: 11.5px; font-weight: 700; }
+  .cp-note.good { background: var(--mint-soft); border-color: var(--mint); }
+  .cp-note.bad { background: var(--coral-soft); border-color: var(--coral); }
+  .cp-note.warn { background: var(--sun-soft); border-color: var(--sun); }
+  .cp-lang { margin-left: auto; display: inline-flex; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 9px; padding: 2px; gap: 2px; }
+  .cp-lang button { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: 700 12px/1 var(--f-mono); padding: 6px 10px; border-radius: 7px; cursor: pointer; }
+  .cp-lang button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .first .cp-lang { margin: 8px 0 0; display: flex; width: max-content; }
+  .cp-out { margin: 0; padding: 10px 14px; background: var(--ink); color: var(--bg); font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; min-height: 22px; }
+  .t-cm { color: var(--ink-3); font-style: italic; }
+  .t-st { color: color-mix(in srgb, var(--mint) 70%, var(--ink)); }
+  .t-nu { color: color-mix(in srgb, var(--coral) 78%, var(--ink)); }
+  .t-kw { color: var(--blue); font-weight: 700; }
+  .t-ty { color: var(--lilac); font-weight: 700; }
+  .t-pp { color: var(--lilac); }
+  .t-fn { font-weight: 700; }
+  .t-rg { color: var(--lilac); }
+  .t-lb { color: var(--blue); font-weight: 700; }
+  .t-pr { color: color-mix(in srgb, var(--mint) 70%, var(--ink)); font-weight: 700; }
+  .t-of { color: var(--ink-3); }
+  .t-hx { font-weight: 700; }
   .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
-  pre.code { margin: 0; padding: 12px 14px; background: var(--surface-2); border-top: 1px solid var(--line);
-             font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
-             overflow-x: auto; white-space: pre-wrap; min-height: 72px; }
-  pre.code b { color: var(--ink); font-weight: 700; }
-  pre.code i { color: var(--ink-3); font-style: normal; }
-  @media (prefers-reduced-motion: reduce) { .fade { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .fade, .cp-body li { transition: none; } }
+  details.book pre.prelude { margin: 0; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-s); font-family: var(--f-mono); font-size: 12px; line-height: 1.5; overflow-x: auto; color: var(--ink); }
+  #rust-prelude[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -47,276 +79,869 @@
     <div>
       <span class="ch-tag"><span class="num">8</span> Chapter eight · Bitville</span>
       <h1>Exceptional Control Flow</h1>
-      <p class="lede">The chip likes to walk to the next instruction. A timer, a disk, or a finished child can yank that walk somewhere else — and that yank is how many programs share one machine.</p>
+      <p class="lede">From the moment a processor powers on, the program counter walks a sequence of instruction addresses. Most steps are smooth. A jump, a timer, a finished child, or a bad divide can yank that walk somewhere else — and those yanks are how one machine runs many programs.</p>
       <p class="quote">“In general, we refer to these abrupt changes as exceptional control flow (ECF).”</p>
-      <p class="first"><b>New here?</b> Read the short story, then press the buttons on the picture. You cannot break it. The book’s exact calls and figure numbers live under “What the book says.”</p>
+      <p class="first"><b>New here?</b> Every numbered section below is one little machine. Read the short story on the left, then press the buttons on the picture. Under each machine is <b>the code it is running</b>: the highlighted line is what the machine is doing right now, and the small tags show live values. Press <b>C</b> or <b>Rust</b>. Assembly and shell commands stay as the book shows them. You cannot break anything. Grown-up details hide under “What the book says.”</p>
+
+      <details class="book" id="rust-prelude" hidden>
+        <summary>Rust setup: what the listings assume</summary>
+        <div class="inner">
+          <p>The book’s C listings rely on POSIX headers. The Rust listings here are fragments, and they rely on this block: the C calls with their real types, the Linux sizes of <code>sigset_t</code> and <code>jmp_buf</code>, and an atomic <code>PID</code>. A plain variable would not do for <code>PID</code>: at <code>-O</code> rustc turns <code>while pid == 0 {}</code> into one load and an endless loop, so the handler’s write would never be seen. (C needs <code>volatile</code> for the same reason.)</p>
+          <pre class="prelude">use std::ffi::{c_char, c_int};
+use std::sync::atomic::{AtomicI32, Ordering};
+
+// Linux x86-64 sizes: a sigset_t is 128 bytes and a jmp_buf is 200.
+#[repr(C)] struct SigSet([u64; 16]);
+#[repr(C, align(8))] struct JmpBuf([u64; 25]);
+
+const SIGINT: c_int = 2;  const SIGKILL: c_int = 9;
+const SIGTSTP: c_int = 20; const SIG_BLOCK: c_int = 0; const SIG_SETMASK: c_int = 2;
+const WNOHANG: c_int = 1;
+
+unsafe extern "C" {
+    fn fork() -&gt; c_int;
+    fn getpid() -&gt; c_int;
+    fn getppid() -&gt; c_int;
+    fn waitpid(pid: c_int, status: *mut c_int, options: c_int) -&gt; c_int;
+    fn sleep(seconds: u32) -&gt; u32;
+    fn pause() -&gt; c_int;
+    fn alarm(seconds: u32) -&gt; u32;
+    fn kill(pid: c_int, sig: c_int) -&gt; c_int;
+    fn execve(path: *const c_char, argv: *const *const c_char,
+              envp: *const *const c_char) -&gt; c_int;
+    static environ: *const *const c_char;
+    fn signal(sig: c_int, handler: extern "C" fn(c_int));
+    fn sigemptyset(set: *mut SigSet) -&gt; c_int;
+    fn sigaddset(set: *mut SigSet, sig: c_int) -&gt; c_int;
+    fn sigprocmask(how: c_int, set: *const SigSet, old: *mut SigSet) -&gt; c_int;
+    fn sigsuspend(mask: *const SigSet) -&gt; c_int;
+    fn __errno_location() -&gt; *mut c_int;          // macOS: __error
+    // setjmp returns twice, which rustc does not support: calling it is undefined
+    // behaviour in Rust. These two are here only to mirror the book.
+    fn setjmp(buf: *mut JmpBuf) -&gt; c_int;
+    fn longjmp(buf: *mut JmpBuf, val: c_int) -&gt; !;
+    fn sigsetjmp(buf: *mut JmpBuf, save_mask: c_int) -&gt; c_int;
+    fn siglongjmp(buf: *mut JmpBuf, val: c_int) -&gt; !;
+}
+static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by main
+
+// Sketch listings (classes.rs, kernel.rs, ...) also use invented names, as the book's C does.</pre>
+        </div>
+      </details>
       <nav class="toc" aria-label="Scenes in this chapter">
-        <a href="#xfer">Smooth vs jump</a>
-        <a href="#classes">Four classes</a>
-        <a href="#process">Processes</a>
-        <a href="#fork">fork</a>
-        <a href="#wait">Zombies</a>
-        <a href="#exec">execve</a>
-        <a href="#signals">Signals</a>
-        <a href="#handler">Handlers</a>
-        <a href="#jump">setjmp</a>
+        <a href="#s81"><span class="n">8.1</span>Exceptions</a>
+        <a href="#s811"><span class="n">8.1.1</span>Handling</a>
+        <a href="#s812"><span class="n">8.1.2</span>Four classes</a>
+        <a href="#s813"><span class="n">8.1.3</span>Linux / x86-64</a>
+        <a href="#s82"><span class="n">8.2</span>Processes</a>
+        <a href="#s821"><span class="n">8.2.1</span>Logical flow</a>
+        <a href="#s822"><span class="n">8.2.2</span>Concurrent</a>
+        <a href="#s823"><span class="n">8.2.3</span>Address space</a>
+        <a href="#s824"><span class="n">8.2.4</span>User / kernel</a>
+        <a href="#s825"><span class="n">8.2.5</span>Context switch</a>
+        <a href="#s83"><span class="n">8.3</span>Error handling</a>
+        <a href="#s84"><span class="n">8.4</span>Process states</a>
+        <a href="#s841"><span class="n">8.4.1</span>PIDs</a>
+        <a href="#s842"><span class="n">8.4.2</span>fork</a>
+        <a href="#s843"><span class="n">8.4.3</span>Reaping</a>
+        <a href="#s844"><span class="n">8.4.4</span>Sleep</a>
+        <a href="#s845"><span class="n">8.4.5</span>execve</a>
+        <a href="#s846"><span class="n">8.4.6</span>A tiny shell</a>
+        <a href="#s85"><span class="n">8.5</span>Signals</a>
+        <a href="#s851"><span class="n">8.5.1</span>Terminology</a>
+        <a href="#s852"><span class="n">8.5.2</span>Sending</a>
+        <a href="#s853"><span class="n">8.5.3</span>Receiving</a>
+        <a href="#s854"><span class="n">8.5.4</span>Blocking</a>
+        <a href="#s855"><span class="n">8.5.5</span>Handlers</a>
+        <a href="#s856"><span class="n">8.5.6</span>The race</a>
+        <a href="#s857"><span class="n">8.5.7</span>Waiting</a>
+        <a href="#s86"><span class="n">8.6</span>Nonlocal jumps</a>
+        <a href="#s87"><span class="n">8.7</span>Tools</a>
+        <a href="#s88"><span class="n">8.8</span>Summary</a>
       </nav>
     </div>
     <div class="stage hero-stage">
-      <div class="stage-head"><span class="stage-title">Live · the program counter</span><span class="pill info" id="hero-pill"><i></i>smooth</span></div>
-      <svg id="hero-svg" viewBox="0 0 680 210" role="img" aria-label="The program counter walking through four instructions, then jumping to a handler and back"></svg>
-      <div class="caption" aria-live="polite" id="hero-cap">Most steps just go to the next instruction. An event can send the walk into the kernel.</div>
+      <div class="stage-head"><span class="stage-title">Live · one program counter</span><span class="pill info" id="hero-pill"><i></i>smooth</span></div>
+      <svg id="hero-svg" viewBox="0 0 660 220" role="img" aria-label="The program counter walks three instructions, then a timer yanks it into the kernel"></svg>
+      <div class="controls" id="hero-controls"></div>
+      <div class="caption" id="hero-cap" aria-live="polite">Most steps just go to the next instruction.</div>
+      <div id="hero-code"></div>
     </div>
   </section>
 
-  <section class="scene" id="xfer">
+  <section class="scene" id="s81">
     <div class="wrap scene-grid">
       <div class="copy">
-        <span class="eyebrow">Big idea 1 · exceptions</span>
-        <h2>A smooth walk, then a yank to the drill sheet</h2>
-        <p class="story">Imani walks the school corridor locker by locker. That is a <b>smooth</b> control flow: each step’s address sits next to the last one. A jump, a call, or a return is already a hitch — but it still comes from her own program.</p>
-        <p class="story">Then the alarm panel flashes. She does not go to the next locker. The hardware looks up a number in a wall chart — the <b>exception table</b> — and sends her to a drill sheet written by the office, not by her. After the drill she might return to this locker, the next one, or not at all.</p>
-        <p class="imagine"><b>Try it:</b> Pick an event, then press Step. Watch the number index the table and the handler choose a return.</p>
+        <span class="eyebrow">8.1 · exceptions</span>
+        <h2>Three ways the next address is chosen</h2>
+        <p class="story">The program counter holds the address of an instruction. If the next address is simply “just after this instruction,” the book calls that a <b>smooth</b> transfer. Nothing surprising happened.</p>
+        <p class="story">A jump, a call, or a return is already an abrupt change — but the program itself asked for it. An <b>exception</b> is the other kind of abrupt change: some change in the processor’s state, called an <b>event</b>, yanks the walk into code the running program did not choose.</p>
+        <p class="imagine"><b>Try it:</b> step the same three instructions three ways. Smooth adds the instruction’s length. Jump leaps to a label. Exception ignores both and lands in the kernel.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>“An exception is an abrupt change in the control flow in response to some change in the processor’s state.” The change is an <b>event</b>. The processor makes an indirect call through a jump table called the <b>exception table</b>, whose start sits in the exception table base register. Entry k holds the handler for exception number k.</p>
-            <p>There are up to 256 exception types. Numbers 0 to 31 are defined by the Intel architects; 32 to 255 are defined by the operating system. After the handler runs, it either returns to Icurr (the instruction that was running), returns to Inext (the one that would have run next), or aborts.</p>
-            <p>An exception is like a procedure call, with extras: the return address is Icurr or Inext depending on the class; x86-64 also pushes EFLAGS; transfers from a user program push onto the kernel’s stack; and the handler runs in kernel mode. A special “return from interrupt” instruction restores user mode if needed.</p>
+            <p>From power-on until shutdown, the program counter takes a sequence of values <span class="mono">a0, a1, …, an−1</span>, each the address of an instruction. A transition from <span class="mono">ak</span> to <span class="mono">ak+1</span> is a control transfer. It is smooth when the next instruction sits next to the current one, and abrupt otherwise. Jumps, calls, and returns are abrupt transfers that the program requested. Exceptions are abrupt transfers in response to a change in processor state.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;757–759 · 8.1 Exceptions</p>
           </div>
         </details>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-title">Figure 8.1 · anatomy</span><span class="pill" id="s1-pill">Icurr</span></div>
-        <div class="stage-scroll"><svg id="s1-svg" viewBox="0 0 680 300" role="img" aria-label="Exception table lookup from an event to a handler and back"></svg></div>
-        <div class="controls" id="s1-controls"></div>
-        <div class="caption" aria-live="polite" id="s1-cap">An event becomes a number. That number picks a handler. The handler picks the next walk.</div>
+        <div class="stage-head"><span class="stage-title">Next address</span><span id="s81-seg"></span></div>
+        <div class="stage-scroll"><svg id="s81-svg" viewBox="0 0 660 250" role="img" aria-label="Instruction boxes and the rule that picks the next program-counter value"></svg></div>
+        <div class="statrow" id="s81-stats"></div>
+        <div class="controls" id="s81-controls"></div>
+        <div class="caption" id="s81-cap" aria-live="polite"></div>
+        <div id="s81-code"></div>
       </div>
     </div>
   </section>
 
-  <section class="scene" id="classes">
+  <section class="scene" id="s811">
     <div class="wrap scene-grid flip">
       <div class="copy">
-        <span class="eyebrow">Big idea 2 · four classes</span>
-        <h2>Doorbell, librarian, trip, collapse</h2>
-        <p class="story">Mateo sorts four kinds of yanks. A doorbell can ring in the middle of any step — that is an <b>interrupt</b>, and when the helper finishes he always goes to the next step, as if nothing happened.</p>
-        <p class="story">Asking the librarian on purpose is a <b>trap</b>: a system call. Tripping on a missing page is a <b>fault</b> — if the office can fetch the page, Mateo retries the same step. If the building’s memory chips lie, that is an <b>abort</b>. He does not come back.</p>
-        <p class="imagine"><b>Try it:</b> Press Interrupt, Trap, Fault, or Abort. The return target changes with the class — and Linux treats a divide-by-zero fault as fatal.</p>
+        <span class="eyebrow">8.1.1 · exception handling</span>
+        <h2>A number, a table, a handler</h2>
+        <p class="story">Each event has a number. The processor does not “know” what to do. It treats that number as an index into the <b>exception table</b>, a jump table whose start address lives in a special register. Entry <span class="mono">k</span> holds the address of the handler for exception <span class="mono">k</span>.</p>
+        <p class="story">The handler runs in kernel mode. When it finishes it has three choices: go back to the instruction that was running (<b>Icurr</b>), go to the one that would have been next (<b>Inext</b>), or never return.</p>
+        <p class="imagine"><b>Try it:</b> pick an exception number and press <b>Dispatch</b>. Watch the table index light up, then choose where the handler returns.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>Figure 8.4: an interrupt is async (I/O pin) and always returns to the next instruction. A trap is sync and intentional — also always to Inext. A fault is a potentially recoverable error and might return to the current instruction. An abort is a nonrecoverable error and never returns.</p>
-            <p>Figure 8.9 on x86-64: exception 0 is a divide error (fault); 13 is a general protection fault; 14 is a page fault; 18 is a machine check (abort). Linux does not recover from divide errors or general protection faults. Shells typically report them as “Floating exceptions” and “Segmentation faults.” A page fault (typically a 4 KB page) is the classic restart: the handler maps the page and re-executes Icurr.</p>
-            <p>Traps implement system calls. Figure 8.10: write is 1, fork is 57, execve is 59, _exit is 60. Arguments travel in %rax (the number) then %rdi, %rsi, %rdx, %r10, %r8, %r9. A negative return in %rax between −4,095 and −1 is an error corresponding to negative errno. Figure 8.11’s hello uses syscall 1 then syscall 60.</p>
+            <p>Exception handling needs a tight handshake of hardware and software. Each possible exception number <span class="mono">k</span> has a handler. At boot the operating system writes those addresses into the exception table. When an event occurs, the processor looks up entry <span class="mono">k</span> and transfers control there — an indirect call through the table (Figures 8.2 and 8.3).</p>
+            <p>It resembles a procedure call, with extras: the return address may be Icurr or Inext depending on the class; x86-64 also pushes the flags; a transfer from user mode pushes onto the kernel stack; and the handler runs in kernel mode. A return-from-interrupt instruction pops that state and can drop back to user mode.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;760–762 · 8.1.1 Exception Handling</p>
           </div>
         </details>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-title">Figure 8.4 · classes</span><span class="pill" id="s2-pill">pick one</span></div>
-        <div class="stage-scroll"><svg id="s2-svg" viewBox="0 0 680 300" role="img" aria-label="Interrupt, trap, fault, and abort and where each one returns"></svg></div>
-        <div class="controls" id="s2-controls"></div>
-        <div class="caption" aria-live="polite" id="s2-cap">Four classes. The return rule is the whole difference you can see from user code.</div>
+        <div class="stage-head"><span class="stage-title">Figure 8.2 · exception table</span><span class="pill" id="s811-pill">k = ?</span></div>
+        <div class="stage-scroll"><svg id="s811-svg" viewBox="0 0 660 280" role="img" aria-label="An exception number indexing a table of handler addresses"></svg></div>
+        <div class="controls" id="s811-controls"></div>
+        <div class="caption" id="s811-cap" aria-live="polite"></div>
+        <div id="s811-code"></div>
       </div>
     </div>
   </section>
 
-  <section class="scene" id="process">
+  <section class="scene" id="s812">
     <div class="wrap scene-grid">
       <div class="copy">
-        <span class="eyebrow">Big idea 3 · processes</span>
-        <h2>One swing, three private desks</h2>
-        <p class="story">Priya, Yusuf, and Sofia share one swing. Each turn looks, to that kid, like the whole afternoon. That sequence of their own steps is a <b>logical control flow</b>. The grown-up with the stopwatch is the kernel: a slice for you, a slice for someone else.</p>
-        <p class="story">Each kid also has a private desk. A byte at “address 12” on Priya’s desk is not Sofia’s byte 12. Code starts at a familiar door, 0x400000. The top of the building is the office — <b>kernel</b> memory — and a kid in user mode who walks up there hits a protection fault.</p>
-        <p class="imagine"><b>Try it:</b> Step the three flows and watch who overlaps. Then switch to the address map and press Touch kernel.</p>
+        <span class="eyebrow">8.1.2 · classes of exceptions</span>
+        <h2>The return rule is the whole difference</h2>
+        <p class="story">Exceptions come in four classes. An <b>interrupt</b> arrives from outside, on a pin, in the middle of whatever instruction was running — a timer or a disk. The handler always returns to the <b>next</b> instruction.</p>
+        <p class="story">A <b>trap</b> is intentional, like a system call, and also returns to the next instruction. A <b>fault</b> is a possibly fixable error: the handler may retry the same instruction. An <b>abort</b> is fatal. It does not come back.</p>
+        <p class="imagine"><b>Try it:</b> press each class. The picture shows who caused it, and whether the walk resumes at Icurr, at Inext, or not at all.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>“The classic definition of a process is an instance of a program in execution.” A process gives two illusions: exclusive use of the processor (a logical control flow) and exclusive use of memory (a private address space). Figure 8.12 interleaves A, then B to completion, then C, then A to completion, then C. A and B run concurrently, as do A and C; B and C do not, because B finishes before C starts.</p>
-            <p>Concurrent means the flows overlap in time, even on one core. Parallel means they run on different cores or machines. A time slice is one turn; multitasking is also called time slicing. A context switch saves the current context, restores another, and passes control. Timers typically interrupt every 1 ms or 10 ms. Figure 8.14: A’s read traps, the kernel switches to B while the disk works (tens of milliseconds), then a disk interrupt switches back to A just after read.</p>
-            <p>Figure 8.13: on x86-64 Linux the code segment begins at 0x400000; the kernel occupies the top of the 2<sup>48</sup>−1 space. User mode cannot execute privileged instructions or touch kernel memory. The only way into kernel mode is an exception. The /proc filesystem exports kernel data as text files; Linux 2.6 added /sys.</p>
+            <p>Figure 8.4: interrupts are asynchronous (an I/O pin) and return to the next instruction (Figure 8.5). Traps are synchronous and intentional — the system-call instruction — and also return to the next instruction (Figure 8.6). Faults are potentially recoverable errors; the handler may re-execute the faulting instruction (Figure 8.7). Aborts are unrecoverable and never return (Figure 8.8).</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;762–764 · 8.1.2 Classes of Exceptions</p>
           </div>
         </details>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-title">Figure 8.12 · then 8.13</span><span id="s3-seg"></span></div>
-        <div class="stage-scroll"><svg id="s3-svg" viewBox="0 0 680 320" role="img" aria-label="Three interleaved logical flows, or a private address space with a kernel region"></svg></div>
-        <div class="controls" id="s3-controls"></div>
-        <div class="caption" aria-live="polite" id="s3-cap">Each process takes turns on the processor and keeps its own addresses.</div>
+        <div class="stage-head"><span class="stage-title">Figure 8.4 · four classes</span><span class="pill" id="s812-pill">pick one</span></div>
+        <div class="stage-scroll"><svg id="s812-svg" viewBox="0 0 660 270" role="img" aria-label="Interrupt, trap, fault, and abort, each with its return rule"></svg></div>
+        <div class="controls" id="s812-controls"></div>
+        <div class="caption" id="s812-cap" aria-live="polite"></div>
+        <div id="s812-code"></div>
       </div>
     </div>
   </section>
 
-  <section class="scene" id="fork">
+  <section class="scene" id="s813">
     <div class="wrap scene-grid flip">
       <div class="copy">
-        <span class="eyebrow">Big idea 4 · fork</span>
-        <h2>Photocopy the desk, then change only your cup</h2>
-        <p class="story">Yusuf hits the copier once. Suddenly there are two desks, two pencil cups, two walks. The function was called <b>once</b> and came back <b>twice</b>: the new kid is told “you are 0,” and the original is told the new kid’s real number.</p>
-        <p class="story">Both cups start with 1 marble. The child adds one and prints 2. The parent takes one and prints 0. The cups do not sync, because the address spaces are copies, not the same room. They do share the already-open screen, so both lines appear.</p>
-        <p class="imagine"><b>Try it:</b> Step Figure 8.15. Then switch to the nested graph: two forks in the source become four hellos.</p>
+        <span class="eyebrow">8.1.3 · exceptions in Linux/x86-64 systems</span>
+        <h2>Divide, page fault, syscall, machine check</h2>
+        <p class="story">On x86-64, numbers 0–31 belong to the processor architects and 32–255 to the operating system. A few of them show up constantly: divide error (0), general protection fault (13), page fault (14), and machine check (18).</p>
+        <p class="story">Linux does not try to repair a divide by zero or a protection fault. The shell reports them as “Floating exception” and “Segmentation fault.” A page fault is the famous restart: the handler maps the missing page and runs the same instruction again. System calls are traps. The number goes in <span class="mono">%rax</span>, the arguments in the argument registers, and a return between −4095 and −1 means −errno.</p>
+        <p class="imagine"><b>Try it:</b> fire each example. The code panel follows the syscall hello, or the instruction that faulted.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>getpid and getppid return a pid_t. A process is running, stopped (SIGSTOP, SIGTSTP, SIGTTIN, SIGTTOU until SIGCONT), or terminated (a fatal signal, return from main, or exit). fork returns 0 to the child, the child’s PID to the parent, and −1 on error. “The fork function is interesting (and often confusing) because it is called once but it returns twice.”</p>
-            <p>Figure 8.15: x starts at 1; after fork the child does ++x and prints <code>child : x=2</code>, the parent does --x and prints <code>parent: x=0</code>. Figure 8.16 is that process graph. Figure 8.17 nests two Fork calls and runs four processes, each printing hello, in any topological order. We never assume an interleaving.</p>
-            <p>Unix-level functions return −1 and set errno. The book’s unix_error helper and the capitalised wrappers (Fork calls fork and dies on error) live in csapp.c / csapp.h, following Stevens. The rest of the book calls the lowercase names in the prose and the wrappers in the listings.</p>
+            <p>Figure 8.9: exception 0 is a divide error (fault), 13 a general protection fault, 14 a page fault, 18 a machine check (abort). Linux treats divide errors and general protection faults as fatal. A page fault — typically a 4 KB page — is repaired and Icurr is re-executed.</p>
+            <p>Figure 8.10: <span class="mono">write</span> is 1, <span class="mono">fork</span> is 57, <span class="mono">execve</span> is 59, <span class="mono">_exit</span> is 60. Arguments travel in <span class="mono">%rax</span> (the number), then <span class="mono">%rdi, %rsi, %rdx, %r10, %r8, %r9</span>. Figure 8.11’s hello issues syscall 1, then syscall 60.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;765–767 · 8.1.3 Exceptions in Linux/x86-64 Systems</p>
           </div>
         </details>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-title">Figure 8.15 · fork.c</span><span id="s4-seg"></span></div>
-        <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 680 300" role="img" aria-label="Parent and child after fork, with return values 0 and the child PID"></svg></div>
-        <div class="controls" id="s4-controls"></div>
-        <pre class="code" id="s4-code"></pre>
-        <div class="caption" aria-live="polite" id="s4-cap">One call, two returns, two private copies of x.</div>
+        <div class="stage-head"><span class="stage-title">Figures 8.9–8.11</span><span class="pill" id="s813-pill">idle</span></div>
+        <div class="stage-scroll"><svg id="s813-svg" viewBox="0 0 660 270" role="img" aria-label="Linux exception examples and a system-call register setup"></svg></div>
+        <div class="statrow" id="s813-stats"></div>
+        <div class="controls" id="s813-controls"></div>
+        <div class="caption" id="s813-cap" aria-live="polite"></div>
+        <div id="s813-code"></div>
       </div>
     </div>
   </section>
 
-  <section class="scene" id="wait">
+  <section class="scene" id="s82">
     <div class="wrap scene-grid">
       <div class="copy">
-        <span class="eyebrow">Big idea 5 · waitpid</span>
+        <span class="eyebrow">8.2 · processes</span>
+        <h2>Two polite illusions</h2>
+        <p class="story">A <b>process</b> is an instance of a program in execution. The kernel uses exceptions to give every process two illusions: it has the processor to itself, and it has memory to itself.</p>
+        <p class="story">The first illusion is a <b>logical control flow</b>. The second is a <b>private address space</b>. The rest of this section takes them apart. This machine just shows the trick: three programs, one processor, each convinced it is alone.</p>
+        <p class="imagine"><b>Try it:</b> press <b>Run a slice</b>. The program on the CPU changes. Each program’s own “I am running” counter only moves on its turn.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>“The classic definition of a process is an instance of a program in execution.” Processes are the most successful idea the kernel builds out of exceptions. Each process appears to have exclusive use of the processor and exclusive use of the address space. Those two illusions are logical control flow and private address space.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., p.&nbsp;768 · 8.2 Processes</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">One CPU, three processes</span><span class="pill" id="s82-pill">idle</span></div>
+        <div class="stage-scroll"><svg id="s82-svg" viewBox="0 0 660 250" role="img" aria-label="Three processes sharing one processor while each believes it runs alone"></svg></div>
+        <div class="controls" id="s82-controls"></div>
+        <div class="caption" id="s82-cap" aria-live="polite"></div>
+        <div id="s82-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s821">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">8.2.1 · logical control flow</span>
+        <h2>Your steps, with other people’s time cut out</h2>
+        <p class="story">A logical control flow is the sequence of instructions <b>this</b> process executes. On the physical timeline those instructions are broken into slices, with other processes in the gaps. From inside the process, the gaps are invisible: its program counter just keeps walking its own code.</p>
+        <p class="story">Figure 8.12 is the picture: A runs, then B runs to completion, then a bit of C, then A finishes, then C finishes. A’s flow is two slices. A never sees B’s instructions.</p>
+        <p class="imagine"><b>Try it:</b> step the physical timeline. The code panel has three files. Only the running process’s line advances.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 8.12 draws each process as vertical bars on a time axis. A single logical flow can be several bars with other processes in between. The key idea is that processes take turns. Each turn is a time slice; the kernel’s preemption is also called multitasking or time slicing. A process’s logical control flow is the sequence of its own program-counter values, not the values of the physical processor while someone else runs.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;768–769 · 8.2.1 Logical Control Flow</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 8.12 · three flows</span><span class="pill" id="s821-pill">t = 0</span></div>
+        <div class="stage-scroll"><svg id="s821-svg" viewBox="0 0 660 250" role="img" aria-label="Interleaved time slices for processes A, B, and C"></svg></div>
+        <div class="controls" id="s821-controls"></div>
+        <div class="caption" id="s821-cap" aria-live="polite"></div>
+        <div id="s821-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s822">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">8.2.2 · concurrent flows</span>
+        <h2>Overlap in time, or overlap on two cores</h2>
+        <p class="story">Two flows are <b>concurrent</b> when their lifetimes overlap: one has started and the other has not yet finished. They do not have to run on two cores. A and B in Figure 8.12 are concurrent. B and C are not, because B finishes before C starts.</p>
+        <p class="story"><b>Parallel</b> is stricter. The flows run at the same time on different cores or different computers. Concurrent on one core is real; it is just not parallel.</p>
+        <p class="imagine"><b>Try it:</b> drag the start and end times. The pair table answers Practice Problem 8.1’s question. Then switch cores: overlap becomes parallel only when two cores exist.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A logical flow whose execution overlaps another in time is a concurrent flow; the two processes run concurrently. In Figure 8.12, A overlaps B, and A overlaps C; B finishes before C starts, so B and C do not. Parallel flows are concurrent flows running on different cores or computers. Practice Problem 8.1 asks the same overlap question for A on [1, 3], B on [2, 5], and C on [4, 6].</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;769–770 · 8.2.2 Concurrent Flows</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Lifetimes on a clock</span><span id="s822-seg"></span></div>
+        <div class="stage-scroll"><svg id="s822-svg" viewBox="0 0 660 230" role="img" aria-label="Three process lifetimes and whether each pair overlaps"></svg></div>
+        <div class="statrow" id="s822-stats"></div>
+        <div class="controls" id="s822-controls"></div>
+        <div class="caption" id="s822-cap" aria-live="polite"></div>
+        <div id="s822-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s823">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">8.2.3 · private address space</span>
+        <h2>Same number, different byte</h2>
+        <p class="story">Every process sees the same tidy map. On x86-64 Linux the code segment begins at <span class="mono">0x400000</span>. Above it sit data, a heap that grows up, a gap, shared libraries, a stack that grows down, and — at the very top — kernel memory the process is not allowed to touch.</p>
+        <p class="story">The addresses are private. Byte <span class="mono">0x400000</span> in process A is not byte <span class="mono">0x400000</span> in process B. The hardware translates each process’s addresses into different physical memory.</p>
+        <p class="imagine"><b>Try it:</b> tap a region. The code line that lives there lights up. Then press <b>Same address, two processes</b> and watch one virtual address name two different bytes.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 8.13: the bottom of the user space holds code and data loaded from the executable, then the run-time heap, a shared-library region, and the user stack. The kernel occupies the top of the space, up to <span class="mono">2<sup>48</sup>−1</span> on this machine. User code cannot read or write that region. The same virtual address in two processes refers to different physical memory — that privacy is the address-space illusion.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;770–771 · 8.2.3 Private Address Space</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 8.13 · the map</span><span id="s823-seg"></span></div>
+        <div class="stage-scroll"><svg id="s823-svg" viewBox="0 0 660 300" role="img" aria-label="A process address space, or the same virtual address in two processes"></svg></div>
+        <div class="controls" id="s823-controls"></div>
+        <div class="caption" id="s823-cap" aria-live="polite"></div>
+        <div id="s823-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s824">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">8.2.4 · user and kernel modes</span>
+        <h2>A mode bit, and one legal way through it</h2>
+        <p class="story">A <b>mode bit</b> in a control register says how much the running code is allowed to do. <b>User mode</b> cannot execute privileged instructions and cannot touch kernel memory. <b>Kernel mode</b> can.</p>
+        <p class="story">The only way for user code to enter kernel mode is an exception — usually a system call. A program that wants kernel facts the polite way reads <span class="mono">/proc</span> (or <span class="mono">/sys</span>), which the kernel exports as text files. Reaching into a kernel address directly is a protection fault.</p>
+        <p class="imagine"><b>Try it:</b> run an ordinary add, a privileged halt, a peek at kernel memory, and a read of <span class="mono">/proc/cpuinfo</span>. Only the last one is a legal question.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The mode bit limits which instructions a process may execute and which addresses it may touch. Kernel mode may use privileged instructions and the whole address space. User mode may not. Switching from user to kernel mode happens only through an exception such as a system call, a fault, or an interrupt. The <span class="mono">/proc</span> filesystem exposes kernel data as readable text — CPU type in <span class="mono">/proc/cpuinfo</span>, a process’s segments in <span class="mono">/proc/&lt;pid&gt;/maps</span>. Linux 2.6 added <span class="mono">/sys</span> for buses and devices.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;771–772 · 8.2.4 User and Kernel Modes</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Mode bit</span><span class="pill" id="s824-pill">user</span></div>
+        <div class="stage-scroll"><svg id="s824-svg" viewBox="0 0 660 240" role="img" aria-label="User mode and kernel mode separated by the mode bit"></svg></div>
+        <div class="controls" id="s824-controls"></div>
+        <div class="caption" id="s824-cap" aria-live="polite"></div>
+        <div id="s824-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s825">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">8.2.5 · context switches</span>
+        <h2>Save this process, restore that one</h2>
+        <p class="story">A <b>context switch</b> is exceptional control flow one level up. The kernel saves the current process’s context — program counter, registers, and the rest of what it needs to resume — restores another process’s context, and passes control to it.</p>
+        <p class="story">Figure 8.14 is the classic reason: process A calls <span class="mono">read</span> and the disk will take tens of milliseconds. The kernel switches to B while the disk works. A disk interrupt later switches back to A, just after <span class="mono">read</span> returns. A timer interrupt, often every 1 ms or 10 ms, does the same trick when nobody is waiting on I/O.</p>
+        <p class="imagine"><b>Try it:</b> step A’s <span class="mono">read</span>. Watch the saved context sit on the shelf while B runs, then come back.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The kernel implements multitasking with context switches, built on the exception mechanism. The kernel saves the current context, restores a previously saved one, and transfers control. Figure 8.14: A’s <span class="mono">read</span> traps into the kernel; the kernel switches to B for the long disk wait; a disk interrupt switches back so A continues at the instruction after <span class="mono">read</span>.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;772–773 · 8.2.5 Context Switches</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 8.14 · read, then B, then A</span><span class="pill" id="s825-pill">step 0</span></div>
+        <div class="stage-scroll"><svg id="s825-svg" viewBox="0 0 660 260" role="img" aria-label="Context switch from process A during a disk read to process B and back"></svg></div>
+        <div class="controls" id="s825-controls"></div>
+        <div class="caption" id="s825-cap" aria-live="polite"></div>
+        <div id="s825-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s83">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">8.3 · system call error handling</span>
+        <h2>−1 is not a pid</h2>
+        <p class="story">Linux system-level functions such as <span class="mono">fork</span> report trouble by returning −1 and setting the global <span class="mono">errno</span>. Forgetting the check is how quiet bugs are born: the next line treats −1 as a process id.</p>
+        <p class="story">The book’s style, following Stevens, is a tiny helper <span class="mono">unix_error</span> and wrappers with capital names. <span class="mono">Fork</span> calls <span class="mono">fork</span> and never returns on error. The rest of the listings can stay readable.</p>
+        <p class="imagine"><b>Try it:</b> call <span class="mono">fork</span> when it works, and when the process table is full. Then switch the code to the wrapper and see the error path in one place.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Unix-level functions return −1 and set <span class="mono">errno</span> when something goes wrong. Checking every call makes the interesting code hard to see, so the book uses an error-reporting helper and capitalized wrappers (<span class="mono">Fork</span>, <span class="mono">Waitpid</span>, and the rest) in <span class="mono">csapp.c</span>. The wrapper calls the lowercase function and exits with a message on error. Prose in the book uses the lowercase names; the printed listings use the wrappers.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;773–774 · 8.3 System Call Error Handling</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">errno</span><span id="s83-seg"></span></div>
+        <div class="stage-scroll"><svg id="s83-svg" viewBox="0 0 660 220" role="img" aria-label="A fork call returning a pid or minus one with errno set"></svg></div>
+        <div class="statrow" id="s83-stats"></div>
+        <div class="controls" id="s83-controls"></div>
+        <div class="caption" id="s83-cap" aria-live="polite"></div>
+        <div id="s83-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s84">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">8.4 · process control</span>
+        <h2>Running, stopped, or gone</h2>
+        <p class="story">From the moment it is created until it is reaped, a process is in one of three states. <b>Running</b> means it is either on a CPU or waiting for a turn. <b>Stopped</b> means it is suspended until something continues it. <b>Terminated</b> means it has stopped forever — it will never run another instruction — but it still exists until its parent collects it.</p>
+        <p class="story">Stop signals include <span class="mono">SIGSTOP</span>, <span class="mono">SIGTSTP</span> (Ctrl+Z), <span class="mono">SIGTTIN</span>, and <span class="mono">SIGTTOU</span>. <span class="mono">SIGCONT</span> runs a stopped process again. Termination comes from a fatal signal, a return from <span class="mono">main</span>, or a call to <span class="mono">exit</span>.</p>
+        <p class="imagine"><b>Try it:</b> walk the three states. Illegal jumps — terminated back to running — are refused.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A process is running, stopped, or terminated. Stopped processes were suspended by a signal (<span class="mono">SIGSTOP</span>, <span class="mono">SIGTSTP</span>, <span class="mono">SIGTTIN</span>, or <span class="mono">SIGTTOU</span>) and stay stopped until <span class="mono">SIGCONT</span>. A process terminates because it received a signal whose default action is to terminate, because it returned from <span class="mono">main</span>, or because it called <span class="mono">exit</span>. The following subsections are the system calls that create, wait for, pause, and replace processes.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;774–775 · 8.4 Process Control</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Three states</span><span class="pill" id="s84-pill">running</span></div>
+        <div class="stage-scroll"><svg id="s84-svg" viewBox="0 0 660 230" role="img" aria-label="Running, stopped, and terminated, with the signals that move between them"></svg></div>
+        <div class="controls" id="s84-controls"></div>
+        <div class="caption" id="s84-cap" aria-live="polite"></div>
+        <div id="s84-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s841">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">8.4.1 · obtaining process IDs</span>
+        <h2>Every process wears a positive number</h2>
+        <p class="story">Each process has a unique positive <b>PID</b>. <span class="mono">getpid</span> returns your own. <span class="mono">getppid</span> returns your parent’s. Both return a <span class="mono">pid_t</span>.</p>
+        <p class="story">The parent does not change when you merely call these functions. It changes when the parent dies — the child is adopted, usually by <span class="mono">init</span>, PID 1.</p>
+        <p class="imagine"><b>Try it:</b> step a parent and the child it creates. Each box prints the two ids. Then remove the parent and watch <span class="mono">getppid</span> in the child become 1.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Every process has a unique nonzero PID. <span class="mono">getpid</span> returns the caller’s PID. <span class="mono">getppid</span> returns the parent’s PID. The type of both is <span class="mono">pid_t</span>, defined in the system headers the book includes through <span class="mono">csapp.h</span>.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., p.&nbsp;775 · 8.4.1 Obtaining Process IDs</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">getpid / getppid</span><span class="pill" id="s841-pill">before fork</span></div>
+        <div class="stage-scroll"><svg id="s841-svg" viewBox="0 0 660 230" role="img" aria-label="Parent and child process ids, then adoption by init"></svg></div>
+        <div class="controls" id="s841-controls"></div>
+        <div class="caption" id="s841-cap" aria-live="polite"></div>
+        <div id="s841-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s842">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">8.4.2 · creating and terminating processes</span>
+        <h2>Called once, returns twice</h2>
+        <p class="story"><span class="mono">fork</span> creates a child that is almost a copy of the parent: same code, same data at that instant, same open files. It is called once and returns twice. The child receives 0. The parent receives the child’s PID. On error the parent receives −1 and there is no child.</p>
+        <p class="story">After the copy, the address spaces diverge. In the book’s example <span class="mono">x</span> starts at 1. The child increments its copy and prints 2. The parent decrements its copy and prints 0. They share the screen, so both lines appear. Two nested forks with no <span class="mono">if</span> create four processes, and four hellos can appear in any order.</p>
+        <p class="imagine"><b>Try it:</b> step the private-<span class="mono">x</span> example. Then switch to <b>Four hellos</b> and run processes in different orders. The set of lines stays the same; the order does not.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><span class="mono">fork</span> returns 0 to the child, the child’s PID to the parent, and −1 on error. “The fork function is interesting (and often confusing) because it is called once but it returns twice.” The child is a duplicate: identical address space, identical file descriptors, and an independent copy of the variables from then on.</p>
+            <p>Figure 8.15: <span class="mono">x</span> starts at 1; the child prints <span class="mono">child : x=2</span> and the parent prints <span class="mono">parent: x=0</span>. Figure 8.16 is that process graph. Figure 8.17 nests two <span class="mono">Fork</span> calls so four processes each print hello, in any topological order. Never assume one interleaving.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;775–779 · 8.4.2 Creating and Terminating Processes</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">fork</span><span id="s842-seg"></span></div>
+        <div class="stage-scroll"><svg id="s842-svg" viewBox="0 0 660 280" role="img" aria-label="Parent and child after fork, or four processes from two forks"></svg></div>
+        <div class="controls" id="s842-controls"></div>
+        <div class="caption" id="s842-cap" aria-live="polite"></div>
+        <div id="s842-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s843">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">8.4.3 · reaping child processes</span>
         <h2>Finished, still wearing the name tag</h2>
-        <p class="story">Sofia sends two helpers out. They finish, stand by the door, and keep their name tags. Until she collects a tag, each helper is a <b>zombie</b>: not running, but not gone. The office still stores a little card for them.</p>
-        <p class="story">If Sofia herself leaves, a clerk called <b>init</b> — PID 1, there since start-up — adopts the leftovers. A long-running shell should not rely on that. She calls waitpid, reads the exit status, and the card disappears.</p>
-        <p class="imagine"><b>Try it:</b> Step until both children are zombies, then reap. Switch to “in order” to force 22966 before 22967.</p>
+        <p class="story">A terminated process that has not been <b>reaped</b> is a <b>zombie</b>. It is not running, but the kernel keeps a small record — the PID and the exit status — until the parent collects it with <span class="mono">waitpid</span>.</p>
+        <p class="story">If the parent dies first, <span class="mono">init</span> (PID 1) adopts the orphans and reaps them. A long-running program such as a shell must not rely on that. <span class="mono">waitpid(-1, …)</span> reaps any child, in whatever order they finish. Storing the PIDs and waiting for each one makes the order deterministic. <span class="mono">WNOHANG</span> returns 0 instead of blocking when nobody has exited yet.</p>
+        <p class="imagine"><b>Try it:</b> let both children exit, look at the zombies, then reap. Switch to creation order, or to “parent exits first.”</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>“A terminated process that has not yet been reaped is called a zombie.” The kernel keeps it until the parent reaps it (and reads the exit status). If the parent dies first, init (PID 1) adopts the orphans and reaps them. waitpid(pid, statusp, options) returns the child’s PID, or 0 with WNOHANG, or −1 on error. pid &gt; 0 waits for that child; pid = −1 waits for any child. wait(&amp;status) is waitpid(-1, &amp;status, 0).</p>
-            <p>WNOHANG is 1, WUNTRACED is 2. WIFEXITED / WEXITSTATUS read a normal exit. No children means −1 and errno = ECHILD; an interrupting signal means EINTR.</p>
-            <p>Figure 8.18 (N = 2) has each child exit(100+i). On the authors’ box: <code>child 22966 terminated normally with exit status=100</code> then 22967 with 101 — “in no particular order.” Figure 8.19 stores the PIDs and waitpid’s each in creation order so the printout is deterministic. Either order is equally correct; never assume one.</p>
+            <p>A terminated unreaped process is a zombie. The kernel keeps it until the parent reaps it and reads the exit status. If the parent terminates first, init (PID 1) adopts the orphans. <span class="mono">waitpid(pid, statusp, options)</span> returns the child’s PID, or 0 with <span class="mono">WNOHANG</span>, or −1 on error. <span class="mono">pid &gt; 0</span> waits for that child; <span class="mono">pid == -1</span> waits for any. <span class="mono">wait(&amp;status)</span> is <span class="mono">waitpid(-1, &amp;status, 0)</span>.</p>
+            <p>Figure 8.18 (N = 2) reaps in no particular order; the sample run shows child 22966 with status 100, then 22967 with 101. Figure 8.19 stores the PIDs and waits in creation order. Either order is correct. <span class="mono">WIFEXITED</span> and <span class="mono">WEXITSTATUS</span> read a normal exit. No children means <span class="mono">ECHILD</span>; an interrupting signal means <span class="mono">EINTR</span>.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;779–785 · 8.4.3 Reaping Child Processes</p>
           </div>
         </details>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-title">Figure 8.18 · waitpid1</span><span id="s5-seg"></span></div>
-        <div class="stage-scroll"><svg id="s5-svg" viewBox="0 0 680 300" role="img" aria-label="Two children becoming zombies and then being reaped by waitpid"></svg></div>
-        <div class="controls" id="s5-controls"></div>
-        <div class="caption" aria-live="polite" id="s5-cap">A zombie still occupies a table slot until someone calls waitpid.</div>
+        <div class="stage-head"><span class="stage-title">Figures 8.18–8.19</span><span id="s843-seg"></span></div>
+        <div class="stage-scroll"><svg id="s843-svg" viewBox="0 0 660 270" role="img" aria-label="Two children becoming zombies and then being reaped"></svg></div>
+        <div class="controls" id="s843-controls"></div>
+        <div class="caption" id="s843-cap" aria-live="polite"></div>
+        <div id="s843-code"></div>
       </div>
     </div>
   </section>
 
-  <section class="scene" id="exec">
+  <section class="scene" id="s844">
     <div class="wrap scene-grid flip">
       <div class="copy">
-        <span class="eyebrow">Big idea 6 · execve</span>
-        <h2>Same locker number, a new pile of books</h2>
-        <p class="story">Hiro does not get a new locker. He empties this one and loads a different course. That is <b>execve</b>: a new program in the same process. The PID stays put. Open files stay open. If the load works, the call never comes back.</p>
-        <p class="story">A shell does both tricks: fork a copy, then execve the user’s program in the copy, then waitpid if the job is in the foreground. A trailing <code>&amp;</code> means “do not wait.” The book’s tiny shell forgets to reap those background kids — that needs signals.</p>
-        <p class="imagine"><b>Try it:</b> Press Run execve and watch ls overlay the process. Switch to shell to fork, exec, and wait.</p>
+        <span class="eyebrow">8.4.4 · putting processes to sleep</span>
+        <h2>Sleep for three seconds, or until a signal</h2>
+        <p class="story"><span class="mono">sleep(secs)</span> suspends the caller. It returns 0 if the whole interval elapsed. If a signal wakes it early, it returns the number of seconds still left.</p>
+        <p class="story"><span class="mono">pause</span> sleeps until some signal arrives, and always returns −1. It does not take a duration. A signal you are not catching may kill the process instead of waking it into your code — that story continues in 8.5.</p>
+        <p class="imagine"><b>Try it:</b> run a 3-second sleep with no signal, then interrupt it at 1 second. Then <span class="mono">pause</span> and deliver <span class="mono">SIGALRM</span>.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>execve(filename, argv, envp) “is called once and never returns” if it succeeds (−1 on error). argv[0] is the executable’s name by convention. Figure 8.20: argv holds <code>ls</code>, <code>-lt</code>, <code>/user/include</code>, then NULL. Figure 8.21: <code>PWD=/usr/droh</code>, <code>PRINTER=iron</code>, <code>USER=droh</code>. main receives argc in %rdi, argv in %rsi, envp in %rdx. getenv / setenv / unsetenv edit that array.</p>
-            <p>fork runs the same program in a new child. execve loads a new program in the current process: same PID, inherited file descriptors, overwritten address space. Figure 8.23–8.25’s shellex prints <code>&gt; </code>, parses a line, runs the quit builtin, or Fork + execve + waitpid for a foreground job. A final <code>&amp;</code> is background. The simple shell does not reap background children.</p>
+            <p><span class="mono">sleep</span> returns 0 when the requested time has elapsed, and otherwise the seconds still left — which happens when a signal interrupts it. <span class="mono">pause</span> puts the caller to sleep until the process receives a signal, and always returns −1. Practice Problem 8.5 asks for a <span class="mono">wakeup</span> wrapper that sleeps and then prints when the process actually woke.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;785–786 · 8.4.4 Putting Processes to Sleep</p>
           </div>
         </details>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-title">Figures 8.20–8.24</span><span id="s6-seg"></span></div>
-        <div class="stage-scroll"><svg id="s6-svg" viewBox="0 0 680 300" role="img" aria-label="execve overlaying a new program in the same process, or a tiny shell"></svg></div>
-        <div class="controls" id="s6-controls"></div>
-        <div class="caption" aria-live="polite" id="s6-cap">fork copies the process. execve rewrites the program inside it.</div>
+        <div class="stage-head"><span class="stage-title">sleep and pause</span><span class="pill" id="s844-pill">awake</span></div>
+        <div class="stage-scroll"><svg id="s844-svg" viewBox="0 0 660 200" role="img" aria-label="A three-second sleep bar and a pause that waits for a signal"></svg></div>
+        <div class="controls" id="s844-controls"></div>
+        <div class="caption" id="s844-cap" aria-live="polite"></div>
+        <div id="s844-code"></div>
       </div>
     </div>
   </section>
 
-  <section class="scene" id="signals">
+  <section class="scene" id="s845">
     <div class="wrap scene-grid">
       <div class="copy">
-        <span class="eyebrow">Big idea 7 · pending and blocked</span>
-        <h2>A flag that does not stack</h2>
-        <p class="story">Amara has three mail flags. The office can raise a flag (the signal is <b>pending</b>). A latch can hold it so she does not look yet (<b>blocked</b>). When she returns from the office to her own walk, the kernel checks: pending, and not blocked? Then she must deal with it.</p>
-        <p class="story">Two letters of the same kind do not queue. If SIGCHLD is already up, the next SIGCHLD is tossed. Ctrl+C raises SIGINT for everyone in the front-row group, not just one desk.</p>
-        <p class="imagine"><b>Try it:</b> Send SIGINT or SIGCHLD. Block, then send again. Switch to groups and press Ctrl+C — only group 20 lights up.</p>
+        <span class="eyebrow">8.4.5 · loading and running programs</span>
+        <h2>Same process, different program</h2>
+        <p class="story"><span class="mono">execve</span> loads a new program into the <b>current</b> process. On success it does not return: the code, data, heap, and stack are gone, replaced by the new program, which starts at its <span class="mono">main</span>. The PID stays. Open file descriptors stay.</p>
+        <p class="story">The new <span class="mono">main</span> receives <span class="mono">argc</span>, <span class="mono">argv</span>, and <span class="mono">envp</span>. By convention <span class="mono">argv[0]</span> is the program name. The list ends with <span class="mono">NULL</span>. The environment is the same shape: strings like <span class="mono">USER=ada</span>, also <span class="mono">NULL</span>-terminated. <span class="mono">getenv</span>, <span class="mono">setenv</span>, and <span class="mono">unsetenv</span> edit that array.</p>
+        <p class="imagine"><b>Try it:</b> press <b>execve</b>. Watch the program name change and the PID stay. On failure the call returns −1 and the old program continues.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>Linux has 30 signal types (Figure 8.26). The kernel exposes hardware faults as signals: SIGFPE (8) for divide-by-zero, SIGILL (4) for an illegal instruction, SIGSEGV (11) for a bad memory reference. Typing Ctrl+C sends SIGINT (2) to every process in the foreground process group; Ctrl+Z sends SIGTSTP (20). kill / SIGKILL (9) forcibly terminates. A child’s stop or exit sends SIGCHLD (17) to the parent.</p>
-            <p>“At any point in time, there can be at most one pending signal of a particular type.” Subsequent signals of that type are discarded, not queued. The kernel keeps a pending bit vector and a blocked bit vector (the signal mask). Receipt happens when the kernel is about to return p to user mode and pending &amp; ~blocked is nonempty — typically the smallest k.</p>
-            <p>Every process is in one process group. Default: a child shares its parent’s group. setpgid(0, 0) in process 15213 makes group 15213. <code>/bin/kill -9 15213</code> kills that PID; a negative PID kills the group. Figure 8.28: shell 10/10, foreground job 20/20 with children 21 and 22, background 32 and 40. SIGKILL and SIGSTOP cannot be caught or ignored.</p>
+            <p><span class="mono">execve(filename, argv, envp)</span> is called once and never returns on success (−1 on error). Figure 8.20’s <span class="mono">argv</span> holds the program name, its arguments, and a NULL pointer. Figure 8.21 is the environment list. Figure 8.22 shows those strings on the user stack when the new program starts. <span class="mono">main</span> receives <span class="mono">argc</span> in <span class="mono">%rdi</span>, <span class="mono">argv</span> in <span class="mono">%rsi</span>, and <span class="mono">envp</span> in <span class="mono">%rdx</span>.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;786–789 · 8.4.5 Loading and Running Programs</p>
           </div>
         </details>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-title">Pending &amp; blocked</span><span id="s7-seg"></span></div>
-        <div class="stage-scroll"><svg id="s7-svg" viewBox="0 0 680 300" role="img" aria-label="Pending and blocked bits for SIGINT, SIGKILL, and SIGCHLD, or foreground process groups"></svg></div>
-        <div class="controls" id="s7-controls"></div>
-        <div class="caption" aria-live="polite" id="s7-cap">A pending bit means at least one arrived. A second of the same type is thrown away.</div>
+        <div class="stage-head"><span class="stage-title">Figures 8.20–8.22</span><span class="pill" id="s845-pill">hello</span></div>
+        <div class="stage-scroll"><svg id="s845-svg" viewBox="0 0 660 270" role="img" aria-label="execve replacing a program inside the same process"></svg></div>
+        <div class="controls" id="s845-controls"></div>
+        <div class="caption" id="s845-cap" aria-live="polite"></div>
+        <div id="s845-code"></div>
       </div>
     </div>
   </section>
 
-  <section class="scene" id="handler">
+  <section class="scene" id="s846">
     <div class="wrap scene-grid flip">
       <div class="copy">
-        <span class="eyebrow">Big idea 8 · handlers</span>
-        <h2>A helper who must not use the lobby phone</h2>
-        <p class="story">Kenji pins a helper to the SIGINT hook. Ctrl+C no longer kills him by default — the helper runs, then (usually) he continues. If that helper shouts through the lobby phone — <code>printf</code> — it can tangle with Kenji’s own phone call. The safe window is <code>write</code>, or the book’s <b>Sio</b> helpers.</p>
-        <p class="story">Three children finish while the helper is still tidying. The SIGCHLD flag can only be up or down. The third “child done” is lost. The helper must loop on waitpid until the room is empty, not count the bells.</p>
-        <p class="imagine"><b>Try it:</b> Catch SIGINT the unsafe way, then the Sio way. Switch to SIGCHLD and play signal1 (a leftover zombie) versus signal2 (all reaped).</p>
+        <span class="eyebrow">8.4.6 · using fork and execve to run programs</span>
+        <h2>A shell is a loop around those two calls</h2>
+        <p class="story">The book’s simple shell prints a prompt, reads a line, and evaluates it. A blank line does nothing. <span class="mono">quit</span> is a <b>builtin</b>: the shell handles it itself. Anything else is a program name.</p>
+        <p class="story">The shell forks. The child <span class="mono">execve</span>s the program. If the line did not end with <span class="mono">&amp;</span>, the parent waits — a foreground job. If it did, the parent prints the PID and takes another command — a background job. This shell does not reap background children. They become zombies when they exit. Signals, in the next section, are how a real shell notices.</p>
+        <p class="imagine"><b>Try it:</b> run <span class="mono">quit</span>, a foreground <span class="mono">ls</span>, and <span class="mono">ls &amp;</span>. Step <span class="mono">eval</span> and watch which branch the code takes.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>Figure 8.30 installs signal(SIGINT, handler) and pause()s; the handler printf’s “Caught SIGINT!” and exit(0). That printf is not async-signal-safe. Figure 8.33’s safe list includes write, waitpid, and _exit — not printf, sprintf, malloc, or exit. Figure 8.35 uses Sio_puts and _exit. Guidelines: keep handlers tiny; save and restore errno; block signals around shared data; declare shared vars volatile; use volatile sig_atomic_t for flags.</p>
-            <p>Figure 8.36’s signal1 reaps one child per SIGCHLD. On the authors’ box the children are 14073, 14074, 14075; only two handlers run and 14075 stays <code>&lt;defunct&gt;</code>. “Signals cannot be used to count the occurrence of events in other processes.” Figure 8.37’s handler2 loops while (waitpid(-1, NULL, 0) &gt; 0) and reaps 15237–15239.</p>
-            <p>Older Unix restores the default action after a catch, and slow calls (read, wait, accept) may return EINTR. The book’s Signal wrapper uses sigaction with SA_RESTART. Figure 8.39 races addjob against deletejob; Figure 8.40 blocks SIGCHLD around fork and addjob. sigsuspend is the race-free wait; a pause after the while test can sleep forever.</p>
+            <p>Figures 8.23–8.25 are a tiny shell. <span class="mono">main</span> prints a prompt and calls <span class="mono">eval</span>. <span class="mono">parseline</span> builds <span class="mono">argv</span> and reports whether the job is background. Builtins such as <span class="mono">quit</span> run in the shell process. Otherwise the shell forks, the child calls <span class="mono">execve</span>, and the parent calls <span class="mono">waitpid</span> only for a foreground job. Background children are not reaped by this version.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;789–792 · 8.4.6 Using fork and execve to Run Programs</p>
           </div>
         </details>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-title">Catch, then reap</span><span id="s8-seg"></span></div>
-        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 680 320" role="img" aria-label="A SIGINT handler that may be unsafe, or a SIGCHLD handler that must reap in a loop"></svg></div>
-        <div class="controls" id="s8-controls"></div>
-        <div class="caption" aria-live="polite" id="s8-cap">A handler shares the process. Pending bits do not count.</div>
+        <div class="stage-head"><span class="stage-title">Figures 8.23–8.25 · shellex</span><span class="pill" id="s846-pill">ready</span></div>
+        <div class="stage-scroll"><svg id="s846-svg" viewBox="0 0 660 250" role="img" aria-label="A shell deciding among quit, a foreground job, and a background job"></svg></div>
+        <div class="controls" id="s846-controls"></div>
+        <div class="caption" id="s846-cap" aria-live="polite"></div>
+        <div id="s846-code"></div>
       </div>
     </div>
   </section>
 
-  <section class="scene" id="jump">
+  <section class="scene" id="s85">
     <div class="wrap scene-grid">
       <div class="copy">
-        <span class="eyebrow">Big idea 9 · nonlocal jumps</span>
-        <h2>A bookmark that skips the stairs</h2>
-        <p class="story">Lucia leaves a bookmark in main, then walks into foo and on into bar. If bar finds a mess, she does not climb the stairs back one door at a time. She snaps to the bookmark. That is a <b>nonlocal jump</b>: setjmp saves the room, longjmp restores it.</p>
-        <p class="story">The tidy-up on those stairs never runs — a leak if she had hung coats there. Another use: a SIGINT helper that longjmp’s back to “restart” instead of returning into the middle of the loop.</p>
-        <p class="imagine"><b>Try it:</b> Press error2 (the book’s default) and watch the snap to case 2. Then switch to restart and press Ctrl+C.</p>
+        <span class="eyebrow">8.5 · signals</span>
+        <h2>A small message from the kernel</h2>
+        <p class="story">A <b>signal</b> is a tiny message that the kernel delivers to a process because something exceptional happened. Linux has 30 types. Some are hardware faults turned into software events: divide by zero becomes <span class="mono">SIGFPE</span> (8), an illegal instruction becomes <span class="mono">SIGILL</span> (4), a bad memory reference becomes <span class="mono">SIGSEGV</span> (11).</p>
+        <p class="story">Others are higher-level. Ctrl+C is <span class="mono">SIGINT</span> (2) to the foreground group. <span class="mono">SIGKILL</span> (9) forces termination. A child that stops or exits causes <span class="mono">SIGCHLD</span> (17) in the parent.</p>
+        <p class="imagine"><b>Try it:</b> press an event. The kernel stamps the matching signal number onto the destination process.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>setjmp(env) saves the calling environment (PC, stack pointer, registers) and returns 0. longjmp(env, retval) restores it and makes that setjmp return retval (nonzero). “The setjmp function is called once but returns multiple times.” Do not write <code>rc = setjmp(env)</code>; use it as a switch test. Skipping intermediate frames can leak anything those frames meant to free.</p>
-            <p>Figure 8.43: error1 = 0, error2 = 1, so the run takes bar’s longjmp(buf, 2) and prints “Detected an error2 condition in foo.” Figure 8.44 uses sigsetjmp / siglongjmp so a SIGINT handler can restart: “starting”, then “processing…”, then after Ctrl+C “restarting”. Install the handler only after sigsetjmp, or the handler might run before env exists. Call only safe functions on the restart path; in the example, exit is unreachable.</p>
-            <p>C++ and Java catch / throw are higher-level cousins of setjmp / longjmp. A catch in a try is akin to setjmp; a throw is similar to longjmp.</p>
+            <p>A signal is a form of exceptional control flow, higher level than an exception and lower level than a nonlocal jump. Figure 8.26 lists the 30 Linux signals and each default action. The kernel tells a user process about certain exceptions by sending a signal: <span class="mono">SIGFPE</span> for divide-by-zero, <span class="mono">SIGILL</span> for an illegal instruction, <span class="mono">SIGSEGV</span> for an illegal memory reference. Ctrl+C sends <span class="mono">SIGINT</span> to the foreground process group. <span class="mono">SIGKILL</span> forcibly terminates. A child’s stop or termination sends <span class="mono">SIGCHLD</span> to the parent.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;792–794 · 8.5 Signals</p>
           </div>
         </details>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-title">Figures 8.43–8.44</span><span id="s9-seg"></span></div>
-        <div class="stage-scroll"><svg id="s9-svg" viewBox="0 0 680 300" role="img" aria-label="setjmp saving an environment and longjmp skipping back, or a Ctrl+C restart"></svg></div>
-        <div class="controls" id="s9-controls"></div>
-        <div class="caption" aria-live="polite" id="s9-cap">setjmp is called once and returns again from every matching longjmp.</div>
+        <div class="stage-head"><span class="stage-title">Event → signal</span><span class="pill" id="s85-pill">none</span></div>
+        <div class="stage-scroll"><svg id="s85-svg" viewBox="0 0 660 250" role="img" aria-label="Kernel events mapped onto signal numbers delivered to a process"></svg></div>
+        <div class="controls" id="s85-controls"></div>
+        <div class="caption" id="s85-cap" aria-live="polite"></div>
+        <div id="s85-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s851">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">8.5.1 · signal terminology</span>
+        <h2>Pending is a bit, not a counter</h2>
+        <p class="story">Sending and receiving are different moments. The kernel <b>sends</b> (delivers) a signal by updating state in the destination process. The process <b>receives</b> it later, when it is forced to react.</p>
+        <p class="story">Two bit vectors live in the process context. <b>Pending</b> means “at least one of this type has arrived and not yet been received.” A second signal of the same type, while the first is still pending, is thrown away. <b>Blocked</b> means “do not receive this yet.” A blocked signal can sit pending until the process unblocks it. It is still received at most once.</p>
+        <p class="imagine"><b>Try it:</b> send <span class="mono">SIGINT</span> twice. Block it, send again, then unblock. The code’s bit comments update with the picture.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>A signal is sent when the kernel records it in the destination’s context, either because the kernel noticed an event or because some process called <span class="mono">kill</span>. It is received when the destination is forced to react. A pending signal is received at most once. For each process the kernel keeps the set of pending signals and the set of blocked signals. A blocked pending signal stays pending until the signal is unblocked.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;794–795 · 8.5.1 Signal Terminology</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Pending and blocked bits</span><span class="pill" id="s851-pill">quiet</span></div>
+        <div class="stage-scroll"><svg id="s851-svg" viewBox="0 0 660 240" role="img" aria-label="Pending and blocked bit vectors for three signals"></svg></div>
+        <div class="controls" id="s851-controls"></div>
+        <div class="caption" id="s851-cap" aria-live="polite"></div>
+        <div id="s851-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s852">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">8.5.2 · sending signals</span>
+        <h2>One pid, or a whole group</h2>
+        <p class="story">Processes live in <b>process groups</b>. A child normally joins its parent’s group. A shell puts each job in its own group, so Ctrl+C can hit the foreground job and not the shell, and not the background jobs.</p>
+        <p class="story"><span class="mono">/bin/kill -9 15213</span> sends <span class="mono">SIGKILL</span> to one PID. A negative PID means the group: <span class="mono">kill -9 -20</span> hits every member of group 20. <span class="mono">alarm(secs)</span> asks the kernel to send you <span class="mono">SIGALRM</span> later. <span class="mono">SIGKILL</span> and <span class="mono">SIGSTOP</span> cannot be caught or ignored.</p>
+        <p class="imagine"><b>Try it:</b> the picture is Figure 8.28’s groups. Send Ctrl+C, Ctrl+Z, a single-PID kill, a group kill, or an alarm.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The <span class="mono">/bin/kill</span> program sends an arbitrary signal. <span class="mono">kill(pid, sig)</span> does it from a program (Figure 8.29). If <span class="mono">pid</span> is positive, the signal goes to that process. If <span class="mono">pid</span> is negative, it goes to every process in group <span class="mono">|pid|</span>. Figure 8.28: shell 10 in group 10, foreground job 20 with children 21 and 22, background jobs 32 and 40. <span class="mono">setpgid(0, 0)</span> puts the caller in a new group whose id is its PID. <span class="mono">alarm</span> schedules <span class="mono">SIGALRM</span> and cancels any previous alarm.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;795–798 · 8.5.2 Sending Signals</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 8.28 · process groups</span><span class="pill" id="s852-pill">idle</span></div>
+        <div class="stage-scroll"><svg id="s852-svg" viewBox="0 0 660 270" role="img" aria-label="A shell, a foreground process group, and two background jobs"></svg></div>
+        <div class="controls" id="s852-controls"></div>
+        <div class="caption" id="s852-cap" aria-live="polite"></div>
+        <div id="s852-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s853">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">8.5.3 · receiving signals</span>
+        <h2>Default, ignore, or catch</h2>
+        <p class="story">When a process receives a pending unblocked signal, it does one of three things. The <b>default</b> action is often “terminate.” It can <b>ignore</b> the signal. Or it can <b>catch</b> it by running a handler the program installed, then resume.</p>
+        <p class="story">A handler can itself be interrupted by a different signal. Figure 8.31 shows handler S running, then handler T, then S again, then the main program. <span class="mono">SIGKILL</span> and <span class="mono">SIGSTOP</span> still cannot be caught or ignored.</p>
+        <p class="imagine"><b>Try it:</b> set <span class="mono">SIGINT</span> to default, ignore, or catch. Then play the nested-handler story: signal <span class="mono">t</span> arrives while handler <span class="mono">s</span> is running.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>The kernel forces the process to react before it returns to user mode from an exception, or when a blocked signal is unblocked. Each signal has a default action (Figure 8.26). A program can ignore a signal or install a handler with <span class="mono">signal</span>. Figure 8.30 catches <span class="mono">SIGINT</span>, prints, and exits. Figure 8.31: handlers can be interrupted by other handlers. The interrupted handler resumes when the inner one returns.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;798–800 · 8.5.3 Receiving Signals</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Disposition</span><span id="s853-seg"></span></div>
+        <div class="stage-scroll"><svg id="s853-svg" viewBox="0 0 660 250" role="img" aria-label="Default, ignore, and catch, or two nested signal handlers"></svg></div>
+        <div class="controls" id="s853-controls"></div>
+        <div class="caption" id="s853-cap" aria-live="polite"></div>
+        <div id="s853-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s854">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">8.5.4 · blocking and unblocking signals</span>
+        <h2>Hold the bit, then let it through</h2>
+        <p class="story"><span class="mono">sigprocmask</span> changes the blocked set. While <span class="mono">SIGINT</span> is blocked, sending it sets the pending bit and does not run the handler. Unblocking receives it — once, even if it was sent twice.</p>
+        <p class="story">There is also an implicit block. While a handler for signal <span class="mono">s</span> runs, <span class="mono">s</span> is blocked, so the same signal does not nest inside its own handler. A different signal still can. That is why Figure 8.31’s handlers are for two different signals.</p>
+        <p class="imagine"><b>Try it:</b> block, send twice, unblock. Then run the handler and send the same signal again before it returns.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Applications use <span class="mono">sigprocmask</span> to block and unblock signals explicitly (Figure 8.32). The helpers <span class="mono">sigemptyset</span>, <span class="mono">sigfillset</span>, <span class="mono">sigaddset</span>, and <span class="mono">sigdelset</span> build the sets. The kernel also blocks the signal currently being handled, so a handler is not recursively interrupted by another instance of the same signal unless the program asks for that. Other signal types are not implicitly blocked.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;800–802 · 8.5.4 Blocking and Unblocking Signals</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figure 8.32 · sigprocmask</span><span class="pill" id="s854-pill">unblocked</span></div>
+        <div class="stage-scroll"><svg id="s854-svg" viewBox="0 0 660 230" role="img" aria-label="Blocking SIGINT so it stays pending, then receiving it once"></svg></div>
+        <div class="controls" id="s854-controls"></div>
+        <div class="caption" id="s854-cap" aria-live="polite"></div>
+        <div id="s854-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s855">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">8.5.5 · writing signal handlers</span>
+        <h2>Tiny, safe, and ready for more than one</h2>
+        <p class="story">A handler shares the process with the main program, and it can run between any two instructions. That makes it a hard place to write code. Keep it short. Save and restore <span class="mono">errno</span>. Only call functions that are <b>async-signal-safe</b>: <span class="mono">write</span>, <span class="mono">waitpid</span>, and <span class="mono">_exit</span> are; <span class="mono">printf</span>, <span class="mono">malloc</span>, and <span class="mono">exit</span> are not. The book’s <span class="mono">Sio_puts</span> is a safe print.</p>
+        <p class="story">Pending bits do not count. If three children exit before the parent receives <span class="mono">SIGCHLD</span>, one bit is set. A handler that reaps a single child leaves the others as zombies. A handler that loops on <span class="mono">waitpid</span> until it returns −1 reaps all of them.</p>
+        <p class="imagine"><b>Try it:</b> compare the unsafe <span class="mono">printf</span> handler with <span class="mono">Sio_puts</span>. Then exit three children and reap one versus reap-in-a-loop.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Guidelines: handlers should be simple; they should call only async-signal-safe functions (Figure 8.33); they should save and restore <span class="mono">errno</span>; they should block signals around shared data; and shared flags should be <span class="mono">volatile sig_atomic_t</span>. Figure 8.35 is the safe version of Figure 8.30’s <span class="mono">SIGINT</span> handler, using <span class="mono">Sio_puts</span> and <span class="mono">_exit</span>.</p>
+            <p>Figure 8.36 reaps one child per <span class="mono">SIGCHLD</span> and can leave a zombie, because one pending bit means “at least one,” not “how many.” Figure 8.37 loops while <span class="mono">waitpid</span> succeeds. The book’s <span class="mono">Signal</span> wrapper (Figure 8.38) uses <span class="mono">sigaction</span> with <span class="mono">SA_RESTART</span> so slow calls restart instead of returning <span class="mono">EINTR</span>.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;802–812 · 8.5.5 Writing Signal Handlers</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Safe handlers</span><span id="s855-seg"></span></div>
+        <div class="stage-scroll"><svg id="s855-svg" viewBox="0 0 660 260" role="img" aria-label="A safe SIGINT handler, or three children and a SIGCHLD reap loop"></svg></div>
+        <div class="controls" id="s855-controls"></div>
+        <div class="caption" id="s855-cap" aria-live="polite"></div>
+        <div id="s855-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s856">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">8.5.6 · synchronizing flows to avoid nasty concurrency bugs</span>
+        <h2>The child can finish before you write its name down</h2>
+        <p class="story">A shell keeps a list of jobs. The parent forks, then adds the child to the list. The <span class="mono">SIGCHLD</span> handler deletes the job after it reaps the child. If the child exits in the crack — after <span class="mono">fork</span> returns, before <span class="mono">addjob</span> — the handler deletes nothing, and <span class="mono">addjob</span> then records a job that will never be removed.</p>
+        <p class="story">You can run this a billion times and miss it. The fix blocks <span class="mono">SIGCHLD</span> before <span class="mono">fork</span> and unblocks only after <span class="mono">addjob</span>. The child inherits that blocked set, so the child must unblock before <span class="mono">execve</span>.</p>
+        <p class="imagine"><b>Try it:</b> run the race with a fast child, then run the blocked version. The job list is the picture; the code highlights the window.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 8.39 is a shell-shaped loop with a race between <span class="mono">addjob</span> in the parent and <span class="mono">deletejob</span> in the handler. If the child terminates before <span class="mono">addjob</span>, the job list is wrong. Figure 8.40 blocks <span class="mono">SIGCHLD</span> across <span class="mono">fork</span> and <span class="mono">addjob</span>, then unblocks. Children inherit the blocked set, so the child restores the previous mask before <span class="mono">execve</span>.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;812–814 · 8.5.6 Synchronizing Flows to Avoid Nasty Concurrency Bugs</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figures 8.39–8.40</span><span id="s856-seg"></span></div>
+        <div class="stage-scroll"><svg id="s856-svg" viewBox="0 0 660 250" role="img" aria-label="A job list that misses a fast child unless SIGCHLD is blocked"></svg></div>
+        <div class="controls" id="s856-controls"></div>
+        <div class="caption" id="s856-cap" aria-live="polite"></div>
+        <div id="s856-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s857">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">8.5.7 · explicitly waiting for signals</span>
+        <h2>Spin, pause forever, or sigsuspend</h2>
+        <p class="story">Sometimes the main program must wait until a handler has run. A spin loop <span class="mono">while (!pid);</span> is correct and wasteful. Putting <span class="mono">pause</span> in that loop looks kinder, and it has a race: if <span class="mono">SIGCHLD</span> arrives after the test and before <span class="mono">pause</span>, <span class="mono">pause</span> sleeps forever. <span class="mono">sleep(1)</span> in the loop is merely slow.</p>
+        <p class="story"><span class="mono">sigsuspend</span> replaces the blocked set and waits for a signal as one atomic step, then restores the mask when it returns. The signal cannot sneak into the gap.</p>
+        <p class="imagine"><b>Try it:</b> deliver the signal in the gap. Spin still finishes. Pause gets stuck. <span class="mono">sigsuspend</span> wakes up.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Figure 8.41 waits in a spin loop until the handler stores a nonzero PID. It is correct and wasteful. <span class="mono">while (!pid) pause();</span> races: a signal in the window after the test and before <span class="mono">pause</span> sleeps forever. <span class="mono">sleep</span> in the loop is too slow. Figure 8.42 uses <span class="mono">sigsuspend</span>, which atomically unblocks the signals in the given mask and suspends until a handler returns, then restores the previous blocked set.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;814–817 · 8.5.7 Explicitly Waiting for Signals</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figures 8.41–8.42</span><span id="s857-seg"></span></div>
+        <div class="stage-scroll"><svg id="s857-svg" viewBox="0 0 660 230" role="img" aria-label="Spin loop, a pause race, and sigsuspend waiting for SIGCHLD"></svg></div>
+        <div class="controls" id="s857-controls"></div>
+        <div class="caption" id="s857-cap" aria-live="polite"></div>
+        <div id="s857-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s86">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">8.6 · nonlocal jumps</span>
+        <h2>Called once, returns again from somewhere else</h2>
+        <p class="story"><span class="mono">setjmp</span> saves the calling environment — program counter, stack pointer, registers — and returns 0. <span class="mono">longjmp</span> restores that environment and makes the original <span class="mono">setjmp</span> return again, this time with a nonzero value. It is the C version of a jump that skips stack frames. Use it as the test of a <span class="mono">switch</span>, not as <span class="mono">rc = setjmp(env)</span>.</p>
+        <p class="story">From a signal handler, the signal-aware pair is <span class="mono">sigsetjmp</span> / <span class="mono">siglongjmp</span>. The book’s restart program installs the handler only after the first <span class="mono">sigsetjmp</span>, so the bookmark exists before Ctrl+C can fire. Skipping frames can leak anything those frames meant to free. C++ and Java exceptions are a more structured version of this idea.</p>
+        <p class="imagine"><b>Try it:</b> step <span class="mono">main → foo → bar</span> and jump back with code 2. Then switch to the Ctrl+C restart loop.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><span class="mono">setjmp</span> is called once and returns multiple times. <span class="mono">longjmp(env, retval)</span> restores the environment and makes that <span class="mono">setjmp</span> return <span class="mono">retval</span>, or 1 if <span class="mono">retval</span> was 0. Figure 8.43 takes <span class="mono">bar</span>’s <span class="mono">longjmp(buf, 2)</span> because <span class="mono">error2</span> is set. Figure 8.44 uses <span class="mono">sigsetjmp</span> / <span class="mono">siglongjmp</span> so a <span class="mono">SIGINT</span> handler restarts the program. Install the handler after the initial <span class="mono">sigsetjmp</span>. Only async-signal-safe functions should be reachable from the jump; in the example, <span class="mono">exit</span> is unreachable.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;817–822 · 8.6 Nonlocal Jumps</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Figures 8.43–8.44</span><span id="s86-seg"></span></div>
+        <div class="stage-scroll"><svg id="s86-svg" viewBox="0 0 660 260" role="img" aria-label="A stack of calls snapped back by longjmp, or a loop restarted by Ctrl+C"></svg></div>
+        <div class="controls" id="s86-controls"></div>
+        <div class="caption" id="s86-cap" aria-live="polite"></div>
+        <div id="s86-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s87">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">8.7 · tools for manipulating processes</span>
+        <h2>Look at a process without rewriting it</h2>
+        <p class="story">Linux already has tools for the ideas in this chapter. <span class="mono">strace</span> prints every system call a program makes. <span class="mono">ps</span> lists processes, including zombies. <span class="mono">top</span> shows who is using the CPU. <span class="mono">pmap</span> prints a process’s memory map. <span class="mono">/proc</span> is the kernel’s data, as text files — <span class="mono">cat /proc/loadavg</span> is the load average.</p>
+        <p class="story">Compile with <span class="mono">-static</span> if you want an <span class="mono">strace</span> that is not flooded with shared-library calls.</p>
+        <p class="imagine"><b>Try it:</b> point each tool at the same toy process: a shell, a running child, and a zombie. The code panel is the command. The black bar is what it prints.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p><span class="mono">strace</span> traces each system call of a running program and its children. <span class="mono">ps</span> lists processes, zombies included. <span class="mono">top</span> reports resource use. <span class="mono">pmap</span> displays a process’s memory map. <span class="mono">/proc</span> exports kernel data structures as ASCII; <span class="mono">/proc/loadavg</span> is the current load average. A statically linked binary keeps an strace shorter.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;822–823 · 8.7 Tools for Manipulating Processes</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">The same process, five tools</span><span class="pill" id="s87-pill">ps</span></div>
+        <div class="stage-scroll"><svg id="s87-svg" viewBox="0 0 660 230" role="img" aria-label="A process table with a zombie, inspected by ps, top, pmap, strace, and /proc"></svg></div>
+        <div class="controls" id="s87-controls"></div>
+        <div class="caption" id="s87-cap" aria-live="polite"></div>
+        <div id="s87-code"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="s88">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">8.8 · summary</span>
+        <h2>The same idea at three heights</h2>
+        <p class="story">Exceptional control flow is how a computer does more than one thing. At the bottom, hardware exceptions yank the processor into a handler. In the middle, the kernel uses that mechanism to build processes, switches, and signals. At the top, an application catches signals or jumps nonlocally back to a bookmark.</p>
+        <p class="story">Concurrency in this chapter is mostly one core taking turns. Chapter 12 comes back when several flows really share data on purpose.</p>
+        <p class="imagine"><b>Try it:</b> tap a layer. The code changes to the program that lives at that height.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>ECF occurs at every level and is a basic mechanism for concurrency. Hardware exceptions are interrupts, traps, faults, and aborts. The kernel uses them to provide processes: logical control flows and private address spaces. Applications create children, wait for them, run new programs, and catch signals. Signal handling is subtle. Nonlocal jumps are the application-level form of the same abrupt transfer.</p>
+            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., p.&nbsp;823 · 8.8 Summary</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Three heights of ECF</span><span class="pill" id="s88-pill">tap a layer</span></div>
+        <div class="stage-scroll"><svg id="s88-svg" viewBox="0 0 660 240" role="img" aria-label="Hardware exceptions, kernel processes, and application signals stacked"></svg></div>
+        <div class="controls" id="s88-controls"></div>
+        <div class="caption" id="s88-cap" aria-live="polite"></div>
+        <div id="s88-code"></div>
       </div>
     </div>
   </section>
 
   <section class="scene" id="summary">
     <div class="wrap">
-      <div class="section-title"><h2>The seesaws from this chapter</h2><p>Each row is a choice the hardware, the kernel, or a careful parent process makes.</p></div>
+      <div class="section-title"><h2>The chapter on one page</h2><p>Each row is a choice the hardware, the kernel, or a careful program makes.</p></div>
       <div class="tradeoffs">
-        <div class="tradeoff"><div class="side"><h4>Smooth walk</h4><p>Ik then Ik+1 sit next to each other in memory.</p></div><div class="vs">vs</div><div class="side"><h4>ECF</h4><p>An event yanks the PC into a handler, another process, or a bookmark.</p></div></div>
-        <div class="tradeoff"><div class="side"><h4>User mode</h4><p>No privileged ops, no kernel addresses. A touch is a protection fault.</p></div><div class="vs">vs</div><div class="side"><h4>Kernel mode</h4><p>The handler may use every resource. Return-from-interrupt drops the bit.</p></div></div>
-        <div class="tradeoff"><div class="side"><h4>fork</h4><p>New process, same program, two returns. Child sees 0.</p></div><div class="vs">vs</div><div class="side"><h4>execve</h4><p>Same process, new program, same PID. Success never returns.</p></div></div>
-        <div class="tradeoff"><div class="side"><h4>waitpid(-1)</h4><p>Reap any child. Order is a property of this run.</p></div><div class="vs">vs</div><div class="side"><h4>waitpid(pid)</h4><p>Reap in the order you stored. Still equally correct either way.</p></div></div>
-        <div class="tradeoff"><div class="side"><h4>printf in a handler</h4><p>Convenient, not async-signal-safe. Can tangle with the main flow.</p></div><div class="vs">vs</div><div class="side"><h4>write / Sio</h4><p>The book’s safe door. _exit, not exit.</p></div></div>
-        <div class="tradeoff"><div class="side"><h4>Reap one SIGCHLD</h4><p>A pending bit is not a counter. A child can stay a zombie.</p></div><div class="vs">vs</div><div class="side"><h4>while waitpid</h4><p>Each catch empties the room. Existence meant at least one.</p></div></div>
-        <div class="tradeoff"><div class="side"><h4>pause after a test</h4><p>The signal can arrive in the crack. You sleep forever.</p></div><div class="vs">vs</div><div class="side"><h4>sigsuspend</h4><p>Unblock and sleep as one step. Then the bookmark of blocked bits returns.</p></div></div>
-      </div>
-      <div class="themes" style="margin-top:18px">
-        <div class="card"><h3>What we skipped</h3><p>Section 8.7’s tool list (strace, ps, top, pmap, <code>/proc</code>), the full 30-row signal table, getenv/setenv, alarm, the Sio source, and the homework graphs. Error-handling wrappers are in the fork notes: check −1, or call Fork. Chapter 12 comes back for races in earnest.</p></div>
+        <div class="tradeoff"><div class="side"><h4>Smooth walk</h4><p>The next instruction sits immediately after this one.</p></div><div class="vs">vs</div><div class="side"><h4>Exception</h4><p>An event indexes the exception table and runs a handler.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>User mode</h4><p>No privileged instructions, no kernel addresses.</p></div><div class="vs">vs</div><div class="side"><h4>Kernel mode</h4><p>The handler may use every resource. Only an exception gets you there.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>fork</h4><p>New process, same program, two returns. The child sees 0.</p></div><div class="vs">vs</div><div class="side"><h4>execve</h4><p>Same process, new program, same PID. Success never returns.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>waitpid(-1)</h4><p>Reap any child. Finish order is a property of this run.</p></div><div class="vs">vs</div><div class="side"><h4>waitpid(pid)</h4><p>Reap the children in the order you stored.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>One SIGCHLD reap</h4><p>A pending bit is not a count. A child can stay a zombie.</p></div><div class="vs">vs</div><div class="side"><h4>while (waitpid)</h4><p>Each delivery means “at least one.” Loop until the room is empty.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>pause after a test</h4><p>The signal can arrive in the crack. You sleep forever.</p></div><div class="vs">vs</div><div class="side"><h4>sigsuspend</h4><p>Unblock and sleep as one step.</p></div></div>
       </div>
     </div>
   </section>
@@ -325,29 +950,28 @@
     <div class="wrap">
       <div class="section-title"><h2>Words to know</h2><p>The chapter’s grown-up words, in plain language.</p></div>
       <dl class="words">
-        <div class="word"><dt>ECF</dt><dd>Any abrupt change in the walk of the program counter, at hardware, kernel, or app level.</dd></div>
-        <div class="word"><dt>exception</dt><dd>Hardware + kernel: an event looks up a handler in a table and yanks the PC there.</dd></div>
-        <div class="word"><dt>exception table</dt><dd>A jump table. Entry k is the handler for exception number k.</dd></div>
-        <div class="word"><dt>interrupt</dt><dd>Async yank from an I/O pin. Always returns to the next instruction.</dd></div>
-        <div class="word"><dt>trap / syscall</dt><dd>Intentional sync yank. The door from user code into the kernel. Always to Inext.</dd></div>
-        <div class="word"><dt>fault</dt><dd>A maybe-fixable error. The handler may restart Icurr (page fault) or abort (Linux divide).</dd></div>
-        <div class="word"><dt>abort</dt><dd>Fatal hardware error. The handler never returns to the program.</dd></div>
-        <div class="word"><dt>process</dt><dd>An instance of a program in execution: a logical flow plus a private address space.</dd></div>
-        <div class="word"><dt>context switch</dt><dd>Save this process, restore another, pass control. Built on exceptions.</dd></div>
-        <div class="word"><dt>zombie</dt><dd>Terminated, not yet reaped. Still occupies a kernel slot until waitpid.</dd></div>
-        <div class="word"><dt>fork</dt><dd>Called once, returns twice: 0 in the child, the child’s PID in the parent.</dd></div>
-        <div class="word"><dt>execve</dt><dd>Load a new program in this process. Same PID. Does not return on success.</dd></div>
+        <div class="word"><dt>ECF</dt><dd>An abrupt change in the sequence of program-counter values, at hardware, kernel, or application level.</dd></div>
+        <div class="word"><dt>exception / exception table</dt><dd>An event indexes a jump table. Entry k is the handler for exception number k.</dd></div>
+        <div class="word"><dt>interrupt / trap / fault / abort</dt><dd>Async and always Inext; intentional and always Inext; maybe restart Icurr; never return.</dd></div>
+        <div class="word"><dt>process</dt><dd>An instance of a program in execution: a logical control flow plus a private address space.</dd></div>
+        <div class="word"><dt>concurrent / parallel</dt><dd>Lifetimes overlap in time, versus actually running at once on different cores.</dd></div>
+        <div class="word"><dt>mode bit</dt><dd>User mode or kernel mode. User code enters the kernel only through an exception.</dd></div>
+        <div class="word"><dt>context switch</dt><dd>Save this process’s context, restore another’s, and pass control.</dd></div>
+        <div class="word"><dt>errno / wrapper</dt><dd>The reason a system call returned −1. A capitalized wrapper checks it for you.</dd></div>
+        <div class="word"><dt>zombie / reap / init</dt><dd>Terminated but not yet collected. waitpid collects it. PID 1 adopts orphans.</dd></div>
+        <div class="word"><dt>fork / execve</dt><dd>Called once, returns twice. Versus called once and, on success, never returns.</dd></div>
         <div class="word"><dt>pending / blocked</dt><dd>Two bit vectors. At most one pending signal of each type. Blocked means “not yet.”</dd></div>
-        <div class="word"><dt>signal handler</dt><dd>User function that runs when a caught signal is received. Shares the process.</dd></div>
-        <div class="word"><dt>async-signal-safe</dt><dd>OK to call from a handler. write is; printf, malloc, and exit are not.</dd></div>
-        <div class="word"><dt>setjmp / longjmp</dt><dd>Save a calling environment; snap back to it from a deeper function or a handler.</dd></div>
+        <div class="word"><dt>process group</dt><dd>The set of processes a single Ctrl+C or a negative kill pid can hit together.</dd></div>
+        <div class="word"><dt>async-signal-safe</dt><dd>OK to call from a handler. write and waitpid are; printf, malloc, and exit are not.</dd></div>
+        <div class="word"><dt>sigsuspend</dt><dd>Atomically swap the blocked set and wait for a handler to run.</dd></div>
+        <div class="word"><dt>setjmp / longjmp</dt><dd>Save a calling environment and later snap back to it, skipping the frames in between.</dd></div>
       </dl>
     </div>
   </section>
 
   <section class="scene" id="quiz">
     <div class="wrap" style="max-width:820px">
-      <div class="section-title"><h2>Check yourself</h2><p>Eight questions. Finish all eight to mark the chapter explored.</p></div>
+      <div class="section-title"><h2>Check yourself</h2><p>Ten quick questions. Answer all ten to mark the chapter explored.</p></div>
       <div class="quiz" id="quiz-root"></div>
     </div>
   </section>
@@ -357,1032 +981,6 @@
 
 <script src="book.js"></script>
 <script src="../../assets/kit.js"></script>
-<script>
-const { h, s, draw, fly, sleep, tween, loop, seg, slider, stat, whenVisible } = K;
-K.page(8);
-const cap = (id, html) => { K.$(id).innerHTML = html; };
-
-function box(parent, x, y, w, hgt, cls, title, sub) {
-  const r = s("rect", { x, y, width: w, height: hgt, rx: 10, class: cls });
-  parent.appendChild(r);
-  const ty = sub ? y + hgt / 2 - 4 : y + hgt / 2 + 5;
-  const t = s("text", { x: x + w / 2, y: ty, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 700, fontSize: "13px" } }, title || "");
-  parent.appendChild(t);
-  let u = null;
-  if (sub) {
-    u = s("text", { x: x + w / 2, y: y + hgt / 2 + 14, class: "sv-label", "text-anchor": "middle" }, sub);
-    parent.appendChild(u);
-  }
-  return { r, t, u, x, y, w, h: hgt, cx: x + w / 2, cy: y + hgt / 2 };
-}
-
-function setCls(el, cls) { el.setAttribute("class", cls); }
-
-function clickable(el, fn, label) {
-  el.setAttribute("class", ((el.getAttribute("class") || "") + " clickable").trim());
-  el.setAttribute("tabindex", "0");
-  el.setAttribute("role", "button");
-  if (label) el.setAttribute("aria-label", label);
-  el.addEventListener("click", fn);
-  el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } });
-}
-
-function hide(el, on) {
-  if (!el) return;
-  el.style.display = on ? "none" : "";
-  if ("disabled" in el) el.disabled = !!on;
-}
-
-/* ================= HERO ================= */
-(function hero() {
-  const svg = K.$("#hero-svg");
-  const INS = [
-    { lab: "I0  add", kind: "smooth", note: "Adjacent in memory: a smooth transfer." },
-    { lab: "I1  mov", kind: "smooth", note: "Still next door. The walk has not jumped." },
-    { lab: "I2  load", kind: "event", note: "A timer pin goes high during this instruction." },
-    { lab: "I3  add", kind: "back", note: "The handler returned to Inext. The program never saw the hitch." },
-  ];
-  svg.append(draw.label(24, 22, "HANDLER", "sv-label", "start"));
-  const hBox = box(svg, 220, 28, 240, 56, "sv-panel", "timer IRQ", "kernel mode");
-  const rows = INS.map((ins, i) => {
-    const x = 24 + i * 164;
-    const b = box(svg, x, 120, 148, 56, "sv-panel", ins.lab, "user");
-    return { b, ins };
-  });
-  const pc = s("text", { x: 98, y: 198, class: "sv-label", "text-anchor": "middle" }, "PC");
-  svg.appendChild(pc);
-  let i = 0, vis = false;
-  function paint() {
-    const cur = INS[i];
-    rows.forEach((row, k) => setCls(row.b.r, k === i ? "sv-good" : "sv-panel"));
-    const inH = cur.kind === "event";
-    setCls(hBox.r, inH ? "sv-server" : "sv-panel");
-    hBox.t.textContent = inH ? "handler runs" : "timer IRQ";
-    pc.setAttribute("x", rows[i].b.cx);
-    pc.textContent = inH ? "IRQ" : "PC";
-    K.$("#hero-pill").innerHTML = `<i></i>${inH ? "exception" : "smooth"} · ${i + 1}/4`;
-    cap("#hero-cap", cur.note);
-  }
-  paint();
-  whenVisible(svg, () => (vis = true), () => (vis = false));
-  (async function auto() {
-    await sleep(800);
-    for (;;) {
-      if (vis && !K.reduced && !document.hidden) {
-        i = (i + 1) % INS.length;
-        paint();
-      }
-      await sleep(1600);
-    }
-  })();
-  svg.style.cursor = "pointer";
-  svg.addEventListener("click", () => { i = (i + 1) % INS.length; paint(); });
-})();
-
-/* ================= 1. XFER ================= */
-(function xfer() {
-  const svg = K.$("#s1-svg");
-  const EVENTS = [
-    { name: "timer", k: 32, ret: "Inext", cls: "sv-server", why: "Interrupt. After Icurr finishes, the handler returns to Inext." },
-    { name: "write", k: 128, ret: "Inext", cls: "sv-good", why: "Trap from syscall. Always return to the instruction after syscall." },
-    { name: "page", k: 14, ret: "Icurr", cls: "sv-data-soft", why: "Fault. The handler maps the page, then re-executes Icurr." },
-    { name: "check", k: 18, ret: "abort", cls: "sv-bad", why: "Abort. Machine check never returns to the program." },
-  ];
-  let ev = 0, step = 0, busy = false;
-  const icurr = box(svg, 24, 36, 170, 72, "sv-server", "Icurr", "user code");
-  const inext = box(svg, 24, 124, 170, 72, "sv-panel", "Inext", "would be next");
-  const abortB = box(svg, 24, 212, 170, 72, "sv-panel", "abort", "kernel routine");
-  svg.append(draw.label(220, 28, "TABLE", "sv-label", "start"));
-  const slots = [
-    { k: 0, lab: "0 divide" },
-    { k: 14, lab: "14 page" },
-    { k: 18, lab: "18 check" },
-    { k: 32, lab: "32+ IRQ" },
-  ].map((row, i) => box(svg, 220, 40 + i * 62, 170, 52, "sv-panel", row.lab, "table[k]"));
-  const hand = box(svg, 430, 36, 226, 100, "sv-panel", "handler", "kernel mode");
-  const dest = box(svg, 430, 184, 226, 100, "sv-panel", "return?", "after handler");
-  function paint() {
-    const e = EVENTS[ev];
-    const phase = ["event", "lookup", "handler", "return"];
-    icurr.t.textContent = "Icurr";
-    setCls(icurr.r, step === 0 ? "sv-good" : "sv-server");
-    slots.forEach((sl, i) => {
-      const hit = (e.k === 32 && i === 3) || (e.k === 14 && i === 1) || (e.k === 18 && i === 2) || (e.k === 128 && i === 3);
-      setCls(sl.r, step >= 1 && hit ? "sv-data-soft" : "sv-panel");
-    });
-    setCls(hand.r, step === 2 ? "sv-server" : "sv-panel");
-    hand.t.textContent = step >= 2 ? `k = ${e.k}` : "handler";
-    dest.t.textContent = step >= 3 ? e.ret : "return?";
-    setCls(dest.r, step >= 3 ? (e.ret === "abort" ? "sv-bad" : "sv-good") : "sv-panel");
-    setCls(inext.r, step >= 3 && e.ret === "Inext" ? "sv-good" : "sv-panel");
-    setCls(abortB.r, step >= 3 && e.ret === "abort" ? "sv-bad" : "sv-panel");
-    setCls(icurr.r, step >= 3 && e.ret === "Icurr" ? "sv-good" : (step === 0 ? "sv-good" : "sv-server"));
-    K.$("#s1-pill").textContent = `${e.name} · ${phase[Math.min(step, 3)]}`;
-    cap("#s1-cap", step === 0
-      ? `Imani is in <b>Icurr</b>. Next event: <b>${e.name}</b> (exception ${e.k}). Press Step.`
-      : step === 1
-        ? `Because the event is number <b>${e.k}</b>, the processor indexes the exception table. Entry k holds the handler address.`
-        : step === 2
-          ? `The handler runs in <b>kernel mode</b> on the kernel stack. User mode cannot do this walk itself.`
-          : e.why);
-  }
-  const ctr = K.$("#s1-controls");
-  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
-  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
-  stepB.addEventListener("click", async () => {
-    if (busy || step >= 3) return;
-    busy = true; stepB.disabled = true;
-    const p = draw.tag(EVENTS[ev].name);
-    svg.appendChild(p);
-    const from = step === 0 ? [icurr.cx, icurr.cy] : step === 1 ? [305, 140] : [hand.cx, hand.cy];
-    const to = step === 0 ? [305, 140] : step === 1 ? [hand.cx, hand.cy] : [dest.cx, dest.cy];
-    await fly(p, from, to, 480);
-    p.remove();
-    step++;
-    paint();
-    busy = false;
-    stepB.disabled = step >= 3;
-  });
-  resetB.addEventListener("click", () => { step = 0; busy = false; stepB.disabled = false; paint(); });
-  ctr.append(stepB, resetB);
-  EVENTS.forEach((e, i) => {
-    const b = h("button", { class: "btn small", type: "button" }, e.name);
-    b.addEventListener("click", () => { ev = i; step = 0; busy = false; stepB.disabled = false; paint(); });
-    ctr.appendChild(b);
-  });
-  paint();
-})();
-
-/* ================= 2. CLASSES ================= */
-(function classes() {
-  const svg = K.$("#s2-svg");
-  const KLASS = [
-    { name: "Interrupt", async: "async", ret: "Inext", ex: "timer / disk pin", note: "The pin goes high during Icurr. After Icurr finishes, the handler runs, then Inext. As if the doorbell never rang." },
-    { name: "Trap", async: "sync", ret: "Inext", ex: "syscall write", note: "Intentional. write is syscall 1: %rax=1, then syscall. The handler always returns to the instruction after syscall." },
-    { name: "Fault", async: "sync", ret: "Icurr", ex: "page fault 14", note: "Classic recovery: map a 4 KB page, then re-execute Icurr. The load sees memory this time." },
-    { name: "Abort", async: "sync", ret: "never", ex: "machine check 18", note: "Parity error in DRAM/SRAM. The handler goes to a kernel abort routine. The program does not resume." },
-  ];
-  let ki = 0, busy = false, divide = false;
-  const cur = box(svg, 24, 36, 200, 80, "sv-server", "Icurr", "faulting instr");
-  const hand = box(svg, 240, 36, 200, 80, "sv-panel", "handler", "kernel");
-  const ret = box(svg, 456, 36, 200, 80, "sv-panel", "Inext", "return");
-  const cause = box(svg, 24, 140, 308, 80, "sv-data-soft", "async", "when");
-  const exb = box(svg, 348, 140, 308, 80, "sv-db", "timer pin", "book example");
-  const foot = s("text", { x: 340, y: 254, class: "sv-label", "text-anchor": "middle" }, "");
-  svg.append(foot);
-  function paint() {
-    const k = KLASS[ki];
-    const retLab = (ki === 2 && divide) ? "abort" : k.ret;
-    cur.t.textContent = "Icurr";
-    hand.t.textContent = k.name;
-    ret.t.textContent = retLab;
-    setCls(hand.r, ki === 3 || (ki === 2 && divide) ? "sv-bad" : "sv-server");
-    setCls(ret.r, retLab === "never" || retLab === "abort" ? "sv-bad" : "sv-good");
-    cause.t.textContent = k.async;
-    cause.u.textContent = ki === 0 ? "not from this instr" : "this instruction";
-    exb.t.textContent = (ki === 2 && divide) ? "divide error 0" : k.ex;
-    foot.textContent = ki === 2
-      ? (divide ? "Linux does not recover · Floating exceptions" : "might return to Icurr · or abort")
-      : `always ${k.ret === "never" ? "terminates" : "returns to " + k.ret}`;
-    K.$("#s2-pill").textContent = k.name;
-    cap("#s2-cap", (ki === 2 && divide)
-      ? "Unix does not try to recover from a divide error (exception 0). The shell prints <b>Floating exceptions</b> and the program dies — a fault that acts like an abort."
-      : k.note);
-  }
-  const ctr = K.$("#s2-controls");
-  const runB = h("button", { class: "btn primary", type: "button" }, "Run class");
-  runB.addEventListener("click", async () => {
-    if (busy) return;
-    busy = true; runB.disabled = true;
-    const p = draw.tag("evt");
-    svg.appendChild(p);
-    await fly(p, [cur.cx, cur.cy], [hand.cx, hand.cy], 420);
-    await fly(p, [hand.cx, hand.cy], [ret.cx, ret.cy], 420);
-    p.remove();
-    busy = false; runB.disabled = false;
-    paint();
-  });
-  ctr.append(runB);
-  KLASS.forEach((k, i) => {
-    const b = h("button", { class: "btn small", type: "button" }, k.name);
-    b.addEventListener("click", () => { ki = i; divide = false; paint(); });
-    ctr.appendChild(b);
-  });
-  const divB = h("button", { class: "btn small", type: "button" }, "Divide error");
-  divB.addEventListener("click", () => { ki = 2; divide = true; paint(); });
-  ctr.appendChild(divB);
-  paint();
-})();
-
-/* ================= 3. PROCESS ================= */
-(function process() {
-  const svg = K.$("#s3-svg");
-  const flowG = s("g", {});
-  const spaceG = s("g", { visibility: "hidden" });
-  svg.append(flowG, spaceG);
-  const NAMES = ["A Priya", "B Yusuf", "C Sofia"];
-  const SLICES = [0, 1, 2, 0, 2];
-  const cols = NAMES.map((nm, i) => {
-    const x = 40 + i * 210;
-    flowG.appendChild(draw.label(x + 90, 28, nm, "sv-label", "middle"));
-    const cells = [0, 1, 2, 3, 4].map((t) => box(flowG, x, 40 + t * 48, 180, 40, "sv-panel", "—", `t${t + 1}`));
-    return { x, cells };
-  });
-  const flowNote = s("text", { x: 340, y: 300, class: "sv-label", "text-anchor": "middle" }, "");
-  flowG.appendChild(flowNote);
-
-  const SEGS = [
-    { lab: "kernel", sub: "top · invisible", cls: "sv-db", h: 48 },
-    { lab: "user stack", sub: "%rsp  run time", cls: "sv-server", h: 40 },
-    { lab: "shared libs", sub: "mapped", cls: "sv-panel", h: 36 },
-    { lab: "heap", sub: "brk / malloc", cls: "sv-data-soft", h: 40 },
-    { lab: ".data .bss", sub: "read/write", cls: "sv-panel", h: 36 },
-    { lab: "code 0x400000", sub: ".text .rodata", cls: "sv-good", h: 48 },
-  ];
-  let y = 28;
-  const segBoxes = SEGS.map((sg) => {
-    const b = box(spaceG, 24, y, 240, sg.h, sg.cls, sg.lab, sg.sub);
-    y += sg.h + 6;
-    return { b, sg };
-  });
-  const info = box(spaceG, 292, 36, 364, 100, "sv-panel", "user mode", "cannot touch kernel");
-  const touch = box(spaceG, 292, 156, 364, 100, "sv-panel", "0x400000", "code door");
-  spaceG.appendChild(draw.label(474, 276, "Figure 8.13", "sv-label", "middle"));
-
-  let mode = 0, t = 0, busy = false, fault = false, sel = 5;
-  function paintFlow() {
-    cols.forEach((col, pi) => {
-      col.cells.forEach((c, ti) => {
-        const mine = SLICES[ti] === pi;
-        const done = ti < t && mine;
-        const now = ti === t - 1 && mine;
-        c.t.textContent = now ? "running" : done ? "ran" : (ti < t && !mine) ? "preempt" : "—";
-        setCls(c.r, now ? "sv-good" : done ? "sv-server" : (ti < t && !mine) ? "sv-box" : "sv-panel");
-      });
-    });
-    flowNote.textContent = t === 0
-      ? "Figure 8.12 · A, then B done, then C, then A done, then C"
-      : t < 5 ? `${NAMES[SLICES[t - 1]]} takes slice t${t}` : "A||B and A||C yes · B||C no";
-  }
-  function paintSpace() {
-    segBoxes.forEach((row, i) => setCls(row.b.r, fault && i === 0 ? "sv-bad" : i === sel ? "sv-good" : row.sg.cls));
-    const sg = SEGS[sel];
-    info.t.textContent = fault ? "kernel mode" : "user mode";
-    info.u.textContent = fault ? "exception raised the bit" : "cannot touch kernel";
-    setCls(info.r, fault ? "sv-server" : "sv-panel");
-    touch.t.textContent = fault ? "Segmentation faults" : sg.lab;
-    touch.u.textContent = fault ? "general protection 13" : sg.sub;
-    setCls(touch.r, fault ? "sv-bad" : "sv-data-soft");
-  }
-  function paint() {
-    flowG.setAttribute("visibility", mode === 0 ? "visible" : "hidden");
-    spaceG.setAttribute("visibility", mode === 1 ? "visible" : "hidden");
-    if (mode === 0) {
-      paintFlow();
-      cap("#s3-cap", t === 0
-        ? "Three kids share one swing. Press Step to give the next time slice."
-        : t < 5
-          ? `Because the kernel scheduled <b>${NAMES[SLICES[t - 1]]}</b>, the others wait. Each still sees only their own PC values.`
-          : "A overlaps B, and A overlaps C. B finishes before C starts, so B and C are not concurrent. Concurrent is about time, not cores.");
-    } else {
-      paintSpace();
-      cap("#s3-cap", fault
-        ? "User code walked into kernel virtual memory. That is a general protection fault — shells print <b>Segmentation faults</b>."
-        : `This process believes it owns every address. <b>${SEGS[sel].lab}</b> sits in the private map. Code begins at 0x400000.`);
-    }
-  }
-  segBoxes.forEach((row, i) => {
-    clickable(row.b.r, () => { if (mode === 1) { sel = i; fault = false; paint(); } }, SEGS[i].lab);
-  });
-  const ctr = K.$("#s3-controls");
-  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
-  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
-  const kernB = h("button", { class: "btn danger", type: "button" }, "Touch kernel");
-  stepB.addEventListener("click", async () => {
-    if (mode !== 0 || busy || t >= 5) return;
-    busy = true; stepB.disabled = true;
-    t++;
-    paint();
-    await sleep(80);
-    busy = false; stepB.disabled = t >= 5;
-  });
-  resetB.addEventListener("click", () => {
-    t = 0; fault = false; sel = 5; busy = false;
-    stepB.disabled = mode !== 0;
-    paint();
-  });
-  kernB.addEventListener("click", () => { if (mode === 1) { sel = 0; fault = true; paint(); } });
-  ctr.append(stepB, resetB, kernB);
-  function modeButtons() {
-    hide(stepB, mode !== 0);
-    hide(kernB, mode !== 1);
-    resetB.disabled = false;
-    if (mode === 0) stepB.disabled = t >= 5;
-  }
-  K.$("#s3-seg").appendChild(seg(["logical flow", "address space"], 0, (i) => {
-    mode = i; paint(); modeButtons();
-  }, "s3-mode"));
-  modeButtons();
-  paint();
-})();
-
-/* ================= 4. FORK ================= */
-(function forksim() {
-  const svg = K.$("#s4-svg");
-  const oneG = s("g", {});
-  const nestG = s("g", { visibility: "hidden" });
-  svg.append(oneG, nestG);
-  const par = box(oneG, 24, 28, 300, 80, "sv-server", "parent  x=1", "return —");
-  const chi = box(oneG, 356, 28, 300, 80, "sv-panel", "child    x=1", "not yet");
-  const mainB = box(oneG, 24, 132, 140, 64, "sv-panel", "main", "x = 1");
-  const forkB = box(oneG, 200, 132, 140, 64, "sv-panel", "fork", "once");
-  const pOut = box(oneG, 380, 120, 276, 48, "sv-panel", "parent: x=?", "printf");
-  const cOut = box(oneG, 380, 180, 276, 48, "sv-panel", "child : x=?", "printf");
-  const nestBoxes = [
-    box(nestG, 24, 28, 148, 64, "sv-server", "P0", "main"),
-    box(nestG, 188, 28, 148, 64, "sv-panel", "P1", "fork 1"),
-    box(nestG, 352, 28, 148, 64, "sv-panel", "P2", "fork 2"),
-    box(nestG, 516, 28, 148, 64, "sv-panel", "P3", "fork 2"),
-  ];
-  const hellos = [0, 1, 2, 3].map((i) => box(nestG, 24 + i * 164, 120, 148, 64, "sv-panel", "hello?", "printf"));
-  const nestNote = s("text", { x: 340, y: 220, class: "sv-label", "text-anchor": "middle" }, "Figure 8.17 · two Fork calls · four processes");
-  nestG.appendChild(nestNote);
-
-  let mode = 0, step = 0, nstep = 0, busy = false;
-  const CODE = [
-    `<b>pid = Fork();</b>   <i>x is 1 in both</i>\nif (pid == 0) printf("child : x=%d\\n", ++x);\nprintf("parent: x=%d\\n", --x);`,
-    `<b>after fork</b>   parent ret=15213   child ret=0\nboth still have x=1   <i>copies, not aliases</i>`,
-    `child: ++x → 2\nparent: --x → 0   <i>private address spaces</i>`,
-    `linux&gt; ./fork\nparent: x=0\nchild : x=2`,
-  ];
-  function paintOne() {
-    par.t.textContent = step === 0 ? "parent  x=1" : step === 1 ? "parent  x=1" : "parent  x=0";
-    par.u.textContent = step === 0 ? "before fork" : "return 15213";
-    chi.t.textContent = step === 0 ? "no child" : step === 1 ? "child    x=1" : "child    x=2";
-    chi.u.textContent = step === 0 ? "not yet" : "return 0";
-    setCls(par.r, "sv-server");
-    setCls(chi.r, step === 0 ? "sv-panel" : "sv-good");
-    setCls(mainB.r, step === 0 ? "sv-good" : "sv-panel");
-    setCls(forkB.r, step === 1 ? "sv-data-soft" : "sv-panel");
-    pOut.t.textContent = step >= 3 ? "parent: x=0" : "parent: x=?";
-    cOut.t.textContent = step >= 3 ? "child : x=2" : "child : x=?";
-    setCls(pOut.r, step >= 3 ? "sv-good" : "sv-panel");
-    setCls(cOut.r, step >= 3 ? "sv-good" : "sv-panel");
-    K.$("#s4-code").innerHTML = CODE[Math.min(step, 3)];
-  }
-  function paintNest() {
-    nestBoxes.forEach((b, i) => {
-      const born = nstep === 0 ? i === 0 : nstep === 1 ? i <= 1 : true;
-      b.t.textContent = ["P0", "P1", "P2", "P3"][i];
-      setCls(b.r, !born ? "sv-panel" : i === 0 ? "sv-server" : "sv-good");
-    });
-    hellos.forEach((b, i) => {
-      const show = nstep >= 3;
-      b.t.textContent = show ? "hello" : "hello?";
-      setCls(b.r, show ? "sv-data-soft" : "sv-panel");
-    });
-    K.$("#s4-code").innerHTML = nstep === 0
-      ? `<b>Fork(); Fork(); printf("hello\\n");</b>`
-      : nstep === 1 ? `first Fork · now two processes`
-      : nstep === 2 ? `second Fork · four processes`
-      : `four hellos, any topological order`;
-  }
-  function paint() {
-    oneG.setAttribute("visibility", mode === 0 ? "visible" : "hidden");
-    nestG.setAttribute("visibility", mode === 1 ? "visible" : "hidden");
-    if (mode === 0) {
-      paintOne();
-      cap("#s4-cap", step === 0
-        ? "Yusuf’s desk has x=1. Press Step to hit fork — called once, returns twice."
-        : step === 1
-          ? "Because fork copied the address space, both still have x=1. The child sees <b>0</b>; the parent sees PID <b>15213</b>."
-          : step === 2
-            ? "Each cup changes privately. Child ++x → 2. Parent --x → 0. They share the already-open stdout."
-            : "On the authors’ machine the parent printed first. Another run may reverse it. Never assume the order.");
-    } else {
-      paintNest();
-      cap("#s4-cap", nstep < 3
-        ? "Two Fork calls in the source. Each living process walks the remaining calls. Step to split."
-        : "Four processes, four hellos. Any order that respects the graph edges is legal.");
-    }
-  }
-  const ctr = K.$("#s4-controls");
-  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
-  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
-  stepB.addEventListener("click", async () => {
-    if (busy) return;
-    if (mode === 0 && step >= 3) return;
-    if (mode === 1 && nstep >= 3) return;
-    busy = true; stepB.disabled = true;
-    if (mode === 0) {
-      const p = draw.tag(step === 0 ? "fork" : step === 1 ? "copy" : "print");
-      svg.appendChild(p);
-      await fly(p, [forkB.cx, forkB.cy], step < 2 ? [chi.cx, chi.cy] : [cOut.cx, cOut.cy], 460);
-      p.remove();
-      step++;
-    } else {
-      nstep++;
-    }
-    paint();
-    busy = false;
-    stepB.disabled = (mode === 0 && step >= 3) || (mode === 1 && nstep >= 3);
-  });
-  resetB.addEventListener("click", () => {
-    step = 0; nstep = 0; busy = false; stepB.disabled = false; paint();
-  });
-  ctr.append(stepB, resetB);
-  K.$("#s4-seg").appendChild(seg(["fork.c", "nested"], 0, (i) => {
-    mode = i; paint();
-    stepB.disabled = (mode === 0 && step >= 3) || (mode === 1 && nstep >= 3);
-  }, "s4-mode"));
-  paint();
-})();
-
-/* ================= 5. WAIT ================= */
-(function waitsim() {
-  const svg = K.$("#s5-svg");
-  const kids = [
-    box(svg, 24, 28, 200, 80, "sv-server", "22966", "running"),
-    box(svg, 240, 28, 200, 80, "sv-server", "22967", "running"),
-  ];
-  const par = box(svg, 456, 28, 200, 80, "sv-db", "parent", "waitpid");
-  const line1 = box(svg, 24, 128, 632, 56, "sv-panel", "no output yet", "stdout");
-  const line2 = box(svg, 24, 196, 632, 56, "sv-panel", "", "stdout");
-  const KIDS0 = [
-    { pid: 22966, st: 100, state: "run" },
-    { pid: 22967, st: 101, state: "run" },
-  ];
-  let mode = 0, phase = 0, busy = false, order;
-  function resetOrder() { order = mode === 1 ? [0, 1] : [1, 0]; }
-  resetOrder();
-  function paint() {
-    KIDS0.forEach((k, i) => {
-      const live = k.state;
-      kids[i].t.textContent = String(k.pid);
-      kids[i].u.textContent = live === "run" ? "running" : live === "z" ? "zombie" : "reaped";
-      setCls(kids[i].r, live === "run" ? "sv-server" : live === "z" ? "sv-bad" : "sv-good");
-    });
-    const logs = KIDS0.filter((k) => k.state === "gone").map((k) =>
-      `child ${k.pid} terminated normally with exit status=${k.st}`);
-    line1.t.textContent = logs[0] || (phase === 0 ? "children still running" : "zombies waiting");
-    line2.t.textContent = logs[1] || (phase >= 4 ? "waitpid → -1  ECHILD" : "—");
-    setCls(line1.r, logs[0] ? "sv-good" : "sv-panel");
-    setCls(line2.r, logs[1] ? "sv-good" : phase >= 4 ? "sv-data-soft" : "sv-panel");
-    par.t.textContent = phase >= 4 ? "ECHILD" : "parent";
-    setCls(par.r, phase >= 4 ? "sv-good" : "sv-db");
-  }
-  function caption() {
-    if (phase === 0) cap("#s5-cap", "Two children, exit(100) and exit(101). Press Step: they finish and become zombies.");
-    else if (phase === 1) cap("#s5-cap", "Both are <b>zombies</b>. They still occupy a kernel slot. Press Step to waitpid.");
-    else if (phase === 2) cap("#s5-cap", `waitpid(${mode === 1 ? "22966" : "-1"}) reaped <b>${KIDS0[order[0]].pid}</b> with status ${KIDS0[order[0]].st}. One zombie remains.`);
-    else if (phase === 3) cap("#s5-cap", `Then <b>${KIDS0[order[1]].pid}</b> with status ${KIDS0[order[1]].st}. ${mode === 0 ? "Any order is equally correct." : "We asked for creation order."}`);
-    else cap("#s5-cap", "The next waitpid returns <b>−1</b> and errno is ECHILD. No children left. Init (PID 1) would have reaped them if the parent had exited first.");
-  }
-  function paintAll() { paint(); caption(); }
-  const ctr = K.$("#s5-controls");
-  const stepB = h("button", { class: "btn primary", type: "button" }, "Step");
-  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
-  stepB.addEventListener("click", async () => {
-    if (busy || phase >= 4) return;
-    busy = true; stepB.disabled = true;
-    if (phase === 0) {
-      KIDS0.forEach((k) => { k.state = "z"; });
-      const p = draw.tag("exit");
-      svg.appendChild(p);
-      await fly(p, [kids[0].cx, kids[0].cy], [par.cx, par.cy], 400);
-      p.remove();
-      phase = 1;
-    } else if (phase === 1 || phase === 2) {
-      const idx = order[phase - 1];
-      KIDS0[idx].state = "gone";
-      const p = draw.tag(String(KIDS0[idx].pid));
-      svg.appendChild(p);
-      await fly(p, [kids[idx].cx, kids[idx].cy], [par.cx, par.cy], 400);
-      p.remove();
-      phase++;
-    } else {
-      phase = 4;
-    }
-    paintAll();
-    busy = false; stepB.disabled = phase >= 4;
-  });
-  resetB.addEventListener("click", () => {
-    KIDS0[0].state = "run"; KIDS0[1].state = "run";
-    phase = 0; busy = false; resetOrder(); stepB.disabled = false; paintAll();
-  });
-  ctr.append(stepB, resetB);
-  K.$("#s5-seg").appendChild(seg(["any order", "in order"], 0, (i) => {
-    mode = i;
-    KIDS0[0].state = "run"; KIDS0[1].state = "run";
-    phase = 0; resetOrder(); stepB.disabled = false; paintAll();
-  }, "s5-mode"));
-  paintAll();
-})();
-
-/* ================= 6. EXEC ================= */
-(function execsim() {
-  const svg = K.$("#s6-svg");
-  const ovG = s("g", {});
-  const shG = s("g", { visibility: "hidden" });
-  svg.append(ovG, shG);
-  const proc = box(ovG, 24, 28, 220, 80, "sv-server", "PID 15213", "./shellex");
-  const neu = box(ovG, 436, 28, 220, 80, "sv-panel", "same PID", "not yet");
-  const mid = box(ovG, 260, 28, 160, 80, "sv-data-soft", "execve", "overlay");
-  const av = [
-    box(ovG, 24, 128, 200, 64, "sv-db", "ls", "argv[0]"),
-    box(ovG, 240, 128, 200, 64, "sv-db", "-lt", "argv[1]"),
-    box(ovG, 456, 128, 200, 64, "sv-db", "/user/include", "argv[2]"),
-  ];
-  const env = box(ovG, 24, 212, 632, 56, "sv-panel", "PWD=/usr/droh   PRINTER=iron   USER=droh", "envp");
-  const sh = box(shG, 24, 28, 200, 80, "sv-server", "shell", "PID 10");
-  const child = box(shG, 240, 28, 200, 80, "sv-panel", "child", "fork first");
-  const job = box(shG, 456, 28, 200, 80, "sv-panel", "ls", "execve");
-  const shLine = box(shG, 24, 132, 632, 64, "sv-panel", "> ls /user/include", "foreground");
-  const shNote = s("text", { x: 340, y: 230, class: "sv-label", "text-anchor": "middle" }, "waitpid if no & · background kids are a leak");
-  shG.appendChild(shNote);
-
-  let mode = 0, done = false, shs = 0, busy = false;
-  function paint() {
-    ovG.setAttribute("visibility", mode === 0 ? "visible" : "hidden");
-    shG.setAttribute("visibility", mode === 1 ? "visible" : "hidden");
-    if (mode === 0) {
-      proc.t.textContent = "PID 15213";
-      proc.u.textContent = done ? "gone image" : "./shellex";
-      neu.t.textContent = "PID 15213";
-      neu.u.textContent = done ? "ls  running" : "same process";
-      setCls(neu.r, done ? "sv-good" : "sv-panel");
-      setCls(proc.r, done ? "sv-box" : "sv-server");
-      cap("#s6-cap", done
-        ? "Because execve succeeded, it <b>never returned</b>. Same PID, new program, inherited files. argv was ls, -lt, /user/include."
-        : "Press Run execve. The locker number stays 15213. The books inside are replaced.");
-    } else {
-      child.t.textContent = shs === 0 ? "no child" : "PID 21";
-      child.u.textContent = shs === 0 ? "press Run" : shs === 1 ? "same program" : "waiting";
-      job.t.textContent = shs >= 2 ? "ls" : "empty";
-      job.u.textContent = shs >= 2 ? "execve overlay" : "not loaded";
-      setCls(child.r, shs >= 1 ? "sv-server" : "sv-panel");
-      setCls(job.r, shs >= 2 ? "sv-good" : "sv-panel");
-      shLine.t.textContent = shs >= 3 ? "job done · prompt >" : "> ls /user/include";
-      cap("#s6-cap", shs === 0
-        ? "A shell: read a line, skip builtins like quit, then fork + execve. Foreground means waitpid."
-        : shs === 1
-          ? "fork made a child with the same program. Next the child calls execve."
-          : shs === 2
-            ? "The child is now ls. The shell, still PID 10, waitpid’s because this job is in the foreground."
-            : "The job terminated. A trailing & would have skipped waitpid — and this tiny shell would leak a zombie.");
-    }
-  }
-  const ctr = K.$("#s6-controls");
-  const runB = h("button", { class: "btn primary", type: "button" }, "Run execve");
-  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
-  runB.addEventListener("click", async () => {
-    if (busy) return;
-    if (mode === 0 && done) return;
-    if (mode === 1 && shs >= 3) return;
-    busy = true; runB.disabled = true;
-    const p = draw.tag(mode === 0 ? "ls" : shs === 0 ? "fork" : shs === 1 ? "execve" : "wait");
-    svg.appendChild(p);
-    if (mode === 0) {
-      await fly(p, [av[0].cx, av[0].cy], [neu.cx, neu.cy], 500);
-      p.remove();
-      done = true;
-    } else {
-      const from = shs === 0 ? [sh.cx, sh.cy] : shs === 1 ? [child.cx, child.cy] : [job.cx, job.cy];
-      const to = shs === 0 ? [child.cx, child.cy] : shs === 1 ? [job.cx, job.cy] : [sh.cx, sh.cy];
-      await fly(p, from, to, 420);
-      p.remove();
-      shs++;
-    }
-    paint();
-    busy = false;
-    runB.disabled = (mode === 0 && done) || (mode === 1 && shs >= 3);
-  });
-  resetB.addEventListener("click", () => {
-    done = false; shs = 0; busy = false; runB.disabled = false; paint();
-  });
-  ctr.append(runB, resetB);
-  K.$("#s6-seg").appendChild(seg(["execve", "shell"], 0, (i) => {
-    mode = i;
-    runB.textContent = mode === 0 ? "Run execve" : "Step shell";
-    runB.disabled = (mode === 0 && done) || (mode === 1 && shs >= 3);
-    paint();
-  }, "s6-mode"));
-  paint();
-})();
-
-/* ================= 7. SIGNALS ================= */
-(function signals() {
-  const svg = K.$("#s7-svg");
-  const bitG = s("g", {});
-  const grpG = s("g", { visibility: "hidden" });
-  svg.append(bitG, grpG);
-  const SIGS = [
-    { n: 2, name: "SIGINT", def: "term" },
-    { n: 9, name: "SIGKILL", def: "term" },
-    { n: 17, name: "SIGCHLD", def: "ign" },
-  ];
-  const proc = box(bitG, 24, 28, 180, 80, "sv-server", "alive", "user mode");
-  const pend = SIGS.map((sg, i) => box(bitG, 220 + i * 150, 28, 136, 80, "sv-panel", "0", `pend ${sg.name}`));
-  const blk = SIGS.map((sg, i) => box(bitG, 220 + i * 150, 128, 136, 80, "sv-panel", "0", `block ${sg.name}`));
-  const act = box(bitG, 24, 128, 180, 80, "sv-panel", "idle", "action");
-  const bitNote = s("text", { x: 340, y: 244, class: "sv-label", "text-anchor": "middle" }, "pending & ~blocked · typically smallest k");
-  bitG.appendChild(bitNote);
-
-  const shell = box(grpG, 24, 28, 148, 64, "sv-db", "10 / 10", "shell");
-  const fg = [
-    box(grpG, 188, 28, 148, 64, "sv-server", "20 / 20", "fg parent"),
-    box(grpG, 352, 28, 148, 64, "sv-server", "21 / 20", "fg child"),
-    box(grpG, 516, 28, 148, 64, "sv-server", "22 / 20", "fg child"),
-  ];
-  const bg = [
-    box(grpG, 188, 120, 148, 64, "sv-panel", "32 / 32", "bg job 1"),
-    box(grpG, 352, 120, 148, 64, "sv-panel", "40 / 40", "bg job 2"),
-  ];
-  const grpNote = s("text", { x: 340, y: 220, class: "sv-label", "text-anchor": "middle" }, "Figure 8.28 · Ctrl+C hits group 20");
-  grpG.appendChild(grpNote);
-
-  let mode = 0, pending = [0, 0, 0], blocked = [0, 0, 0], alive = true, discarded = 0, last = "idle", busy = false, hit = "";
-  function paintBits() {
-    proc.t.textContent = alive ? "alive" : "dead";
-    setCls(proc.r, alive ? "sv-server" : "sv-bad");
-    pending.forEach((v, i) => {
-      pend[i].t.textContent = String(v);
-      setCls(pend[i].r, v ? "sv-data-soft" : "sv-panel");
-    });
-    blocked.forEach((v, i) => {
-      blk[i].t.textContent = String(v);
-      setCls(blk[i].r, v ? "sv-bad" : "sv-panel");
-    });
-    act.t.textContent = last === "ready" ? "pending" : last === "blocked" ? "latched" : last;
-    setCls(act.r, last === "term" ? "sv-bad" : last === "ready" || last === "ignore" ? "sv-data-soft" : last === "blocked" ? "sv-bad" : "sv-panel");
-  }
-  function paintGrp() {
-    fg.forEach((b) => setCls(b.r, hit === "int" || hit === "tstp" ? (hit === "int" ? "sv-bad" : "sv-data-soft") : "sv-server"));
-    bg.forEach((b) => setCls(b.r, "sv-panel"));
-    setCls(shell.r, "sv-db");
-    grpNote.textContent = hit === "int" ? "SIGINT to every PID in group 20" : hit === "tstp" ? "SIGTSTP to group 20 · stop" : "Figure 8.28 · Ctrl+C hits group 20";
-  }
-  function paint() {
-    bitG.setAttribute("visibility", mode === 0 ? "visible" : "hidden");
-    grpG.setAttribute("visibility", mode === 1 ? "visible" : "hidden");
-    if (mode === 0) {
-      paintBits();
-      cap("#s7-cap", !alive
-        ? `Default action was terminate. Discarded extras this run: <b>${discarded}</b>.`
-        : last === "discard"
-          ? "That type was already pending, so the new signal was <b>discarded</b>. A bit is not a counter."
-          : last === "blocked"
-            ? "Delivered and <b>blocked</b>, so it stays pending. Receipt waits until the latch opens and we return to user mode."
-            : last === "ready"
-              ? "The bit is up and not blocked. Press <b>Receive</b> — that is the kernel returning to user mode and noticing pending &amp; ~blocked."
-              : last === "ignore"
-                ? "SIGCHLD’s default is to ignore. The pending bit cleared and the process kept walking."
-                : "Send a signal. If it is not blocked, Receive applies the default: SIGINT/SIGKILL terminate, SIGCHLD is ignored.");
-    } else {
-      paintGrp();
-      cap("#s7-cap", hit === "int"
-        ? "Because they share process group <b>20</b>, Ctrl+C delivers SIGINT to 20, 21, and 22 — not the shell, not the background jobs."
-        : hit === "tstp"
-          ? "Ctrl+Z sends SIGTSTP to the same foreground group. Default: stop until SIGCONT."
-          : "Figure 8.28: shell 10/10, foreground 20 with children 21 and 22, background 32 and 40.");
-    }
-  }
-  function send(i) {
-    if (!alive) { last = "dead"; return; }
-    if (pending[i]) { discarded++; last = "discard"; return; }
-    pending[i] = 1;
-    last = blocked[i] ? "blocked" : "ready";
-  }
-  function receive() {
-    if (!alive) return;
-    for (let i = 0; i < 3; i++) {
-      if (pending[i] && !blocked[i]) {
-        pending[i] = 0;
-        if (SIGS[i].def === "term") { alive = false; last = "term"; }
-        else last = "ignore";
-        return;
-      }
-    }
-    last = "idle";
-  }
-  const ctr = K.$("#s7-controls");
-  const sendI = h("button", { class: "btn primary", type: "button" }, "Send SIGINT");
-  const sendC = h("button", { class: "btn", type: "button" }, "Send SIGCHLD");
-  const sendK = h("button", { class: "btn danger", type: "button" }, "Send SIGKILL");
-  const blkB = h("button", { class: "btn", type: "button" }, "Block SIGINT");
-  const ublB = h("button", { class: "btn", type: "button" }, "Unblock");
-  const recB = h("button", { class: "btn good", type: "button" }, "Receive");
-  const cC = h("button", { class: "btn primary", type: "button" }, "Ctrl+C");
-  const cZ = h("button", { class: "btn", type: "button" }, "Ctrl+Z");
-  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
-  sendI.addEventListener("click", () => { send(0); paint(); });
-  sendC.addEventListener("click", () => { send(2); paint(); });
-  sendK.addEventListener("click", () => { send(1); paint(); });
-  blkB.addEventListener("click", () => { blocked[0] = 1; last = "idle"; paint(); });
-  ublB.addEventListener("click", () => { blocked[0] = 0; last = "idle"; paint(); });
-  recB.addEventListener("click", () => { receive(); paint(); });
-  cC.addEventListener("click", () => { hit = "int"; paint(); });
-  cZ.addEventListener("click", () => { hit = "tstp"; paint(); });
-  resetB.addEventListener("click", () => {
-    pending = [0, 0, 0]; blocked = [0, 0, 0]; alive = true; discarded = 0; last = "idle"; hit = "";
-    paint();
-  });
-  ctr.append(sendI, sendC, sendK, blkB, ublB, recB, cC, cZ, resetB);
-  function modeButtons() {
-    [sendI, sendC, sendK, blkB, ublB, recB].forEach((b) => hide(b, mode !== 0));
-    [cC, cZ].forEach((b) => hide(b, mode !== 1));
-  }
-  K.$("#s7-seg").appendChild(seg(["bits", "groups"], 0, (i) => {
-    mode = i; paint(); modeButtons();
-  }, "s7-mode"));
-  modeButtons();
-  paint();
-})();
-
-/* ================= 8. HANDLER ================= */
-(function handler() {
-  const svg = K.$("#s8-svg");
-  const intG = s("g", {});
-  const chG = s("g", { visibility: "hidden" });
-  svg.append(intG, chG);
-  const mainB = box(intG, 24, 28, 300, 88, "sv-server", "main  pause()", "waiting");
-  const hB = box(intG, 356, 28, 300, 88, "sv-panel", "no handler", "default = term");
-  const phone = box(intG, 24, 140, 300, 80, "sv-bad", "printf", "not safe");
-  const sio = box(intG, 356, 140, 300, 80, "sv-good", "Sio_puts", "write + _exit");
-  const intNote = s("text", { x: 340, y: 250, class: "sv-label", "text-anchor": "middle" }, "Figure 8.30 vs 8.35");
-  intG.appendChild(intNote);
-
-  const kids = [14073, 14074, 14075].map((pid, i) => box(chG, 24 + i * 220, 28, 200, 72, "sv-server", String(pid), "running"));
-  const pendB = box(chG, 24, 120, 200, 72, "sv-panel", "pend 0", "SIGCHLD bit");
-  const reapB = box(chG, 244, 120, 200, 72, "sv-panel", "reaped 0", "waitpid");
-  const zomB = box(chG, 464, 120, 200, 72, "sv-panel", "zombie —", "left behind");
-  const chNote = s("text", { x: 340, y: 230, class: "sv-label", "text-anchor": "middle" }, "signal1 vs signal2");
-  chG.appendChild(chNote);
-
-  let mode = 0, safe = false, installed = false, caught = false, dead = false;
-  let reaped = [], zombies = [], pending = 0, discarded = 0, kind = 1, busy = false;
-  function paintInt() {
-    mainB.t.textContent = dead ? "terminated" : "main  pause()";
-    mainB.u.textContent = dead ? (caught ? "handler ran" : "default SIGINT") : "waiting";
-    setCls(mainB.r, dead ? "sv-bad" : "sv-server");
-    hB.t.textContent = !installed ? "no handler" : safe ? "sigint_handler" : "unsafe handler";
-    hB.u.textContent = caught ? (safe ? "Sio + _exit" : "printf + exit") : installed ? "installed" : "default = term";
-    setCls(hB.r, caught ? (safe ? "sv-good" : "sv-bad") : installed ? "sv-data-soft" : "sv-panel");
-    setCls(phone.r, !safe && caught ? "sv-bad" : "sv-panel");
-    setCls(sio.r, safe && caught ? "sv-good" : "sv-panel");
-  }
-  function paintCh() {
-    const live = [14073, 14074, 14075];
-    kids.forEach((b, i) => {
-      const pid = live[i];
-      const gone = reaped.includes(pid);
-      const z = zombies.includes(pid);
-      b.t.textContent = String(pid);
-      b.u.textContent = gone ? "reaped" : z ? "zombie" : "running";
-      setCls(b.r, gone ? "sv-good" : z ? "sv-bad" : "sv-server");
-    });
-    pendB.t.textContent = `pend ${pending}`;
-    setCls(pendB.r, pending ? "sv-data-soft" : "sv-panel");
-    reapB.t.textContent = `reaped ${reaped.length}`;
-    zomB.t.textContent = zombies.length ? `zombie ${zombies[0]}` : "zombie —";
-    setCls(zomB.r, zombies.length ? "sv-bad" : "sv-panel");
-    chNote.textContent = kind === 1 ? "signal1 · reap one per catch" : "signal2 · while waitpid > 0";
-  }
-  function paint() {
-    intG.setAttribute("visibility", mode === 0 ? "visible" : "hidden");
-    chG.setAttribute("visibility", mode === 1 ? "visible" : "hidden");
-    if (mode === 0) {
-      paintInt();
-      cap("#s8-cap", dead && !installed
-        ? "No handler: default SIGINT terminates the process."
-        : caught && !safe
-          ? "The handler used <b>printf</b> and <b>exit</b>. Neither is async-signal-safe. It often works — until it fails in a way you cannot replay."
-          : caught && safe
-            ? "Sio_puts writes; _exit terminates. That matches Figure 8.35. Control does not return to pause."
-            : installed
-              ? `Handler is installed (${safe ? "safe Sio" : "unsafe printf"}). Press Send SIGINT.`
-              : "Press Install, optionally Safe Sio, then Send SIGINT.");
-    } else {
-      paintCh();
-      cap("#s8-cap", kind === 1 && reaped.length
-        ? `Three SIGCHLDs were sent. The handler was busy, so the second went pending and the third was <b>discarded</b>. Reaped ${reaped.join(", ")}. ${zombies.length ? zombies[0] + " is still a zombie." : ""}`
-        : kind === 2 && reaped.length
-          ? "Each catch loops waitpid until ECHILD. All three — 14073, 14074, 14075 — are gone. A pending bit meant <b>at least one</b>."
-          : "Play signal1 (buggy: leftover zombie) or signal2 (loop). Children 14073–14075.");
-    }
-  }
-  async function playSignal(loopReap) {
-    if (busy) return;
-    busy = true;
-    kind = loopReap ? 2 : 1;
-    reaped = []; zombies = []; pending = 0; discarded = 0;
-    paint();
-    const pids = [14073, 14074, 14075];
-    let inH = false;
-    function deliver(pid) {
-      zombies.push(pid);
-      if (inH) {
-        if (pending) discarded++;
-        else pending = 1;
-      } else {
-        runH();
-      }
-    }
-    function runH() {
-      inH = true;
-      if (loopReap) {
-        while (zombies.length) reaped.push(zombies.shift());
-      } else if (zombies.length) {
-        reaped.push(zombies.shift());
-      }
-      inH = false;
-      if (pending) { pending = 0; runH(); }
-    }
-    deliver(pids[0]);
-    paint();
-    await sleep(360);
-    inH = true;
-    deliver(pids[1]);
-    paint();
-    await sleep(280);
-    deliver(pids[2]);
-    paint();
-    await sleep(360);
-    inH = false;
-    if (pending) { pending = 0; runH(); }
-    paint();
-    busy = false;
-  }
-  const ctr = K.$("#s8-controls");
-  const instB = h("button", { class: "btn", type: "button" }, "Install");
-  const safeB = h("button", { class: "btn", type: "button" }, "Safe Sio");
-  const defB = h("button", { class: "btn danger", type: "button" }, "Default kill");
-  const sendB = h("button", { class: "btn primary", type: "button" }, "Send SIGINT");
-  const p1 = h("button", { class: "btn primary", type: "button" }, "Play signal1");
-  const p2 = h("button", { class: "btn", type: "button" }, "Play signal2");
-  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
-  instB.addEventListener("click", () => { installed = true; paint(); });
-  safeB.addEventListener("click", () => { safe = !safe; paint(); });
-  defB.addEventListener("click", () => { installed = false; caught = false; dead = true; paint(); });
-  sendB.addEventListener("click", async () => {
-    if (busy || dead) return;
-    if (!installed) installed = true;
-    busy = true;
-    const p = draw.tag("INT");
-    svg.appendChild(p);
-    await fly(p, [mainB.cx, mainB.cy], [hB.cx, hB.cy], 420);
-    p.remove();
-    caught = true;
-    dead = true;
-    paint();
-    busy = false;
-  });
-  p1.addEventListener("click", () => playSignal(false));
-  p2.addEventListener("click", () => playSignal(true));
-  resetB.addEventListener("click", () => {
-    safe = false; installed = false; caught = false; dead = false;
-    reaped = []; zombies = []; pending = 0; discarded = 0; kind = 1; busy = false;
-    paint();
-  });
-  ctr.append(instB, safeB, defB, sendB, p1, p2, resetB);
-  function modeButtons() {
-    [instB, safeB, defB, sendB].forEach((b) => hide(b, mode !== 0));
-    [p1, p2].forEach((b) => hide(b, mode !== 1));
-  }
-  K.$("#s8-seg").appendChild(seg(["SIGINT", "SIGCHLD"], 0, (i) => {
-    mode = i; paint(); modeButtons();
-  }, "s8-mode"));
-  modeButtons();
-  paint();
-})();
-
-/* ================= 9. JUMP ================= */
-(function jump() {
-  const svg = K.$("#s9-svg");
-  const jmpG = s("g", {});
-  const rstG = s("g", { visibility: "hidden" });
-  svg.append(jmpG, rstG);
-  const env = box(jmpG, 24, 28, 180, 72, "sv-db", "env", "not saved");
-  const retv = box(jmpG, 24, 116, 180, 72, "sv-panel", "ret  —", "setjmp");
-  const mainB = box(jmpG, 230, 28, 200, 64, "sv-server", "main", "switch");
-  const fooB = box(jmpG, 230, 108, 200, 64, "sv-panel", "foo", "error1?");
-  const barB = box(jmpG, 230, 188, 200, 64, "sv-panel", "bar", "error2?");
-  const msg = box(jmpG, 456, 28, 200, 224, "sv-panel", "no jump yet", "stdout");
-  const out = [
-    box(rstG, 24, 28, 632, 48, "sv-panel", "—", "line 1"),
-    box(rstG, 24, 88, 632, 48, "sv-panel", "—", "line 2"),
-    box(rstG, 24, 148, 632, 48, "sv-panel", "—", "line 3"),
-    box(rstG, 24, 208, 632, 48, "sv-panel", "—", "line 4"),
-  ];
-
-  let mode = 0, phase = 0, which = 0, lines = [], busy = false;
-  function paintJ() {
-    env.t.textContent = phase >= 1 ? "env saved" : "env";
-    env.u.textContent = phase >= 1 ? "PC + regs" : "not saved";
-    setCls(env.r, phase >= 1 ? "sv-good" : "sv-db");
-    retv.t.textContent = phase < 2 ? "ret  0" : `ret  ${which}`;
-    setCls(retv.r, phase >= 2 ? "sv-data-soft" : "sv-panel");
-    setCls(mainB.r, phase === 0 || phase === 3 ? "sv-good" : "sv-server");
-    setCls(fooB.r, phase === 1 && which !== 1 ? "sv-data-soft" : phase >= 1 && which === 1 ? "sv-bad" : "sv-panel");
-    setCls(barB.r, phase === 2 && which === 2 ? "sv-bad" : phase >= 2 && which === 0 ? "sv-data-soft" : "sv-panel");
-    msg.t.textContent = phase < 3 ? "no jump yet" : which === 0 ? "returned normally" : which === 1 ? "error1 in foo" : "error2 in foo";
-    setCls(msg.r, phase >= 3 ? (which ? "sv-data-soft" : "sv-good") : "sv-panel");
-  }
-  function paintR() {
-    ["starting", "processing...", "processing...", "restarting"].forEach((lab, i) => {
-      const show = i < lines.length;
-      out[i].t.textContent = show ? lines[i] : "—";
-      setCls(out[i].r, show && lab === "restarting" ? "sv-data-soft" : show ? "sv-good" : "sv-panel");
-    });
-  }
-  function paint() {
-    jmpG.setAttribute("visibility", mode === 0 ? "visible" : "hidden");
-    rstG.setAttribute("visibility", mode === 1 ? "visible" : "hidden");
-    if (mode === 0) {
-      paintJ();
-      cap("#s9-cap", phase === 0
-        ? "Press setjmp to save the calling environment. Then pick a path."
-        : phase < 3
-          ? "Walking foo → bar. A longjmp will skip the stairs back."
-          : which === 0
-            ? "No error. foo called bar, bar returned, main fell out of case 0."
-            : `longjmp(buf, ${which}) made setjmp return <b>${which}</b>. The book prints “Detected an error${which} condition in foo.” Intermediate tidy-up is skipped.`);
-    } else {
-      paintR();
-      cap("#s9-cap", lines.includes("restarting")
-        ? "The SIGINT handler called <b>siglongjmp</b>, not return. Control snapped to the bookmark. Install the handler only after sigsetjmp."
-        : "Figure 8.44. Press Start, then Ctrl+C. The loop says processing… until the bookmark fires.");
-    }
-  }
-  const ctr = K.$("#s9-controls");
-  const setB = h("button", { class: "btn", type: "button" }, "setjmp");
-  const e1 = h("button", { class: "btn", type: "button" }, "error1");
-  const e2 = h("button", { class: "btn primary", type: "button" }, "error2");
-  const okB = h("button", { class: "btn", type: "button" }, "No error");
-  const stB = h("button", { class: "btn", type: "button" }, "Start");
-  const ccB = h("button", { class: "btn primary", type: "button" }, "Ctrl+C");
-  const resetB = h("button", { class: "btn", type: "button" }, "Reset");
-  setB.addEventListener("click", () => { phase = 1; which = 0; paint(); });
-  async function go(w) {
-    if (busy) return;
-    if (phase < 1) phase = 1;
-    busy = true;
-    which = w;
-    phase = w === 1 ? 1 : 2;
-    paint();
-    const p = draw.tag("jmp");
-    svg.appendChild(p);
-    const from = w === 1 ? [fooB.cx, fooB.cy] : w === 2 ? [barB.cx, barB.cy] : [barB.cx, barB.cy];
-    await fly(p, from, [mainB.cx, mainB.cy], 480);
-    p.remove();
-    phase = 3;
-    paint();
-    busy = false;
-  }
-  e1.addEventListener("click", () => go(1));
-  e2.addEventListener("click", () => go(2));
-  okB.addEventListener("click", () => go(0));
-  stB.addEventListener("click", () => {
-    if (mode !== 1) return;
-    lines = ["starting", "processing...", "processing..."];
-    paint();
-  });
-  ccB.addEventListener("click", async () => {
-    if (mode !== 1 || busy) return;
-    if (!lines.length) lines = ["starting", "processing...", "processing..."];
-    busy = true;
-    const p = draw.tag("INT");
-    svg.appendChild(p);
-    await fly(p, [340, 260], [340, 52], 400);
-    p.remove();
-    lines = ["starting", "processing...", "processing...", "restarting"];
-    paint();
-    busy = false;
-  });
-  resetB.addEventListener("click", () => { phase = 0; which = 0; lines = []; busy = false; paint(); });
-  ctr.append(setB, e1, e2, okB, stB, ccB, resetB);
-  function modeButtons() {
-    [setB, e1, e2, okB].forEach((b) => hide(b, mode !== 0));
-    [stB, ccB].forEach((b) => hide(b, mode !== 1));
-  }
-  K.$("#s9-seg").appendChild(seg(["setjmp", "restart"], 0, (i) => {
-    mode = i; paint(); modeButtons();
-  }, "s9-mode"));
-  modeButtons();
-  paint();
-})();
-
-/* ================= QUIZ ================= */
-K.quiz(K.$("#quiz-root"), [
-  { q: "After a hardware interrupt, where does the handler return?", options: ["Always to the next instruction (Inext)", "Always to the faulting instruction (Icurr)", "Never — interrupts abort", "To whichever address gcc stored in %rbx"], answer: 0, why: "Figure 8.4: an interrupt is async and always returns to the next instruction. The program continues as if the doorbell never rang." },
-  { q: "fork() is called once. What does it return?", options: ["Always the child’s PID", "Always 0", "0 in the child, and the child’s PID in the parent", "−1 in both, unless you use Fork"], answer: 2, why: "Called once, returns twice. The child sees 0; the parent sees the new nonzero PID. −1 is only the error case." },
-  { q: "A child that has terminated but has not been waitpid’d is a:", options: ["Stopped process (SIGTSTP)", "Zombie", "Orphan already adopted by init", "Kernel thread"], answer: 1, why: "A terminated process that has not yet been reaped is a zombie. Init (PID 1) only adopts it after the parent itself exits." },
-  { q: "If execve succeeds, it:", options: ["Returns 0", "Returns the new program’s PID", "Returns twice, like fork", "Does not return"], answer: 3, why: "Unlike fork (once, twice), execve is called once and never returns on success. Failure returns −1. The PID does not change." },
-  { q: "Two SIGCHLD signals arrive while a SIGCHLD handler is already running. After it returns:", options: ["At most one SIGCHLD is still pending; the extra was discarded", "Both are queued and the handler runs twice more", "Both are lost immediately", "The kernel upgrades them to SIGKILL"], answer: 0, why: "At most one pending signal of a type. The handler implicitly blocks SIGCHLD, so the second is pending and the third is discarded. A bit is not a counter." },
-  { q: "Which pair can be neither caught nor ignored?", options: ["SIGINT and SIGCHLD", "SIGALRM and SIGTERM", "SIGKILL and SIGSTOP", "SIGHUP and SIGPIPE"], answer: 2, why: "Figure 8.26 note (b): SIGKILL (9) and SIGSTOP (19) cannot be caught or ignored. Their default actions stay put." },
-  { q: "A page fault (exception 14) that the handler repairs:", options: ["Returns to Inext, skipping the load", "Re-executes the faulting instruction (Icurr)", "Always becomes an abort on Linux", "Is turned into SIGCHLD"], answer: 1, why: "The handler maps the page (typically 4 KB) and returns to Icurr so the instruction can complete. Linux divide errors (0) and general protection faults (13) are the ones that abort." },
-  { q: "setjmp / longjmp:", options: ["setjmp never returns", "longjmp returns 0 to the caller of longjmp", "They create a new process, like fork", "setjmp returns 0 first, then the nonzero retval from each longjmp"], answer: 3, why: "setjmp is called once and returns multiple times: 0 when it saves env, then retval from each matching longjmp. longjmp itself never returns." },
-], 8);
-</script>
+<script src="ch08.js"></script>
 </body>
 </html>
