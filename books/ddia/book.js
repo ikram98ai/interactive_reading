@@ -8,6 +8,8 @@ window.BOOK = {
   edition: "2nd edition",
   blurb: "A picture-book tour of how real data systems work, with machines you can poke, break, and fix.",
   accent: "blue",
+  // Cites link here; printed page p is PDF page p + 24 (the front matter comes first).
+  pdf: { file: "DDIA.pdf", offsets: [[1, 24]] },
   built: 14, // every chapter has a page; lower this to show later ones as "coming soon"
   chapters: [
     { n: 1, short: "Trade-offs", title: "Trade-Offs in Data Systems Architecture", kid: "There's no perfect answer — only choices with pros and cons." },

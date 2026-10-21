@@ -152,7 +152,7 @@ const EINTR: c_int = 4;</pre>
           <div class="inner">
             <p>Opening a file asks the kernel to open the corresponding file. “The kernel keeps track of all information about the open file. The application only keeps track of the descriptor.” <code>unistd.h</code> names descriptors 0, 1, and 2 <code>STDIN_FILENO</code>, <code>STDOUT_FILENO</code>, and <code>STDERR_FILENO</code>.</p>
             <p>The kernel maintains a file position k, initially 0. A read copies n &gt; 0 bytes starting at k and then increments k by n. When k ≥ m, the application detects end-of-file. “There is no explicit EOF character at the end of a file.” Close frees the kernel structures and restores the descriptor to the pool. Process termination closes every open file.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., §10.1 Unix I/O</p>
+            <p class="cite">p.&nbsp;926 · §10.1 Unix I/O</p>
           </div>
         </details>
       </div>
@@ -180,7 +180,7 @@ const EINTR: c_int = 4;</pre>
           <div class="inner">
             <p>A regular file contains arbitrary data. Applications distinguish text files from binary files. “To the kernel there is no difference between text and binary files.” A Linux text line ends with <code>'\n'</code>, the ASCII line feed, numeric value 0x0a. MS Windows and HTTP use <code>'\r\n'</code> (0x0d 0x0a).</p>
             <p>A directory is an array of links. Each contains at least <code>.</code> and <code>..</code>. Figure 10.1 includes <code>/home/droh/hello.c</code>, <code>/usr/include/stdio.h</code>, <code>/bin/bash</code>, and <code>/dev/tty1</code>. An absolute pathname starts with a slash. If the cwd is <code>/home/droh</code>, the relative name of <code>hello.c</code> is <code>./hello.c</code>. If the cwd is <code>/home/bryant</code>, it is <code>../droh/hello.c</code>. Named pipes, symbolic links, and character and block devices are beyond the chapter’s scope.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., §10.2 Files</p>
+            <p class="cite">p.&nbsp;927 · §10.2 Files</p>
           </div>
         </details>
       </div>
@@ -208,7 +208,7 @@ const EINTR: c_int = 4;</pre>
           <div class="inner">
             <p><code>open(filename, flags, mode)</code> returns a new descriptor or −1. “The descriptor returned is always the smallest descriptor that is not currently open in the process.” Access flags: <code>O_RDONLY</code>, <code>O_WRONLY</code>, <code>O_RDWR</code>. Extra flags, or-ed in: <code>O_CREAT</code>, <code>O_TRUNC</code>, <code>O_APPEND</code>.</p>
             <p>Figure 10.2 lists the permission bits. New-file bits are <code>mode &amp; ~umask</code>. With <code>DEF_MODE</code> granting read and write to user, group, and other, and <code>DEF_UMASK</code> equal to <code>S_IWGRP|S_IWOTH</code>, the owner can read and write and everyone else can only read. <code>close</code> returns 0 or −1. Practice Problem 10.1 prints <code>fd2 = 3</code>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., §10.3 Opening and Closing Files</p>
+            <p class="cite">p.&nbsp;929 · §10.3 Opening and Closing Files</p>
           </div>
         </details>
       </div>
@@ -236,7 +236,7 @@ const EINTR: c_int = 4;</pre>
           <div class="inner">
             <p><code>read</code> returns −1 on error, 0 on EOF, otherwise the number of bytes transferred. Figure 10.3 copies standard input to standard output one byte at a time. <code>lseek</code> can move the position; it is beyond the chapter’s scope.</p>
             <p>“Such short counts do not indicate an error.” They happen at EOF (20 bytes left, a 50-byte request, so the next read returns 20 and the one after returns 0), from a terminal (one text line per read), and on sockets because of buffering and delay. In practice disk reads short only at EOF, and disk writes do not short. On x86-64, <code>size_t</code> is an unsigned long and <code>ssize_t</code> is a long. The possibility of returning −1 halves the maximum size of a read.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., §10.4 Reading and Writing Files</p>
+            <p class="cite">p.&nbsp;931 · §10.4 Reading and Writing Files</p>
           </div>
         </details>
       </div>
@@ -264,7 +264,7 @@ const EINTR: c_int = 4;</pre>
           <div class="inner">
             <p>Applications that must be robust call <code>read</code> and <code>write</code> until every requested byte has moved. Rio does that loop. Unbuffered <code>rio_readn</code> and <code>rio_writen</code> transfer directly between memory and a file. “The rio_readn function can only return a short count if it encounters EOF.” <code>rio_writen</code> never returns a short count. Both restart after <code>EINTR</code>. They may be interleaved on the same descriptor.</p>
             <p>The package is inspired by Stevens’s <code>readn</code> and <code>writen</code>. The picture below is a teaching sketch of that loop, with a tiny transfer of 8 bytes so each subtraction fits on the stage. The book’s listing is Figure 10.4.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., §10.5.1 Rio Unbuffered Input and Output Functions</p>
+            <p class="cite">p.&nbsp;933 · §10.5.1 Rio Unbuffered Input and Output Functions</p>
           </div>
         </details>
       </div>
@@ -292,7 +292,7 @@ const EINTR: c_int = 4;</pre>
           <div class="inner">
             <p><code>rio_readinitb</code> associates a descriptor with a <code>rio_t</code> and sets the unread count to 0. <code>rio_readlineb</code> copies the next text line, including the newline, NUL-terminates it, and reads at most <code>maxlen-1</code> bytes. <code>rio_readnb</code> transfers raw bytes from the same buffer. Figure 10.5 is <code>cpfile</code>: init, then readline and writen.</p>
             <p>Internal <code>rio_read</code> refills when <code>rio_cnt &lt;= 0</code>. A short fill is not an error. It then copies <code>min(n, rio_cnt)</code> bytes. Buffered calls must not be interleaved with unbuffered <code>rio_readn</code> on the same descriptor. The buffered pair is thread-safe, which fixes the static buffer in Stevens’s <code>readline</code>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., §10.5.2 Rio Buffered Input Functions</p>
+            <p class="cite">p.&nbsp;934 · §10.5.2 Rio Buffered Input Functions</p>
           </div>
         </details>
       </div>
@@ -320,7 +320,7 @@ const EINTR: c_int = 4;</pre>
           <div class="inner">
             <p><code>stat(filename, &amp;buf)</code> and <code>fstat(fd, &amp;buf)</code> fill a <code>struct stat</code> (Figure 10.9). The chapter needs <code>st_mode</code> and <code>st_size</code>. <code>st_mode</code> encodes both the permission bits of Figure 10.2 and the file type of Section 10.2.</p>
             <p>Macros: <code>S_ISREG</code>, <code>S_ISDIR</code>, <code>S_ISSOCK</code>. Figure 10.10 prints <code>type: regular</code>, <code>directory</code>, or <code>other</code>, and <code>read: yes</code> or <code>no</code> from <code>st_mode &amp; S_IRUSR</code>. The standard I/O library provides no way to read this metadata.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., §10.6 Reading File Metadata</p>
+            <p class="cite">p.&nbsp;939 · §10.6 Reading File Metadata</p>
           </div>
         </details>
       </div>
@@ -347,7 +347,7 @@ const EINTR: c_int = 4;</pre>
           <summary>What the book says</summary>
           <div class="inner">
             <p>Applications read a directory with <code>opendir</code>, <code>readdir</code>, and <code>closedir</code>. Only <code>d_ino</code> and <code>d_name</code> are standard across systems. <code>readdir</code> returns NULL at the end or on error. “The only way to tell the difference is to check whether errno has changed.” Figure 10.11 sets <code>errno = 0</code> before the loop and tests it after.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., §10.7 Reading Directory Contents</p>
+            <p class="cite">p.&nbsp;941 · §10.7 Reading Directory Contents</p>
           </div>
         </details>
       </div>
@@ -375,7 +375,7 @@ const EINTR: c_int = 4;</pre>
           <div class="inner">
             <p>Figure 10.12: descriptors 1 and 4 name two different files — no sharing. Figure 10.13: two descriptors, same disk file, two file table entries. “The key idea is that each descriptor has its own distinct file position.” Practice Problem 10.2 therefore prints <code>c = f</code>.</p>
             <p>Figure 10.14: after <code>fork</code>, parent and child share the open file table entries, so they share the file position, and each reference count becomes 2. Practice Problem 10.3: the child reads the first byte of <code>foobar</code>, the parent reads the second, and the output is <code>c = o</code>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., §10.8 Sharing Files</p>
+            <p class="cite">p.&nbsp;942 · §10.8 Sharing Files</p>
           </div>
         </details>
       </div>
@@ -403,7 +403,7 @@ const EINTR: c_int = 4;</pre>
           <div class="inner">
             <p><code>dup2(oldfd, newfd)</code> copies descriptor table entry <code>oldfd</code> to <code>newfd</code>, closing <code>newfd</code> first if it was open. Figure 10.15 is that picture: both descriptors point at file B, and B’s reference count is 2. Practice Problem 10.4 redirects standard input with <code>dup2(5, STDIN_FILENO)</code>.</p>
             <p>Practice Problem 10.5: two opens of <code>foobar.txt</code>, <code>Read(fd2)</code>, <code>Dup2(fd2, fd1)</code>, <code>Read(fd1)</code>. fd1 now shares fd2’s file position, already past the first byte, so the output is <code>c = o</code>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., §10.9 I/O Redirection</p>
+            <p class="cite">p.&nbsp;945 · §10.9 I/O Redirection</p>
           </div>
         </details>
       </div>
@@ -431,7 +431,7 @@ const EINTR: c_int = 4;</pre>
           <div class="inner">
             <p>The standard I/O library models an open file as a stream, a pointer to a <code>FILE</code>. A <code>FILE</code> is a descriptor plus a stream buffer, filled by one <code>read</code> so later character calls stay in user space. Figure 10.16 draws this layer, and Rio, sitting on top of Unix I/O.</p>
             <p>Input functions following output functions need <code>fflush</code>, <code>fseek</code>, <code>fsetpos</code>, or <code>rewind</code> first. Output functions following input functions need a seek, unless the input hit EOF. <code>lseek</code> is illegal on a socket, so that second restriction cannot be worked around there.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., §10.10 Standard I/O</p>
+            <p class="cite">p.&nbsp;947 · §10.10 Standard I/O</p>
           </div>
         </details>
       </div>
@@ -459,7 +459,7 @@ const EINTR: c_int = 4;</pre>
           <div class="inner">
             <p>G1: “Use the standard I/O functions whenever possible.” They are the method of choice on disk and terminal devices. Most C programmers use them exclusively, except possibly <code>stat</code>, which has no standard I/O counterpart. G2: do not use <code>scanf</code> or <code>rio_readlineb</code> to read binary files. G3: “Use the Rio functions for I/O on network sockets.”</p>
             <p>Opening two streams with <code>fdopen</code> on the same socket and calling <code>fclose</code> on both closes the same descriptor twice — a recipe for disaster in a threaded program (Section 12.7.4). Format in memory with <code>sprintf</code> and send with <code>rio_writen</code>. Read a line with <code>rio_readlineb</code> and parse with <code>sscanf</code>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., §10.11 Putting It Together: Which I/O Functions Should I Use?</p>
+            <p class="cite">p.&nbsp;947 · §10.11 Putting It Together: Which I/O Functions Should I Use?</p>
           </div>
         </details>
       </div>

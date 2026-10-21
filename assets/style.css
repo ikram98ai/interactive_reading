@@ -161,7 +161,9 @@ details.book .cite {
   line-height: 1.45;
   color: var(--ink-3);
 }
-details.book .cite i { font-family: var(--f-display); font-style: italic; font-weight: 600; color: var(--ink-2); }
+details.book .cite a { color: var(--ink-2); text-underline-offset: 3px; }
+details.book .cite a:hover { color: var(--blue); }
+details.book .cite i {font-family: var(--f-display); font-style: italic; font-weight: 600; color: var(--ink-2); }
 .cite-note { font-size: 14.5px; color: var(--ink-3); max-width: 62ch; }
 .cite-note i { font-style: italic; }
 

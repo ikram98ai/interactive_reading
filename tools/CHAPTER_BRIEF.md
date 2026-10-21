@@ -60,7 +60,9 @@ none (see "Code panel rules").
   Left: `.copy` with `.eyebrow` ("1.4.1 · section title in lower case"), `<h2>`, 2–3 `.story`
   paragraphs, an `.imagine` box starting `<b>Try it:</b>` that says exactly what to press, and
   `<details class="book"><summary>What the book says</summary>`, ending with a `<p class="cite">` that
-  gives the book's page numbers and section title.
+  gives the book's printed page numbers and then the section title, e.g. `pp.&nbsp;198–208 · Single-Leader
+  Replication` — no author, book title or edition. `kit.js` turns the page numbers into links that open the
+  book's PDF at that page.
   Right: `.stage` with `.stage-head` (title + pill / seg / stats), `.stage-scroll > svg` (viewBox 660
   wide, about 300–380 tall, `role="img"` + `aria-label`), `.controls`, an optional `.statrow`, a
   `.caption` with `aria-live="polite"` that narrates what is happening in plain words, and last — only

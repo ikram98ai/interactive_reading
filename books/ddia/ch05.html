@@ -34,7 +34,7 @@
       <h1>Encoding and Evolution</h1>
       <p class="lede">Inside a program, data is a web of little boxes joined by invisible strings. To send it anywhere you have to flatten it into a line of bytes — and the program that unpacks it may be a different, older, or newer version of your app.</p>
       <p class="quote">“Everything changes and nothing stands still.” — Heraclitus of Ephesus, as quoted by Plato in <i>Cratylus</i> (360 BCE), quoted at the start of the chapter</p>
-      <p class="cite-note">Grown-up boxes are from Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd edition, with the printed page numbers.</p>
+      <p class="cite-note">Grown-up boxes come from the book. Tap the page numbers under one to open the book at that page.</p>
       <nav class="toc" aria-label="Scenes in this chapter">
         <a href="#rollout">Changing the town</a>
         <a href="#encode">Mailing a Lego castle</a>
@@ -85,7 +85,7 @@
                 <p><b>Backward compatibility:</b> newer code can read data written by older code. <b>Forward compatibility:</b> older code can read data written by newer code.</p>
                 <p>For APIs: for an older client to call a newer service you need backward compatibility on the request and forward compatibility on the response.</p>
                 <p>Figure 5-1: if an older version updates data written by a newer version and the record is decoded into a model object that does not preserve unknown fields, <b>data can be lost</b>.</p>
-            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;161–162 · Encoding and Evolution</p>
+            <p class="cite">pp.&nbsp;161–162 · Encoding and Evolution</p>
           </div>
             </details>
           </div>
@@ -116,7 +116,7 @@
             <p>Careful: "serialization" also means something completely different in transactions, so the book says <b>encoding</b>.</p>
             <p>Some formats skip the step: <b>Cap'n Proto</b> and <b>FlatBuffers</b> are zero-copy formats usable both at runtime and on disk.</p>
             <p>Language-built-ins — Java's <code>java.io.Serializable</code>, Python's <code>pickle</code>, Ruby's <code>Marshal</code>, Kryo — are convenient but: tied to one language; decoding instantiates arbitrary classes, a classic security hole that can allow remote code execution; versioning is an afterthought; and they are often slow and bloated. Use them only for very transient purposes.</p>
-            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;162–164 · Formats for Encoding Data</p>
+            <p class="cite">pp.&nbsp;162–164 · Formats for Encoding Data</p>
           </div>
         </details>
       </div>
@@ -145,7 +145,7 @@
             <p>Integers greater than 2<sup>53</sup> can't be represented exactly in an IEEE 754 double, so they break in JavaScript. X (Twitter) returns post IDs <b>twice</b> — once as a JSON number and once as a decimal string — to work around it.</p>
             <p>JSON and XML have no binary string type, so people <b>Base64</b>-encode bytes as text: hacky, and about a third bigger.</p>
             <p>CSV has no schema and is vague (commas and newlines inside values); its escaping rules are specified in RFC 4180 but not all parsers implement them correctly. Despite the flaws, these formats are good enough as interchange formats.</p>
-            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;164–165 · JSON, XML, and Binary Variants</p>
+            <p class="cite">pp.&nbsp;164–165 · JSON, XML, and Binary Variants</p>
           </div>
         </details>
       </div>
@@ -174,7 +174,7 @@
             <p>It has primitive types (string, number, integer, object, array, boolean, null) plus a separate <b>validation</b> specification for constraints such as a minimum and maximum.</p>
             <p><b>Open</b> content models (<code>additionalProperties: true</code>, the default) allow undeclared fields; <b>closed</b> ones allow only declared fields. So JSON Schemas usually define what <i>isn't</i> permitted rather than what is.</p>
             <p>JSON has no map type with integer keys — object keys are always strings — so you express it with <code>patternProperties</code> and <code>additionalProperties: false</code>. With conditional if/else logic, named types and remote schema references, it is very powerful but unwieldy: resolving remote schemas and evolving schemas compatibly is hard.</p>
-            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;165–166 · JSON Schema</p>
+            <p class="cite">pp.&nbsp;165–166 · JSON Schema</p>
           </div>
         </details>
       </div>
@@ -202,7 +202,7 @@
             <p>Binary JSON variants (MessagePack, CBOR, BSON, BJSON, UBJSON, BISON, Hessian, Smile) and binary XML (WBXML, Fast Infoset) exist in niches; none are as widely adopted as the textual versions. Because they prescribe no schema, they must include every field name. MessagePack takes <b>66 bytes</b>: <code>0x83</code> = object with 3 fields, <code>0xa8</code> = an 8-byte string, then <code>userName</code> in ASCII, then <code>0xa6</code> and <code>Martin</code>.</p>
             <p>Protocol Buffers needs <b>33 bytes</b>, Avro <b>32</b> — the most compact of all.</p>
             <p>Schema-based binary encodings can be much more compact; the schema is documentation that can't go stale, a schema database lets you check compatibility before deploying, and code generation gives compile-time type checking in statically typed languages.</p>
-            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;166–171 · Binary encodings</p>
+            <p class="cite">pp.&nbsp;166–171 · Binary encodings</p>
           </div>
         </details>
       </div>
@@ -232,7 +232,7 @@
             <p>An encoded record is just the concatenation of its encoded fields; each is identified by its <b>field tag</b> and annotated with a datatype. Unset fields are simply omitted. Field type and tag are packed into a single byte, and integers use <b>variable-length</b> encoding: 1337 takes two bytes; –64 to 63 fit in one.</p>
             <p><b>Adding</b> a field: give it a new tag number. Old code sees an unknown tag and can skip it using the datatype annotation, preserving the unknown field — forward compatibility. Reading old data with a new schema fills missing fields with a <b>default value</b> (empty string, 0) — backward compatibility.</p>
             <p>You can never reuse an old tag number; tags used in the past can be <b>reserved</b>. Changing a datatype is sometimes possible, but a 64-bit value read by old 32-bit code will be <b>truncated</b>. There is no list type: <code>repeated</code> means the same tag simply appears several times.</p>
-            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;168–171 · Protocol Buffers</p>
+            <p class="cite">pp.&nbsp;168–171 · Protocol Buffers</p>
           </div>
         </details>
       </div>
@@ -262,7 +262,7 @@
             <p>You may add or remove only a field that <b>has a default value</b>. Adding one with no default breaks backward compatibility; removing one with no default breaks forward compatibility. <code>null</code> is not a default for everything: you need a <b>union type</b>, and null must be the first branch.</p>
             <p>Where does the writer's schema come from? A large file stores it once at the start (Avro <b>object container files</b>); a database stores a version number per record and keeps a list of schema versions (Confluent's schema registry for Kafka, LinkedIn's Espresso); a network connection negotiates it at setup (Avro RPC).</p>
             <p>Avro suits <b>dynamically generated schemas</b> — dump a relational table and each column becomes a field by name, with no tag numbers to assign by hand. Renaming a field via <b>aliases</b> in the reader's schema is backward but not forward compatible.</p>
-            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;171–176 · Apache Avro</p>
+            <p class="cite">pp.&nbsp;171–176 · Apache Avro</p>
           </div>
         </details>
       </div>
@@ -291,7 +291,7 @@
             <p>Migrating data into a new schema is possible but expensive on a large dataset, so most databases defer it, asynchronously and best-effort. LSM-tree engines rewrite data in the latest format during <b>compaction</b>; relational databases add a column with a null default without rewriting existing rows.</p>
             <p>Schema evolution lets the whole database <i>appear</i> to use one schema even though the storage holds many historical versions. Harder changes — single-valued to multivalued, moving data to another table — still need rewriting at the application level, and staying compatible across such migrations is a research problem.</p>
             <p>A snapshot for backup or for a data warehouse is written in one go and is immutable, so it is usually encoded with the <b>latest</b> schema — a good fit for Avro object container files, or a column-oriented format such as <b>Parquet</b>.</p>
-            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;177–179 · Dataflow Through Databases</p>
+            <p class="cite">pp.&nbsp;177–179 · Dataflow Through Databases</p>
           </div>
         </details>
       </div>
@@ -321,7 +321,7 @@
             <p>RPC's promise of <b>location transparency</b> is fundamentally flawed. A network request is unpredictable; it can time out, and then you simply don't know what happened; retrying may perform the action twice unless you build in <b>idempotence</b>; latency is wildly variable; parameters must be encoded; and languages disagree about datatypes.</p>
             <p>For services you can assume servers are updated first, so you need <b>backward compatibility on requests and forward compatibility on responses</b>. Because clients outside your organization may never upgrade, compatibility must be kept for a long time, often by running several API versions side by side (version in the URL, in an Accept header, or per API key).</p>
             <p>Clients find servers through <b>service discovery</b> and <b>load balancing</b>: hardware load balancers, software ones (NGINX, HAProxy), DNS (which caches, so entries go stale), registries such as etcd and ZooKeeper with heartbeats, or a <b>service mesh</b> (Istio, Linkerd) using sidecars that handle encryption and observability.</p>
-            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;179–186 · Dataflow Through Services: REST and RPC</p>
+            <p class="cite">pp.&nbsp;179–186 · Dataflow Through Services: REST and RPC</p>
           </div>
         </details>
       </div>
@@ -357,7 +357,7 @@
                 <p>A <b>workflow engine</b> has an orchestrator (scheduling) and an executor (running). Airflow, Dagster and Prefect orchestrate ETL; Camunda and Orkes give a graphical notation; Temporal and Restate provide durable execution.</p>
                 <p>If a task fails the framework re-executes it but <b>skips RPC calls and state changes that already succeeded</b>, returning the previous results, because everything is logged to durable storage like a write-ahead log.</p>
                 <p>Catches: external services must still provide an <b>idempotent API</b> with unique IDs; the framework expects the same RPCs in the same order, so reordering calls is risky — deploy a new version instead of editing an existing workflow; and nondeterministic code (random numbers, clocks) breaks replay, which is why frameworks ship deterministic replacements and checkers like Temporal's Workflow Check.</p>
-            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;186–188 · Durable Execution and Workflows</p>
+            <p class="cite">pp.&nbsp;186–188 · Durable Execution and Workflows</p>
           </div>
             </details>
           </div>
@@ -382,7 +382,7 @@
                 <p>Two patterns: a named <b>queue</b> (one of the consumers receives each message) and a named <b>topic</b> (all subscribers receive it). Open source brokers include RabbitMQ, ActiveMQ, HornetQ, NATS, Redpanda and Apache Kafka; cloud ones include Amazon Kinesis, Azure Service Bus and Google Cloud Pub/Sub.</p>
                 <p>Brokers don't enforce a data model — a message is bytes plus metadata — so teams use Protocol Buffers, Avro or JSON with a <b>schema registry</b>, and <b>AsyncAPI</b> to specify messages. Many brokers delete messages after consumption; some can keep them forever, which is what <b>event sourcing</b> needs. A consumer that republishes messages must be careful to preserve unknown fields.</p>
                 <p>In <b>distributed actor frameworks</b> (Akka, Orleans, Erlang/OTP) each actor has private state and communicates only by asynchronous messages that may be lost — so location transparency works better than in RPC. Rolling upgrades still need forward and backward compatible message encodings.</p>
-            <p class="cite">Kleppmann &amp; Riccomini, <i>Designing Data-Intensive Applications</i>, 2nd&nbsp;ed., pp.&nbsp;188–191 · Event-Driven Architectures</p>
+            <p class="cite">pp.&nbsp;188–191 · Event-Driven Architectures</p>
           </div>
             </details>
           </div>

@@ -142,7 +142,7 @@
           <div class="inner">
             <p>Most computers use blocks of 8 bits, or bytes, as the smallest addressable unit. A machine-level program views memory as a very large array of bytes, called virtual memory. Every byte is identified by a unique address, and the set of all possible addresses is the virtual address space. Chapter 9 shows that this image is built from DRAM, flash, disk, hardware, and the operating system.</p>
             <p>A pointer’s value is the virtual address of the first byte of a block of storage. The C compiler associates type information with each pointer so it can generate different code for different types. The machine-level program it generates has no information about data types. It treats each program object as a block of bytes, and the program itself as a sequence of bytes.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;70–71 · 2.1 Information Storage</p>
+            <p class="cite">pp.&nbsp;70–71 · 2.1 Information Storage</p>
           </div>
         </details>
       </div>
@@ -170,7 +170,7 @@
           <div class="inner">
             <p>A byte ranges from 00000000 to 11111111 in binary, and from 0 to 255 in decimal. Hexadecimal uses digits 0 through 9 and characters A through F. Figure 2.2 is the chart. In C, constants starting with 0x or 0X are hexadecimal, and the letters may be upper- or lowercase. “Converting between binary and hexadecimal is straightforward, since it can be performed one hexadecimal digit at a time.”</p>
             <p>The book’s running example expands 0x173A4C into 0001 0111 0011 1010 0100 1100. The other way, 1111001010110110110011 is padded on the left and becomes 0x3CADB3. Decimal 314,156 converts by repeated division by 16, remainders C, 2, B, C, 4, so 0x4CB2C. Powers of two are easy: 2<sup>11</sup> = 2048 = 0x800.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;72–75 · 2.1.1 Hexadecimal Notation</p>
+            <p class="cite">pp.&nbsp;72–75 · 2.1.1 Hexadecimal Notation</p>
           </div>
         </details>
       </div>
@@ -198,7 +198,7 @@
           <div class="inner">
             <p>For a w-bit word, virtual addresses range from 0 to 2<sup>w</sup> − 1, so the program can touch at most 2<sup>w</sup> bytes. A 32-bit word limits that to 4 gigabytes. A 64-bit word yields 16 exabytes. Most 64-bit machines can also run programs compiled for 32-bit machines. <span class="mono">gcc -m32 prog.c</span> runs on either; <span class="mono">gcc -m64 prog.c</span> runs only on a 64-bit machine. The book therefore talks about 32-bit programs and 64-bit programs, not machines.</p>
             <p>Figure 2.3: char 1, short 2, int 4, long 4 or 8, int32_t 4, int64_t 8, char * 4 or 8, float 4, double 8. ISO C99 added the fixed-size types so the size does not depend on the compiler. “Many programmers historically assumed that an object declared as type int could be used to store a pointer. This works fine for most 32-bit programs, but it leads to problems for 64-bit programs.”</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;75–78 · 2.1.2 Data Sizes</p>
+            <p class="cite">pp.&nbsp;75–78 · 2.1.2 Data Sizes</p>
           </div>
         </details>
       </div>
@@ -226,7 +226,7 @@
             <p>A multi-byte object is stored as a contiguous sequence of bytes, and its address is the smallest address used. For <span class="mono">x = 0x01234567</span> at <span class="mono">0x100</span>, big endian stores 01 23 45 67 and little endian stores 67 45 23 01.</p>
             <p>Figure 2.4 is <span class="mono">show_bytes</span>. Figure 2.6 runs it on 12,345, which is <span class="mono">0x00003039</span>. Linux 32, Windows, and Linux 64 print <span class="mono">39 30 00 00</span>. Sun prints <span class="mono">00 00 30 39</span>. The float 12,345.0 is <span class="mono">0x4640E400</span>, same bytes, reversed on the Sun. Pointer bytes differ completely, and Linux 64 uses 8-byte addresses.</p>
             <p>Byte order shows up when binary data cross a network (Chapter 11), when you read a disassembly such as <span class="mono">4004d3: 01 05 43 0b 20 00</span>, and when a cast or union peeks at the raw bytes.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;78–85 · 2.1.3 Addressing and Byte Ordering</p>
+            <p class="cite">pp.&nbsp;78–85 · 2.1.3 Addressing and Byte Ordering</p>
           </div>
         </details>
       </div>
@@ -254,7 +254,7 @@
           <div class="inner">
             <p>A string in C is an array of characters terminated by the null character, value 0. The most common encoding is ASCII. <span class="mono">show_bytes</span> on <span class="mono">"12345"</span> with length 6 prints <span class="mono">31 32 33 34 35 00</span>. The ASCII code for decimal digit x is 0x3x. The same bytes appear on any ASCII system, independent of byte ordering and word size. Text data are more platform independent than binary data.</p>
             <p>Practice Problem 2.7 asks what <span class="mono">show_bytes</span> prints for <span class="mono">"mnopqr"</span> with <span class="mono">strlen</span>, which does not include the null. Letters a through z are 0x61 through 0x7A. The Unicode aside notes that UTF-8 keeps those same single-byte codes, and that Java strings use Unicode.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;85–86 · 2.1.4 Representing Strings</p>
+            <p class="cite">pp.&nbsp;85–86 · 2.1.4 Representing Strings</p>
           </div>
         </details>
       </div>
@@ -282,7 +282,7 @@
           <div class="inner">
             <p>The sample function is <span class="mono">int sum(int x, int y) { return x + y; }</span>. Compiled, its bytes are: Linux 32 <span class="mono">55 89 e5 8b 45 0c 03 45 08 c9 c3</span>; Windows <span class="mono">55 89 e5 8b 45 0c 03 45 08 5d c3</span>; Sun <span class="mono">81 c3 e0 08 90 02 00 09</span>; Linux 64 <span class="mono">55 48 89 e5 89 7d fc 89 75 f8 03 45 fc c9 c3</span>.</p>
             <p>Different machine types use different and incompatible instructions and encodings. Identical processors running different operating systems are not binary compatible. A program, from the perspective of the machine, is simply a sequence of bytes.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;85–86 · 2.1.5 Representing Code</p>
+            <p class="cite">pp.&nbsp;85–86 · 2.1.5 Representing Code</p>
           </div>
         </details>
       </div>
@@ -309,7 +309,7 @@
           <div class="inner">
             <p>Binary values are encoded as 0 and 1. Boolean algebra, from George Boole, is the algebraic treatment of logic. Figure 2.7 defines NOT, AND, OR, and exclusive-OR. The book’s symbols match C: <span class="mono">~</span>, <span class="mono">&amp;</span>, <span class="mono">|</span>, and <span class="mono">^</span>.</p>
             <p>The operations extend to bit vectors one bit at a time. With a = [0110] and b = [1100], AND is [0100], OR is [1110], XOR is [1010], and NOT b is [0011]. In the Boolean ring, every value is its own inverse: a ^ a = 0. Bit vectors also encode sets, and Practice Problem 2.9 mixes red, green, and blue light into eight colors. Claude Shannon connected this algebra to networks of relays.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;86–90 · 2.1.6 Introduction to Boolean Algebra</p>
+            <p class="cite">pp.&nbsp;86–90 · 2.1.6 Introduction to Boolean Algebra</p>
           </div>
         </details>
       </div>
@@ -337,7 +337,7 @@
           <div class="inner">
             <p>C’s <span class="mono">| &amp; ~ ^</span> apply to any integral type. For char: <span class="mono">~0x41</span> is <span class="mono">0xBE</span>, <span class="mono">~0x00</span> is <span class="mono">0xFF</span>, <span class="mono">0x69 &amp; 0x55</span> is <span class="mono">0x41</span>, and <span class="mono">0x69 | 0x55</span> is <span class="mono">0x7D</span>. The best method is to expand to binary, operate, and convert back.</p>
             <p>Practice Problem 2.10 is <span class="mono">inplace_swap</span>, three XOR steps and no temporary. Practice Problem 2.11 uses it to reverse an array. Even length works. Odd length sets the middle element to 0, because the last swap is a value with itself. A mask example: <span class="mono">0x89ABCDEF &amp; 0xFF</span> yields <span class="mono">0x000000EF</span>. <span class="mono">~0</span> is a mask of all ones at any word size.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;90–92 · 2.1.7 Bit-Level Operations in C</p>
+            <p class="cite">pp.&nbsp;90–92 · 2.1.7 Bit-Level Operations in C</p>
           </div>
         </details>
       </div>
@@ -365,7 +365,7 @@
           <div class="inner">
             <p>Logical operators treat any nonzero argument as true and 0 as false, and they return 1 or 0. The book’s table: <span class="mono">!0x41</span> is <span class="mono">0x00</span>, <span class="mono">!0x00</span> is <span class="mono">0x01</span>, <span class="mono">!!0x41</span> is <span class="mono">0x01</span>, and both <span class="mono">0x69 &amp;&amp; 0x55</span> and <span class="mono">0x69 || 0x55</span> are <span class="mono">0x01</span>. A bitwise operation matches its logical twin only when the arguments are restricted to 0 and 1.</p>
             <p><span class="mono">&amp;&amp;</span> and <span class="mono">||</span> do not evaluate their second argument if the first argument already decides the result. The expression <span class="mono">a &amp;&amp; 5/a</span> never causes a division by zero, and <span class="mono">p &amp;&amp; *p++</span> never dereferences a null pointer.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;92–93 · 2.1.8 Logical Operations in C</p>
+            <p class="cite">pp.&nbsp;92–93 · 2.1.8 Logical Operations in C</p>
           </div>
         </details>
       </div>
@@ -393,7 +393,7 @@
           <div class="inner">
             <p><span class="mono">x &lt;&lt; k</span> drops the top k bits and fills the right with zeros. Shifts associate left to right. A logical right shift fills with zeros. An arithmetic right shift fills with copies of the most significant bit. For an 8-bit argument, <span class="mono">[01100011] &lt;&lt; 4</span> is <span class="mono">[00110000]</span>, and <span class="mono">[10010101] &gt;&gt; 4</span> is <span class="mono">[00001001]</span> logically and <span class="mono">[11111001]</span> arithmetically.</p>
             <p>The C standards do not say which right shift signed data must use. In practice almost every compiler uses arithmetic for signed data, and unsigned right shifts must be logical. Java defines <span class="mono">&gt;&gt;</span> as arithmetic and <span class="mono">&gt;&gt;&gt;</span> as logical. Shifting a 32-bit int by 32, 36, or 40 is undefined in C. The expression <span class="mono">1&lt;&lt;2 + 3&lt;&lt;4</span> equals <span class="mono">(1 &lt;&lt; (2+3)) &lt;&lt; 4</span>, which is 512, rather than the intended 52.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;93–95 · 2.1.9 Shift Operations in C</p>
+            <p class="cite">pp.&nbsp;93–95 · 2.1.9 Shift Operations in C</p>
           </div>
         </details>
       </div>
@@ -421,7 +421,7 @@
           <div class="inner">
             <p>Section 2.2 describes two ways bits encode integers: one for nonnegative numbers, and one that can be negative, zero, or positive. They are strongly related in their mathematics and in their machine-level implementations. Expanding or shrinking an encoded integer to a different length is part of the same story.</p>
             <p>Figure 2.8 lists the notation used for the rest of the chapter. B2U<sub>w</sub> and B2T<sub>w</sub> turn a bit vector into an unsigned or two’s-complement number. U2B<sub>w</sub> and T2B<sub>w</sub> go the other way. T2U<sub>w</sub> and U2T<sub>w</sub> keep the bits and change the interpretation. TMin<sub>w</sub>, TMax<sub>w</sub>, and UMax<sub>w</sub> are the extreme values. The operations +<sup>u</sup>, +<sup>t</sup>, *<sup>u</sup>, *<sup>t</sup>, and the two negations are defined on later pages.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;95–96 · 2.2 Integer Representations</p>
+            <p class="cite">pp.&nbsp;95–96 · 2.2 Integer Representations</p>
           </div>
         </details>
       </div>
@@ -449,7 +449,7 @@
           <div class="inner">
             <p>Figure 2.9, 32-bit programs: signed char −128…127, unsigned char 0…255, short −32,768…32,767, int and long −2,147,483,648…2,147,483,647, unsigned 0…4,294,967,295. int64_t reaches −9,223,372,036,854,775,808. Figure 2.10 is the same except long and unsigned long grow to the 64-bit range.</p>
             <p>Figure 2.11 is the guaranteed minimum. Signed char is only −127…127, int is −32,767…32,767, and unsigned int need only reach 65,535. The fixed-size types keep the full asymmetric ranges. Java supports only signed integers. The asymmetry is explained by two’s complement in the next sections.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;96–98 · 2.2.1 Integral Data Types</p>
+            <p class="cite">pp.&nbsp;96–98 · 2.2.1 Integral Data Types</p>
           </div>
         </details>
       </div>
@@ -476,7 +476,7 @@
           <div class="inner">
             <p>Equation 2.1 defines B2U<sub>w</sub>(x) as the sum of x<sub>i</sub> 2<sup>i</sup>. Figure 2.12 works four cases: [0001] = 1, [0101] = 5, [1011] = 11, [1111] = 15. UMax<sub>w</sub> is 2<sup>w</sup> − 1. For w = 4 that is 15.</p>
             <p>Every number from 0 to 2<sup>w</sup> − 1 has exactly one w-bit encoding. The book’s principle: function B2U<sub>w</sub> is a bijection. There is only one unsigned 4-bit form of 11, namely [1011].</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;98–100 · 2.2.2 Unsigned Encodings</p>
+            <p class="cite">pp.&nbsp;98–100 · 2.2.2 Unsigned Encodings</p>
           </div>
         </details>
       </div>
@@ -504,7 +504,7 @@
           <div class="inner">
             <p>Equation 2.3 defines B2T<sub>w</sub>(x) as −x<sub>w−1</sub> 2<sup>w−1</sup> plus the usual sum of the lower bits. Figure 2.13 uses the same four patterns as Figure 2.12. [1011] is −5. TMin<sub>w</sub> = −2<sup>w−1</sup> and TMax<sub>w</sub> = 2<sup>w−1</sup> − 1. Figure 2.14 records |TMin| = TMax + 1, and UMax = 2 TMax + 1.</p>
             <p>Both mappings are bijections. The pattern of all ones is −1. The pattern 100…0 is TMin. An alternative the book mentions, and almost nobody uses, is ones’ complement or sign-magnitude. Negating a two’s-complement value is equivalent to complementing the bits and adding 1, which the negation section makes precise.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;100–106 · 2.2.3 Two’s-Complement Encodings</p>
+            <p class="cite">pp.&nbsp;100–106 · 2.2.3 Two’s-Complement Encodings</p>
           </div>
         </details>
       </div>
@@ -532,7 +532,7 @@
           <div class="inner">
             <p>The principle for T2U<sub>w</sub>(x): if x is negative, the unsigned reading is x + 2<sup>w</sup>; otherwise it is x. U2T<sub>w</sub>(u) subtracts 2<sup>w</sup> when u is greater than TMax. “Most systems follow the rule that the underlying bit representation does not change.”</p>
             <p>T2U<sub>w</sub>(−1) = UMax<sub>w</sub>. T2U<sub>w</sub>(TMin<sub>w</sub>) = 2<sup>w−1</sup> = TMax<sub>w</sub> + 1. From Figure 2.15, T2U<sub>16</sub>(−12,345) = 65,536 − 12,345 = 53,191.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;106–110 · 2.2.4 Conversions between Signed and Unsigned</p>
+            <p class="cite">pp.&nbsp;106–110 · 2.2.4 Conversions between Signed and Unsigned</p>
           </div>
         </details>
       </div>
@@ -560,7 +560,7 @@
           <div class="inner">
             <p>Constants are signed unless you add U or u, as in 12345U. “Most systems follow the rule that the underlying bit representation does not change.” The book’s printf example, compiled as a 32-bit program, prints <span class="mono">x = 4294967295 = -1</span> and <span class="mono">u = 2147483648 = -2147483648</span>.</p>
             <p>“When either operand of a comparison is unsigned, the other operand is implicitly cast to unsigned.” Figure 2.19: <span class="mono">-1 &lt; 0</span> is 1, <span class="mono">-1 &lt; 0U</span> is 0, and <span class="mono">2147483647U &gt; -2147483647-1</span> is 0. The book writes TMin<sub>32</sub> as -2,147,483,647-1 because of a quirk explained in the web aside, matching the <span class="mono">INT_MIN (-INT_MAX - 1)</span> in limits.h.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;110–112 · 2.2.5 Signed versus Unsigned in C</p>
+            <p class="cite">pp.&nbsp;110–112 · 2.2.5 Signed versus Unsigned in C</p>
           </div>
         </details>
       </div>
@@ -588,7 +588,7 @@
           <div class="inner">
             <p>Converting to a larger data type should always be possible. For an unsigned number, zero extension adds leading zeros and B2U of the short vector equals B2U of the long one. For two’s complement, sign extension repeats the most significant bit. The numeric value is unchanged.</p>
             <p>The book’s pictures show a negative value staying negative only when the new bits copy the sign. Casting a short to an int in C does this sign extension for you. The next section is what happens when the destination is smaller instead of larger.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;112–117 · 2.2.6 Expanding the Bit Representation of a Number</p>
+            <p class="cite">pp.&nbsp;112–117 · 2.2.6 Expanding the Bit Representation of a Number</p>
           </div>
         </details>
       </div>
@@ -616,7 +616,7 @@
           <div class="inner">
             <p>The sample cast is <span class="mono">int x = 53191; short sx = (short) x;</span> which is −12,345, and <span class="mono">int y = sx;</span> which is still −12,345. Equation 2.9: truncating an unsigned value to k bits yields x mod 2<sup>k</sup>. Equation 2.10: truncating a two’s-complement value yields U2T<sub>k</sub> of that same remainder.</p>
             <p>53,191 fits in 16 unsigned bits, so the mod changes nothing, but the signed reading is 53,191 − 65,536 = −12,345. Practice Problem 2.24 chops one hex digit to 3 bits: C (12, and −4) becomes 4, and E (14, and −2) becomes 6.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;117–119 · 2.2.7 Truncating Numbers</p>
+            <p class="cite">pp.&nbsp;117–119 · 2.2.7 Truncating Numbers</p>
           </div>
         </details>
       </div>
@@ -644,7 +644,7 @@
           <div class="inner">
             <p>Practice Problem 2.25 is <span class="mono">sum_elements</span>. With <span class="mono">length</span> equal to 0 it should return 0.0. Instead <span class="mono">length-1</span> wraps, and the loop accesses past the array. Practice Problem 2.26 is <span class="mono">strlonger</span>, which returns <span class="mono">strlen(s) - strlen(t) &gt; 0</span>. <span class="mono">size_t</span> is unsigned. When s is shorter, the subtraction wraps and the comparison succeeds.</p>
             <p>The book notes that few languages other than C have unsigned integers; Java has only signed ones, an arithmetic <span class="mono">&gt;&gt;</span>, and a logical <span class="mono">&gt;&gt;&gt;</span>. Unsigned is still the right tool for raw bits, for addresses, and for modular arithmetic. The bugs come from implicit casts, especially around subtraction and comparison.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;119–120 · 2.2.8 Advice on Signed versus Unsigned</p>
+            <p class="cite">pp.&nbsp;119–120 · 2.2.8 Advice on Signed versus Unsigned</p>
           </div>
         </details>
       </div>
@@ -672,7 +672,7 @@
           <div class="inner">
             <p>On a machine with a 32-bit int, <span class="mono">200 * 300 * 400 * 500</span> yields −884,901,888. Multiplication is associative and commutative, so <span class="mono">(500 * 400) * (300 * 200)</span> and the other parenthesizations yield that same value.</p>
             <p>Section 2.3 opens by noting that adding two positive numbers can yield a negative result, and that <span class="mono">x &lt; y</span> can differ from <span class="mono">x - y &lt; 0</span>. Both are artifacts of finite computer arithmetic. The following subsections say exactly when unsigned and two’s-complement addition and multiplication wrap.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;68–69 and p.&nbsp;120 · 2.3 Integer Arithmetic</p>
+            <p class="cite">pp.&nbsp;68–69 and p.&nbsp;120 · 2.3 Integer Arithmetic</p>
           </div>
         </details>
       </div>
@@ -700,7 +700,7 @@
           <div class="inner">
             <p>For 0 ≤ x, y &lt; 2<sup>w</sup>, the true sum can be as large as 2<sup>w+1</sup> − 2. Figure 2.21 plots that for w = 4: arguments 0…15, sums 0…30. Unsigned addition keeps the sum modulo 2<sup>w</sup>. It overflows if and only if the stored sum s satisfies s &lt; x (or equally s &lt; y).</p>
             <p>The aside on <span class="mono">getpeername</span> shows a real bug in which an unsigned length wraps, so a check that was meant to reject a too-large request accepts it. The arithmetic fact is the same one this machine shows: the stored sum can be smaller than an addend.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;120–126 · 2.3.1 Unsigned Addition</p>
+            <p class="cite">pp.&nbsp;120–126 · 2.3.1 Unsigned Addition</p>
           </div>
         </details>
       </div>
@@ -728,7 +728,7 @@
           <div class="inner">
             <p>The bit-level representation of a two’s-complement sum is binary addition, truncated to w bits. Positive overflow happens if and only if x &gt; 0, y &gt; 0, and s ≤ 0. Negative overflow happens if and only if x &lt; 0, y &lt; 0, and s ≥ 0. When the true sum is below TMin, the stored result is 2<sup>w</sup> too high. When it is above TMax, the stored result is 2<sup>w</sup> too low.</p>
             <p>Figure 2.25 illustrates both overflows for w = 4. Figure 2.26 draws the three planes: negative overflow, the normal band from −8 to 7, and positive overflow.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;126–131 · 2.3.2 Two’s-Complement Addition</p>
+            <p class="cite">pp.&nbsp;126–131 · 2.3.2 Two’s-Complement Addition</p>
           </div>
         </details>
       </div>
@@ -755,7 +755,7 @@
           <summary>What the book says</summary>
           <div class="inner">
             <p>Two’s-complement negation of x is ~x + 1 at the bit level. For every x other than TMin, that result is the ordinary −x, and x + (−x) = 0 inside the word. The principle the book states: −<sup>t</sup> TMin<sub>w</sub> = TMin<sub>w</sub>. TMin is its own additive inverse, because the positive value 2<sup>w−1</sup> cannot be represented.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;131–132 · 2.3.3 Two’s-Complement Negation</p>
+            <p class="cite">pp.&nbsp;131–132 · 2.3.3 Two’s-Complement Negation</p>
           </div>
         </details>
       </div>
@@ -783,7 +783,7 @@
           <div class="inner">
             <p>The product of two numbers in 0 … 2<sup>w</sup> − 1 can be as large as (2<sup>w</sup> − 1)<sup>2</sup>, which needs up to 2w bits. Unsigned multiplication is defined to equal that product modulo 2<sup>w</sup>. The low-order w bits of the full product are exactly that value.</p>
             <p>Figure 2.27 shows three-bit examples where the unsigned and two’s-complement readings of the same bit product differ, while the bits of the truncated product match. That match is the point of the next section.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;132–133 · 2.3.4 Unsigned Multiplication</p>
+            <p class="cite">pp.&nbsp;132–133 · 2.3.4 Unsigned Multiplication</p>
           </div>
         </details>
       </div>
@@ -811,7 +811,7 @@
           <div class="inner">
             <p>The bit-level result of two’s-complement multiplication equals the bit-level result of unsigned multiplication on the same bit vectors. The low-order w bits are the product modulo 2<sup>w</sup>, then interpreted with U2T if you want the signed value. Figure 2.27 shows three-bit cases of both.</p>
             <p>The aside on the XDR library is a security bug in which a multiplication used to compute a size overflows, so too little memory is allocated. The opening numeric example is the same phenomenon: 200 * 300 * 400 * 500 evaluates to −884,901,888 in 32-bit int arithmetic.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;133–137 · 2.3.5 Two’s-Complement Multiplication</p>
+            <p class="cite">pp.&nbsp;133–137 · 2.3.5 Two’s-Complement Multiplication</p>
           </div>
         </details>
       </div>
@@ -839,7 +839,7 @@
           <div class="inner">
             <p>Shifting the 4-bit pattern [1011] (the number 11) left by 2 gives [101100], which is 44 = 11 × 4. Truncating back to 4 bits gives [1100], the value 12, and 44 mod 16 is 12. For a fixed word, <span class="mono">x &lt;&lt; k</span> equals x multiplied by 2<sup>k</sup> in unsigned or two’s-complement arithmetic.</p>
             <p>Because multiply is slower — 3 clock cycles on the Intel Core i7 Haswell, against 1 for a shift or an add — compilers rewrite <span class="mono">x*14</span> as <span class="mono">(x&lt;&lt;3)+(x&lt;&lt;2)+(x&lt;&lt;1)</span> or as <span class="mono">(x&lt;&lt;4)-(x&lt;&lt;1)</span>. The results match even on overflow. A single <span class="mono">lea</span> can compute <span class="mono">(a&lt;&lt;k)+b</span> for small k, so 3*a is <span class="mono">(a&lt;&lt;1)+a</span>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;137–139 · 2.3.6 Multiplying by Constants</p>
+            <p class="cite">pp.&nbsp;137–139 · 2.3.6 Multiplying by Constants</p>
           </div>
         </details>
       </div>
@@ -867,7 +867,7 @@
           <div class="inner">
             <p>Division is slower still, 30 or more clock cycles. For unsigned x, <span class="mono">x &gt;&gt; k</span> equals floor(x / 2<sup>k</sup>), which is toward zero. Figure 2.28: 12,340 shifted by 0, 1, 4, 8 gives 12,340, 6,170, 771, 48.</p>
             <p>An arithmetic right shift equals floor(x / 2<sup>k</sup>), which for negatives rounds the wrong way for C. Figure 2.29: −12,340 &gt;&gt; 4 is −772, while −12,340 / 16 is −771.25. The expression <span class="mono">(x&lt;0 ? x+(1&lt;&lt;k)-1 : x) &gt;&gt; k</span> adds the bias 2<sup>k</sup> − 1 first. Figure 2.30 shows the bias 15 turning the k = 4 case into −771.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;139–143 · 2.3.7 Dividing by Powers of 2</p>
+            <p class="cite">pp.&nbsp;139–143 · 2.3.7 Dividing by Powers of 2</p>
           </div>
         </details>
       </div>
@@ -895,7 +895,7 @@
           <div class="inner">
             <p>Computer “integer” arithmetic is modular. Two’s complement lets addition, subtraction, multiplication, and even division share most of their bit-level behavior with the unsigned forms. Unsigned surprises, including constants and library types such as <span class="mono">size_t</span>, are a common source of bugs.</p>
             <p>Practice Problem 2.44 asks which expressions are true for all 32-bit two’s-complement x and y. Among them: <span class="mono">x*x &gt;= 0</span> is not, and <span class="mono">x&gt;0 || -x&gt;=0</span> fails when x is TMin. The summary later notes that associativity, commutativity, and distributivity still hold, which is what justifies replacing <span class="mono">7*x</span> by <span class="mono">(x&lt;&lt;3)-x</span>, and that <span class="mono">~x+1</span> equals <span class="mono">-x</span> except at TMin.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;143–144 · 2.3.8 Final Thoughts on Integer Arithmetic</p>
+            <p class="cite">pp.&nbsp;143–144 · 2.3.8 Final Thoughts on Integer Arithmetic</p>
           </div>
         </details>
       </div>
@@ -923,7 +923,7 @@
           <div class="inner">
             <p>A floating-point representation encodes rationals of the form V = x × 2<sup>y</sup>. It is for numbers with very large magnitude, numbers very close to 0, and as an approximation to real arithmetic. Before the 1980s each manufacturer defined its own format and often treated accuracy as secondary to speed.</p>
             <p>Around 1985, IEEE Standard 754 replaced that variety. The effort began in 1976 for Intel’s 8087. Intel hired William Kahan of the University of California, Berkeley. The IEEE committee adopted a standard close to his. Virtually all computers now support IEEE floating point. The aside notes that IEEE, the Institute of Electrical and Electronics Engineers, also publishes the 802.11 wireless standard.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;144–145 · 2.4 Floating Point</p>
+            <p class="cite">pp.&nbsp;144–145 · 2.4 Floating Point</p>
           </div>
         </details>
       </div>
@@ -951,7 +951,7 @@
           <div class="inner">
             <p>Equation 2.19 sums 2<sup>i</sup> × b<sub>i</sub> on both sides of the binary point. 101.11<sub>2</sub> = 5 3/4. Shifting the point left, 10.111<sub>2</sub> = 2 7/8. Shifting it right, 1011.1<sub>2</sub> = 11 1/2. A string of ones after the point, such as 0.111111<sub>2</sub> = 63/64, is what the book writes as 1.0 − ε.</p>
             <p>Finite decimal cannot represent 1/3 or 5/7 exactly. Finite binary cannot represent 1/5 exactly, though 0.2 is exact in decimal. The book’s lengthening approximations are 0, 0.25, 0.25, 0.1875, 0.1875, 0.203125, 0.203125, and 0.19921875.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;145–148 · 2.4.1 Fractional Binary Numbers</p>
+            <p class="cite">pp.&nbsp;145–148 · 2.4.1 Fractional Binary Numbers</p>
           </div>
         </details>
       </div>
@@ -979,7 +979,7 @@
           <div class="inner">
             <p>The numeric value has the form (−1)<sup>s</sup> × M × 2<sup>E</sup>. Figure 2.32: single precision uses 1 sign bit, k = 8 exponent bits, n = 23 fraction bits, bias 127. Double precision uses k = 11, n = 52, bias 1023. Bias is 2<sup>k−1</sup> − 1.</p>
             <p>Figure 2.33: exp all zeros means denormalized, with E = 1 − Bias and M = f, the fraction with no hidden 1. Exp all ones means infinity when frac is 0, and NaN otherwise. Any other exp is normalized: E = e − Bias and M = 1 + f. Denormalized values use E = 1 − Bias rather than −Bias so they meet the smallest normalized number smoothly.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;148–151 · 2.4.2 IEEE Floating-Point Representation</p>
+            <p class="cite">pp.&nbsp;148–151 · 2.4.2 IEEE Floating-Point Representation</p>
           </div>
         </details>
       </div>
@@ -1008,7 +1008,7 @@
           <div class="inner">
             <p>Figure 2.34 uses k = 3 and n = 2, so the bias is 3. Infinities sit at the extremes. The largest normalized magnitudes are ±14. Denormalized numbers cluster at 0, and the two zeros are the denormalized numbers with a zero fraction. The representable numbers are not uniform: they are denser nearer the origin.</p>
             <p>Figure 2.35, k = 4, n = 3, bias 7, lists nonnegative examples. Smallest positive 1/512 ≈ 0.001953. Largest denormalized 7/512 ≈ 0.013672. Smallest normalized 1/64 = 0.015625. The value 1.0 is bits 0 0111 000. Largest normalized is 240. Infinity is 0 1111 000.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;151–156 · 2.4.3 Example Numbers</p>
+            <p class="cite">pp.&nbsp;151–156 · 2.4.3 Example Numbers</p>
           </div>
         </details>
       </div>
@@ -1036,7 +1036,7 @@
           <div class="inner">
             <p>Figure 2.37 rounds to the nearest dollar. Round-to-even, also called round-to-nearest, is the default: $1.40 → $1, $1.60 → $2, $1.50 → $2, $2.50 → $2, $−1.50 → $−2. Round-toward-zero gives $1, $1, $1, $2, $−1. Round-down gives $1, $1, $1, $2, $−2. Round-up gives $2, $2, $2, $3, $−1.</p>
             <p>The even rule avoids a statistical bias in averages. The same idea applies past the decimal point: 1.2350000 and 1.2450000 both round to 1.24 when the target is hundredths, because 4 is even. In binary, a 0 in the last kept bit is even and a 1 is odd. The mode matters for a pattern whose remainder begins with 1 followed by all zeros — a perfect tie.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;156–158 · 2.4.4 Rounding</p>
+            <p class="cite">pp.&nbsp;156–158 · 2.4.4 Rounding</p>
           </div>
         </details>
       </div>
@@ -1064,7 +1064,7 @@
           <div class="inner">
             <p>The result of an operation is Round(x ⊙ y), the exact real result then rounded. 1/−0 yields −∞ and 1/+0 yields +∞. Floating-point addition is commutative, and x + (−x) is 0 except for infinities (∞ − ∞ is NaN) and NaNs. It is not associative. With single precision, (3.14+1e10)−1e10 evaluates to 0.0, while 3.14+(1e10−1e10) evaluates to 3.14.</p>
             <p>Multiplication is commutative and has identity 1.0, and it is not associative: (1e20*1e20)*1e-20 evaluates to +∞, while 1e20*(1e20*1e-20) evaluates to 1e20. It does not distribute: 1e20*(1e20−1e20) is 0.0, while 1e20*1e20 − 1e20*1e20 is NaN. Monotonicity does hold, for values other than NaN. A compiler that computes t = b+c and then x = a+t may not match x = a+b+c.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;158–160 · 2.4.5 Floating-Point Operations</p>
+            <p class="cite">pp.&nbsp;158–160 · 2.4.5 Floating-Point Operations</p>
           </div>
         </details>
       </div>
@@ -1092,7 +1092,7 @@
           <div class="inner">
             <p><span class="mono">float</span> and <span class="mono">double</span> are the two C floating types. On IEEE machines they are single and double precision, rounded to even. The standards do not require IEEE, so there is no portable way to change the rounding mode or to name −0, +∞, −∞, or NaN. gcc defines <span class="mono">INFINITY</span> and <span class="mono">NAN</span> when the file contains <span class="mono">#define _GNU_SOURCE 1</span> and <span class="mono">#include &lt;math.h&gt;</span>.</p>
             <p>Assuming a 32-bit int: int to float may round but cannot overflow; int or float to double preserves the value; double to float may overflow to ±∞ or round; float or double to int rounds toward zero. 1.999 becomes 1 and −1.999 becomes −1. A conversion that cannot produce a reasonable integer yields the bit pattern [10…00], TMin, on Intel-compatible processors. The book gives (int)+1e10 as the example that turns a positive value into that negative pattern.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;160–162 · 2.4.6 Floating Point in C</p>
+            <p class="cite">pp.&nbsp;160–162 · 2.4.6 Floating Point in C</p>
           </div>
         </details>
       </div>
@@ -1120,7 +1120,7 @@
           <div class="inner">
             <p>The summary gathers the chapter: bits and bytes, 32-bit versus 64-bit programs, two’s complement, IEEE 754, casts that keep the bits, and arithmetic that overflows or underflows. Integer arithmetic stays associative, commutative, and distributive even though <span class="mono">x*x</span> can be negative. Floating-point arithmetic must be used carefully because it has limited range and precision and is not associative. <span class="mono">~x+1</span> is <span class="mono">-x</span>, and <span class="mono">(1&lt;&lt;k)-1</span> builds a mask of k ones.</p>
             <p>The aside Ariane 5: the maiden voyage was 4 June 1996. At 37 seconds the rocket veered off its flight path, broke up, and exploded. The satellites were valued at $500 million. A 64-bit floating-point horizontal velocity was converted to a 16-bit signed integer and overflowed. The software had been written for Ariane 4, whose horizontal velocity would never overflow a 16-bit number. Ariane 5 could be more than five times faster in that measurement, and the assumption was not rechecked.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;162–163 · 2.5 Summary, Aside: Ariane 5</p>
+            <p class="cite">pp.&nbsp;162–163 · 2.5 Summary, Aside: Ariane 5</p>
           </div>
         </details>
       </div>

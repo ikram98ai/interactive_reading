@@ -158,7 +158,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>SRAM: 6 transistors per bit, relative access 1×, persistent while powered, about 1,000× the cost of DRAM, used for cache. DRAM: 1 transistor and a capacitor of about 30 femtofarads, access about 10×, must be refreshed, used for main memory and frame buffers.</p>
             <p>A 16 × 8 DRAM has 16 supercells of 8 bits, arranged 4 × 4. Reading (2, 1) sends RAS = 2, then CAS = 1. A DIMM wires chips in parallel so they answer with a wider word. A memory read puts the address on the system bus, the I/O bridge forwards it on the memory bus, and main memory sends the word back. Enhanced DRAMs (SDR, DDR, and their kin) change the interface around the same capacitor cell.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.1.1 Random Access Memory</p>
+            <p class="cite">p.&nbsp;617 · §6.1.1 Random Access Memory</p>
           </div>
         </details>
       </div>
@@ -186,7 +186,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>Average seek is typically 3 to 9 ms. Average rotation is half a turn. Transfer of one sector is a thin slice of a turn. Tavg rotation at 7,200 RPM is about 4 ms; Tavg transfer for 512 bytes at 400 sectors/track is about 0.02 ms. Twice the seek time is a handy estimate of a random access.</p>
             <p>A 64-bit word is roughly 4 ns in SRAM and 60 ns in DRAM. A disk access of about 10 ms is tens of thousands of times a DRAM access. After the command, the controller can DMA the sector and interrupt the CPU.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.1.2 Disk Storage</p>
+            <p class="cite">p.&nbsp;625 · §6.1.2 Disk Storage</p>
           </div>
         </details>
       </div>
@@ -214,7 +214,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>An SSD packages flash chips plus a translation layer behind a disk slot such as SATA or USB. “A page can be written only after the entire block to which it belongs has been erased.” A block wears out after roughly 100,000 writes.</p>
             <p>One commercial drive in the book: sequential read about 550 MB/s and write about 470 MB/s; random reads faster than random writes; sequential access around 50 μs read and 60 μs write for 4 KB. Random writes pay the erase and the copy of sibling pages. Wear-leveling spreads that cost. SSDs cost more per byte than rotating disks and have no moving arm.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.1.3 Solid State Disks</p>
+            <p class="cite">p.&nbsp;636 · §6.1.3 Solid State Disks</p>
           </div>
         </details>
       </div>
@@ -241,7 +241,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>The survey behind the trend figure: SRAM $/MB from about 2,900 (1985) to 25 (2015), access from 150 ns to 1.3 ns. DRAM $/MB from about 880 to 0.02, access from 200 ns to 20 ns, typical size from a fraction of a megabyte to 16 GB. Disk $/GB from about 100,000 to 0.03, minimum seek from 75 ms to 3 ms.</p>
             <p>CPU cycle time from 166 ns (80286) to 0.33 ns (2015 Core i7). Around 2003 the curve splits: single-core cycle time stalled, and chips gained cores instead. Effective cycle time fell further. It is much easier to increase density than to decrease access time.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.1.4 Storage Technology Trends</p>
+            <p class="cite">p.&nbsp;638 · §6.1.4 Storage Technology Trends</p>
           </div>
         </details>
       </div>
@@ -268,7 +268,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>A program with good temporal locality reuses a memory location many times in the near future. Spatial locality is the neighbour rule. In the vector sum, <code>sum</code> is temporal and has no spatial locality; <code>v</code> with stride 1 is spatial and each element is touched once.</p>
             <p>The row-wise double loop matches C’s row-major layout. The column-wise loop is stride-N. On the authors’ machine, matrix kernels with the same arithmetic and different locality varied by almost 40×.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.2.1 Locality of References to Program Data</p>
+            <p class="cite">p.&nbsp;642 · §6.2.1 Locality of References to Program Data</p>
           </div>
         </details>
       </div>
@@ -294,7 +294,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <summary>What the book says</summary>
           <div class="inner">
             <p>Instruction fetches have spatial locality because the CPU executes instructions in sequence, and temporal locality because loops reuse the same instructions. Programs almost never write their own instruction memory at run time, so the instruction stream is a friendly client of the cache.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.2.2 Locality of Instruction Fetches</p>
+            <p class="cite">p.&nbsp;643 · §6.2.2 Locality of Instruction Fetches</p>
           </div>
         </details>
       </div>
@@ -320,7 +320,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <summary>What the book says</summary>
           <div class="inner">
             <p>Locality is the reason hierarchies work: a well-written program touches the storage at one level more often than the level below, so the lower level can be slower, larger, and cheaper per bit. Data references and instruction references both count.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.2.3 Summary of Locality</p>
+            <p class="cite">p.&nbsp;644 · §6.2.3 Summary of Locality</p>
           </div>
         </details>
       </div>
@@ -347,7 +347,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>From the top: registers, L1–L3 SRAM, DRAM main memory, local disks, then remote storage such as network file systems. “The overall effect is a large pool of memory that costs as much as the cheap storage near the bottom of the hierarchy but that serves data to programs at the rate of the fast storage near the top.”</p>
             <p>Sample hit times in the book’s survey: registers 0 cycles, L1 about 4, L2 about 10, L3 about 50, main memory about 200, disk cache about 100,000, network or browser cache on the order of millions to billions of cycles. SSDs sit between DRAM and rotating disk.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.3 The Memory Hierarchy</p>
+            <p class="cite">p.&nbsp;645 · §6.3 The Memory Hierarchy</p>
           </div>
         </details>
       </div>
@@ -374,7 +374,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>The cache at level k holds copies of blocks from level k+1. Hits are served from k. A miss copies the block in, possibly replacing another. Placement of the form “block i lives in slot i mod n” is the direct-mapped idea in miniature. The book’s picture holds blocks 4, 9, 14, and 3 in a four-slot cache above a sixteen-block memory.</p>
             <p>Cold misses fill an empty cache. Conflict misses happen when placement piles live blocks onto one slot while other slots sit idle. Capacity misses happen when the working set is simply larger than the cache. The block size is the transfer unit between that pair of levels: words near the registers, cache lines in the SRAM caches, pages between disk and memory.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.3.1 Caching in the Memory Hierarchy</p>
+            <p class="cite">p.&nbsp;646 · §6.3.1 Caching in the Memory Hierarchy</p>
           </div>
         </details>
       </div>
@@ -401,7 +401,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>The ubiquity table pairs each cache with what it holds, where it sits, a latency, and a manager: compiler for registers; hardware for TLB and L1–L3; hardware plus OS for virtual memory; the OS for the buffer cache; disk firmware for the disk cache; AFS or NFS client software, the browser, or a proxy for the network and web caches.</p>
             <p>Latencies in that table run from 0 cycles for registers and a TLB hit, through 4 / 10 / 50 for the SRAM caches and about 200 for main memory, up to about 100,000 for a disk cache and orders of magnitude more once a network is involved.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.3.2 Summary of Memory Hierarchy Concepts</p>
+            <p class="cite">p.&nbsp;650 · §6.3.2 Summary of Memory Hierarchy Concepts</p>
           </div>
         </details>
       </div>
@@ -428,7 +428,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>Parameters: m address bits, S = 2<sup>s</sup> sets, E lines per set, B = 2<sup>b</sup> bytes per block, t = m − (s + b) tag bits. C = B × E × S counts data bytes only. A line is valid bit + tag + block. A set is E lines. People often say “line size” when they mean block size.</p>
             <p>A reference selects the set, matches a valid tag, then extracts the word at the block offset. Direct-mapped means E = 1. Set-associative means 1 &lt; E &lt; C/B. Fully associative means E = C/B, a single set.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.4.1 Generic Cache Memory Organization</p>
+            <p class="cite">p.&nbsp;651 · §6.4.1 Generic Cache Memory Organization</p>
           </div>
         </details>
       </div>
@@ -458,7 +458,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>Worked cache (4, 1, 2, 4). Address bits are t | ss | b with one tag bit, two index bits, one offset bit. The trace 0, 1, 13, 8, 0 is miss, hit, miss, miss, miss. The last miss is the conflict: address 8 replaced the block that address 0 needs, and the other sets never entered the fight.</p>
             <p>Indexing with the middle bits spreads consecutive blocks across sets. Indexing with the high bits maps a run of consecutive blocks onto one set. The set-selection bits are the ones just above the block offset.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.4.2 Direct-Mapped Caches</p>
+            <p class="cite">p.&nbsp;653 · §6.4.2 Direct-Mapped Caches</p>
           </div>
         </details>
       </div>
@@ -486,7 +486,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>Line matching in an E-way set compares the tag against all E lines in the selected set. A hit is any valid match. A miss with a free line fills it. A miss with a full set replaces one line. LRU, LFU, and random are the usual policies; LRU needs a little state per line.</p>
             <p>Raising E removes conflicts that were only a placement accident. It costs extra tag comparators, extra state, and a slower hit path. The Core i7 uses E = 8 in L1 and L2 and E = 16 in L3.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.4.3 Set Associative Caches</p>
+            <p class="cite">p.&nbsp;660 · §6.4.3 Set Associative Caches</p>
           </div>
         </details>
       </div>
@@ -513,7 +513,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>Fully associative placement puts a block in any line. Matching searches the entire cache. Replacement is explicit, because there is no single “home” slot to overwrite. The organization is used when the number of lines is small.</p>
             <p>A capacity miss is independent of the placement function: even a fully associative cache misses when the working set does not fit. Cold misses still happen on the first touch of each block.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.4.4 Fully Associative Caches</p>
+            <p class="cite">p.&nbsp;662 · §6.4.4 Fully Associative Caches</p>
           </div>
         </details>
       </div>
@@ -540,7 +540,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>Write-through updates the next level on a write hit. Write-back defers that update until eviction and keeps a dirty bit per line. Write-allocate fetches the block on a write miss. No-write-allocate bypasses the cache and writes the next level directly.</p>
             <p>The suggested mental model is write-back, write-allocate: lower levels already use write-back (virtual memory uses it exclusively), modern chips use write-back widely, and the policy is symmetric with reads. Write-through can hide behind a write buffer. Write-back leaves more bus bandwidth for DMA.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.4.5 Issues with Writes</p>
+            <p class="cite">p.&nbsp;666 · §6.4.5 Issues with Writes</p>
           </div>
         </details>
       </div>
@@ -567,7 +567,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>Core i7: L1 i-cache and L1 d-cache each 32 KB, 8-way, 64-byte blocks, 64 sets, 4-cycle access. L2 unified 256 KB, 8-way, 64-byte blocks, 512 sets, 10 cycles. L3 unified 8 MB, 16-way, 64-byte blocks, 8,192 sets, 40 to 75 cycles, shared by the cores. All of that SRAM is on the CPU chip.</p>
             <p>Separate L1 caches allow a simultaneous instruction fetch and data load, can be tuned differently, and keep instruction and data references from conflicting with each other. The cost is that a byte used as both code and data cannot be shared inside one L1.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.4.6 Anatomy of a Real Cache Hierarchy</p>
+            <p class="cite">p.&nbsp;667 · §6.4.6 Anatomy of a Real Cache Hierarchy</p>
           </div>
         </details>
       </div>
@@ -595,7 +595,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>Miss rate = misses / references. Hit rate = 1 − miss rate. Hit time includes set selection, line matching, and word extraction. Miss penalty from L2 is about 10 cycles, from L3 about 50, from main memory about 200.</p>
             <p>Larger caches: higher hit rate, slower hit. Larger blocks: better spatial hits, fewer lines, larger transfer. Higher E: fewer conflict misses, more tag bits and a longer hit time. The Core i7 compromise is 64-byte blocks, 8-way L1 and L2, 16-way L3. Write-back becomes more attractive as transfer time grows.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.4.7 Performance Impact of Cache Parameters</p>
+            <p class="cite">p.&nbsp;667 · §6.4.7 Performance Impact of Cache Parameters</p>
           </div>
         </details>
       </div>
@@ -622,7 +622,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>Focus on the inner loops of the core functions. For a stride-1 <code>sumvec</code> of ints with B = 16 and a cold cache, the pattern is miss, hit, hit, hit. <code>sumarrayrows</code> repeats that per row. <code>sumarraycols</code> is stride-N. When the array fits, even the column walk can warm up; when it does not, every <code>a[i][j]</code> misses.</p>
             <p>On the authors’ desktop, the row-wise sum ran about 25 times faster than the column-wise sum once the arrays were large.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.5 Writing Cache-Friendly Code</p>
+            <p class="cite">p.&nbsp;669 · §6.5 Writing Cache-Friendly Code</p>
           </div>
         </details>
       </div>
@@ -649,7 +649,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>The mountain is read throughput versus size (about 16 KB to 128 MB) and stride, measured on a Core i7 Haswell with 32 KB L1 d-cache, 256 KB L2, 8 MB L3, and 64-byte blocks. The function walks <code>data[i]</code> with a configurable stride and reports MB/s (10<sup>6</sup> bytes per second).</p>
             <p>Ridges of temporal locality sit at the cache sizes. The spatial slope falls as stride grows. Stride-1 prefetch holds a high ridge even when the array is larger than L2. At stride 8 (one 64-byte line per access, when the element is 8 bytes) the slope flattens.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.6.1 The Memory Mountain</p>
+            <p class="cite">p.&nbsp;675 · §6.6.1 The Memory Mountain</p>
           </div>
         </details>
       </div>
@@ -676,7 +676,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>Class AB (ijk, jik): 0.25 + 1.00 + 0 = 1.25 misses per inner iteration. Class AC (jki, kji): two stride-n loads, 2.00 misses. Class BC (kij, ikj): two stride-1 streams, 0.50 misses, even though the inner loop also stores C.</p>
             <p>Pairs with the same miss count measured almost the same. For large n, kij and ikj stayed flat — the prefetcher kept up with the stride-1 pattern even when the arrays were far larger than SRAM. The fastest version was almost 40× the slowest.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.6.2 Rearranging Loops to Increase Spatial Locality</p>
+            <p class="cite">p.&nbsp;679 · §6.6.2 Rearranging Loops to Increase Spatial Locality</p>
           </div>
         </details>
       </div>
@@ -703,7 +703,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <div class="inner">
             <p>Focus on inner loops. Maximize spatial locality by reading data sequentially with stride 1. Maximize temporal locality by using a data object as much as possible once it has been read. Those habits help on any hierarchy, because they raise the fraction of references served from the fast levels.</p>
             <p>Blocking (a web aside in this edition) organizes the data into chunks that fit in cache, exhausts the work on a chunk, then loads the next. On the Core i7, hardware prefetch already rewards plain stride-1 matrix multiply, so blocking is not what made kij fast there. The idea still matters on machines that do not prefetch, and it is the direct way to manufacture temporal locality.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed., §6.6.3 Exploiting Locality in Your Programs</p>
+            <p class="cite">p.&nbsp;683 · §6.6.3 Exploiting Locality in Your Programs</p>
           </div>
         </details>
       </div>

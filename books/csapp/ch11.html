@@ -195,7 +195,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
             <p>Every network application is based on the client-server model: a server process and one or more client processes. A server manages some resource and provides a service by manipulating it. A Web server manages disk files; an FTP server stores and retrieves files; an email server reads and updates a spool file.</p>
             <p>Figure 11.1 is four steps. The client sends a request. The server interprets it and manipulates its resources. The server sends a response and waits for the next request. The client receives the response and manipulates it — a browser displays the page.</p>
             <p>“Client-server transactions are not database transactions and do not share any of their properties, such as atomicity.” Here a transaction is simply a sequence of steps. Clients and servers are processes, not hosts. One host can run many of each, and a transaction can stay on one host or cross the Internet. The model is the same either way.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;954–955 · 11.1 The Client-Server Programming Model</p>
+            <p class="cite">pp.&nbsp;954–955 · 11.1 The Client-Server Programming Model</p>
           </div>
         </details>
       </div>
@@ -222,7 +222,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <div class="inner">
             <p>To a host, a network is just another I/O device that serves as a source and sink for data (Figure 11.2). An adapter plugged into an expansion slot on the I/O bus provides the physical interface. Data received from the network are copied from the adapter across the I/O and memory buses into memory, typically by a DMA transfer. Data can also be copied from memory to the network.</p>
             <p>Physically, a network is hierarchical by geographical proximity. The lowest level is a LAN spanning a building or campus. The most popular LAN technology is Ethernet, developed in the mid-1970s at Xerox PARC, evolving from 3 Mb/s to 10 Gb/s.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;955–956 · 11.2 Networks</p>
+            <p class="cite">pp.&nbsp;955–956 · 11.2 Networks</p>
           </div>
         </details>
       </div>
@@ -250,7 +250,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
             <p>An Ethernet segment (Figure 11.3) is wires, usually twisted pairs, and a hub. Segments typically span a room or a floor. Each wire has the same maximum bit bandwidth, typically 100 Mb/s or 1 Gb/s. “A hub slavishly copies every bit that it receives on each port to every other port. Thus, every host sees every bit.”</p>
             <p>Each adapter has a globally unique 48-bit address in nonvolatile memory. A frame’s header identifies source, destination, and length, then a payload. Every host adapter sees the frame, but only the destination host actually reads it.</p>
             <p>Bridges join segments into a bridged Ethernet (Figure 11.4). In the book’s picture the bridge–bridge wire is 1 Gb/s and the hub–bridge wires are 100 Mb/s. Bridges learn which hosts are reachable from which ports and copy a frame only when necessary. If host A sends to host B on the same segment, bridge X throws the frame away. If A sends to host C on a different segment, X copies only toward bridge Y, which copies only toward C’s segment.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;956–957 · 11.2 Networks</p>
+            <p class="cite">pp.&nbsp;956–957 · 11.2 Networks</p>
           </div>
         </details>
       </div>
@@ -278,7 +278,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
             <p>To simplify LAN pictures, the book draws hubs, bridges, and wires as one horizontal line (Figure 11.5). Routers connect incompatible LANs, and also WANs such as high-speed point-to-point phone links, into an internet (Figure 11.6: two LANs, two WANs, three routers). “We will always use lowercase internet to denote the general concept, and uppercase Internet to denote a specific implementation — namely, the global IP Internet.”</p>
             <p>Protocol software on each host and router gives two things the wires do not share: a uniform naming scheme, and packets. A packet has a header (size and source and destination host addresses) and a payload. Figure 11.7 walks eight steps from a client on host A (LAN1) to a server on host B (LAN2). The LAN1 frame’s payload is an internet packet, whose payload is the user data. “This kind of encapsulation is one of the fundamental insights of internetworking.”</p>
             <p>The router reads the destination internet address, indexes a routing table, strips the LAN1 frame header, and prepends a LAN2 frame header addressed to host B. Host B strips both headers and, when the server reads, copies the data into the server’s virtual address space. The book leaves open different maximum frame sizes, how routers learn routes, topology changes, and lost packets.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;957–959 · 11.2 Networks</p>
+            <p class="cite">pp.&nbsp;957–959 · 11.2 Networks</p>
           </div>
         </details>
       </div>
@@ -308,7 +308,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
             <p>IP provides naming and delivery of datagrams from host to host, and “makes no effort to recover if datagrams are lost or duplicated.” UDP extends IP so datagrams can go from process to process. TCP builds reliable full-duplex connections on IP. The book treats TCP/IP as one monolithic protocol and does not discuss UDP.</p>
             <p>From a programmer’s perspective the Internet is a worldwide collection of hosts with three properties: hosts map to 32-bit IP addresses; those addresses map to Internet domain names; a process can communicate with a process on any other host over a connection.</p>
             <p>IPv4 is the original 32-bit protocol. In 1996 the IETF proposed IPv6, with 128-bit addresses. As of 2015, only 4 percent of users accessed Google services using IPv6, so the chapter focuses on IPv4. The client and server techniques later in the chapter use modern interfaces that are independent of any particular protocol.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;960–961 · 11.3 The Global IP Internet</p>
+            <p class="cite">pp.&nbsp;960–961 · 11.3 The Global IP Internet</p>
           </div>
         </details>
       </div>
@@ -337,7 +337,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
             <p>Figure 11.9: <code>struct in_addr { uint32_t s_addr; }</code> with the address always in network (big-endian) byte order, even on a little-endian host. 128.2.194.242 is 0x8002c2f2. <code>hostname -i</code> on the book’s host printed 128.2.210.175.</p>
             <p><code>htonl</code> and <code>ntohl</code> convert 32-bit values; <code>htons</code> and <code>ntohs</code> convert 16-bit values. <code>inet_pton</code> and <code>inet_ntop</code> convert dotted-decimal strings and binary addresses (“p” presentation, “n” network). They return 1, 0, or −1 (<code>inet_pton</code>) and a pointer or NULL (<code>inet_ntop</code>). They also accept <code>AF_INET6</code>, which the book does not cover.</p>
             <p>Practice Problem 11.1 asks for a dotted-decimal ↔ hex table. The solution pairs 107.212.122.205 with 0x6BD47ACD, 64.12.149.13 with 0x400C950D, 107.212.96.29 with 0x6BD4601D, 0x00000080 with 0.0.0.128, 0xFFFFFF00 with 255.255.255.0, and 0x0A010140 with 10.1.1.64.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;961–963 · 11.3.1 IP Addresses</p>
+            <p class="cite">pp.&nbsp;961–963 · 11.3.1 IP Addresses</p>
           </div>
         </details>
       </div>
@@ -366,7 +366,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
             <p>A domain name is words (letters, numbers, dashes) separated by periods. Figure 11.10: an unnamed root, first-level names defined by ICANN (com, edu, gov, org, net), then second-level names such as cmu.edu, assigned first-come first-serve. An organisation that owns a second-level name may create cs.cmu.edu and so on. The figure also shows whaleshark at 128.2.210.175, a www at 128.2.131.66, and amazon’s www at 176.32.98.166.</p>
             <p>Until 1988 the mapping lived in HOSTS.TXT. Since then it is DNS. Each host entry maps a set of names to a set of IP addresses. <code>localhost</code> always maps to the loopback address 127.0.0.1. <code>whaleshark.ics.cs.cmu.edu</code> maps to 128.2.210.175. <code>cs.mit.edu</code> and <code>eecs.mit.edu</code> both map to 18.62.1.6. <code>www.twitter.com</code> and <code>twitter.com</code> share 199.16.156.6, 199.16.156.70, 199.16.156.102, and 199.16.156.230. <code>nslookup edu</code> and <code>ics.cs.cmu.edu</code> print “No answer.”</p>
             <p>The Internet Domain Survey counted about 20,000 hosts in 1987 and over 1,000,000,000 by 2015.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;963–965 · 11.3.2 Internet Domain Names</p>
+            <p class="cite">pp.&nbsp;963–965 · 11.3.2 Internet Domain Names</p>
           </div>
         </details>
       </div>
@@ -394,7 +394,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <div class="inner">
             <p>A connection is point-to-point, full duplex, and reliable: “the stream of bytes sent by the source process is eventually received by the destination process in the same order it was sent,” barring a catastrophe such as a cable cut by a careless backhoe operator.</p>
             <p>A socket address is an IP address plus a 16-bit port, written <code>address:port</code>. The client port is an ephemeral port assigned by the kernel. Web servers typically use port 80 (well-known name <code>http</code> in <code>/etc/services</code>); email uses port 25 (<code>smtp</code>). A connection is the socket pair <code>(cliaddr:cliport, servaddr:servport)</code>. Figure 11.11’s pair is <code>(128.2.194.242:51213, 208.216.181.15:80)</code>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;965–967 · 11.3.3 Internet Connections</p>
+            <p class="cite">pp.&nbsp;965–967 · 11.3.3 Internet Connections</p>
           </div>
         </details>
       </div>
@@ -423,7 +423,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <div class="inner">
             <p>The sockets interface is used with the Unix I/O functions to build network applications. It exists on Unix variants and on Windows and Macintosh systems. Figure 11.12 is the road map: the server side runs <code>getaddrinfo</code>, <code>socket</code>, <code>bind</code>, <code>listen</code>, then blocks in <code>accept</code>; the client runs <code>getaddrinfo</code>, <code>socket</code>, and <code>connect</code>. After the connection, both sides use <code>rio_readlineb</code> and <code>rio_writen</code>, then <code>close</code>. The helpers <code>open_clientfd</code> and <code>open_listenfd</code> wrap the open sequence.</p>
             <p>EOF on a connection is not a character. It is a condition the kernel detects. For a connection, EOF happens when the other process closes its end. The reader finds out by getting a zero return from <code>read</code>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;968–969 · 11.4 The Sockets Interface</p>
+            <p class="cite">pp.&nbsp;968–969 · 11.4 The Sockets Interface</p>
           </div>
         </details>
       </div>
@@ -450,7 +450,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <div class="inner">
             <p>Figure 11.13: <code>sockaddr_in</code> has <code>sin_family</code> (always <code>AF_INET</code> for these programs), <code>sin_port</code> (16-bit, network byte order), <code>sin_addr</code> (32-bit, network byte order), and <code>sin_zero[8]</code> so the struct matches <code>sizeof(struct sockaddr)</code>. The generic <code>sockaddr</code> has <code>sa_family</code> and <code>sa_data[14]</code>.</p>
             <p>The book follows Stevens and defines <code>typedef struct sockaddr SA</code>, then casts <code>sockaddr_in *</code> to <code>SA *</code> at the calls.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;969–970 · 11.4.1 Socket Address Structures</p>
+            <p class="cite">pp.&nbsp;969–970 · 11.4.1 Socket Address Structures</p>
           </div>
         </details>
       </div>
@@ -478,7 +478,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <div class="inner">
             <p><code>socket(domain, type, protocol)</code> returns a nonnegative descriptor, or −1 on error. A connection end point can be created with <code>Socket(AF_INET, SOCK_STREAM, 0)</code>: <code>AF_INET</code> means 32-bit IP addresses, <code>SOCK_STREAM</code> means a connection. The best practice is to let <code>getaddrinfo</code> generate those arguments (Section 11.4.8).</p>
             <p>The descriptor is only partially opened and cannot yet be used for reading and writing. How you finish opening it depends on whether you are a client or a server.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., p.&nbsp;970 · 11.4.2 The socket Function</p>
+            <p class="cite">p.&nbsp;970 · 11.4.2 The socket Function</p>
           </div>
         </details>
       </div>
@@ -505,7 +505,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <div class="inner">
             <p><code>connect(clientfd, addr, addrlen)</code> attempts a connection to the socket address <code>addr</code>, with <code>addrlen</code> equal to <code>sizeof(sockaddr_in)</code>. It blocks until the connection is established or an error occurs. On success <code>clientfd</code> is ready for reading and writing, and the connection is the socket pair <code>(x:y, addr.sin_addr:addr.sin_port)</code>, where <code>x</code> is the client’s IP address and <code>y</code> is the ephemeral port.</p>
             <p>As with <code>socket</code>, the best practice is to let <code>getaddrinfo</code> supply the address arguments.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;970–971 · 11.4.3 The connect Function</p>
+            <p class="cite">pp.&nbsp;970–971 · 11.4.3 The connect Function</p>
           </div>
         </details>
       </div>
@@ -532,7 +532,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <summary>What the book says</summary>
           <div class="inner">
             <p><code>bind</code>, <code>listen</code>, and <code>accept</code> are how servers establish connections. <code>bind(sockfd, addr, addrlen)</code> asks the kernel to associate the server’s socket address with <code>sockfd</code>. <code>addrlen</code> is <code>sizeof(sockaddr_in)</code>. It returns 0, or −1 on error. As with <code>socket</code> and <code>connect</code>, the best practice is to let <code>getaddrinfo</code> supply the arguments.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., p.&nbsp;971 · 11.4.4 The bind Function</p>
+            <p class="cite">p.&nbsp;971 · 11.4.4 The bind Function</p>
           </div>
         </details>
       </div>
@@ -559,7 +559,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <summary>What the book says</summary>
           <div class="inner">
             <p>Clients are active; servers are passive. <code>listen(sockfd, backlog)</code> converts <code>sockfd</code> from an active socket into a listening socket that can accept connection requests. The backlog is a hint about how many outstanding requests the kernel should queue before it refuses more. The exact meaning needs more TCP/IP than the chapter covers. The book typically sets it to a large value, such as 1,024.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;971–972 · 11.4.5 The listen Function</p>
+            <p class="cite">pp.&nbsp;971–972 · 11.4.5 The listen Function</p>
           </div>
         </details>
       </div>
@@ -587,7 +587,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <div class="inner">
             <p><code>accept(listenfd, addr, addrlen)</code> waits for a connection request on the listening descriptor, fills in the client’s socket address, and returns a connected descriptor. The listening descriptor is created once and exists for the lifetime of the server. The connected descriptor is created for each accepted client and exists only while the server services that client.</p>
             <p>Figure 11.14: the server blocks in <code>accept</code> on <code>listenfd</code> (descriptor 3). The client blocks in <code>connect</code>. <code>accept</code> returns <code>connfd</code> 4, the connection is between <code>clientfd</code> and <code>connfd</code>, and both calls return. The aside points out why the split exists: a concurrent server can fork a child that talks on the connected descriptor while the parent keeps accepting on the listening one. Chapter 12 builds those servers.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;972–973 · 11.4.6 The accept Function</p>
+            <p class="cite">pp.&nbsp;972–973 · 11.4.6 The accept Function</p>
           </div>
         </details>
       </div>
@@ -616,7 +616,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
             <p><code>getaddrinfo</code> replaces <code>gethostbyname</code> and <code>getservbyname</code>. It is reentrant and protocol-independent. Given host and service, it returns a list of <code>addrinfo</code> structures (Figure 11.15), each pointing at a socket address. A client tries each until <code>socket</code> and <code>connect</code> succeed; a server tries each until <code>socket</code> and <code>bind</code> succeed. Nonzero errors become strings via <code>gai_strerror</code>. At least one of host and service must be set.</p>
             <p>Hints (Figure 11.16) may set <code>ai_family</code>, <code>ai_socktype</code>, <code>ai_protocol</code>, and <code>ai_flags</code>; everything else is zeroed with <code>memset</code>. Useful flags: <code>AI_ADDRCONFIG</code>, <code>AI_CANONNAME</code>, <code>AI_NUMERICSERV</code>, and <code>AI_PASSIVE</code> (server; host NULL; wildcard address). <code>ai_family</code>, <code>ai_socktype</code>, and <code>ai_protocol</code> pass straight to <code>socket</code>; <code>ai_addr</code> and <code>ai_addrlen</code> pass straight to <code>connect</code> or <code>bind</code>.</p>
             <p><code>getnameinfo</code> is the inverse, replacing <code>gethostbyaddr</code> and <code>getservbyport</code>. <code>NI_NUMERICHOST</code> asks for a numeric address; <code>NI_NUMERICSERV</code> asks for a port number instead of a name from <code>/etc/services</code>. Figure 11.17’s hostinfo, run on twitter.com, prints 199.16.156.102, 199.16.156.230, 199.16.156.6, and 199.16.156.70.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;973–978 · 11.4.7 Host and Service Conversion</p>
+            <p class="cite">pp.&nbsp;973–978 · 11.4.7 Host and Service Conversion</p>
           </div>
         </details>
       </div>
@@ -643,7 +643,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <div class="inner">
             <p>Figure 11.18, <code>open_clientfd</code>: hints request <code>SOCK_STREAM</code>, <code>AI_NUMERICSERV</code>, and <code>AI_ADDRCONFIG</code>. The loop creates a socket and connects. A failed socket tries the next entry; a failed connect closes the descriptor and tries the next. The list is freed either way. No line depends on a particular IP version.</p>
             <p>Figure 11.19, <code>open_listenfd</code>: hints are <code>AI_PASSIVE | AI_ADDRCONFIG</code> plus <code>AI_NUMERICSERV</code>, and the host argument is NULL, so each address is the wildcard. <code>setsockopt</code> with <code>SO_REUSEADDR</code> avoids the “Address already in use” error. By default a restarted server denies requests for approximately 30 seconds. After a successful bind, <code>listen(listenfd, LISTENQ)</code> makes it a listening socket. If listen fails, the descriptor is closed before returning −1.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;978–981 · 11.4.8 Helper Functions for the Sockets Interface</p>
+            <p class="cite">pp.&nbsp;978–981 · 11.4.8 Helper Functions for the Sockets Interface</p>
           </div>
         </details>
       </div>
@@ -671,7 +671,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <div class="inner">
             <p>Figure 11.20: the client requires <code>host</code> and <code>port</code>, calls <code>Open_clientfd</code>, then loops <code>Fgets</code> / <code>Rio_writen</code> / <code>Rio_readlineb</code> / <code>Fputs</code> until <code>fgets</code> hits EOF (Ctrl+D, or the end of a redirected file). <code>Close</code> on the way out is good practice; the kernel would close descriptors at exit anyway.</p>
             <p>Figure 11.21: <code>Open_listenfd</code>, then an infinite loop of <code>Accept</code>, <code>Getnameinfo</code>, <code>printf("Connected to (%s, %s)\n")</code>, <code>echo</code>, <code>Close</code>. The client address is a <code>sockaddr_storage</code>. Figure 11.22’s <code>echo</code> prints <code>server received %d bytes</code> and writes the same bytes back until <code>rio_readlineb</code> returns 0. A server that handles one client at a time is an iterative server. Concurrent servers wait until Chapter 12.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;981–984 · 11.4.9 Example Echo Client and Server</p>
+            <p class="cite">pp.&nbsp;981–984 · 11.4.9 Example Echo Client and Server</p>
           </div>
         </details>
       </div>
@@ -698,7 +698,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <div class="inner">
             <p>Web clients and servers use HTTP. A browser opens a connection, requests content, the server responds and closes the connection, and the browser displays what it read. HTML tags describe the page. <code>&lt;b&gt; Make me bold! &lt;/b&gt;</code> is boldface. A hyperlink such as <code>&lt;a href="http://www.cmu.edu/index.html"&gt;Carnegie Mellon&lt;/a&gt;</code> highlights the text and, on a click, requests <code>index.html</code> from the CMU server.</p>
             <p>The Web was proposed in 1989 by Tim Berners-Lee at CERN. In 1993 Marc Andreesen and colleagues at NCSA released the graphical browser mosaic for Linux, Windows, and Macintosh. By 2015 there were over 975,000,000 sites (Netcraft Web Survey).</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;984–985 · 11.5.1 Web Basics</p>
+            <p class="cite">pp.&nbsp;984–985 · 11.5.1 Web Basics</p>
           </div>
         </details>
       </div>
@@ -725,7 +725,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <div class="inner">
             <p>Figure 11.23 lists MIME types including text/html, text/plain, application/postscript, image/gif, image/png, and image/jpeg. Static content is a disk file; dynamic content is the output of an executable.</p>
             <p>The URL <code>http://www.google.com:80/index.html</code> names <code>/index.html</code> on www.google.com, port 80. The port is optional and defaults to 80. <code>http://bluefish.ics.cs.cmu.edu:8000/cgi-bin/adder?15000&amp;213</code> names an executable with argument strings 15000 and 213. The client uses the prefix to find the server; the server uses the suffix to find the file and to decide static versus dynamic. There is no universal rule; a classic one is a directory such as cgi-bin for executables. The leading slash is the content home, not the Linux root — a server might keep static files in /usr/httpd/html and dynamic files in /usr/httpd/cgi-bin. The suffix <code>/</code> expands to a default such as /index.html.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;985–986 · 11.5.2 Web Content</p>
+            <p class="cite">pp.&nbsp;985–986 · 11.5.2 Web Content</p>
           </div>
         </details>
       </div>
@@ -753,7 +753,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <div class="inner">
             <p>Figure 11.24: <code>telnet www.aol.com 80</code> reaches 205.188.146.23. The client sends <code>GET / HTTP/1.1</code> and <code>Host: www.aol.com</code>, then a blank line. The server replies <code>HTTP/1.0 200 OK</code>, five response headers including <code>Content-Type: text/html</code> and <code>Content-Length: 42092</code>, then HTML, then closes. Telnet appends <code>\r\n</code> to each line. The Host header is “required in HTTP/1.1 requests, but not in HTTP/1.0 requests.” It tells a proxy the origin server’s domain name.</p>
             <p>Methods include GET, POST, OPTIONS, HEAD, PUT, DELETE, and TRACE. The chapter discusses GET. A request line is <code>method URI version</code>. The URI is the URL suffix (a proxy must send the whole URL). HTTP/1.1 adds caching, security, and persistent connections; HTTP/1.0 clients and servers ignore unknown HTTP/1.1 headers. Figure 11.25: 200 OK, 301 Moved permanently, 400 Bad request, 403 Forbidden, 404 Not found, 501 Not implemented, 505 HTTP version not supported. POST carries arguments in the body, not the URI.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;986–989 · 11.5.3 HTTP Transactions</p>
+            <p class="cite">pp.&nbsp;986–989 · 11.5.3 HTTP Transactions</p>
           </div>
         </details>
       </div>
@@ -780,7 +780,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <div class="inner">
             <p>CGI answers how arguments reach the server, how they reach the child, what else the child may see, and where the child writes. GET arguments sit in the URI after <code>?</code>, separated by <code>&amp;</code>. Spaces are <code>%20</code>. The server forks and runs the program with <code>execve</code>. Before that, the child sets <code>QUERY_STRING</code> to <code>15000&amp;213</code>. Figure 11.26 also lists <code>SERVER_PORT</code>, <code>REQUEST_METHOD</code>, <code>REMOTE_HOST</code>, <code>REMOTE_ADDR</code>, and for POST, <code>CONTENT_TYPE</code> and <code>CONTENT_LENGTH</code>. POST would also dup2 standard input onto the connected descriptor.</p>
             <p>The child sends dynamic content to standard output, after <code>dup2</code> has aimed stdout at the client, and the child generates Content-type, Content-length, and the blank line. Figure 11.27 is adder. Figure 11.28’s transaction against Tiny returns <code>Content-length: 115</code> and the line “The answer is: 15000 + 213 = 15213”.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;989–992 · 11.5.4 Serving Dynamic Content</p>
+            <p class="cite">pp.&nbsp;989–992 · 11.5.4 Serving Dynamic Content</p>
           </div>
         </details>
       </div>
@@ -807,7 +807,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <summary>What the book says</summary>
           <div class="inner">
             <p>Tiny combines process control, Unix I/O, sockets, and HTTP in about 250 lines. It can serve static and dynamic content, text and graphics, to real browsers, and it lacks the robustness and security of a production server. Figure 11.29: if <code>argc != 2</code>, print usage and <code>exit(1)</code>. Otherwise <code>Open_listenfd(argv[1])</code> and an infinite loop: <code>Accept</code>, <code>Getnameinfo</code>, <code>printf("Accepted connection from (%s, %s)\n")</code>, <code>doit(connfd)</code>, <code>Close(connfd)</code>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;992–994 · 11.6 Putting It Together: The Tiny Web Server</p>
+            <p class="cite">pp.&nbsp;992–994 · 11.6 Putting It Together: The Tiny Web Server</p>
           </div>
         </details>
       </div>
@@ -833,7 +833,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 11.30: <code>Rio_readlineb</code> reads the request line, <code>sscanf</code> splits method, URI, and version. <code>strcasecmp(method, "GET")</code> nonzero means not GET: <code>clienterror</code> with 501 “Not implemented” and return. Otherwise <code>read_requesthdrs</code>, then <code>parse_uri</code>. <code>stat</code> failure is 404 “Not found.” Static content must be a regular file with read permission (<code>S_ISREG</code> and <code>S_IRUSR</code>), else 403 “Tiny couldn’t read the file.” Dynamic content must be a regular file with execute permission (<code>S_IXUSR</code>), else 403 “Tiny couldn’t run the CGI program.”</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;994–995 · 11.6 The doit Function</p>
+            <p class="cite">pp.&nbsp;994–995 · 11.6 The doit Function</p>
           </div>
         </details>
       </div>
@@ -860,7 +860,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 11.31 sends an HTTP response with the status code and message, plus an HTML body that explains the error. The body is one string so its size is easy to measure. Output uses <code>rio_writen</code>. The body starts with a title “Tiny Error,” then the code and short message, then the long message and the cause, then a line “The Tiny Web server.”</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;995–996 · 11.6 The clienterror Function</p>
+            <p class="cite">pp.&nbsp;995–996 · 11.6 The clienterror Function</p>
           </div>
         </details>
       </div>
@@ -887,7 +887,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 11.32 reads and ignores request headers. Tiny does not use any of the information in them. The empty line that terminates the headers is a carriage return and line feed pair, checked with <code>strcmp(buf, "\r\n")</code>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., p.&nbsp;996 · 11.6 The read_requesthdrs Function</p>
+            <p class="cite">p.&nbsp;996 · 11.6 The read_requesthdrs Function</p>
           </div>
         </details>
       </div>
@@ -913,7 +913,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <summary>What the book says</summary>
           <div class="inner">
             <p>Static content lives in the current directory; executables live in <code>./cgi-bin</code>. Any URI containing <code>cgi-bin</code> is dynamic. The default filename is <code>./home.html</code>. Figure 11.33: no <code>cgi-bin</code> means clear <code>cgiargs</code>, set filename to <code>.</code> plus the URI, and if the URI ends in <code>/</code> append <code>home.html</code>, then return 1. With <code>cgi-bin</code>, arguments after <code>?</code> are copied to <code>cgiargs</code> and the <code>?</code> is cut out of the URI before the filename is built. Return 0.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;996–997 · 11.6 The parse_uri Function</p>
+            <p class="cite">pp.&nbsp;996–997 · 11.6 The parse_uri Function</p>
           </div>
         </details>
       </div>
@@ -940,7 +940,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 11.34 sends response headers, then the file. <code>mmap</code> maps the first <code>filesize</code> bytes of the open file into a private read-only area. The descriptor is closed immediately so it is not leaked. <code>rio_writen</code> copies <code>filesize</code> bytes from that area to the client. <code>munmap</code> frees the area; skipping it is also a leak. <code>get_filetype</code> maps <code>.html</code> to text/html, <code>.gif</code> to image/gif, <code>.png</code> to image/png, <code>.jpg</code> to image/jpeg, and anything else to text/plain.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;997–999 · 11.6 The serve_static Function</p>
+            <p class="cite">pp.&nbsp;997–999 · 11.6 The serve_static Function</p>
           </div>
         </details>
       </div>
@@ -969,7 +969,7 @@ fn cstr(b: &amp;[u8]) -&gt; std::borrow::Cow&lt;'_, str&gt; {
           <div class="inner">
             <p>Figure 11.35 writes <code>HTTP/1.0 200 OK</code> and the Server header, then <code>Fork</code>. The child calls <code>setenv("QUERY_STRING", cgiargs, 1)</code>, <code>Dup2(fd, STDOUT_FILENO)</code>, and <code>Execve(filename, emptylist, environ)</code>. A real server would set the other CGI variables too. The parent <code>Wait</code>s. Because the child shares the open files and the environment from before <code>execve</code>, CGI output on stdout reaches the client with no further help from the parent. The book notes this is less robust than it might be: the 200 is sent before the CGI program has a chance to fail.</p>
             <p>If the client has already closed (the Stop button), the first write returns normally and the second causes SIGPIPE, whose default action terminates the process. If SIGPIPE is caught or ignored, that write returns −1 with <code>errno</code> set to EPIPE. <code>perror</code> reports “Broken pipe.” Tiny does not catch SIGPIPE.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;999–1000 · 11.6 The serve_dynamic Function</p>
+            <p class="cite">pp.&nbsp;999–1000 · 11.6 The serve_dynamic Function</p>
           </div>
         </details>
       </div>

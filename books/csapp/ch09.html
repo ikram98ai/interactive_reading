@@ -172,7 +172,7 @@
           <div class="inner">
             <p>Main memory is an array of M contiguous byte-size cells, each with a unique physical address starting at 0. Physical addressing sends that address over the memory bus. Early PCs worked this way; digital signal processors, embedded microcontrollers, and Cray supercomputers still do.</p>
             <p>With virtual addressing the CPU generates a virtual address. The memory management unit translates it on the fly, using a table the kernel maintains. Translation, like exception handling, is hardware and the operating system working together.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.1 Physical and Virtual Addressing · Figures 9.1–9.2</p>
+            <p class="cite">p.&nbsp;839 · §9.1 Physical and Virtual Addressing · Figures 9.1–9.2</p>
           </div>
         </details>
       </div>
@@ -200,7 +200,7 @@
           <div class="inner">
             <p>The size of an address space is the number of bits needed for its largest address. N = 2<sup>n</sup> virtual addresses, largest address N − 1. Physical memory has M bytes; the discussion assumes M = 2<sup>m</sup>.</p>
             <p>Once a byte and its address are different things, each byte of main memory can have a virtual address and a physical address, chosen independently. That is the basic idea of virtual memory. Practice Problem 9.1 asks you to fill N and the largest address for a given n, using K = 2<sup>10</sup>, M = 2<sup>20</sup>, and so on up to E = 2<sup>60</sup>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.2 Address Spaces · Practice Problem 9.1</p>
+            <p class="cite">p.&nbsp;840 · §9.2 Address Spaces · Practice Problem 9.1</p>
           </div>
         </details>
       </div>
@@ -228,7 +228,7 @@
           <div class="inner">
             <p>Figure 9.3 is a small virtual memory of eight pages. Virtual pages 0 and 3 are unallocated. Virtual pages 1, 4, and 6 are cached in physical memory. Pages 2, 5, and 7 are allocated and currently uncached.</p>
             <p>Unallocated blocks have no data and occupy no disk. Cached pages are the DRAM-resident ones. Uncached pages are the rest of the allocated set.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.3 VM as a Tool for Caching · Figure 9.3</p>
+            <p class="cite">p.&nbsp;841 · §9.3 VM as a Tool for Caching · Figure 9.3</p>
           </div>
         </details>
       </div>
@@ -256,7 +256,7 @@
           <div class="inner">
             <p>Misses in the DRAM cache are served from disk, while SRAM misses are usually served from DRAM. The organization of the DRAM cache is driven by that cost.</p>
             <p>Large pages, full associativity, sophisticated replacement (left as beyond the book’s scope), and write-back rather than write-through. The SRAM caches higher up the hierarchy make the opposite choices because their misses are cheap.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.3.1 DRAM Cache Organization</p>
+            <p class="cite">p.&nbsp;842 · §9.3.1 DRAM Cache Organization</p>
           </div>
         </details>
       </div>
@@ -284,7 +284,7 @@
           <div class="inner">
             <p>Figure 9.4 shows eight virtual pages and four physical pages. VP 1, VP 2, VP 4, and VP 7 are cached. VP 0 and VP 5 are unallocated (null). VP 3 and VP 6 are on disk. Because the DRAM cache is fully associative, any physical page can contain any virtual page.</p>
             <p>Practice Problem 9.2: the number of PTEs is 2<sup>n</sup> / P. For n = 12 and P = 1 KB you need 4 entries; the book’s table continues through n = 36 and P = 1 GB.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.3.2 Page Tables · Figure 9.4</p>
+            <p class="cite">p.&nbsp;842 · §9.3.2 Page Tables · Figure 9.4</p>
           </div>
         </details>
       </div>
@@ -312,7 +312,7 @@
           <div class="inner">
             <p>Figure 9.5: the reference to a word in VP 2 is a hit. Address translation hardware locates PTE 2. The valid bit is set, so VP 2 is cached, and the PTE’s physical address points at the start of PP 1.</p>
             <p>The MMU constructs the physical address of the requested word from that page address. The word returns to the CPU.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.3.3 Page Hits · Figure 9.5</p>
+            <p class="cite">p.&nbsp;844 · §9.3.3 Page Hits · Figure 9.5</p>
           </div>
         </details>
       </div>
@@ -340,7 +340,7 @@
           <div class="inner">
             <p>Figures 9.6 and 9.7: before the fault, VP 3 is on disk and VP 4 occupies PP 3. The handler victims VP 4, copies VP 3 in, and updates both PTEs. After the handler returns, the restarted instruction hits.</p>
             <p>Demand paging loads a page only when it is touched. The transfer unit is a whole page, which is why the miss penalty in §9.3.1 pushed pages to be large.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.3.4 Page Faults · Figures 9.6–9.7</p>
+            <p class="cite">p.&nbsp;844 · §9.3.4 Page Faults · Figures 9.6–9.7</p>
           </div>
         </details>
       </div>
@@ -368,7 +368,7 @@
           <div class="inner">
             <p>The operating system allocates a virtual page by creating room on disk and updating the page table entry to point there. The page is not loaded into DRAM at allocation time.</p>
             <p>The first reference faults, and the demand-paging machinery of §9.3.4 brings the page in. Until that reference, the PTE’s valid bit stays clear.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.3.5 Allocating Pages</p>
+            <p class="cite">p.&nbsp;846 · §9.3.5 Allocating Pages</p>
           </div>
         </details>
       </div>
@@ -396,7 +396,7 @@
           <div class="inner">
             <p>Locality makes demand paging practical. If the working set is resident, references hit in DRAM.</p>
             <p>If the working set exceeds the physical pages available to the process, the program thrashes: the DRAM cache never holds the pages the loop is about to use.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.3.6 Locality to the Rescue Again</p>
+            <p class="cite">p.&nbsp;846 · §9.3.6 Locality to the Rescue Again</p>
           </div>
         </details>
       </div>
@@ -424,7 +424,7 @@
           <div class="inner">
             <p>Even a machine whose virtual space was smaller than its physical memory, such as the DEC PDP-11/70, wanted virtual memory, because management and protection got simpler.</p>
             <p>Figure 9.9 is the two-process picture. Linking uses a uniform layout (code at 0x400000 on 64-bit Linux, data after an alignment gap, stack at the top growing down). Loading allocates virtual pages and points PTEs at the object file. Sharing maps one physical page into several spaces. Allocation hands an application contiguous virtual pages without finding contiguous physical pages.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.4 VM as a Tool for Memory Management · Figure 9.9</p>
+            <p class="cite">p.&nbsp;847 · §9.4 VM as a Tool for Memory Management · Figure 9.9</p>
           </div>
         </details>
       </div>
@@ -452,7 +452,7 @@
           <div class="inner">
             <p>Figure 9.10 adds SUP, READ, and WRITE to each PTE. In the example, process i in user mode may read VP 0 and read or write VP 1. It is not allowed to access VP 2.</p>
             <p>A violating instruction triggers a general protection fault. The kernel sends SIGSEGV, which shells report as a segmentation fault.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.5 VM as a Tool for Memory Protection · Figure 9.10</p>
+            <p class="cite">p.&nbsp;848 · §9.5 VM as a Tool for Memory Protection · Figure 9.10</p>
           </div>
         </details>
       </div>
@@ -480,7 +480,7 @@
           <div class="inner">
             <p>Figure 9.12: VA = VPN concatenated with VPO, PA = PPN concatenated with PPO, and PPO is identical to VPO. The MMU uses the VPN as an index into the page table identified by the PTBR.</p>
             <p>A page hit is handled entirely by hardware. A page fault transfers to the kernel handler, which selects a victim, pages it out if dirty, pages the missing page in, updates the PTE, and returns to the faulting instruction.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.6 Address Translation · Figures 9.11–9.13</p>
+            <p class="cite">p.&nbsp;849 · §9.6 Address Translation · Figures 9.11–9.13</p>
           </div>
         </details>
       </div>
@@ -508,7 +508,7 @@
           <div class="inner">
             <p>Whether an SRAM cache is virtually or physically addressed is a real design choice. Physical addressing makes sharing and protection straightforward, because rights are checked during translation.</p>
             <p>Figure 9.14: address translation occurs before the cache lookup. Page table entries can be cached just like other data words, so a PTE fetch has its own hit/miss.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.6.1 Integrating Caches and VM · Figure 9.14</p>
+            <p class="cite">p.&nbsp;853 · §9.6.1 Integrating Caches and VM · Figure 9.14</p>
           </div>
         </details>
       </div>
@@ -536,7 +536,7 @@
           <div class="inner">
             <p>A TLB is a small, virtually addressed cache where each line holds one PTE. TLBI selects the set; TLBT is compared with the tags in that set.</p>
             <p>Figure 9.16: a hit stays inside the MMU. A miss brings the PTE in from L1 or memory and installs it. The page-fault path is unchanged: a PTE with a clear valid bit still traps.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.6.2 Speeding Up Address Translation with a TLB · Figures 9.15–9.16</p>
+            <p class="cite">p.&nbsp;853 · §9.6.2 Speeding Up Address Translation with a TLB · Figures 9.15–9.16</p>
           </div>
         </details>
       </div>
@@ -564,7 +564,7 @@
           <div class="inner">
             <p>Figure 9.17: 1,024 level-1 PTEs cover 4 GB, and each level-1 or level-2 table is itself 4 KB. The example allocates the first 2 K pages for code and data, leaves a huge hole, and maps one stack page at the top. Level-1 PTEs for the hole are null.</p>
             <p>Figure 9.18: VPN is k fields. PTE i for i &lt; k points at the next table. The last PTE holds the PPN or a disk address. PPO is still identical to VPO.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.6.3 Multi-Level Page Tables · Figures 9.17–9.18</p>
+            <p class="cite">p.&nbsp;855 · §9.6.3 Multi-Level Page Tables · Figures 9.17–9.18</p>
           </div>
         </details>
       </div>
@@ -592,7 +592,7 @@
           <div class="inner">
             <p>Figure 9.19 draws the 14-bit VA and 12-bit PA. Figure 9.20 is the TLB, the first 16 PTEs, and the cache. Set 3 of the TLB holds tag 0x03 with PPN 0x0D and a valid bit.</p>
             <p>The symbol # means the bit is irrelevant, or that nothing is cached there. A TLB hit does not consult the page table in memory. The cache then hits on the physical address and returns the byte at block offset CO.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.6.4 Putting It Together · Figures 9.19–9.20</p>
+            <p class="cite">p.&nbsp;857 · §9.6.4 Putting It Together · Figures 9.19–9.20</p>
           </div>
         </details>
       </div>
@@ -620,7 +620,7 @@
           <div class="inner">
             <p>Current Core i7 implementations support a 48-bit virtual address space and a 52-bit physical address space. Figure 9.21 shows four cores, private L1 and L2 caches, and a shared L3.</p>
             <p>The TLBs cache PTEs. The data caches are physically addressed with 64-byte blocks. Linux on this system uses 4 KB pages, so the low 12 bits of an address are the page offset.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.7 Case Study · Figure 9.21</p>
+            <p class="cite">p.&nbsp;861 · §9.7 Case Study · Figure 9.21</p>
           </div>
         </details>
       </div>
@@ -648,7 +648,7 @@
           <div class="inner">
             <p>Figure 9.23 is the format of a level-1/2/3 PTE. Figure 9.24 is a level-4 PTE: P, R/W, U/S, WT, CD, A, D, G, a 40-bit physical base, and XD. With P = 0 the address field is available for the kernel to remember where the page lives on disk.</p>
             <p>Figure 9.25: CR3 plus VPN1 selects the level-1 PTE, which points at level 2, and so on until VPN4 selects the PTE that holds the data page’s PPN. The 12-bit VPO is concatenated unchanged.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.7.1 Core i7 Address Translation · Figures 9.22–9.25</p>
+            <p class="cite">p.&nbsp;862 · §9.7.1 Core i7 Address Translation · Figures 9.22–9.25</p>
           </div>
         </details>
       </div>
@@ -676,7 +676,7 @@
           <div class="inner">
             <p>Figure 9.26 is the user virtual address space. Figure 9.27 is task_struct → mm_struct → vm_area_struct. Figure 9.28 classifies a fault as illegal, a protection violation, or a normal miss that should be paged in.</p>
             <p>Shared libraries and the kernel’s own mappings sit in this same structure. The area list, not the page tables alone, decides whether a virtual address is one the process is allowed to name.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.7.2 Linux Virtual Memory System · Figures 9.26–9.28</p>
+            <p class="cite">p.&nbsp;864 · §9.7.2 Linux Virtual Memory System · Figures 9.26–9.28</p>
           </div>
         </details>
       </div>
@@ -704,7 +704,7 @@
           <div class="inner">
             <p>A regular-file mapping is demand-paged from that file. Bytes past the end of the file section read as zero.</p>
             <p>An anonymous mapping is demand-zero: the kernel zeros a physical page in place. Thereafter the swap file is the backing store. Swap space limits the total allocated virtual pages.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.8 Memory Mapping</p>
+            <p class="cite">p.&nbsp;869 · §9.8 Memory Mapping</p>
           </div>
         </details>
       </div>
@@ -732,7 +732,7 @@
           <div class="inner">
             <p>Shared objects are mapped into the virtual address space. Instruction pages are shared. Writable data uses private copy-on-write so each process can keep its own globals.</p>
             <p>Figure 9.30 shows the copy-on-write sequence: the PTE is read-only while the page is shared; a store faults; the kernel copies the page and updates the writer’s PTE; the store restarts.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.8.1 Shared Objects Revisited · Figure 9.30</p>
+            <p class="cite">p.&nbsp;869 · §9.8.1 Shared Objects Revisited · Figure 9.30</p>
           </div>
         </details>
       </div>
@@ -760,7 +760,7 @@
           <div class="inner">
             <p>fork duplicates the memory-map structures and marks private pages copy-on-write instead of copying their contents. Figure 9.31 is this picture.</p>
             <p>A later write fault copies the single page that was stored to. Read-only sharing stands until then. The two return paths are how parent and child tell themselves apart.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.8.2 The fork Function Revisited</p>
+            <p class="cite">p.&nbsp;872 · §9.8.2 The fork Function Revisited</p>
           </div>
         </details>
       </div>
@@ -788,7 +788,7 @@
           <div class="inner">
             <p>execve replaces the user portion of the address space. Code and initialized data are private mappings of the executable. bss, heap, and stack are anonymous demand-zero. Shared libraries are mapped shared for their code.</p>
             <p>The loader does not copy file bytes into memory. Page faults on first touch do that work, which is the loading story from §9.4 seen from the system call that triggers it.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.8.3 The execve Function Revisited</p>
+            <p class="cite">p.&nbsp;872 · §9.8.3 The execve Function Revisited</p>
           </div>
         </details>
       </div>
@@ -816,7 +816,7 @@
           <div class="inner">
             <p>The prototype is mmap(void *start, size_t length, int prot, int flags, int fd, off_t offset). start is a hint. The kernel rounds the region to page boundaries.</p>
             <p>MAP_PRIVATE plus a file is the copy-on-write file mapping. MAP_SHARED writes through to the file and to other mappers. MAP_ANON ignores fd and gives demand-zero pages. munmap(start, length) deletes the mapping.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.8.4 User-Level Memory Mapping with the mmap Function</p>
+            <p class="cite">p.&nbsp;873 · §9.8.4 User-Level Memory Mapping with the mmap Function</p>
           </div>
         </details>
       </div>
@@ -844,7 +844,7 @@
           <div class="inner">
             <p>The heap starts after the uninitialized data and grows up. brk is the current top. Allocators manage blocks inside that region; the kernel only moves brk or maps new areas.</p>
             <p>Explicit allocators pair allocate and free. Implicit allocators free unreachable blocks themselves. Both are dynamic memory allocation.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9 Dynamic Memory Allocation</p>
+            <p class="cite">p.&nbsp;875 · §9.9 Dynamic Memory Allocation</p>
           </div>
         </details>
       </div>
@@ -872,7 +872,7 @@
           <div class="inner">
             <p>In this section a word is 4 bytes and a double word is 8 bytes. malloc pads so that returned addresses and the following free block stay double-word aligned.</p>
             <p>sbrk(incr) adds incr to brk and returns the old brk, or −1 with ENOMEM. sbrk(0) reports the current brk. free’s argument must be a block start; otherwise the behavior is undefined.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9.1 The malloc and free Functions · Figure 9.34</p>
+            <p class="cite">p.&nbsp;876 · §9.9.1 The malloc and free Functions · Figure 9.34</p>
           </div>
         </details>
       </div>
@@ -900,7 +900,7 @@
           <div class="inner">
             <p>The simplest approach hard-codes a maximum. It wastes space when n is small and fails when n exceeds the maximum.</p>
             <p>Allocating after n is known matches the block to the input. The integers themselves can then be read into that block.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9.2 Why Dynamic Memory Allocation?</p>
+            <p class="cite">p.&nbsp;879 · §9.9.2 Why Dynamic Memory Allocation?</p>
           </div>
         </details>
       </div>
@@ -928,7 +928,7 @@
           <div class="inner">
             <p>Constraints: immediate response, heap memory only, alignment, no overlap, and no relocation of allocated blocks.</p>
             <p>Goals: maximize throughput and peak memory utilization. An allocator is judged by how close it gets to both at once.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9.3 Allocator Requirements and Goals</p>
+            <p class="cite">p.&nbsp;880 · §9.9.3 Allocator Requirements and Goals</p>
           </div>
         </details>
       </div>
@@ -956,7 +956,7 @@
           <div class="inner">
             <p>Internal fragmentation is padding and allocator overhead charged to an allocated block. It depends on the pattern of previous requests and on alignment.</p>
             <p>External fragmentation is free memory split into holes too small for the next request. The total free space can exceed the request and still be unusable.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9.4 Fragmentation</p>
+            <p class="cite">p.&nbsp;882 · §9.9.4 Fragmentation</p>
           </div>
         </details>
       </div>
@@ -984,7 +984,7 @@
           <div class="inner">
             <p>Free-block organization, placement, splitting, and coalescing are the four implementation issues. Everything from §9.9.6 through §9.9.14 is an answer to one of them.</p>
             <p>Headers must record size so the allocator can walk the heap. Allocated blocks need the same size field, because free receives only a pointer and has to find the block’s end.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9.5 Implementation Issues</p>
+            <p class="cite">p.&nbsp;882 · §9.9.5 Implementation Issues</p>
           </div>
         </details>
       </div>
@@ -1012,7 +1012,7 @@
           <div class="inner">
             <p>Figure 9.35 formats a block as header plus payload plus optional padding. Figure 9.36 packs the allocated flag into the low bits of the size, which is always a multiple of 8.</p>
             <p>The heap is a sequence of blocks. Given a header address p, the next header is p + size(p). A zero-size allocated epilogue can terminate the walk.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9.6 Implicit Free Lists · Figures 9.35–9.36</p>
+            <p class="cite">p.&nbsp;883 · §9.9.6 Implicit Free Lists · Figures 9.35–9.36</p>
           </div>
         </details>
       </div>
@@ -1039,7 +1039,7 @@
           <div class="inner">
             <p>First fit searches from the beginning. Next fit searches from the last place a block was found. Best fit searches the entire free set for the smallest block that fits.</p>
             <p>On an implicit list, best fit and a full first-fit scan have the same asymptotic cost. The difference is which block they return.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9.7 Placing Allocated Blocks</p>
+            <p class="cite">p.&nbsp;885 · §9.9.7 Placing Allocated Blocks</p>
           </div>
         </details>
       </div>
@@ -1066,7 +1066,7 @@
           <div class="inner">
             <p>Splitting replaces one free block with an allocated block and a smaller free block. The remainder’s header carries the leftover size and a clear allocated bit.</p>
             <p>When the remainder would be too small to be a legal block, the allocator does not split. Those extra bytes are internal fragmentation.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9.8 Splitting Free Blocks · Figure 9.37</p>
+            <p class="cite">p.&nbsp;885 · §9.9.8 Splitting Free Blocks · Figure 9.37</p>
           </div>
         </details>
       </div>
@@ -1093,7 +1093,7 @@
           <div class="inner">
             <p>extend_heap grows the heap with sbrk and coalesces the new free space with a free predecessor if there is one, so a free block at the old top does not stay stranded.</p>
             <p>Asking for a chunk at a time amortizes the system call. The unused part of the chunk remains a free block for later requests.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9.9 Getting Additional Heap Memory</p>
+            <p class="cite">p.&nbsp;886 · §9.9.9 Getting Additional Heap Memory</p>
           </div>
         </details>
       </div>
@@ -1121,7 +1121,7 @@
           <div class="inner">
             <p>Figure 9.38 shows false fragmentation: free blocks that are neighbors and still separate cannot satisfy a request either one would fail alone.</p>
             <p>Immediate coalescing runs in free. The four cases depend on whether the previous and next blocks are allocated. Deferred coalescing is the alternative when immediate merges hurt a program that frees and reallocates the same size.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9.10 Coalescing Free Blocks · Figure 9.38</p>
+            <p class="cite">p.&nbsp;886 · §9.9.10 Coalescing Free Blocks · Figure 9.38</p>
           </div>
         </details>
       </div>
@@ -1149,7 +1149,7 @@
           <div class="inner">
             <p>Figure 9.39 places a header and a footer, both holding size and the allocated bit. The footer of the previous block sits immediately before the current header.</p>
             <p>With boundary tags, coalescing does not walk the implicit list. The simple allocator in the next section is built on this layout.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9.11 Coalescing with Boundary Tags · Figure 9.39</p>
+            <p class="cite">p.&nbsp;887 · §9.9.11 Coalescing with Boundary Tags · Figure 9.39</p>
           </div>
         </details>
       </div>
@@ -1177,7 +1177,7 @@
           <div class="inner">
             <p>The simple allocator uses a 16-byte minimum block, prologue and epilogue blocks, and CHUNKSIZE of 1 &lt;&lt; 12. find_fit is first fit. place splits when the remainder is large enough.</p>
             <p>mm_free marks the block free and calls coalesce, which uses boundary tags for the four neighbor cases. Practice problems in this section ask for extend_heap, place, find_fit, and mm_malloc itself.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9.12 Putting It Together: Implementing a Simple Allocator</p>
+            <p class="cite">p.&nbsp;890 · §9.9.12 Putting It Together: Implementing a Simple Allocator</p>
           </div>
         </details>
       </div>
@@ -1205,7 +1205,7 @@
           <div class="inner">
             <p>Figure 9.48: an allocated block is header, payload, footer. A free block stores pred and succ where the payload would be.</p>
             <p>Allocation time drops from “all blocks” to “free blocks.” The free-list policy — LIFO or address order — decides whether free itself is constant time.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9.13 Explicit Free Lists · Figure 9.48</p>
+            <p class="cite">p.&nbsp;898 · §9.9.13 Explicit Free Lists · Figure 9.48</p>
           </div>
         </details>
       </div>
@@ -1233,7 +1233,7 @@
           <div class="inner">
             <p>Segregated storage approximates best fit without a full scan: the first block in the right size class is already a good fit. Simple segregated storage does not split or coalesce across classes.</p>
             <p>Segregated fits do split and coalesce, then refile the resulting block by its new size. GNU malloc and many production allocators are variants of segregated fits.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.9.14 Segregated Free Lists</p>
+            <p class="cite">p.&nbsp;899 · §9.9.14 Segregated Free Lists</p>
           </div>
         </details>
       </div>
@@ -1261,7 +1261,7 @@
           <div class="inner">
             <p>Languages such as Lisp and Java allocate implicitly. C and C++ are explicit, though conservative collectors for C exist and are the subject of §9.10.3.</p>
             <p>The collector returns memory by calling the same free the application would have called. malloc’s contract with the program does not change.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.10 Garbage Collection · Figure 9.50</p>
+            <p class="cite">p.&nbsp;901 · §9.10 Garbage Collection · Figure 9.50</p>
           </div>
         </details>
       </div>
@@ -1289,7 +1289,7 @@
           <div class="inner">
             <p>A reachability graph has roots at the registers, stack, and global variables. Heap nodes are allocated blocks. An edge is a pointer stored in one node that aims at another.</p>
             <p>The collector’s job is to free unreachable allocated blocks. Reachable blocks stay. Figure 9.49 is this graph.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.10.1 Garbage Collector Basics · Figure 9.49</p>
+            <p class="cite">p.&nbsp;902 · §9.10.1 Garbage Collector Basics · Figure 9.49</p>
           </div>
         </details>
       </div>
@@ -1317,7 +1317,7 @@
           <div class="inner">
             <p>mark(p) uses isPtr to find the block containing p, returns if the block is already marked, marks it, and recurses on every word in the block. sweep walks from the first block to the end, frees unmarked allocated blocks, and unmarks the marked ones.</p>
             <p>After sweep, the free list holds the garbage and the marked bits are clear for the next collection.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.10.2 Mark&amp;Sweep Garbage Collectors · Figure 9.51</p>
+            <p class="cite">p.&nbsp;903 · §9.10.2 Mark&amp;Sweep Garbage Collectors · Figure 9.51</p>
           </div>
         </details>
       </div>
@@ -1345,7 +1345,7 @@
           <div class="inner">
             <p>A conservative collector identifies pointers by whether a bit pattern is a plausible address into an allocated block. Ambiguous words are treated as pointers.</p>
             <p>The collector may fail to free some garbage. It will not free a live block. Because it cannot be sure which words are pointers, it also cannot relocate blocks.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.10.3 Conservative Mark&amp;Sweep for C Programs</p>
+            <p class="cite">p.&nbsp;905 · §9.10.3 Conservative Mark&amp;Sweep for C Programs</p>
           </div>
         </details>
       </div>
@@ -1373,7 +1373,7 @@
           <div class="inner">
             <p>Memory bugs often manifest far from their cause, in both time and space. A program can crash at once, run for hours and then crash, or run to completion with wrong answers.</p>
             <p>The catalog is bad pointers, uninitialized memory, stack overflows, size confusion, off-by-one errors, pointer-versus-object mistakes, pointer arithmetic, dangling stack addresses, use of freed blocks, and leaks.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.11 Common Memory-Related Bugs in C Programs</p>
+            <p class="cite">p.&nbsp;906 · §9.11 Common Memory-Related Bugs in C Programs</p>
           </div>
         </details>
       </div>
@@ -1400,7 +1400,7 @@
           <summary>What the book says</summary>
           <div class="inner">
             <p>This is the §9.11.1 case from the chapter’s catalog. The machine runs the mistaken code and, where there is a repair, the repaired code beside it.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.11.1 Dereferencing bad pointers</p>
+            <p class="cite">p.&nbsp;906 · §9.11.1 Dereferencing bad pointers</p>
           </div>
         </details>
       </div>
@@ -1427,7 +1427,7 @@
           <summary>What the book says</summary>
           <div class="inner">
             <p>This is the §9.11.2 case from the chapter’s catalog. The machine runs the mistaken code and, where there is a repair, the repaired code beside it.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.11.2 Reading uninitialized memory</p>
+            <p class="cite">p.&nbsp;907 · §9.11.2 Reading uninitialized memory</p>
           </div>
         </details>
       </div>
@@ -1454,7 +1454,7 @@
           <summary>What the book says</summary>
           <div class="inner">
             <p>This is the §9.11.3 case from the chapter’s catalog. The machine runs the mistaken code and, where there is a repair, the repaired code beside it.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.11.3 Allowing stack buffer overflows</p>
+            <p class="cite">p.&nbsp;907 · §9.11.3 Allowing stack buffer overflows</p>
           </div>
         </details>
       </div>
@@ -1481,7 +1481,7 @@
           <summary>What the book says</summary>
           <div class="inner">
             <p>This is the §9.11.4 case from the chapter’s catalog. The machine runs the mistaken code and, where there is a repair, the repaired code beside it.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.11.4 Pointers and the objects they point to</p>
+            <p class="cite">p.&nbsp;908 · §9.11.4 Pointers and the objects they point to</p>
           </div>
         </details>
       </div>
@@ -1508,7 +1508,7 @@
           <summary>What the book says</summary>
           <div class="inner">
             <p>This is the §9.11.5 case from the chapter’s catalog. The machine runs the mistaken code and, where there is a repair, the repaired code beside it.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.11.5 Making off-by-one errors</p>
+            <p class="cite">p.&nbsp;908 · §9.11.5 Making off-by-one errors</p>
           </div>
         </details>
       </div>
@@ -1535,7 +1535,7 @@
           <summary>What the book says</summary>
           <div class="inner">
             <p>This is the §9.11.6 case from the chapter’s catalog. The machine runs the mistaken code and, where there is a repair, the repaired code beside it.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.11.6 Referencing a pointer instead of the object</p>
+            <p class="cite">p.&nbsp;909 · §9.11.6 Referencing a pointer instead of the object</p>
           </div>
         </details>
       </div>
@@ -1562,7 +1562,7 @@
           <summary>What the book says</summary>
           <div class="inner">
             <p>This is the §9.11.7 case from the chapter’s catalog. The machine runs the mistaken code and, where there is a repair, the repaired code beside it.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.11.7 Misunderstanding pointer arithmetic</p>
+            <p class="cite">p.&nbsp;909 · §9.11.7 Misunderstanding pointer arithmetic</p>
           </div>
         </details>
       </div>
@@ -1589,7 +1589,7 @@
           <summary>What the book says</summary>
           <div class="inner">
             <p>This is the §9.11.8 case from the chapter’s catalog. The machine runs the mistaken code and, where there is a repair, the repaired code beside it.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.11.8 Referencing nonexistent variables</p>
+            <p class="cite">p.&nbsp;910 · §9.11.8 Referencing nonexistent variables</p>
           </div>
         </details>
       </div>
@@ -1616,7 +1616,7 @@
           <summary>What the book says</summary>
           <div class="inner">
             <p>This is the §9.11.9 case from the chapter’s catalog. The machine runs the mistaken code and, where there is a repair, the repaired code beside it.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.11.9 Referencing data in free heap blocks</p>
+            <p class="cite">p.&nbsp;910 · §9.11.9 Referencing data in free heap blocks</p>
           </div>
         </details>
       </div>
@@ -1643,7 +1643,7 @@
           <summary>What the book says</summary>
           <div class="inner">
             <p>This is the §9.11.10 case from the chapter’s catalog. The machine runs the mistaken code and, where there is a repair, the repaired code beside it.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.11.10 Introducing memory leaks</p>
+            <p class="cite">p.&nbsp;911 · §9.11.10 Introducing memory leaks</p>
           </div>
         </details>
       </div>
@@ -1671,7 +1671,7 @@
           <div class="inner">
             <p>The summary restates the cache, memory-management, and protection roles, then the address-translation path from VPN and TLB through multi-level tables.</p>
             <p>It closes on dynamic allocation and the catalog of memory bugs: bad pointers, uninitialized memory, stack overflows, size confusion, pointer-versus-object errors, pointer arithmetic, nonexistent variables, and leaks.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd ed. · §9.12 Summary</p>
+            <p class="cite">p.&nbsp;911 · §9.12 Summary</p>
           </div>
         </details>
       </div>
