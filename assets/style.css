@@ -108,10 +108,15 @@ b, strong { font-weight: 700; }
 .theme-switch .theme-ico { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .theme-switch .theme-moon { fill: currentColor; }
 .theme-switch button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.speed-switch { display: inline-flex; flex: none; }
+.speed-switch select { appearance: none; -webkit-appearance: none; height: 36px; min-width: 52px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 700 13px/1 var(--f-mono); text-align: center; text-align-last: center; cursor: pointer; }
+.speed-switch select:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 @media (max-width: 760px) {
   .dots { display: none; }
   .topbar .where { font-size: 13px; }
-  .topbar .wrap { gap: 8px; }
+  .topbar .wrap { gap: 6px; }
+  .speed-switch select { min-width: 0; padding: 0 6px; font-size: 12px; }
+  .theme-switch button { width: 28px; }
 }
 
 /* ---------- chapter hero ---------- */

@@ -479,7 +479,7 @@ const fmt = (n) => n.toLocaleString();
       await fly(q, [258, 195], [346, b.y], 620);
       q.remove(); counts[bi]++; writes++;
       b.num.textContent = `${counts[bi]} post${counts[bi] === 1 ? "" : "s"}`;
-      b.rect.classList.add("hit"); setTimeout(() => b.rect.classList.remove("hit"), 420);
+      b.rect.classList.add("hit"); setTimeout(() => b.rect.classList.remove("hit"), 420 / K.speed.value);
     }));
     server.light.setAttribute("class", "sv-fill-mint");
     counter.textContent = `${posts} post${posts === 1 ? "" : "s"} · ${writes} timeline writes`;
@@ -534,7 +534,7 @@ const fmt = (n) => n.toLocaleString();
     st.write.set(fmt(writes), writes > 400 ? "warn" : writes > 0 ? "good" : "");
     boxes.forEach((b, i) => (b.num.textContent = `${counts[i]} post${counts[i] === 1 ? "" : "s"}`));
   };
-  const flash = (b, cls) => { b.rect.classList.add(cls); setTimeout(() => b.rect.classList.remove(cls), 520); };
+  const flash = (b, cls) => { b.rect.classList.add(cls); setTimeout(() => b.rect.classList.remove(cls), 520 / K.speed.value); };
 
   async function post() {
     if (busy) return; lock(true);
@@ -1092,7 +1092,7 @@ const fmt = (n) => n.toLocaleString();
   }
   function toggle(it, silent) {
     it.down = !it.down;
-    if (it.down) { faultCount++; st.f.set(faultCount, "warn"); it.rect.classList.add("sv-shake"); setTimeout(() => it.rect.classList.remove("sv-shake"), 420); }
+    if (it.down) { faultCount++; st.f.set(faultCount, "warn"); it.rect.classList.add("sv-shake"); setTimeout(() => it.rect.classList.remove("sv-shake"), 420 / K.speed.value); }
     paint(); evaluate();
   }
   const ctr = K.$("#s7-controls");
@@ -1113,7 +1113,7 @@ const fmt = (n) => n.toLocaleString();
         const alive = items.filter((x) => !x.down);
         if (alive.length && Math.random() < 0.7) toggle(alive[rand(alive.length)]);
         else { items.forEach((x) => (x.down = false)); lastState = true; paint(); evaluate(); }
-      }, 2600);
+      }, 2600 / K.speed.value);
       K.toast("Chaos monkey released");
     }
   }, "s7-monkey"));
@@ -1173,7 +1173,7 @@ const fmt = (n) => n.toLocaleString();
         setCap("#s8-cap", gradual
           ? "The new configuration went to <b>3 machines first</b>. They started erroring, monitoring noticed, and the other 21 are untouched. Press <b>Roll back</b> to undo it."
           : "The new configuration went everywhere at once, and everywhere at once is where it broke. Studies of large internet services found <b>configuration changes by operators were the leading cause of outages</b> — hardware faults only 10–25%. The answer isn't blaming the operator, it's gradual rollouts, fast rollback and <b>blameless postmortems</b>.");
-      }, 900);
+      }, 900 / K.speed.value);
       tally("pushing new config…", true);
     }
   }

@@ -62,7 +62,27 @@
     inOut: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
     back: (t) => { const c = 1.7; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); },
   };
+  /* One speed for every animation on every page: sleep, tween, fly and loop divide their time by it,
+     and CSS animations inside a sim get it as their playbackRate. The choice is remembered. */
+  const SPEED_KEY = "datatown-speed";
+  const SPEEDS = [0.25, 0.5, 1, 1.5, 2, 3];
   const speed = { value: 1 };
+  try {
+    const saved = Number(localStorage.getItem(SPEED_KEY));
+    if (SPEEDS.includes(saved)) speed.value = saved;
+  } catch (e) {}
+  const inSim = (el) => el && el.closest && el.closest(".stage, svg");
+  function rateAnims(anims) {
+    anims.forEach((a) => { const t = a.effect && a.effect.target; if (inSim(t)) a.playbackRate = speed.value; });
+  }
+  ["animationstart", "transitionrun"].forEach((type) =>
+    document.addEventListener(type, (e) => { if (e.target.getAnimations) rateAnims(e.target.getAnimations()); }, true));
+  function setSpeed(v) {
+    speed.value = v;
+    try { localStorage.setItem(SPEED_KEY, String(v)); } catch (e) {}
+    if (document.getAnimations) rateAnims(document.getAnimations());
+    document.querySelectorAll("[data-speed-switch]").forEach((sel) => { sel.value = String(v); });
+  }
   const sleep = (ms) => new Promise((r) => setTimeout(r, reduced ? Math.min(ms, 40) : ms / speed.value));
   /** tween(ms, t => {...}, ease.inOut) → Promise, resolves when done */
   function tween(ms, fn, e = ease.inOut) {
@@ -126,6 +146,14 @@
       wrap.appendChild(b);
     });
     return wrap;
+  }
+  /** Animation speed picker for the top bar; changing it speeds up or slows down every sim on the page. */
+  function speedSwitch() {
+    const sel = h("select", { "aria-label": "Animation speed", title: "Animation speed", "data-speed-switch": "1" },
+      SPEEDS.map((v) => h("option", { value: String(v) }, `${v}×`)));
+    sel.value = String(speed.value);
+    sel.addEventListener("change", () => setSpeed(Number(sel.value)));
+    return h("label", { class: "speed-switch" }, sel);
   }
   function mountTheme() {
     $$(".topbar .wrap").forEach((wrap) => {
@@ -291,6 +319,7 @@
         h("nav", { class: "dots", "aria-label": "Chapters" }),
         h("a", { class: "navbtn", href: prev ? file(prev.n) : "#", "aria-label": "Previous chapter", "aria-disabled": String(!prev) }, "←"),
         h("a", { class: "navbtn", href: next ? file(next.n) : "#", "aria-label": "Next chapter", "aria-disabled": String(!next) }, "→"),
+        speedSwitch(),
         themeSwitch()));
       renderDots(n);
     }
@@ -394,5 +423,5 @@
   };
 
   mountTheme();
-  window.K = { BOOK, CHAPTERS, BUILT, h, s, $, $$, clear, tween, fly, path, loop, sleep, lerp, ease, speed, reduced, whenVisible, seg, slider, stat, toast, quiz, page, themeSwitch, applyTheme, getProgress, setDone, file, draw };
+  window.K = { BOOK, CHAPTERS, BUILT, h, s, $, $$, clear, tween, fly, path, loop, sleep, lerp, ease, speed, setSpeed, reduced, whenVisible, seg, slider, stat, toast, quiz, page, themeSwitch, speedSwitch, applyTheme, getProgress, setDone, file, draw };
 })();
