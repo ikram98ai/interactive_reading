@@ -155,6 +155,39 @@
     sel.addEventListener("change", () => setSpeed(Number(sel.value)));
     return h("label", { class: "speed-switch" }, sel);
   }
+  /* Phones: a machine wider than the screen fits it whole, or zooms in and scrolls sideways.
+     One choice for every machine on every page, remembered; the CSS only acts on it at phone width. */
+  const VIEW_KEY = "datatown-sim-view";
+  function applyView(view) {
+    document.documentElement.setAttribute("data-sim-view", view);
+    try { localStorage.setItem(VIEW_KEY, view); } catch (e) {}
+    $$(".sim-zoom button").forEach((b) => {
+      const zoomed = view === "zoom";
+      b.setAttribute("aria-pressed", String(zoomed));
+      b.lastChild.textContent = zoomed ? "Fit" : "Zoom";
+      b.title = zoomed ? "Fit the whole machine on screen" : "Zoom in, then drag sideways";
+    });
+  }
+  try { if (localStorage.getItem(VIEW_KEY) === "zoom") document.documentElement.setAttribute("data-sim-view", "zoom"); } catch (e) {}
+  /** One zoom button in the head row of each stage that has a scrollable machine. */
+  function mountZoom() {
+    $$(".stage-scroll").forEach((sc) => {
+      const stage = sc.closest(".stage");
+      const head = stage && $(".stage-head", stage);
+      if (!head || $(".sim-zoom", head)) return;
+      const b = h("button", { type: "button", "aria-label": "Zoom in on the machine" },
+        s("svg", { viewBox: "0 0 24 24", "aria-hidden": "true" }, s("circle", { cx: 10.5, cy: 10.5, r: 6.5 }), s("path", { d: "M15.5 15.5L21 21M8 10.5h5M10.5 8v5" })),
+        h("span", {}, ""));
+      b.addEventListener("click", () => {
+        const view = document.documentElement.getAttribute("data-sim-view") === "zoom" ? "fit" : "zoom";
+        applyView(view);
+        $$(".stage-scroll", stage).forEach((x) => { x.scrollLeft = 0; });
+        if (view === "zoom") toast("Drag a machine sideways to see all of it");
+      });
+      head.appendChild(h("span", { class: "sim-zoom" }, b));
+    });
+    applyView(document.documentElement.getAttribute("data-sim-view") === "zoom" ? "zoom" : "fit");
+  }
   function mountTheme() {
     $$(".topbar .wrap").forEach((wrap) => {
       if (wrap.querySelector("[data-theme-switch]")) return;
@@ -313,7 +346,7 @@
       top.className = "topbar";
       top.appendChild(h("div", { class: "wrap" },
         h("a", { class: "navbtn wide", href: "../../index.html", title: "All books" }, "Books"),
-        h("a", { class: "brand", href: "index.html" }, brandSvg(), BOOK.title),
+        h("a", { class: "brand", href: "index.html", "aria-label": BOOK.title }, brandSvg(), h("span", { class: "brand-name" }, BOOK.title)),
         h("span", { class: "where" }, `Ch ${n} · ${c.title}`),
         h("span", { class: "spacer" }),
         h("nav", { class: "dots", "aria-label": "Chapters" }),
@@ -423,5 +456,6 @@
   };
 
   mountTheme();
+  mountZoom();
   window.K = { BOOK, CHAPTERS, BUILT, h, s, $, $$, clear, tween, fly, path, loop, sleep, lerp, ease, speed, setSpeed, reduced, whenVisible, seg, slider, stat, toast, quiz, page, themeSwitch, speedSwitch, applyTheme, getProgress, setDone, file, draw };
 })();
