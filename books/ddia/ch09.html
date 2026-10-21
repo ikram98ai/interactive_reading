@@ -820,7 +820,7 @@ const btn = (ctr, label, cls, fn) => { const b = h("button", { type: "button", c
   }
   async function serve() {
     const pkt = queue.shift();
-    const d = performance.now() - pkt.t;
+    const d = (performance.now() - pkt.t) * K.speed.value;
     hist.push(d); if (hist.length > 14) hist.shift();
     worst = Math.max(worst, d);
     stLast.set(Math.round(d) + " ms", d > 1200 ? "bad" : d > 500 ? "warn" : "good");

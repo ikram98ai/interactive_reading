@@ -867,7 +867,7 @@ const btn = (label, cls, fn) => { const b = h("button", { type: "button", class:
     bStep.disabled = i >= steps.length;
   }
   function stopPlay() { playing = false; clearTimeout(timer); bPlay.textContent = "Play"; bPlay.classList.remove("danger"); }
-  function tick() { if (!playing) return; if (i >= steps.length) { stopPlay(); return; } doStep(); timer = setTimeout(tick, K.reduced ? 500 : 1700); }
+  function tick() { if (!playing) return; if (i >= steps.length) { stopPlay(); return; } doStep(); timer = setTimeout(tick, K.reduced ? 500 : 1700 / K.speed.value); }
   const bStep = btn("Step ›", "primary", () => { stopPlay(); doStep(); });
   const bPlay = btn("Play", "", () => {
     if (playing) { stopPlay(); return; }

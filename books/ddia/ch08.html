@@ -507,7 +507,7 @@ function stepper(ctrlEl, o) {
   bPlay.addEventListener("click", function () {
     if (timer) { stop(); return; }
     if (i >= n()) reset();
-    bPlay.textContent = "Pause"; timer = setInterval(one, o.ms || 1200);
+    bPlay.textContent = "Pause"; timer = setInterval(one, (o.ms || 1200) / K.speed.value);
   });
   bReset.addEventListener("click", reset);
   ctrlEl.append(bStep, bPlay, bReset, pill);
@@ -1266,7 +1266,7 @@ function laneRig(svg, rows, x0, dx, slots) {
 
   const svc = function () { return fast === 1 ? 45 : 300; };
   let acc = 0, secAcc = 0;
-  const L = loop(function (dt) {
+  const L = loop(function (dt, now) {
     dt = Math.min(dt, 80);
     acc += rate * dt / 1000;
     while (acc >= 1) {
@@ -1280,7 +1280,7 @@ function laneRig(svg, rows, x0, dx, slots) {
     }
     if (crossTimer > 0) {
       crossTimer -= dt;
-      if (crossTimer <= 0) { crossTimer = 0; lanes[0].done++; doneWindow.push(performance.now()); }
+      if (crossTimer <= 0) { crossTimer = 0; lanes[0].done++; doneWindow.push(now); }
     } else {
       const allIdle = lanes.every(function (l) { return l.busy <= 0; });
       if (crossQ > 0 && allIdle) { crossQ--; crossTimer = svc() * 3 + 250; }
@@ -1288,13 +1288,12 @@ function laneRig(svg, rows, x0, dx, slots) {
         lanes.forEach(function (l) {
           if (l.busy > 0) {
             l.busy -= dt;
-            if (l.busy <= 0) { l.busy = 0; l.done++; doneWindow.push(performance.now()); }
+            if (l.busy <= 0) { l.busy = 0; l.done++; doneWindow.push(now); }
           }
           if (l.busy <= 0 && l.queue > 0 && crossTimer === 0) { l.queue--; l.dur = svc(); l.busy = l.dur; }
         });
       }
     }
-    const now = performance.now();
     while (doneWindow.length && now - doneWindow[0] > 2000) doneWindow.shift();
     secAcc += dt;
     if (secAcc > 120) {
@@ -1486,7 +1485,7 @@ function laneRig(svg, rows, x0, dx, slots) {
   function flyTag(i, text, cls) {
     const tag = draw.tag(text, cls || "sv-data-soft");
     layer.appendChild(tag);
-    fly(tag, [330, 150], [parts[i].x, 172], 550).then(function () { setTimeout(function () { tag.remove(); }, 400); });
+    fly(tag, [330, 150], [parts[i].x, 172], 550).then(function () { setTimeout(function () { tag.remove(); }, 400 / K.speed.value); });
   }
   let mode = 0;
   function reset() {

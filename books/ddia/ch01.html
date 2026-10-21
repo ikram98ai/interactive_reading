@@ -1764,7 +1764,7 @@ function code(sel, o) {
     "Both on one database: the detective's giant scan hogs it, every checkout slows down, and <b>the line keeps growing</b>. That's one reason analysts don't query OLTP systems directly.",
     "Fix: copy the data into a separate <b>data warehouse</b> with <b>ETL</b>. The detective scans the copy as much as they like, and the cashier is fast again.",
   ];
-  function flash(cell, cls = "hit") { cell.classList.add(cls); setTimeout(() => cell.classList.remove(cls), 90); }
+  function flash(cell, cls = "hit") { cell.classList.add(cls); setTimeout(() => cell.classList.remove(cls), 90 / K.speed.value); }
   function drawQueue() {
     if (queue === drawnQ) return; drawnQ = queue; K.clear(queueG);
     const shown = Math.min(queue, 9);

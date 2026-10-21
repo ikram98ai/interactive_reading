@@ -1394,7 +1394,7 @@ function makeFlow(ctrSel, steps, reset, label) {
       slot.t.textContent = "";
       slot.r.setAttribute("class", "sv-bad");
       setCap("#s9-cap", "Only <b>" + acks + "</b> replica acknowledged. That is not a majority, so the entry <b>cannot be committed</b> and the whole system stops accepting writes. This is the price of consensus: it always needs a strict majority.");
-      setTimeout(() => { slot.r.setAttribute("class", "sv-panel"); }, 1200);
+      setTimeout(() => { slot.r.setAttribute("class", "sv-panel"); }, 1200 / K.speed.value);
     }
     busy = false; render();
   }

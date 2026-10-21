@@ -1418,7 +1418,7 @@ function mkBtn(root, label, cls, fn) {
         await fly(p, [420, 140], [508, cons[t].y], 420); p.remove();
         m.done.push(t); cons[t].n++;
         cons[t].g.light.setAttribute("class", "sv-fill-sun");
-        setTimeout(() => cons[t].g.light.setAttribute("class", "sv-fill-mint"), 300);
+        setTimeout(() => cons[t].g.light.setAttribute("class", "sv-fill-mint"), 300 / K.speed.value);
         paint();
       }
       if (m.targets.every((t) => m.done.includes(t))) { queue = queue.filter((x) => x !== m); paint(); }
