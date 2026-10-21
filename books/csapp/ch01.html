@@ -148,7 +148,7 @@
             <p>A source program is a sequence of bits, each with a value of 0 or 1, organized in 8-bit chunks called bytes; each byte represents some text character. Most systems use the ASCII standard, which gives each character a unique byte-size integer value. In Figure 1.2 the first byte of <code>hello.c</code> is 35 (<code>#</code>), the second is 105 (<code>i</code>), and each text line ends with the invisible newline character <code>\n</code>, value 10.</p>
             <p>“All information in a system—including disk files, programs stored in memory, user data stored in memory, and data transferred across a network—is represented as a bunch of bits.” “The only thing that distinguishes different data objects is the context in which we view them.” The same bytes might be an integer, a floating-point number, a character string, or a machine instruction.</p>
             <p>Machine representations of numbers are finite approximations of integers and real numbers, so they can behave in unexpected ways. That is the subject of Chapter 2.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;39–40 · 1.1 Information Is Bits + Context</p>
+            <p class="cite">pp.&nbsp;39–40 · 1.1 Information Is Bits + Context</p>
           </div>
         </details>
       </div>
@@ -183,7 +183,7 @@
               <li><b>Linker (ld):</b> the <code>printf</code> function lives in a separate precompiled object file, <code>printf.o</code>, which must be merged with <code>hello.o</code>. The result is the executable object file <code>hello</code>, ready to be loaded into memory and run.</li>
             </ul>
             <p>Figure 1.3 marks <code>hello.c</code>, <code>hello.i</code> and <code>hello.s</code> as text and <code>hello.o</code>, <code>printf.o</code> and <code>hello</code> as binary. In the book’s listing of <code>hello.s</code>, the call appears as <code>call puts</code>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;40–42 · 1.2 Programs Are Translated by Other Programs into Different Forms</p>
+            <p class="cite">pp.&nbsp;40–42 · 1.2 Programs Are Translated by Other Programs into Different Forms</p>
           </div>
         </details>
       </div>
@@ -213,7 +213,7 @@
             <p><b>Optimizing program performance.</b> We do not need to know the compiler’s inner workings, but good coding decisions need a basic understanding of machine-level code. Among the book’s questions: is a <code>switch</code> always more efficient than a sequence of <code>if-else</code> statements, how much overhead does a function call add, and “Why does our loop run so much faster if we sum into a local variable instead of an argument that is passed by reference?” (Chapters 3, 5 and 6.)</p>
             <p><b>Understanding link-time errors.</b> For example, “what does it mean when the linker reports that it cannot resolve a reference?” and “What happens if you define two global variables in different C files with the same name?” Some linker errors do not appear until run time. (Chapter 7.)</p>
             <p><b>Avoiding security holes.</b> “For many years, buffer overflow vulnerabilities have accounted for many of the security holes in network and Internet servers.” A first step in secure programming is to understand how data and control information are stored on the program stack. (Chapter 3.)</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;42–43 · 1.3 It Pays to Understand How Compilation Systems Work</p>
+            <p class="cite">pp.&nbsp;42–43 · 1.3 It Pays to Understand How Compilation Systems Work</p>
           </div>
         </details>
       </div>
@@ -243,7 +243,7 @@
             <p>“The shell is a command-line interpreter that prints a prompt, waits for you to type a command line, and then performs the command.”</p>
             <p>If the first word of the command line is not a built-in shell command, the shell assumes it names an executable file that it should load and run. For <code>./hello</code>, the shell loads and runs hello and waits for it to terminate; hello prints its message and terminates; the shell prints a prompt and waits for the next command line.</p>
             <p>The book writes its own simple shell in Chapter 8. The shell code here is a sketch in the same spirit, with helper names that say what each step does.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;43–44 · 1.4 Processors Read and Interpret Instructions Stored in Memory</p>
+            <p class="cite">pp.&nbsp;43–44 · 1.4 Processors Read and Interpret Instructions Stored in Memory</p>
           </div>
         </details>
       </div>
@@ -272,7 +272,7 @@
             <p>Figure 1.4 shows the hardware organization of a typical system, modeled after recent Intel systems. Buses are electrical conduits that carry bytes between the components. “Buses are typically designed to transfer fixed-size chunks of bytes known as words.” Most machines today have word sizes of either 4 bytes (32 bits) or 8 bytes (64 bits); the book does not assume a fixed word size and says what a “word” means wherever it matters.</p>
             <p>The example system has four I/O devices: a keyboard and mouse for input, a display for output, and a disk drive for long-term storage. Initially the executable hello program resides on the disk. Each device connects to the I/O bus by a controller (chip sets in the device itself or on the motherboard) or an adapter (a card that plugs into a slot on the motherboard). “The distinction between the two is mainly one of packaging.”</p>
             <p>In the figure, the CPU’s bus interface, the I/O bridge and main memory are joined by the system bus and the memory bus; the I/O bus leaves the bridge with expansion slots for other devices such as network adapters.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;44–45 · 1.4.1 Hardware Organization of a System: Buses, I/O Devices</p>
+            <p class="cite">pp.&nbsp;44–45 · 1.4.1 Hardware Organization of a System: Buses, I/O Devices</p>
           </div>
         </details>
       </div>
@@ -301,7 +301,7 @@
             <p>“The main memory is a temporary storage device that holds both a program and the data it manipulates while the processor is executing the program.” Physically, it is a collection of dynamic random access memory (DRAM) chips.</p>
             <p>“Logically, memory is organized as a linear array of bytes, each with its own unique address (array index) starting at zero.” Each machine instruction can consist of a variable number of bytes.</p>
             <p>The sizes of data items depend on their C type. On an x86-64 machine running Linux, <code>short</code> requires 2 bytes, <code>int</code> and <code>float</code> 4 bytes, and <code>long</code> and <code>double</code> 8 bytes. Chapter 6 explains DRAM.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., p.&nbsp;45 · 1.4.1 Hardware Organization of a System: Main Memory</p>
+            <p class="cite">p.&nbsp;45 · 1.4.1 Hardware Organization of a System: Main Memory</p>
           </div>
         </details>
       </div>
@@ -332,7 +332,7 @@
             <p>“From the time that power is applied to the system until the time that the power is shut off, a processor repeatedly executes the instruction pointed at by the program counter and updates the program counter to point to the next instruction.” The next instruction may or may not be contiguous in memory.</p>
             <p>The simple operations revolve around main memory, the register file (a small storage device of word-size registers, each with its own name) and the ALU, which computes new data and address values. Examples: <b>load</b> (memory → register), <b>store</b> (register → memory), <b>operate</b> (two registers → ALU → register) and <b>jump</b> (a word from the instruction → PC).</p>
             <p>The instruction set architecture describes the effect of each machine-code instruction; the microarchitecture describes how the processor is actually implemented, with far more complex mechanisms to speed things up (Chapters 3, 4 and 5).</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;45–46 · 1.4.1 Hardware Organization of a System: Processor</p>
+            <p class="cite">pp.&nbsp;45–46 · 1.4.1 Hardware Organization of a System: Processor</p>
           </div>
         </details>
       </div>
@@ -362,7 +362,7 @@
             <p>Figure 1.5: initially the shell is executing, waiting for a command. “As we type the characters ./hello at the keyboard, the shell program reads each one into a register and then stores it in memory”.</p>
             <p>Figure 1.6: when we hit enter, the shell loads the executable by running instructions that copy the code and data in the hello object file from disk to main memory, including the string <code>hello, world\n</code>. With direct memory access (DMA, Chapter 6), “the data travel directly from disk to main memory, without passing through the processor.”</p>
             <p>Figure 1.7: the processor then executes the instructions in hello’s <code>main</code> routine, which copy the bytes of <code>hello, world\n</code> from memory to the register file, and from there to the display device.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;46–48 · 1.4.2 Running the hello Program</p>
+            <p class="cite">pp.&nbsp;46–48 · 1.4.2 Running the hello Program</p>
           </div>
         </details>
       </div>
@@ -393,7 +393,7 @@
             <p>A register file stores only a few hundred bytes versus billions in main memory, but the processor can read it almost 100 times faster, and this processor–memory gap keeps growing.</p>
             <p>An L1 cache on the processor chip holds tens of thousands of bytes and is nearly as fast as the register file. An L2 cache with hundreds of thousands to millions of bytes is connected by a special bus; it might take 5 times longer to reach than L1, but is still 5 to 10 times faster than main memory. Both are SRAM; newer systems add an L3. Caches exploit locality, the tendency for programs to access data and code in localized regions.</p>
             <p>“application programmers who are aware of cache memories can exploit them to improve the performance of their programs by an order of magnitude.”</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;47–49 · 1.5 Caches Matter</p>
+            <p class="cite">pp.&nbsp;47–49 · 1.5 Caches Matter</p>
           </div>
         </details>
       </div>
@@ -423,7 +423,7 @@
             <p>Figure 1.9: L0 registers, L1–L3 caches (SRAM), L4 main memory (DRAM), L5 local secondary storage (local disks), L6 remote secondary storage (distributed file systems, Web servers). As we move from the top to the bottom, devices become slower, larger, and less costly per byte.</p>
             <p>“The main idea of a memory hierarchy is that storage at one level serves as a cache for storage at the next lower level.” The register file is a cache for L1; L1 and L2 are caches for L2 and L3; L3 is a cache for main memory, which is a cache for the disk. On some networked systems with distributed file systems, the local disk is a cache for data stored on the disks of other systems.</p>
             <p>The shelf sizes and the rule for throwing things out in this machine are toy choices; Chapter 6 covers the real ones.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., p.&nbsp;50 · 1.6 Storage Devices Form a Hierarchy</p>
+            <p class="cite">p.&nbsp;50 · 1.6 Storage Devices Form a Hierarchy</p>
           </div>
         </details>
       </div>
@@ -452,7 +452,7 @@
             <p>Neither the shell nor hello accessed the keyboard, display, disk or main memory directly; they relied on services provided by the operating system, a layer of software between the application and the hardware (Figure 1.10). “All attempts by an application program to manipulate the hardware must go through the operating system.”</p>
             <p>Its two primary purposes: “(1) to protect the hardware from misuse by runaway applications and (2) to provide applications with simple and uniform mechanisms for manipulating complicated and often wildly different low-level hardware devices.”</p>
             <p>Figure 1.11: files are abstractions for I/O devices; virtual memory is an abstraction for both the main memory and disk I/O devices; processes are abstractions for the processor, main memory, and I/O devices.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;50–51 · 1.7 The Operating System Manages the Hardware</p>
+            <p class="cite">pp.&nbsp;50–51 · 1.7 The Operating System Manages the Hardware</p>
           </div>
         </details>
       </div>
@@ -482,7 +482,7 @@
             <p>The OS provides the illusion that a program has exclusive use of the processor, main memory and I/O devices. “A process is the operating system’s abstraction for a running program.” Processes run concurrently: the instructions of one process are interleaved with the instructions of another, through a mechanism called context switching.</p>
             <p>The context includes the current values of the PC, the register file, and the contents of main memory. A context switch saves the context of the current process, restores the context of the new one, and passes control to it; the new process picks up exactly where it left off. Figure 1.12 shows process A calling <code>read</code>, the kernel switching to process B, and a disk interrupt switching back so A returns from <code>read</code>.</p>
             <p>For hello, the shell invokes a system call; the OS saves the shell’s context, creates a hello process and its context, and passes control to it; after hello terminates, the OS restores the shell. The kernel is the portion of the OS that is always resident in memory. “Note that the kernel is not a separate process.”</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;51–53 · 1.7.1 Processes</p>
+            <p class="cite">pp.&nbsp;51–53 · 1.7.1 Processes</p>
           </div>
         </details>
       </div>
@@ -511,7 +511,7 @@
             <p>“Although we normally think of a process as having a single control flow, in modern systems a process can actually consist of multiple execution units, called threads, each running in the context of the process and sharing the same code and global data.”</p>
             <p>Threads matter because network servers need concurrency, because “it is easier to share data between multiple threads than between multiple processes”, and because threads are typically more efficient than processes. Multi-threading can also make programs run faster when multiple processors are available (Section 1.9.2). Chapter 12 teaches threaded programming.</p>
             <p>The <code>fork</code> call in the process version is a Chapter 8 tool; here it simply makes a child process that is a copy of its parent.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;53–54 · 1.7.2 Threads</p>
+            <p class="cite">pp.&nbsp;53–54 · 1.7.2 Threads</p>
           </div>
         </details>
       </div>
@@ -548,7 +548,7 @@
               <li><b>Kernel virtual memory:</b> applications may not read or write it or call kernel functions directly.</li>
             </ul>
             <p>“The basic idea is to store the contents of a process’s virtual memory on disk and then use the main memory as a cache for the disk.” Hardware translates every address the processor generates (Chapter 9).</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;54–55 · 1.7.3 Virtual Memory</p>
+            <p class="cite">pp.&nbsp;54–55 · 1.7.3 Virtual Memory</p>
           </div>
         </details>
       </div>
@@ -577,7 +577,7 @@
             <p>“A file is a sequence of bytes, nothing more and nothing less.” Every I/O device, including disks, keyboards, displays, and even networks, is modeled as a file. All input and output is performed by reading and writing files with a small set of system calls known as Unix I/O.</p>
             <p>This gives applications a uniform view of all the varied I/O devices. Programmers who manipulate the contents of a disk file are “blissfully unaware of the specific disk technology”, and the same program runs on systems that use different disk technologies. Chapter 10 covers Unix I/O.</p>
             <p><code>open_clientfd</code> in the network version is a helper from the book’s own library, introduced in Chapter 11.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., p.&nbsp;55 · 1.7.4 Files</p>
+            <p class="cite">p.&nbsp;55 · 1.7.4 Files</p>
           </div>
         </details>
       </div>
@@ -606,7 +606,7 @@
             <p>From the point of view of an individual system, a network can be viewed as just another I/O device (Figure 1.14). “When the system copies a sequence of bytes from main memory to the network adapter, the data flow across the network to another machine, instead of, say, to a local disk drive.” Email, instant messaging, the World Wide Web, FTP, and telnet all copy information over a network.</p>
             <p>Figure 1.15: (1) the user types “hello” at the keyboard; (2) the client sends the string to the telnet server; (3) the server sends it to the shell, which runs hello and passes the output to the telnet server; (4) the server sends “hello, world\n” to the client; (5) the client prints it on the display.</p>
             <p>“This type of exchange between clients and servers is typical of all network applications.” Chapter 11 builds network applications, including a simple Web server.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;55–57 · 1.8 Systems Communicate with Other Systems Using Networks</p>
+            <p class="cite">pp.&nbsp;55–57 · 1.8 Systems Communicate with Other Systems Using Networks</p>
           </div>
         </details>
       </div>
@@ -636,7 +636,7 @@
             <p>If a part takes a fraction α of the time T<sub>old</sub> and is sped up by a factor k, then T<sub>new</sub> = T<sub>old</sub>[(1 − α) + α/k] and the speedup S = T<sub>old</sub>/T<sub>new</sub> = 1/((1 − α) + α/k). With α = 0.6 and k = 3, S = 1.67×. Setting k to ∞ gives S<sub>∞</sub> = 1/(1 − α); for α = 0.6 that is 2.5×. The major insight: “to significantly speed up the entire system, we must improve the speed of a very large fraction of the overall system.”</p>
             <p>Practice 1.1: potatoes from Boise to Minneapolis, 2,500 km at 100 km/hr is 25 hours. If 1,500 km (Montana) can be driven at 150 km/hr, the trip takes 10 + 10 hours: 1.25×. For 1.67× the trip must take 15 hours, so Montana in 5 hours: 300 km/hr. Practice 1.2: a 4× target with α = 0.9 needs k = 6.</p>
             <p>The book’s aside recommends expressing a performance improvement as the ratio T<sub>old</sub>/T<sub>new</sub> with a “×” suffix, because percentages are ambiguous.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;58–60, 64 · 1.9 Important Themes, 1.9.1 Amdahl’s Law</p>
+            <p class="cite">pp.&nbsp;58–60, 64 · 1.9 Important Themes, 1.9.1 Amdahl’s Law</p>
           </div>
         </details>
       </div>
@@ -666,7 +666,7 @@
             <p>Figure 1.17: four cores on one chip, each with its own L1 (split into an i-cache and a d-cache) and L2 cache, sharing the L3 cache and the interface to main memory.</p>
             <p>Hyperthreading duplicates some CPU hardware, such as program counters and register files. “Whereas a conventional processor requires around 20,000 clock cycles to shift between different threads, a hyperthreaded processor decides which of its threads to execute on a cycle-by-cycle basis.” If one thread waits for data to be loaded into a cache, the CPU can run another. The Intel Core i7 runs two threads per core, so a four-core system executes eight threads in parallel.</p>
             <p>Multiprocessing helps in two ways: less simulated concurrency, and a single application runs faster — but only if it is expressed as multiple threads that can run in parallel.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;60–62 · 1.9.2 Concurrency and Parallelism: Thread-Level Concurrency</p>
+            <p class="cite">pp.&nbsp;60–62 · 1.9.2 Concurrency and Parallelism: Thread-Level Concurrency</p>
           </div>
         </details>
       </div>
@@ -696,7 +696,7 @@
             <p>Modern processors can execute multiple instructions at one time, a property known as instruction-level parallelism. The 1978-vintage Intel 8086 required multiple (typically 3–10) clock cycles per instruction; more recent processors sustain 2–4 instructions per clock cycle. Any given instruction may take 20 cycles or more from start to finish, but the processor can process as many as 100 instructions at a time.</p>
             <p>With pipelining, the actions of an instruction are partitioned into steps and the hardware is organized as a series of stages that operate in parallel on different parts of different instructions. “We will see that a fairly simple hardware design can sustain an execution rate close to 1 instruction per clock cycle.” Processors that sustain faster than 1 instruction per cycle are superscalar; most modern processors are (Chapters 4 and 5).</p>
             <p>The five stage names and the independent instructions here are a toy; Chapter 4 builds a real pipeline and handles instructions that depend on each other.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., p.&nbsp;62 · 1.9.2 Concurrency and Parallelism: Instruction-Level Parallelism</p>
+            <p class="cite">p.&nbsp;62 · 1.9.2 Concurrency and Parallelism: Instruction-Level Parallelism</p>
           </div>
         </details>
       </div>
@@ -725,7 +725,7 @@
           <div class="inner">
             <p>Many modern processors have special hardware that allows a single instruction to cause multiple operations to be performed in parallel: single-instruction, multiple-data (SIMD) parallelism. Recent generations of Intel and AMD processors have instructions that can add 8 pairs of single-precision floating-point numbers (C data type <code>float</code>) in parallel.</p>
             <p>These instructions are provided mostly to speed up applications that process image, sound, and video data. “Although some compilers attempt to automatically extract SIMD parallelism from C programs, a more reliable method is to write programs using special vector data types supported in compilers such as gcc.” The book describes this style in Web Aside OPT:SIMD and Chapter 5.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., p.&nbsp;62 · 1.9.2 Concurrency and Parallelism: Single-Instruction, Multiple-Data (SIMD) Parallelism</p>
+            <p class="cite">p.&nbsp;62 · 1.9.2 Concurrency and Parallelism: Single-Instruction, Multiple-Data (SIMD) Parallelism</p>
           </div>
         </details>
       </div>
@@ -755,7 +755,7 @@
             <p>“The use of abstractions is one of the most important concepts in computer science.” Good practice is to give a set of functions a simple application program interface (API) so programmers can use them without delving into their inner workings.</p>
             <p>On the processor side, the instruction set architecture abstracts the actual hardware: “With this abstraction, a machine-code program behaves as if it were executed on a processor that performs just one instruction at a time.” The hardware executes many instructions in parallel, but always consistently with the sequential model, so different processor implementations can run the same machine code while offering a range of cost and performance.</p>
             <p>On the operating system side: files abstract I/O devices, virtual memory abstracts program memory, and processes abstract a running program. The virtual machine abstracts the entire computer, including the operating system, the processor, and the programs. IBM introduced it in the 1960s; it helps run programs designed for multiple operating systems (such as Microsoft Windows, Mac OS X, and Linux) or different versions of one (Figure 1.18).</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;62–63 · 1.9.3 The Importance of Abstractions in Computer Systems</p>
+            <p class="cite">pp.&nbsp;62–63 · 1.9.3 The Importance of Abstractions in Computer Systems</p>
           </div>
         </details>
       </div>

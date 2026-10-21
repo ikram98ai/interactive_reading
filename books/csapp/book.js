@@ -8,6 +8,9 @@ window.BOOK = {
   edition: "3rd edition",
   blurb: "What really happens between your program and the machine that runs it.",
   accent: "mint",
+  // Cites link here. The PDF leaves out the blank pages between some chapters, so from each listed
+  // printed page on, the PDF page is printed page + the second number.
+  pdf: { file: "CSAPP.pdf", offsets: [[1, -6], [67, -7], [199, -8], [705, -9], [757, -10], [837, -11], [925, -13], [1007, -14]] },
   built: 12, // chapters 1..12 have pages
   chapters: [
     { n: 1, short: "The tour", title: "A Tour of Computer Systems", kid: "What happens to your program between typing it and seeing it run." },

@@ -181,7 +181,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>From power-on until shutdown, the program counter takes a sequence of values <span class="mono">a0, a1, …, an−1</span>, each the address of an instruction. A transition from <span class="mono">ak</span> to <span class="mono">ak+1</span> is a control transfer. It is smooth when the next instruction sits next to the current one, and abrupt otherwise. Jumps, calls, and returns are abrupt transfers that the program requested. Exceptions are abrupt transfers in response to a change in processor state.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed., pp.&nbsp;757–759 · 8.1 Exceptions</p>
+            <p class="cite">pp.&nbsp;757–759 · 8.1 Exceptions</p>
           </div>
         </details>
       </div>
@@ -209,7 +209,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <div class="inner">
             <p>Exception handling needs a tight handshake of hardware and software. Each possible exception number <span class="mono">k</span> has a handler. At boot the operating system writes those addresses into the exception table. When an event occurs, the processor looks up entry <span class="mono">k</span> and transfers control there — an indirect call through the table (Figures 8.2 and 8.3).</p>
             <p>It resembles a procedure call, with extras: the return address may be Icurr or Inext depending on the class; x86-64 also pushes the flags; a transfer from user mode pushes onto the kernel stack; and the handler runs in kernel mode. A return-from-interrupt instruction pops that state and can drop back to user mode.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;760–762 · 8.1.1 Exception Handling</p>
+            <p class="cite">pp.&nbsp;760–762 · 8.1.1 Exception Handling</p>
           </div>
         </details>
       </div>
@@ -235,7 +235,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 8.4: interrupts are asynchronous (an I/O pin) and return to the next instruction (Figure 8.5). Traps are synchronous and intentional — the system-call instruction — and also return to the next instruction (Figure 8.6). Faults are potentially recoverable errors; the handler may re-execute the faulting instruction (Figure 8.7). Aborts are unrecoverable and never return (Figure 8.8).</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;762–764 · 8.1.2 Classes of Exceptions</p>
+            <p class="cite">pp.&nbsp;762–764 · 8.1.2 Classes of Exceptions</p>
           </div>
         </details>
       </div>
@@ -262,7 +262,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <div class="inner">
             <p>Figure 8.9: exception 0 is a divide error (fault), 13 a general protection fault, 14 a page fault, 18 a machine check (abort). Linux treats divide errors and general protection faults as fatal. A page fault — typically a 4 KB page — is repaired and Icurr is re-executed.</p>
             <p>Figure 8.10: <span class="mono">write</span> is 1, <span class="mono">fork</span> is 57, <span class="mono">execve</span> is 59, <span class="mono">_exit</span> is 60. Arguments travel in <span class="mono">%rax</span> (the number), then <span class="mono">%rdi, %rsi, %rdx, %r10, %r8, %r9</span>. Figure 8.11’s hello issues syscall 1, then syscall 60.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;765–767 · 8.1.3 Exceptions in Linux/x86-64 Systems</p>
+            <p class="cite">pp.&nbsp;765–767 · 8.1.3 Exceptions in Linux/x86-64 Systems</p>
           </div>
         </details>
       </div>
@@ -289,7 +289,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>“The classic definition of a process is an instance of a program in execution.” Processes are the most successful idea the kernel builds out of exceptions. Each process appears to have exclusive use of the processor and exclusive use of the address space. Those two illusions are logical control flow and private address space.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., p.&nbsp;768 · 8.2 Processes</p>
+            <p class="cite">p.&nbsp;768 · 8.2 Processes</p>
           </div>
         </details>
       </div>
@@ -315,7 +315,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 8.12 draws each process as vertical bars on a time axis. A single logical flow can be several bars with other processes in between. The key idea is that processes take turns. Each turn is a time slice; the kernel’s preemption is also called multitasking or time slicing. A process’s logical control flow is the sequence of its own program-counter values, not the values of the physical processor while someone else runs.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;768–769 · 8.2.1 Logical Control Flow</p>
+            <p class="cite">pp.&nbsp;768–769 · 8.2.1 Logical Control Flow</p>
           </div>
         </details>
       </div>
@@ -341,7 +341,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>A logical flow whose execution overlaps another in time is a concurrent flow; the two processes run concurrently. In Figure 8.12, A overlaps B, and A overlaps C; B finishes before C starts, so B and C do not. Parallel flows are concurrent flows running on different cores or computers. Practice Problem 8.1 asks the same overlap question for A on [1, 3], B on [2, 5], and C on [4, 6].</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;769–770 · 8.2.2 Concurrent Flows</p>
+            <p class="cite">pp.&nbsp;769–770 · 8.2.2 Concurrent Flows</p>
           </div>
         </details>
       </div>
@@ -368,7 +368,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 8.13: the bottom of the user space holds code and data loaded from the executable, then the run-time heap, a shared-library region, and the user stack. The kernel occupies the top of the space, up to <span class="mono">2<sup>48</sup>−1</span> on this machine. User code cannot read or write that region. The same virtual address in two processes refers to different physical memory — that privacy is the address-space illusion.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;770–771 · 8.2.3 Private Address Space</p>
+            <p class="cite">pp.&nbsp;770–771 · 8.2.3 Private Address Space</p>
           </div>
         </details>
       </div>
@@ -394,7 +394,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>The mode bit limits which instructions a process may execute and which addresses it may touch. Kernel mode may use privileged instructions and the whole address space. User mode may not. Switching from user to kernel mode happens only through an exception such as a system call, a fault, or an interrupt. The <span class="mono">/proc</span> filesystem exposes kernel data as readable text — CPU type in <span class="mono">/proc/cpuinfo</span>, a process’s segments in <span class="mono">/proc/&lt;pid&gt;/maps</span>. Linux 2.6 added <span class="mono">/sys</span> for buses and devices.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;771–772 · 8.2.4 User and Kernel Modes</p>
+            <p class="cite">pp.&nbsp;771–772 · 8.2.4 User and Kernel Modes</p>
           </div>
         </details>
       </div>
@@ -420,7 +420,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>The kernel implements multitasking with context switches, built on the exception mechanism. The kernel saves the current context, restores a previously saved one, and transfers control. Figure 8.14: A’s <span class="mono">read</span> traps into the kernel; the kernel switches to B for the long disk wait; a disk interrupt switches back so A continues at the instruction after <span class="mono">read</span>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;772–773 · 8.2.5 Context Switches</p>
+            <p class="cite">pp.&nbsp;772–773 · 8.2.5 Context Switches</p>
           </div>
         </details>
       </div>
@@ -446,7 +446,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>Unix-level functions return −1 and set <span class="mono">errno</span> when something goes wrong. Checking every call makes the interesting code hard to see, so the book uses an error-reporting helper and capitalized wrappers (<span class="mono">Fork</span>, <span class="mono">Waitpid</span>, and the rest) in <span class="mono">csapp.c</span>. The wrapper calls the lowercase function and exits with a message on error. Prose in the book uses the lowercase names; the printed listings use the wrappers.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;773–774 · 8.3 System Call Error Handling</p>
+            <p class="cite">pp.&nbsp;773–774 · 8.3 System Call Error Handling</p>
           </div>
         </details>
       </div>
@@ -473,7 +473,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>A process is running, stopped, or terminated. Stopped processes were suspended by a signal (<span class="mono">SIGSTOP</span>, <span class="mono">SIGTSTP</span>, <span class="mono">SIGTTIN</span>, or <span class="mono">SIGTTOU</span>) and stay stopped until <span class="mono">SIGCONT</span>. A process terminates because it received a signal whose default action is to terminate, because it returned from <span class="mono">main</span>, or because it called <span class="mono">exit</span>. The following subsections are the system calls that create, wait for, pause, and replace processes.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;774–775 · 8.4 Process Control</p>
+            <p class="cite">pp.&nbsp;774–775 · 8.4 Process Control</p>
           </div>
         </details>
       </div>
@@ -499,7 +499,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>Every process has a unique nonzero PID. <span class="mono">getpid</span> returns the caller’s PID. <span class="mono">getppid</span> returns the parent’s PID. The type of both is <span class="mono">pid_t</span>, defined in the system headers the book includes through <span class="mono">csapp.h</span>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., p.&nbsp;775 · 8.4.1 Obtaining Process IDs</p>
+            <p class="cite">p.&nbsp;775 · 8.4.1 Obtaining Process IDs</p>
           </div>
         </details>
       </div>
@@ -526,7 +526,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <div class="inner">
             <p><span class="mono">fork</span> returns 0 to the child, the child’s PID to the parent, and −1 on error. “The fork function is interesting (and often confusing) because it is called once but it returns twice.” The child is a duplicate: identical address space, identical file descriptors, and an independent copy of the variables from then on.</p>
             <p>Figure 8.15: <span class="mono">x</span> starts at 1; the child prints <span class="mono">child : x=2</span> and the parent prints <span class="mono">parent: x=0</span>. Figure 8.16 is that process graph. Figure 8.17 nests two <span class="mono">Fork</span> calls so four processes each print hello, in any topological order. Never assume one interleaving.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;775–779 · 8.4.2 Creating and Terminating Processes</p>
+            <p class="cite">pp.&nbsp;775–779 · 8.4.2 Creating and Terminating Processes</p>
           </div>
         </details>
       </div>
@@ -553,7 +553,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <div class="inner">
             <p>A terminated unreaped process is a zombie. The kernel keeps it until the parent reaps it and reads the exit status. If the parent terminates first, init (PID 1) adopts the orphans. <span class="mono">waitpid(pid, statusp, options)</span> returns the child’s PID, or 0 with <span class="mono">WNOHANG</span>, or −1 on error. <span class="mono">pid &gt; 0</span> waits for that child; <span class="mono">pid == -1</span> waits for any. <span class="mono">wait(&amp;status)</span> is <span class="mono">waitpid(-1, &amp;status, 0)</span>.</p>
             <p>Figure 8.18 (N = 2) reaps in no particular order; the sample run shows child 22966 with status 100, then 22967 with 101. Figure 8.19 stores the PIDs and waits in creation order. Either order is correct. <span class="mono">WIFEXITED</span> and <span class="mono">WEXITSTATUS</span> read a normal exit. No children means <span class="mono">ECHILD</span>; an interrupting signal means <span class="mono">EINTR</span>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;779–785 · 8.4.3 Reaping Child Processes</p>
+            <p class="cite">pp.&nbsp;779–785 · 8.4.3 Reaping Child Processes</p>
           </div>
         </details>
       </div>
@@ -579,7 +579,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p><span class="mono">sleep</span> returns 0 when the requested time has elapsed, and otherwise the seconds still left — which happens when a signal interrupts it. <span class="mono">pause</span> puts the caller to sleep until the process receives a signal, and always returns −1. Practice Problem 8.5 asks for a <span class="mono">wakeup</span> wrapper that sleeps and then prints when the process actually woke.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;785–786 · 8.4.4 Putting Processes to Sleep</p>
+            <p class="cite">pp.&nbsp;785–786 · 8.4.4 Putting Processes to Sleep</p>
           </div>
         </details>
       </div>
@@ -605,7 +605,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p><span class="mono">execve(filename, argv, envp)</span> is called once and never returns on success (−1 on error). Figure 8.20’s <span class="mono">argv</span> holds the program name, its arguments, and a NULL pointer. Figure 8.21 is the environment list. Figure 8.22 shows those strings on the user stack when the new program starts. <span class="mono">main</span> receives <span class="mono">argc</span> in <span class="mono">%rdi</span>, <span class="mono">argv</span> in <span class="mono">%rsi</span>, and <span class="mono">envp</span> in <span class="mono">%rdx</span>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;786–789 · 8.4.5 Loading and Running Programs</p>
+            <p class="cite">pp.&nbsp;786–789 · 8.4.5 Loading and Running Programs</p>
           </div>
         </details>
       </div>
@@ -631,7 +631,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figures 8.23–8.25 are a tiny shell. <span class="mono">main</span> prints a prompt and calls <span class="mono">eval</span>. <span class="mono">parseline</span> builds <span class="mono">argv</span> and reports whether the job is background. Builtins such as <span class="mono">quit</span> run in the shell process. Otherwise the shell forks, the child calls <span class="mono">execve</span>, and the parent calls <span class="mono">waitpid</span> only for a foreground job. Background children are not reaped by this version.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;789–792 · 8.4.6 Using fork and execve to Run Programs</p>
+            <p class="cite">pp.&nbsp;789–792 · 8.4.6 Using fork and execve to Run Programs</p>
           </div>
         </details>
       </div>
@@ -657,7 +657,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>A signal is a form of exceptional control flow, higher level than an exception and lower level than a nonlocal jump. Figure 8.26 lists the 30 Linux signals and each default action. The kernel tells a user process about certain exceptions by sending a signal: <span class="mono">SIGFPE</span> for divide-by-zero, <span class="mono">SIGILL</span> for an illegal instruction, <span class="mono">SIGSEGV</span> for an illegal memory reference. Ctrl+C sends <span class="mono">SIGINT</span> to the foreground process group. <span class="mono">SIGKILL</span> forcibly terminates. A child’s stop or termination sends <span class="mono">SIGCHLD</span> to the parent.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;792–794 · 8.5 Signals</p>
+            <p class="cite">pp.&nbsp;792–794 · 8.5 Signals</p>
           </div>
         </details>
       </div>
@@ -683,7 +683,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>A signal is sent when the kernel records it in the destination’s context, either because the kernel noticed an event or because some process called <span class="mono">kill</span>. It is received when the destination is forced to react. A pending signal is received at most once. For each process the kernel keeps the set of pending signals and the set of blocked signals. A blocked pending signal stays pending until the signal is unblocked.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;794–795 · 8.5.1 Signal Terminology</p>
+            <p class="cite">pp.&nbsp;794–795 · 8.5.1 Signal Terminology</p>
           </div>
         </details>
       </div>
@@ -709,7 +709,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>The <span class="mono">/bin/kill</span> program sends an arbitrary signal. <span class="mono">kill(pid, sig)</span> does it from a program (Figure 8.29). If <span class="mono">pid</span> is positive, the signal goes to that process. If <span class="mono">pid</span> is negative, it goes to every process in group <span class="mono">|pid|</span>. Figure 8.28: shell 10 in group 10, foreground job 20 with children 21 and 22, background jobs 32 and 40. <span class="mono">setpgid(0, 0)</span> puts the caller in a new group whose id is its PID. <span class="mono">alarm</span> schedules <span class="mono">SIGALRM</span> and cancels any previous alarm.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;795–798 · 8.5.2 Sending Signals</p>
+            <p class="cite">pp.&nbsp;795–798 · 8.5.2 Sending Signals</p>
           </div>
         </details>
       </div>
@@ -735,7 +735,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>The kernel forces the process to react before it returns to user mode from an exception, or when a blocked signal is unblocked. Each signal has a default action (Figure 8.26). A program can ignore a signal or install a handler with <span class="mono">signal</span>. Figure 8.30 catches <span class="mono">SIGINT</span>, prints, and exits. Figure 8.31: handlers can be interrupted by other handlers. The interrupted handler resumes when the inner one returns.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;798–800 · 8.5.3 Receiving Signals</p>
+            <p class="cite">pp.&nbsp;798–800 · 8.5.3 Receiving Signals</p>
           </div>
         </details>
       </div>
@@ -761,7 +761,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>Applications use <span class="mono">sigprocmask</span> to block and unblock signals explicitly (Figure 8.32). The helpers <span class="mono">sigemptyset</span>, <span class="mono">sigfillset</span>, <span class="mono">sigaddset</span>, and <span class="mono">sigdelset</span> build the sets. The kernel also blocks the signal currently being handled, so a handler is not recursively interrupted by another instance of the same signal unless the program asks for that. Other signal types are not implicitly blocked.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;800–802 · 8.5.4 Blocking and Unblocking Signals</p>
+            <p class="cite">pp.&nbsp;800–802 · 8.5.4 Blocking and Unblocking Signals</p>
           </div>
         </details>
       </div>
@@ -788,7 +788,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <div class="inner">
             <p>Guidelines: handlers should be simple; they should call only async-signal-safe functions (Figure 8.33); they should save and restore <span class="mono">errno</span>; they should block signals around shared data; and shared flags should be <span class="mono">volatile sig_atomic_t</span>. Figure 8.35 is the safe version of Figure 8.30’s <span class="mono">SIGINT</span> handler, using <span class="mono">Sio_puts</span> and <span class="mono">_exit</span>.</p>
             <p>Figure 8.36 reaps one child per <span class="mono">SIGCHLD</span> and can leave a zombie, because one pending bit means “at least one,” not “how many.” Figure 8.37 loops while <span class="mono">waitpid</span> succeeds. The book’s <span class="mono">Signal</span> wrapper (Figure 8.38) uses <span class="mono">sigaction</span> with <span class="mono">SA_RESTART</span> so slow calls restart instead of returning <span class="mono">EINTR</span>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;802–812 · 8.5.5 Writing Signal Handlers</p>
+            <p class="cite">pp.&nbsp;802–812 · 8.5.5 Writing Signal Handlers</p>
           </div>
         </details>
       </div>
@@ -814,7 +814,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 8.39 is a shell-shaped loop with a race between <span class="mono">addjob</span> in the parent and <span class="mono">deletejob</span> in the handler. If the child terminates before <span class="mono">addjob</span>, the job list is wrong. Figure 8.40 blocks <span class="mono">SIGCHLD</span> across <span class="mono">fork</span> and <span class="mono">addjob</span>, then unblocks. Children inherit the blocked set, so the child restores the previous mask before <span class="mono">execve</span>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;812–814 · 8.5.6 Synchronizing Flows to Avoid Nasty Concurrency Bugs</p>
+            <p class="cite">pp.&nbsp;812–814 · 8.5.6 Synchronizing Flows to Avoid Nasty Concurrency Bugs</p>
           </div>
         </details>
       </div>
@@ -840,7 +840,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 8.41 waits in a spin loop until the handler stores a nonzero PID. It is correct and wasteful. <span class="mono">while (!pid) pause();</span> races: a signal in the window after the test and before <span class="mono">pause</span> sleeps forever. <span class="mono">sleep</span> in the loop is too slow. Figure 8.42 uses <span class="mono">sigsuspend</span>, which atomically unblocks the signals in the given mask and suspends until a handler returns, then restores the previous blocked set.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;814–817 · 8.5.7 Explicitly Waiting for Signals</p>
+            <p class="cite">pp.&nbsp;814–817 · 8.5.7 Explicitly Waiting for Signals</p>
           </div>
         </details>
       </div>
@@ -866,7 +866,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p><span class="mono">setjmp</span> is called once and returns multiple times. <span class="mono">longjmp(env, retval)</span> restores the environment and makes that <span class="mono">setjmp</span> return <span class="mono">retval</span>, or 1 if <span class="mono">retval</span> was 0. Figure 8.43 takes <span class="mono">bar</span>’s <span class="mono">longjmp(buf, 2)</span> because <span class="mono">error2</span> is set. Figure 8.44 uses <span class="mono">sigsetjmp</span> / <span class="mono">siglongjmp</span> so a <span class="mono">SIGINT</span> handler restarts the program. Install the handler after the initial <span class="mono">sigsetjmp</span>. Only async-signal-safe functions should be reachable from the jump; in the example, <span class="mono">exit</span> is unreachable.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;817–822 · 8.6 Nonlocal Jumps</p>
+            <p class="cite">pp.&nbsp;817–822 · 8.6 Nonlocal Jumps</p>
           </div>
         </details>
       </div>
@@ -892,7 +892,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p><span class="mono">strace</span> traces each system call of a running program and its children. <span class="mono">ps</span> lists processes, zombies included. <span class="mono">top</span> reports resource use. <span class="mono">pmap</span> displays a process’s memory map. <span class="mono">/proc</span> exports kernel data structures as ASCII; <span class="mono">/proc/loadavg</span> is the current load average. A statically linked binary keeps an strace shorter.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., pp.&nbsp;822–823 · 8.7 Tools for Manipulating Processes</p>
+            <p class="cite">pp.&nbsp;822–823 · 8.7 Tools for Manipulating Processes</p>
           </div>
         </details>
       </div>
@@ -918,7 +918,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
           <summary>What the book says</summary>
           <div class="inner">
             <p>ECF occurs at every level and is a basic mechanism for concurrency. Hardware exceptions are interrupts, traps, faults, and aborts. The kernel uses them to provide processes: logical control flows and private address spaces. Applications create children, wait for them, run new programs, and catch signals. Signal handling is subtle. Nonlocal jumps are the application-level form of the same abrupt transfer.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed., p.&nbsp;823 · 8.8 Summary</p>
+            <p class="cite">p.&nbsp;823 · 8.8 Summary</p>
           </div>
         </details>
       </div>

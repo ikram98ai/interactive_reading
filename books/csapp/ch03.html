@@ -151,7 +151,7 @@
             <p>The book lists Intel processors by the transistors it took to build them. The 8086 (1978, 29 K transistors) is a 16-bit microprocessor. Its 8088 variant, with an 8-bit external bus, was the heart of the original IBM personal computers. Those machines came with 32,768 bytes of memory. Addresses were 20 bits long (1,048,576 bytes addressable), and the operating system reserved 393,216 bytes, leaving a 655,360-byte space.</p>
             <p>The i386 (1985, 275 K transistors) expanded the architecture to 32 bits and the flat addressing model used by Linux. It was the first machine in the series that could fully support a Unix operating system. The PentiumPro (1995, 5.5 M transistors) introduced the P6 microarchitecture and a class of conditional move instructions.</p>
             <p>The Pentium 4E (2004, 125 M transistors) added EM64T, Intel’s implementation of a 64-bit extension to IA32 developed by Advanced Micro Devices (AMD), which the book calls x86-64. The Core i7 Haswell (2013, 1.4 G transistors) extended AVX to AVX2. A program compiled for an earlier chip in this line still runs.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.1 a historical perspective</p>
+            <p class="cite">p.&nbsp;202 · 3.1 a historical perspective</p>
           </div>
         </details>
       </div>
@@ -179,7 +179,7 @@
             <p>gcc is a compiler driver. For a command such as gcc -Og -o p p1.c p2.c it runs the preprocessor (cpp), the compiler (cc1), the assembler (as), and the linker (ld). The preprocessor handles directives that begin with #. The compiler writes assembly. The assembler writes relocatable object code. The linker merges the object files and library code and fills in addresses.</p>
             <p>The book generates code with gcc -Og. At this level the generated code follows the structure of the original C. Optimization levels -O1 and -O2 can transform the code so thoroughly that the mapping back to the source is hard to follow.</p>
             <p>The finished file is what the processor runs. Everything before it is a tool for people, or a file the next tool still has to finish.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.2 compiling into machine code</p>
+            <p class="cite">p.&nbsp;205 · 3.2 compiling into machine code</p>
           </div>
         </details>
       </div>
@@ -207,7 +207,7 @@
             <p>The instruction set architecture defines the processor state, the format of the instructions, and the effect of each instruction. The hardware may execute parts of several instructions at once, but it must produce the same results as a processor that completes one instruction before starting the next.</p>
             <p>The visible state is the program counter (called %rip on x86-64), a register file of 16 named locations, condition codes that record recent arithmetic, and memory. Memory is a large byte-addressable array. Virtual addresses give each program its own view of that array.</p>
             <p>Current 64-bit machines can use up to 256 terabytes (2^48 bytes) of memory, and could be extended toward 16 exabytes (2^64 bytes). A 32-bit machine can only make use of around 4 gigabytes (2^32 bytes).</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.2.1 machine-level code</p>
+            <p class="cite">p.&nbsp;206 · 3.2.1 machine-level code</p>
           </div>
         </details>
       </div>
@@ -235,7 +235,7 @@
             <p>gcc -Og -S writes an assembly file. gcc -Og -c writes the object file mstore.o. Embedded in the 1,368 bytes of that file is the 14-byte sequence 53 48 89 d3 e8 00 00 00 00 48 89 03 5b c3. The program executed by the machine is simply a sequence of bytes encoding a series of instructions.</p>
             <p>On Linux, objdump -d is the disassembler. In the object file the call’s target is not filled in yet. The bytes e8 00 00 00 00 are a placeholder. In the linked program the book shows 400544: e8 42 00 00 00 callq 40058b &lt;mult2&gt;.</p>
             <p>The linked file prog has grown to 8,655 bytes, because it holds more than this one function. Two nop instructions are inserted after the call so the function occupies 16 bytes.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.2.2 code examples</p>
+            <p class="cite">p.&nbsp;208 · 3.2.2 code examples</p>
           </div>
         </details>
       </div>
@@ -263,7 +263,7 @@
             <p>The book shows assembly in ATT format, the form produced by gcc. A register name is prefixed by %, and an immediate is prefixed by $. The last letter of many instruction names is a size: b, w, l, or q. The source operand is written before the destination.</p>
             <p>The raw output of gcc -Og -S also contains assembler directives, lines that begin with a period. The book’s annotated listings omit those and add a comment on each instruction.</p>
             <p>gcc -Og -S -masm=intel asks for Intel format. The operands are reversed, the % signs disappear, and the size is written differently. The book uses ATT unless it says otherwise.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.2.3 notes on formatting</p>
+            <p class="cite">p.&nbsp;211 · 3.2.3 notes on formatting</p>
           </div>
         </details>
       </div>
@@ -291,7 +291,7 @@
             <p>Figure 3.1 gives the sizes used by gcc on x86-64. char is 1 byte (suffix b). short is 2 bytes, which Intel calls a word (suffix w). int is 4 bytes, a double word (suffix l). long and any pointer are 8 bytes, a quad word (suffix q).</p>
             <p>float is 4 bytes, moved by instructions with suffix s. double is 8 bytes, moved by instructions with suffix l. The suffix l also means a 4-byte integer on instructions such as movl, but the floating-point forms are separate instructions, so the two meanings do not collide.</p>
             <p>Most instructions that move or compute on these sizes encode the size in the name. A pointer is an address, 8 bytes on this machine, moved with movq.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.3 data formats</p>
+            <p class="cite">p.&nbsp;213 · 3.3 data formats</p>
           </div>
         </details>
       </div>
@@ -319,7 +319,7 @@
             <p>x86-64 has 16 general-purpose registers holding 64 bits each. The names %rax through %rsp are the historic ones, and %r8 through %r15 were added with the 64-bit extension. Each register also has names for its low 32, 16, and 8 bits.</p>
             <p>Writing the 32-bit form, such as movl, sets the low 4 bytes and forces the high 4 bytes to 0. Writing the 8-bit or 16-bit form leaves the remaining bytes unchanged. There is no movzlq, because movl already zero-extends into the 64-bit register.</p>
             <p>Some names have fixed jobs in the calling convention: %rsp is the stack pointer, %rax carries a return value, and the argument registers are assigned in a set order. The picture’s role labels follow that convention.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.4 the register file</p>
+            <p class="cite">p.&nbsp;215 · 3.4 the register file</p>
           </div>
         </details>
       </div>
@@ -347,7 +347,7 @@
             <p>The three kinds of operands are immediate (a constant, written with $), register, and memory. A memory operand has the general form Imm(rb, ri, s): the effective address is Imm + R[rb] + R[ri] × s, where the scale s is 1, 2, 4, or 8. Any of those pieces except the scale may be omitted.</p>
             <p>Practice Problem 3.1 stores 0xFF, 0xAB, 0x13, and 0x11 at addresses 0x100, 0x104, 0x108, and 0x10C. %rax holds 0x100, %rcx holds 1, and %rdx holds 3. Absolute address 0x104 reads 0xAB. The immediate $0x108 is the number itself, not a load.</p>
             <p>9(%rax,%rdx) is 9 + 0x100 + 3 = 0x10C. 260(%rcx,%rdx) is 264, which is 0x108. 0xFC(,%rcx,4) is 0xFC + 4 = 0x100. (%rax,%rdx,4) is 0x100 + 12 = 0x10C.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.4.1 operand specifiers</p>
+            <p class="cite">p.&nbsp;216 · 3.4.1 operand specifiers</p>
           </div>
         </details>
       </div>
@@ -375,7 +375,7 @@
             <p>The data-movement instruction movq allows an immediate, a register, or one memory operand. Both operands cannot be memory. A copy from memory to memory is done through a register.</p>
             <p>movl stores 4 bytes and sets the upper 4 bytes of a 64-bit register to 0. movb and movw update only the bytes they name. movzbq zero-extends a byte into a quad word, and movsbq sign-extends one.</p>
             <p>The width picture starts from the bit pattern 0x1122334455667788. After movl of 0xaabbccdd the register holds 0x00000000aabbccdd. After a one-byte write, only the low byte has changed.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.4.2 data movement</p>
+            <p class="cite">p.&nbsp;218 · 3.4.2 data movement</p>
           </div>
         </details>
       </div>
@@ -403,7 +403,7 @@
             <p>The book’s exchange takes a pointer xp and a value y. It saves the old *xp, stores y through xp, and returns the old value. With a = 4 and b = 3, the call exchange(&amp;a, b) leaves a equal to 3 and returns 4, so b becomes 4.</p>
             <p>The compiled form is movq (%rdi), %rax, then movq %rsi, (%rdi), then ret. The first instruction both reads memory and sets the return value. No extra register is required.</p>
             <p>A pointer in this code is just an address sitting in a register. The C type says what size to read. The machine sees the address.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.4.3 an example</p>
+            <p class="cite">p.&nbsp;222 · 3.4.3 an example</p>
           </div>
         </details>
       </div>
@@ -431,7 +431,7 @@
             <p>Figure 3.9 starts with %rsp equal to 0x108 and %rax equal to 0x123. pushq %rax sets %rsp to 0x100 and writes 0x123 at that address. popq %rdx reads 0x123 into %rdx and sets %rsp back to 0x108.</p>
             <p>The value 0x123 remains at address 0x100 after the pop. Popping does not erase memory. It only moves the stack pointer.</p>
             <p>pushq is encoded in 1 byte. The two-instruction form subq $8, %rsp and movq %rax, (%rsp) takes 8 bytes. The machine treats them as the same state change.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.4.4 push and pop</p>
+            <p class="cite">p.&nbsp;225 · 3.4.4 push and pop</p>
           </div>
         </details>
       </div>
@@ -459,7 +459,7 @@
             <p>leaq computes an effective address and stores it in a register. The destination must be a register. The instruction does not load from memory, and it does not set the condition codes.</p>
             <p>The book’s example leaq 7(%rdx,%rdx,4), %rax computes 5x + 7 when %rdx holds x. Scale factors of 1, 2, 4, and 8 are the ones the machine can do in the address formula.</p>
             <p>The function scale computes x + 4y + 12z with three leaq instructions: one for x + 4y, one for 3z, and one that adds four times that 3z. The compiler prefers this to an integer multiply when the factors are small.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.5.1 load effective address</p>
+            <p class="cite">p.&nbsp;227 · 3.5.1 load effective address</p>
           </div>
         </details>
       </div>
@@ -487,7 +487,7 @@
             <p>Binary operations such as addq, subq, and xorq read the source and the destination and write the destination. In ATT format the source is first. subq %rax, %rdx performs %rdx ← %rdx − %rax.</p>
             <p>Unary operations such as incq and decq update their only operand. That operand may be a register or a memory location. It may not be two memory locations, because no instruction here has two memory operands.</p>
             <p>incq and decq update the other condition codes but leave the carry flag unchanged. The picture’s memory cell starts at 41 so the increment is easy to see.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.5.2 unary and binary</p>
+            <p class="cite">p.&nbsp;230 · 3.5.2 unary and binary</p>
           </div>
         </details>
       </div>
@@ -515,7 +515,7 @@
             <p>sal and shl are the same left shift. sar is an arithmetic right shift: the sign bit is copied into the vacated bit. shr is a logical right shift: a 0 enters from the left.</p>
             <p>The shift amount is an immediate or the single register %cl. The processor masks the amount to the low 3 bits for an 8-bit shift, the low 4 bits for a 16-bit shift, the low 5 bits for a 32-bit shift, and the low 6 bits for a 64-bit shift. So salb with %cl equal to 0xFF shifts by 7.</p>
             <p>The picture is an 8-bit illustration of that rule, so a carry is easy to see. The masking widths are the book’s.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.5.3 shift operations</p>
+            <p class="cite">p.&nbsp;230 · 3.5.3 shift operations</p>
           </div>
         </details>
       </div>
@@ -543,7 +543,7 @@
             <p>Figure 3.10 lists the arithmetic and logical operations. Addition, subtraction, and the bitwise operations are the same instruction for signed and unsigned data. Only the right shift splits: sar versus shr.</p>
             <p>The arith example computes with x, y, and z. xorq forms t1. leaq (%rdx,%rdx,2), %rax forms 3z. salq $4, %rax multiplies that by 16, which is 48z. andl $252645135, %edi applies the mask 0x0F0F0F0F, and because it is a 4-byte operation it also clears the high half of the register. subq finishes the function.</p>
             <p>leaq does not set the condition codes. A 4-byte logical operation zero-extends into the 64-bit register, just as movl does.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.5.4 discussion</p>
+            <p class="cite">p.&nbsp;232 · 3.5.4 discussion</p>
           </div>
         </details>
       </div>
@@ -571,7 +571,7 @@
             <p>The one-operand mulq multiplies %rax by its operand and writes the full 128-bit product in %rdx:%rax. The two-operand imulq keeps only the low 64 bits, which is what a C multiplication of 64-bit values does.</p>
             <p>Signed division uses cqto to sign-extend %rax into %rdx, then idivq. The quotient is left in %rax and the remainder in %rdx. The remainder has the sign of the dividend.</p>
             <p>The book’s remdiv receives the destination pointer qp in %rdx. Because idivq will overwrite %rdx, the function first copies qp to %r8. The picture divides −7 by 2: the quotient is −3 and the remainder is −1, and −3 × 2 + (−1) = −7.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.5.5 special arithmetic</p>
+            <p class="cite">p.&nbsp;233 · 3.5.5 special arithmetic</p>
           </div>
         </details>
       </div>
@@ -599,7 +599,7 @@
             <p>The condition codes include CF, ZF, SF, and OF. CF is the carry out of unsigned addition. ZF is set when the result is zero. SF is a copy of the most significant bit. OF is set when signed overflow occurs, which is not the same event as unsigned carry.</p>
             <p>Most arithmetic instructions set the codes. leaq does not. inc and dec set ZF, SF, and OF but leave CF unchanged, which matters when a loop is using CF for something else.</p>
             <p>The four-bit adder is an illustration of those rules, not a figure from the book. 9 + 12 needs five bits unsigned and also leaves the signed 4-bit range. 8 + 8 stays inside the unsigned range and leaves the signed range.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.6.1 condition codes</p>
+            <p class="cite">p.&nbsp;237 · 3.6.1 condition codes</p>
           </div>
         </details>
       </div>
@@ -627,7 +627,7 @@
             <p>cmpq S2, S1 sets the condition codes from S1 − S2 and does not write a register. The set family writes a single byte, 0 or 1, according to a condition. The suffix is the condition: setl is signed less, setb is unsigned below, sete is equal.</p>
             <p>Because the result is one byte, the compiler follows it with movzbl to clear the rest of the destination register. There is no 32-bit or 64-bit form of set.</p>
             <p>Signed and unsigned comparisons read different flags. A bit pattern with the top bit set is negative as a signed value and large as an unsigned value, so setl and setb can disagree.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.6.2 accessing the condition codes</p>
+            <p class="cite">p.&nbsp;238 · 3.6.2 accessing the condition codes</p>
           </div>
         </details>
       </div>
@@ -655,7 +655,7 @@
             <p>jmp writes the program counter. A direct jump encodes the target in the instruction. An indirect jump reads the target from a register (jmp *%rax) or from memory (jmp *(%rax)).</p>
             <p>Conditional jumps test the condition codes and, if the condition holds, write the program counter. They are direct only. An indirect conditional jump is not part of the instruction set.</p>
             <p>The picture’s third instruction would load through %rax while %rax holds 0. The direct jump skips that line. Skipping it is the point of the control transfer.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.6.3 jump instructions</p>
+            <p class="cite">p.&nbsp;241 · 3.6.3 jump instructions</p>
           </div>
         </details>
       </div>
@@ -683,7 +683,7 @@
             <p>PC-relative jumps add a displacement to the address of the instruction that follows the jump. In the book’s object-code listing, the bytes at address 3 are eb 03, and 0x5 + 3 = 0x8. The bytes at address b are 7f f8, a displacement of −8, and 0xd + (−8) = 0x5.</p>
             <p>After linking, the book shows those instructions at addresses such as 4004d3 and 4004db. The encoded bytes eb 03 and 7f f8 do not change, because the distance between the instructions did not change.</p>
             <p>The listing ends with f3 c3, printed as repz retq. The rep prefix is a nop here. It keeps a conditional jump from landing directly on the ret, which matters for a particular processor quirk the book mentions.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.6.4 jump instruction encodings</p>
+            <p class="cite">p.&nbsp;243 · 3.6.4 jump instruction encodings</p>
           </div>
         </details>
       </div>
@@ -711,7 +711,7 @@
             <p>The book’s absdiff_se returns the absolute difference and also increments a global, lt_cnt or ge_cnt, depending on the branch. Those stores are side effects.</p>
             <p>Because only one counter may change, the compiler must use a conditional jump. A conditional move evaluates both expressions. That would increment the wrong counter, or both.</p>
             <p>The test is jge: when x &gt;= y the else branch runs. The picture starts at x = 3 and y = 8, so the first run takes the less-than side.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.6.5 implementing conditional branches</p>
+            <p class="cite">p.&nbsp;245 · 3.6.5 implementing conditional branches</p>
           </div>
         </details>
       </div>
@@ -739,7 +739,7 @@
             <p>cmovCC copies the source to the destination only when the condition holds. The book’s absdiff computes y − x and x − y, compares, and then cmovge keeps the right one. Both subtractions always happen.</p>
             <p>On an Intel Haswell processor the book measured absdiff at about 8 cycles when the branch was predictable and about 17.50 cycles when the pattern was random. The misprediction penalty worked out to about 19 cycles. A mispredicted branch in general can cost 15–30 cycles. The cmov form stayed near the predictable-jump cost.</p>
             <p>cread returns *xp, or 0 when xp is null. The load would fault if it were evaluated on a null pointer, so the compiler must use a jump and must not use cmov.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.6.6 conditional move instructions</p>
+            <p class="cite">p.&nbsp;250 · 3.6.6 conditional move instructions</p>
           </div>
         </details>
       </div>
@@ -767,7 +767,7 @@
             <p>A do-while tests after the body, so the body executes at least once. The book’s factorial-style loop multiplies and then decrements, and the conditional jump goes back while n is greater than 1.</p>
             <p>A while can be compiled as a jump to the test in the middle of the loop, so the first thing that happens is the comparison. It can also be compiled as a guarded do: an initial conditional jump skips the loop entirely when the test fails, and the loop itself is a do-while.</p>
             <p>For n = 1 the do-while still multiplies once. The jump-to-middle and guarded-do forms do not. The picture’s result starts at 1 and multiplies by n on each real entry to the body.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.6.7 loops</p>
+            <p class="cite">p.&nbsp;256 · 3.6.7 loops</p>
           </div>
         </details>
       </div>
@@ -795,7 +795,7 @@
             <p>The book’s switch_eg uses case labels 100 through 106. The compiler computes an index n − 100. It compares that index to 6 and jumps to the default when the index is greater. Otherwise an indirect jump goes through the table jt, whose entries are 8-byte code addresses.</p>
             <p>The table has seven entries. Cases 101 and 105 are missing, so those slots point at the default. Case 102 falls through into the next case because there is no break. Cases 104 and 106 share the same code.</p>
             <p>A chain of if statements would test once per case. The jump table does a bounds check and one indirect jump, so the cost stays flat as long as the case labels are dense enough to be worth a table.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.6.8 switch statements</p>
+            <p class="cite">p.&nbsp;268 · 3.6.8 switch statements</p>
           </div>
         </details>
       </div>
@@ -823,7 +823,7 @@
             <p>A stack frame is the region of the stack a single procedure uses. It holds the return address, saved registers, local variables, and argument-build space for calls this procedure makes.</p>
             <p>The stack grows toward lower addresses. %rsp points at the top, which is the lowest address in use. call pushes the return address. The callee subtracts from %rsp to allocate its frame and adds the same amount back before ret.</p>
             <p>The picture labels the usual pieces in the order the book draws them: the caller’s frame at the high addresses, then the return address, saved registers, locals, and the argument-build area at the low end.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.7.1 stack frame structure</p>
+            <p class="cite">p.&nbsp;275 · 3.7.1 stack frame structure</p>
           </div>
         </details>
       </div>
@@ -851,7 +851,7 @@
             <p>The call instruction pushes the address of the following instruction onto the stack and jumps to the target. ret pops that address into the program counter. The pushed value is the return address.</p>
             <p>The book traces main calling top calling leaf. The return address left for leaf is 40054e, and the one left for top is 400560. %rsp moves through values the book shows as 0x7fffffffe820, then e818, then e810.</p>
             <p>leaf returns 97. top doubles that and returns 194. The picture follows that control flow: two calls down, two rets up.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.7.2 transferring control</p>
+            <p class="cite">p.&nbsp;277 · 3.7.2 transferring control</p>
           </div>
         </details>
       </div>
@@ -879,7 +879,7 @@
             <p>The x86-64 calling convention passes the first six integer or pointer arguments in %rdi, %rsi, %rdx, %rcx, %r8, and %r9. Further arguments are passed on the stack. The return value comes back in %rax.</p>
             <p>Stack arguments are pushed from right to left, so the seventh argument ends at the lower address, just above the return address the call is about to push.</p>
             <p>The picture numbers the arguments 1 through 8. Floating-point arguments use a different set of registers; that convention is in the last part of the chapter.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.7.3 data transfer</p>
+            <p class="cite">p.&nbsp;281 · 3.7.3 data transfer</p>
           </div>
         </details>
       </div>
@@ -907,7 +907,7 @@
             <p>When a local’s address is taken, or when there are more live values than registers, the compiler stores the local on the stack. subq $16, %rsp allocates two 8-byte slots.</p>
             <p>The book’s caller stores 534 at (%rsp) and 1057 at 8(%rsp), then calls swap_add with those addresses in %rdi and %rsi. swap_add writes the sum and the difference back through the pointers.</p>
             <p>After the call, %rax holds the sum. The difference is computed from the two memory slots, and imulq multiplies them. addq $16, %rsp releases the frame.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.7.4 local storage on the stack</p>
+            <p class="cite">p.&nbsp;284 · 3.7.4 local storage on the stack</p>
           </div>
         </details>
       </div>
@@ -935,7 +935,7 @@
             <p>Caller-saved registers may be overwritten by a call. The caller saves them, if it still needs them, before the call. %rax, %rcx, %rdx, %rsi, %rdi, and %r8 through %r11 are caller-saved.</p>
             <p>Callee-saved registers must come back unchanged. They are %rbx, %rbp, and %r12 through %r15. A function that uses one pushes the old value and pops it before ret.</p>
             <p>%rsp is special: the callee may move it, but it must restore it so the ret finds the return address. The picture’s switch shows the same call with the promise kept and with the promise broken.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.7.5 local storage in registers</p>
+            <p class="cite">p.&nbsp;287 · 3.7.5 local storage in registers</p>
           </div>
         </details>
       </div>
@@ -963,7 +963,7 @@
             <p>The book’s rfact computes a factorial recursively. It copies n into %rbx, and if n is greater than 1 it calls rfact(n − 1) and multiplies the result by the saved n. %rbx is callee-saved, so pushq %rbx and popq %rbx surround the body.</p>
             <p>The base case writes 1 into %eax and does not call further. Each nested call has its own saved %rbx on the stack, so the values of n are preserved across the recursive call.</p>
             <p>The picture uses n = 4, so the frames are 4, 3, 2, and 1, and the value that comes back to the outermost call is 24.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.7.6 recursive procedures</p>
+            <p class="cite">p.&nbsp;289 · 3.7.6 recursive procedures</p>
           </div>
         </details>
       </div>
@@ -991,7 +991,7 @@
             <p>For an array of elements of size L starting at address x, element i is at x + L × i. A char array uses L = 1, an int array uses L = 4, and an array of pointers uses L = 8.</p>
             <p>The compiler puts the start in one register and the index in another. movb (%rdx,%rcx), %al has scale 1. movl (%rdx,%rcx,4), %eax has scale 4. movq (%rdx,%rcx,8), %rax has scale 8.</p>
             <p>No extra multiply instruction is required when L is 1, 2, 4, or 8. The address arithmetic is the memory operand.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.8.1 arrays</p>
+            <p class="cite">p.&nbsp;291 · 3.8.1 arrays</p>
           </div>
         </details>
       </div>
@@ -1019,7 +1019,7 @@
             <p>Pointer arithmetic scales by the size of the pointed-to type. For an int array, adding i to the pointer adds 4i to the address.</p>
             <p>The book compares several expressions. The array name decays to a pointer to the first element, so E and &amp;E[0] produce the same address, typically with movq. E[0] is a load, movl (%rdx), %eax. E[i] is movl (%rdx,%rcx,4), %eax. &amp;E[2] is leaq 8(%rdx), %rax, an address computation with no memory read.</p>
             <p>E[i] and *(E + i) compile to the same machine code. The brackets are a notation for the scaled add and the load.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.8.2 pointer arithmetic</p>
+            <p class="cite">p.&nbsp;293 · 3.8.2 pointer arithmetic</p>
           </div>
         </details>
       </div>
@@ -1047,7 +1047,7 @@
             <p>C stores a two-dimensional array in row-major order: A[0][0], A[0][1], A[0][2], then the next row. For int A[5][3] there are 5 rows and 3 columns, and the array occupies 60 bytes.</p>
             <p>Equation 3.1 says the address of element i, j is x + L(C·i + j), where L is the element size and C is the number of columns. Here L is 4 and C is 3, so the byte offset is 4(3i + j).</p>
             <p>The compiler often builds 3i with leaq (%rsi,%rsi,2), %rax, adds j, and then uses scale 4 in the load. Declaring the column count in the type is what makes C a constant the compiler can see.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.8.3 nested arrays</p>
+            <p class="cite">p.&nbsp;294 · 3.8.3 nested arrays</p>
           </div>
         </details>
       </div>
@@ -1075,7 +1075,7 @@
             <p>The book’s fix_matrix uses a compile-time constant N equal to 16. With optimization level -O1, gcc walks the row of A with a pointer that increases by 4, and the column of B with a pointer that increases by 64, which is N times 4.</p>
             <p>The loop body then has no integer multiply. The strides are constants, folded into the pointer updates.</p>
             <p>A version that recomputes Equation 3.1 on every j still executes an imul by 16 even though 16 is known. The picture counts those multiplies so the two strategies can be compared. N = 16 and the step of 64 are the book’s; the four-step walk is a short stand-in for the full column.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.8.4 fixed-size arrays</p>
+            <p class="cite">p.&nbsp;296 · 3.8.4 fixed-size arrays</p>
           </div>
         </details>
       </div>
@@ -1103,7 +1103,7 @@
             <p>For a variable-size array the column count is not a compile-time constant. The book’s var_ele computes n × i with imulq, adds j, and then loads with scale 4.</p>
             <p>The address is x + 4(n·i + j). The 4 is still a scale factor. The n is not, so it costs a multiply instruction.</p>
             <p>This is why the fixed-size version in the previous section could delete the multiply and this one cannot. The picture uses small n, i, and j so the index is easy to check by hand.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.8.5 variable-size arrays</p>
+            <p class="cite">p.&nbsp;298 · 3.8.5 variable-size arrays</p>
           </div>
         </details>
       </div>
@@ -1131,7 +1131,7 @@
             <p>The book’s struct rec lays out int i at offset 0, int j at offset 4, int a[2] at offset 8, and a pointer p at offset 16. The structure is 24 bytes.</p>
             <p>A reference r-&gt;j compiles to a load with displacement 4. An element of the embedded array uses the index scaled by 4, added to the displacement 8. The pointer field is an 8-byte load at displacement 16.</p>
             <p>The generated code contains displacements, not field names. All of the layout work happened in the compiler.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.9.1 structures</p>
+            <p class="cite">p.&nbsp;301 · 3.9.1 structures</p>
           </div>
         </details>
       </div>
@@ -1159,7 +1159,7 @@
             <p>In a union, every field starts at offset 0. The size of the union is the size of its largest field. The book’s union U3 contains a char, an array of two ints, and a double, so it is 8 bytes.</p>
             <p>The struct S3 with those same fields places them at different offsets: the char at 0, the int array at 4, the double at 16, and the struct is 24 bytes.</p>
             <p>The bytes of the union are just bytes. Reading them through a different field reinterprets the bit pattern. The picture shows the little-endian bytes of the double 1.5, the int 42, or the character A. Those three values are a demonstration of the shared storage, not a listing from the book.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.9.2 unions</p>
+            <p class="cite">p.&nbsp;305 · 3.9.2 unions</p>
           </div>
         </details>
       </div>
@@ -1187,7 +1187,7 @@
             <p>A K-byte object wants an address that is a multiple of K. The compiler inserts padding so each field is aligned, and it may pad the end of a struct so that an array of the struct stays aligned.</p>
             <p>The book’s struct S1 is int i, char c, int j. Without padding, j would sit at offset 5. The compiler inserts 3 bytes after c so j is at offset 8, and the struct’s size is 12 rather than 9.</p>
             <p>x86-64 can still load a misaligned int, but the recommended rule, and the compiler’s rule, is the multiple-of-K address. A pointer to the struct must itself be a multiple of the strictest field alignment.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.9.3 data alignment</p>
+            <p class="cite">p.&nbsp;309 · 3.9.3 data alignment</p>
           </div>
         </details>
       </div>
@@ -1215,7 +1215,7 @@
             <p>The book treats a pointer as an address, and the pointer type as a C abstraction that says how to interpret the object at that address. Different pointer types can hold the same address bits.</p>
             <p>NULL is address 0. The operator &amp; produces the address of an object. The operator * loads or stores the object at an address. A cast such as (char *) ip changes the type used by later operations and does not alter the address value.</p>
             <p>Machine code moves addresses in the integer registers. The type checking happened earlier, in the compiler.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.10.1 understanding pointers</p>
+            <p class="cite">p.&nbsp;313 · 3.10.1 understanding pointers</p>
           </div>
         </details>
       </div>
@@ -1243,7 +1243,7 @@
             <p>Figure 3.39 shows a gdb session on multstore. break multstore sets a breakpoint at the first instruction of the function. break *0x400540 sets one at an address. run starts the program, which stops at the breakpoint.</p>
             <p>stepi executes a single instruction. stepi 4 executes four. nexti steps over a call. print /x $rax prints a register in hex. x/14xb multstore examines 14 bytes in hex.</p>
             <p>The picture follows that session through the first instructions of multstore: the push of %rbx, the copy of dest, and a look at %rax before the call. The addresses match the book’s listing of this function.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.10.2 life in the real world: using the gdb debugger</p>
+            <p class="cite">p.&nbsp;315 · 3.10.2 life in the real world: using the gdb debugger</p>
           </div>
         </details>
       </div>
@@ -1271,7 +1271,7 @@
             <p>C does not check array bounds. The book’s echo allocates char buf[8] and calls gets. The compiled form subtracts 24 from %rsp, so the return address is 24 bytes above buf.</p>
             <p>Characters 0 through 7 stay inside buf. The book’s figure marks bytes 8 through 23 as unused padding and bytes 24 through 31 as the return address. A longer string overwrites the return address, and ret transfers control to that forged address.</p>
             <p>The same pattern is why strcpy, strcat, and sprintf are dangerous when the source can be longer than the destination. The picture types the letter A so the overrun is visible; the book’s attack string would be exploit bytes plus a forged return address.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.10.3 out-of-bounds memory references and buffer overflow</p>
+            <p class="cite">p.&nbsp;315 · 3.10.3 out-of-bounds memory references and buffer overflow</p>
           </div>
         </details>
       </div>
@@ -1299,7 +1299,7 @@
             <p>The book recommends a bounded copy such as fgets in place of gets. Three further defenses remain useful when a program still has an overflow.</p>
             <p>A stack protector stores a canary between the buffer and the return address, loaded from %fs:40, and checks it before returning. gcc skipped that guard in the book’s demo only when asked with -fno-stack-protector. Stack randomization, a form of ASLR, moves stack addresses. On the book’s 32-bit measurements the range was about 2^23. A 256-byte nop sled against that range still leaves 2^15, or 32,768, guesses. A 64-bit system’s range is nearly 2^32.</p>
             <p>The processor’s NX bit, which AMD introduced, marks memory not executable. The stack can stay readable and writable while the processor refuses to run instructions stored there.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.10.4 thwarting buffer overflow attacks</p>
+            <p class="cite">p.&nbsp;320 · 3.10.4 thwarting buffer overflow attacks</p>
           </div>
         </details>
       </div>
@@ -1327,7 +1327,7 @@
             <p>When a frame’s size depends on a runtime value, gcc uses %rbp as a frame pointer. The prologue is pushq %rbp and movq %rsp, %rbp. A local such as i is addressed from %rbp, at −8(%rbp), so it stays put while %rsp moves.</p>
             <p>The book’s vframe allocates an array of n longs. It computes the byte count with leaq 22(,%rdi,8), %rax and andq $-16, %rax, which rounds up to a multiple of 16, then subtracts that from %rsp.</p>
             <p>leave is equivalent to movq %rbp, %rsp and popq %rbp. It restores both pointers before ret. x86-64 uses %rbp this way only when the frame size is not known in advance.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.10.5 supporting variable-size stack frames</p>
+            <p class="cite">p.&nbsp;326 · 3.10.5 supporting variable-size stack frames</p>
           </div>
         </details>
       </div>
@@ -1355,7 +1355,7 @@
             <p>Scalar floating-point data lives in the XMM registers. movss and movsd (and the AVX forms vmovss and vmovsd) move a single float or double between memory and the low bytes of an XMM register. The memory operand need not be aligned, though alignment is recommended.</p>
             <p>To copy between two XMM registers, gcc uses vmovaps for single precision and vmovapd for double precision, moving the whole register.</p>
             <p>vcvtsi2sd converts an integer to a double. vcvttsd2si converts a double to an integer, truncating toward zero. The picture’s last step turns the integer 7 into the double 7.0.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.11.1 floating-point movement and conversion</p>
+            <p class="cite">p.&nbsp;332 · 3.11.1 floating-point movement and conversion</p>
           </div>
         </details>
       </div>
@@ -1383,7 +1383,7 @@
             <p>The calling convention passes floating arguments in %xmm0 through %xmm7, separately from the integer argument registers. A floating-point return value comes back in %xmm0. All XMM registers are caller-saved.</p>
             <p>The book’s f1(int x, double y, long z) puts x in %edi, y in %xmm0, and z in %rsi. f2(double y, int x, long z) uses the same assignment, because the integer arguments are numbered among themselves and the floating arguments among themselves.</p>
             <p>A function such as g(float x, double *y, long *z) puts the float in %xmm0 and the two pointers in %rdi and %rsi. Pointers are integer arguments even when they point at floating-point data.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.11.2 floating-point code in a procedure</p>
+            <p class="cite">p.&nbsp;337 · 3.11.2 floating-point code in a procedure</p>
           </div>
         </details>
       </div>
@@ -1411,7 +1411,7 @@
             <p>The book’s funct returns a * x - b / i. a, x, and b are floating-point values in XMM registers. i is an integer. gcc widens the float x with vcvtps2pd, multiplies with vmulsd, converts i with vcvtsi2sd, divides with vdivsd, and subtracts with vsubsd.</p>
             <p>These AVX instructions write an XMM destination. The picture uses a = 2, x = 3, b = 8, and i = 2, so the result is 2×3 − 8/2 = 2.</p>
             <p>The integer argument never occupies an XMM register until a conversion instruction puts it there.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.11.3 floating-point arithmetic operations</p>
+            <p class="cite">p.&nbsp;338 · 3.11.3 floating-point arithmetic operations</p>
           </div>
         </details>
       </div>
@@ -1439,7 +1439,7 @@
             <p>AVX floating-point arithmetic instructions do not take a floating immediate. gcc places constants in memory and addresses them relative to the program counter, as in vmulsd .LC2(%rip), %xmm0, %xmm0.</p>
             <p>The book’s cel2fahr multiplies by 1.8 and adds 32.0. It shows 1.8 as the decimal words 3435973837 and 1073532108, and 32.0 as 0 and 1077936128. The first .long is the low-order half.</p>
             <p>The slider applies that same formula. The bit patterns are the book’s; the picture only evaluates them.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.11.4 floating-point constants</p>
+            <p class="cite">p.&nbsp;340 · 3.11.4 floating-point constants</p>
           </div>
         </details>
       </div>
@@ -1467,7 +1467,7 @@
             <p>Bitwise AVX instructions such as vandpd and vxorpd operate on the bits of XMM registers. The book shows fabs implemented by AND with a mask whose final word is 2147483647, so the sign bit is 0 and the other bits stay 1.</p>
             <p>vxorpd %xmm0, %xmm0, %xmm0 clears the register. The all-zero pattern is +0.0.</p>
             <p>The picture starts from the little-endian bytes of −2.5 so the sign bit is visible, then applies those two operations. The value −2.5 is an illustration; the mask word 2147483647 is the book’s.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.11.5 using bitwise operations in floating-point code</p>
+            <p class="cite">p.&nbsp;341 · 3.11.5 using bitwise operations in floating-point code</p>
           </div>
         </details>
       </div>
@@ -1495,7 +1495,7 @@
             <p>ucomisd S1, S2 sets the condition codes from the comparison of S2 − S1. ZF, CF, and PF record the result. If either operand is NaN, the comparison is unordered: ZF, CF, and PF are all set.</p>
             <p>C comparisons are false when an operand is NaN. A later jp instruction can test PF when the program needs to detect the unordered case explicitly.</p>
             <p>The picture’s ordered pairs are 1.5 compared with 2, 2 with 2, and 3 with 2. The fourth pair is a NaN compared with 2. The flag rules are the book’s; the four pairs are a small stand-in for the book’s table.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.11.6 floating-point comparison operations</p>
+            <p class="cite">p.&nbsp;342 · 3.11.6 floating-point comparison operations</p>
           </div>
         </details>
       </div>
@@ -1523,7 +1523,7 @@
             <p>The book’s closing observation is that AVX2 floating-point code follows the same style as integer code: operands in registers, simple operations, and an explicit destination. The registers and the instruction names are the new part.</p>
             <p>Packed instructions apply one operation to several values at once. An XMM register holds two doubles. A YMM register, introduced with AVX on Sandy Bridge and extended by AVX2 on Haswell, holds four.</p>
             <p>The picture steps a four-element sum at those three widths. The counts, one step per scalar value versus one step for the whole YMM vector, are an illustration of that packing. The book’s point is the shape of the code and the parallelism inside one instruction.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 3.11.7 observations</p>
+            <p class="cite">p.&nbsp;345 · 3.11.7 observations</p>
           </div>
         </details>
       </div>

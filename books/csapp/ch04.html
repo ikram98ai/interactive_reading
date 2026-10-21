@@ -140,7 +140,7 @@
             <p>Figure 4.1 is the programmer-visible state. There are 15 program registers: <code>%rax</code>, <code>%rcx</code>, <code>%rdx</code>, <code>%rbx</code>, <code>%rsp</code>, <code>%rbp</code>, <code>%rsi</code>, <code>%rdi</code>, and <code>%r8</code> through <code>%r14</code>. The x86-64 register <code>%r15</code> is omitted to simplify the instruction encoding. Each register stores a 64-bit word. <code>%rsp</code> is the stack pointer for push, pop, call, and return. The others have no fixed meaning.</p>
             <p>Three single-bit condition codes, ZF, SF, and OF, store information about the most recent arithmetic or logical instruction. The PC holds the address of the instruction currently being executed. Memory is a large byte array addressed with virtual addresses; Chapter 9 explains the translation to physical addresses. Stat indicates normal operation or an exception such as an invalid address (Section 4.1.4).</p>
             <p>The processor need not organize this state the way the ISA draws it, as long as machine-level programs appear to have access to it.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.1.1 Programmer-Visible State</p>
+            <p class="cite">p.&nbsp;391 · 4.1.1 Programmer-Visible State</p>
           </div>
         </details>
       </div>
@@ -169,7 +169,7 @@
             <p>Y86-64 is largely a subset of x86-64: only 8-byte integer operations, fewer addressing modes, and a smaller set of operations. The <code>movq</code> instruction is split into <code>irmovq</code>, <code>rrmovq</code>, <code>mrmovq</code>, and <code>rmmovq</code>, so the source and destination forms are explicit. Memory uses a base-and-displacement format only. Direct memory-to-memory moves and immediate-to-memory moves are not allowed.</p>
             <p>OPq is <code>addq</code>, <code>subq</code>, <code>andq</code>, and <code>xorq</code>, on registers only. They set ZF, SF, and OF. The seven jumps are <code>jmp</code>, <code>jle</code>, <code>jl</code>, <code>je</code>, <code>jne</code>, <code>jge</code>, and <code>jg</code>. The six conditional moves use the same conditions and the same encoding shape as <code>rrmovq</code>. <code>call</code> pushes the return address and jumps. <code>ret</code> returns. <code>halt</code> stops execution and sets the status code to HLT. <code>nop</code> is the do-nothing instruction.</p>
             <p>Figure 4.2 draws each instruction’s assembly form beside a byte encoding of 1 to 10 bytes.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.1.2 Y86-64 Instructions</p>
+            <p class="cite">p.&nbsp;392 · 4.1.2 Y86-64 Instructions</p>
           </div>
         </details>
       </div>
@@ -198,7 +198,7 @@
             <p>An instruction consists of a 1-byte instruction specifier, possibly a 1-byte register specifier, and possibly an 8-byte constant word. Encodings range from 1 to 10 bytes. The first byte splits into a code and a function. Codes run from 0 to 0xB: halt, nop, rrmovq/cmovXX, irmovq, rmmovq, mrmovq, OPq, jXX, call, ret, pushq, popq. Function codes matter when several instructions share a code. <code>rrmovq</code> is the unconditional move, function code 0, just as <code>jmp</code> is the unconditional jump.</p>
             <p>Figure 4.4 numbers the registers the same way x86-64 does: 0 <code>%rax</code> through 7 <code>%rdi</code>, 8 <code>%r8</code> through 0xE <code>%r14</code>, and 0xF for no register. The worked example <code>rmmovq %rsp, 0x123456789abcd(%rdx)</code> encodes as <code>40 42 cd ab 89 67 45 23 01 00</code>: icode 4, rA = 4 (<code>%rsp</code>), rB = 2 (<code>%rdx</code>), displacement little-endian.</p>
             <p>Branches and calls store absolute destinations. The design mixes CISC traits (condition codes, variable length, a stack return address) with RISC traits (load/store, a regular encoding, arguments in registers).</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.1.3 Instruction Encoding</p>
+            <p class="cite">p.&nbsp;394 · 4.1.3 Instruction Encoding</p>
           </div>
         </details>
       </div>
@@ -225,7 +225,7 @@
           <div class="inner">
             <p>Figure 4.5 lists the status codes. Value 1, AOK, is normal operation. Value 2, HLT, means a <code>halt</code> instruction was executed. Value 3, ADR, means an invalid address, either while fetching an instruction or while reading or writing data. The maximum address depends on the implementation; any access beyond it triggers ADR. Value 4, INS, means an invalid instruction code.</p>
             <p>For Y86-64, the processor simply stops when it hits any exception other than AOK. A more complete design would invoke an exception handler, a procedure designated to handle that exception. Chapter 8 describes handlers that can abort the program or invoke a user-defined signal handler.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.1.4 Y86-64 Exceptions</p>
+            <p class="cite">p.&nbsp;399 · 4.1.4 Y86-64 Exceptions</p>
           </div>
         </details>
       </div>
@@ -254,7 +254,7 @@
             <p>Figure 4.6 compares x86-64 and Y86-64 for <code>long sum(long *start, long count)</code>. The Y86-64 code loads the constants 8 and 1 (lines 2–3) because arithmetic instructions cannot take immediates. Reading <code>*start</code> and adding it takes two instructions, <code>mrmovq</code> then <code>addq</code>, where x86-64 uses one <code>addq</code> from memory. The <code>subq</code> that decrements the count also sets the condition codes, so the <code>testq</code> in the gcc output is unnecessary — but an <code>andq %rsi, %rsi</code> must set the codes before the loop.</p>
             <p>Figure 4.7 is a complete program: <code>.pos 0</code>, an <code>irmovq</code> that points <code>%rsp</code> at <code>stack</code>, a call to <code>main</code>, then <code>halt</code>. The array is four quad words, aligned with <code>.align 8</code>. The stack is placed at <code>0x200</code> with <code>.pos 0x200</code> and grows toward lower addresses. Figure 4.8 is the <b>yas</b> listing: an address and 1 to 10 bytes on each instruction or data line.</p>
             <p><b>yis</b> models the instruction set, not a particular processor. On the sample it stops in 34 steps at PC = 0x13, status HLT, CC Z=1 S=0 O=0. <code>%rax</code> becomes <code>0x0000abcdabcdabcd</code>. Memory words at <code>0x1f0</code> and <code>0x1f8</code> change because of the stack. The highest code address is <code>0x090</code>, so the stack did not overwrite the program.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.1.5 Y86-64 Programs</p>
+            <p class="cite">p.&nbsp;400 · 4.1.5 Y86-64 Programs</p>
           </div>
         </details>
       </div>
@@ -283,7 +283,7 @@
             <p><code>pushq %rsp</code> could push the original <code>%rsp</code> or the decremented value. Practice Problem 4.7 runs <code>pushtest</code>: copy <code>%rsp</code> to <code>%rax</code>, <code>pushq %rsp</code>, <code>popq %rdx</code>, <code>subq %rdx, %rax</code>. The function always returns 0, so the old value of <code>%rsp</code> is what gets pushed. Y86-64 adopts that convention.</p>
             <p>Practice Problem 4.8 runs <code>poptest</code>: save <code>%rsp</code>, <code>pushq $0xabcd</code>, <code>popq %rsp</code>, return the new <code>%rsp</code>. It always returns <code>0xabcd</code>, so <code>popq %rsp</code> sets the stack pointer to the value read from memory. That is equivalent to <code>mrmovq (%rsp), %rsp</code>.</p>
             <p>An Intel note records the inconsistency: from the 286 on, PUSH ESP pushes the value from before the instruction; the 8086 PUSH SP pushes the value after SP has been decremented by 2. Different modes, different results, extra documentation. Deciding the detail once keeps later implementations consistent.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.1.6 Some Y86-64 Instruction Details</p>
+            <p class="cite">p.&nbsp;406 · 4.1.6 Some Y86-64 Instruction Details</p>
           </div>
         </details>
       </div>
@@ -309,7 +309,7 @@
           <div class="inner">
             <p>Logic value 1 is a high voltage of around 1.0 volt. Logic value 0 is a low voltage of around 0.0 volts. A digital system needs combinational logic, memory elements, and a clock. HCL describes the control portion. Verilog and VHDL are the hardware description languages used to synthesize real circuits; HCL is the book’s smaller notation for control, and it can be translated into Verilog.</p>
             <p>Figure 4.9 shows AND, OR, and NOT. HCL uses <code>&amp;&amp;</code>, <code>||</code>, and <code>!</code> because the gates operate on single bits, not words. N-way AND and OR are still written with the binary operators. Gates are always active: if an input changes, the output changes after a small delay.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.2.1 Logic Gates</p>
+            <p class="cite">p.&nbsp;409 · 4.2.1 Logic Gates</p>
           </div>
         </details>
       </div>
@@ -337,7 +337,7 @@
             <p>Combinational networks obey three restrictions. Every gate input connects to exactly one of: a primary input, the output of a memory element, or the output of a gate. Gate outputs are not tied together. The network is acyclic, because a loop can make the computed function ambiguous.</p>
             <p>Figure 4.10 is bit equality: <code>bool eq = (a &amp;&amp; b) || (!a &amp;&amp; !b);</code>. The HCL <code>=</code> names an expression. It is not a store into memory. Figure 4.11 is a single-bit multiplexor: <code>bool out = (s &amp;&amp; a) || (!s &amp;&amp; b);</code>. The output equals <code>a</code> when <code>s</code> is 1 and <code>b</code> when <code>s</code> is 0.</p>
             <p>Combinational outputs keep responding to inputs. C logical operators accept any integer and may skip the second argument; these gates only see bits 0 and 1, and they always react to every input. Practice Problem 4.9 asks for exclusive-or: <code>bool xor = (!a &amp;&amp; b) || (a &amp;&amp; !b);</code>. It is the complement of <code>eq</code>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.2.2 Combinational Circuits and HCL Boolean Expressions</p>
+            <p class="cite">p.&nbsp;410 · 4.2.2 Combinational Circuits and HCL Boolean Expressions</p>
           </div>
         </details>
       </div>
@@ -365,7 +365,7 @@
             <p>HCL declares word-level signals as <code>int</code> and does not specify the width. Figure 4.12 builds 64-bit equality from 64 bit-equality circuits and one AND. In HCL that is <code>bool Eq = (A == B);</code>. Thick lines in the drawings are words. A dashed line is a single bit.</p>
             <p>Figure 4.13 is a word multiplexor. Case expressions try selection conditions in order and take the first one that yields 1. The mux is <code>word Out = [ s : A; 1 : B; ];</code>. The trailing <code>1</code> is the default. Selection expressions need not be mutually exclusive; a synthesis tool turns them into exclusive hardware by keeping only the first match. Figure 4.14 is the 4-way mux, and the later cases can be shortened because earlier cases already covered the other patterns.</p>
             <p>Figure 4.15 is the ALU. Function codes match Figure 4.3: 0 add, 1 subtract, 2 and, 3 xor. For subtraction the A input is subtracted from the B input, anticipating <code>subq rA, rB</code>. The three-word minimum is a case expression on comparisons; the book’s solution rewrites the second arm as <code>B &lt;= C : B</code>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.2.3 Word-Level Combinational Circuits and HCL Integer Expressions</p>
+            <p class="cite">p.&nbsp;412 · 4.2.3 Word-Level Combinational Circuits and HCL Integer Expressions</p>
           </div>
         </details>
       </div>
@@ -392,7 +392,7 @@
           <div class="inner">
             <p>Set membership tests whether one integer expression matches any expression in a brace list: <code>iexpr in { iexpr1, iexpr2, ..., iexprk }</code>. The 4-way mux controls can be written <code>bool s1 = code == 2 || code == 3;</code> and <code>bool s0 = code == 1 || code == 3;</code>, or more compactly <code>bool s1 = code in { 2, 3 };</code> and <code>bool s0 = code in { 1, 3 };</code>.</p>
             <p>The same form shows up constantly in the processor, whenever an instruction code has to be matched against a category: instructions that need a register byte, instructions that write <code>%rsp</code>, instructions that use the ALU, and so on.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.2.4 Set Membership</p>
+            <p class="cite">p.&nbsp;416 · 4.2.4 Set Membership</p>
           </div>
         </details>
       </div>
@@ -421,7 +421,7 @@
             <p>Combinational circuits store nothing. Sequential circuits add storage controlled by one clock. Clocked registers hold individual bits or words and load the input on the rising edge (Figure 4.16). Random-access memories hold many words. The register file holds the 15 program registers. “Register” means two things: a hardware register wired into the circuit, and a program register addressed by an id inside the register file.</p>
             <p>The register file in the figure has read ports A and B (<code>srcA</code>/<code>srcB</code> produce <code>valA</code>/<code>valB</code>) and write port W (<code>dstW</code>, <code>valW</code>). Reads behave like combinational logic. Writes happen when the clock rises. <code>dstW</code> of <code>0xF</code> writes nothing. Reading and writing the same id makes the read output change from the old value to the new one on that edge. Y86-64 processors use clocked registers for the PC, the condition codes, and the program status.</p>
             <p>Data memory has an address, a data input, a data output, read, write, and error. Reads are combinational when write is 0. Writes happen on the clock when write is 1 and the address is valid. <code>error</code> is combinational: it depends only on the address. Instruction memory is a separate read-only memory; real chips usually merge the two into one dual-ported memory.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.2.5 Memory and Clocking</p>
+            <p class="cite">p.&nbsp;417 · 4.2.5 Memory and Clocking</p>
           </div>
         </details>
       </div>
@@ -449,7 +449,7 @@
             <p>SEQ performs every step of one instruction on each clock cycle. The stages are fetch, decode, execute, memory, write-back, and PC update. Fetch reads up to 10 bytes from instruction memory at the PC, splits the first byte into icode and ifun, maybe reads a register specifier, maybe reads valC, and sets valP to the next sequential address.</p>
             <p>The aside “Tracing the execution of a subq instruction” follows line 3 of Figure 4.17. Earlier instructions left <code>%rdx = 9</code> and <code>%rbx = 21</code>. At PC <code>0x014</code> the bytes are <code>0x61</code> and <code>0x23</code>. Fetch: icode:ifun = 6:1, rA:rB = 2:3, valP = <code>0x016</code>. Decode: valA = 9, valB = 21. Execute: valE = 21 − 9 = 12, and ZF, SF, OF are 0. Write-back stores 12 in <code>%rbx</code>. PC becomes <code>0x016</code>.</p>
             <p>The solution for the <code>irmovq $128, %rsp</code> at <code>0x016</code> reads bytes <code>0x30</code> and <code>0xf4</code>, valC = 128, valE = 0 + 128, writes <code>%rsp</code>, and sets PC to <code>0x020</code>. Decode and memory do no work for that instruction.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.3.1 Organizing Processing into Stages</p>
+            <p class="cite">p.&nbsp;420 · 4.3.1 Organizing Processing into Stages</p>
           </div>
         </details>
       </div>
@@ -476,7 +476,7 @@
           <div class="inner">
             <p>SEQ’s hardware (Figures 4.22 and 4.23) shares one instruction memory, one register file, one ALU, one data memory, and the condition-code register across every instruction. The register file has read ports A and B and write ports E and M. Control logic, drawn as the computations of Figures 4.18 through 4.21, steers values into those shared units.</p>
             <p>The book draws the stages bottom to top, PC at the lower left, so that a later pipeline diagram still reads in program order. Different instructions exercise different subsets: an integer operation uses the ALU and updates the condition codes; a store uses the ALU as an address adder and writes data memory; a jump consults the condition codes and the PC mux; a call also writes the return address and the new stack pointer.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.3.2 SEQ Hardware Structure</p>
+            <p class="cite">p.&nbsp;432 · 4.3.2 SEQ Hardware Structure</p>
           </div>
         </details>
       </div>
@@ -505,7 +505,7 @@
             <p>Instruction memory and register-file reads act like combinational logic. The four units that need explicit sequencing — program counter, condition-code register, data memory, and register file — share one clock. The condition codes load only for an integer operation. Data memory writes only for rmmovq, pushq, or call. Register id <code>0xF</code> leaves a write port idle.</p>
             <p>The book’s no-reading-back principle: “The processor never needs to read back the state updated by an instruction in order to complete the processing of this instruction.” <code>pushq</code> computes valE = valB − 8 and uses valE both as the memory address and as the new <code>%rsp</code>, so the register write and the memory write can happen together on the rising edge. Condition codes are written by OPq and read by later conditional moves and jumps, never by the same instruction.</p>
             <p>Figure 4.25 starts cycle 3 with PC = <code>0x014</code>, <code>%rbx = 0x100</code>, and CC = 100 (ZF SF OF). By the end of the cycle, combinational logic has produced <code>%rbx ← 0x300</code>, CC ← 000, and next PC <code>0x016</code>, while the state boxes still hold the old values. The rising edge commits them. Cycle 4 fetches <code>je dest</code>. ZF is 0, so the branch is not taken and the next PC is <code>0x01f</code>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.3.3 SEQ Timing</p>
+            <p class="cite">p.&nbsp;436 · 4.3.3 SEQ Timing</p>
           </div>
         </details>
       </div>
@@ -533,7 +533,7 @@
             <p>Fetch reads 10 bytes at the PC (Figure 4.27). The first byte splits into icode and ifun. If <code>imem_error</code> is set, those fields are replaced by a nop. From icode the control computes <code>instr_valid</code>, <code>need_regids</code>, and <code>need_valC</code>. The book’s HCL for the register byte is <code>bool need_regids = icode in { IRRMOVQ, IOPQ, IPUSHQ, IPOPQ, IIRMOVQ, IRMMOVQ, IMRMOVQ };</code>. When that signal is 0, both register specifiers are set to <code>0xF</code> (RNONE). valC is bytes 1–8 or bytes 2–9 depending on <code>need_regids</code>.</p>
             <p>For PC value <code>p</code>, need_regids value <code>r</code>, and need_valC value <code>i</code>, the incrementer produces <code>p + 1 + r + 8i</code>. Figure 4.26 gives the constant names used in the HCL: IHALT 0 through IPOPQ 0xB, RESP 4, RNONE 0xF, ALUADD 0.</p>
             <p>The register file has ports A, B, E, and M (Figure 4.28). The book’s <code>srcA</code> is: rA for rrmovq, rmmovq, OPq, and pushq; <code>%rsp</code> for popq and ret; otherwise RNONE. Write-back uses dstE and dstM from this same instruction, and a failed conditional move forces dstE to RNONE so the write does not happen.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.3.4 SEQ Stage Implementations</p>
+            <p class="cite">p.&nbsp;440 · 4.3.4 SEQ Stage Implementations</p>
           </div>
         </details>
       </div>
@@ -560,7 +560,7 @@
           <div class="inner">
             <p>A key feature of pipelining is that it increases the throughput of the system, the number of customers served per unit time, but it may also slightly increase the latency, the time required to service an individual customer. The unpipelined example (Figure 4.32) spends 300 ps in combinational logic and 20 ps loading a register. Delay is 320 ps. Throughput is about 3.12 GIPS. Latency equals that delay.</p>
             <p>Figure 4.33 divides the logic into stages A, B, and C of 100 ps each, plus a 20 ps register per stage. The clock is 120 ps, throughput about 8.33 GIPS, latency 3 × 120 = 360 ps. The speedup is 8.33 / 3.12 = 2.67. The latency ratio is 360 / 320 = 1.12, from the added pipeline registers. In steady state one instruction leaves and a new one enters every clock cycle.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.4.1 Computational Pipelines</p>
+            <p class="cite">p.&nbsp;448 · 4.4.1 Computational Pipelines</p>
           </div>
         </details>
       </div>
@@ -588,7 +588,7 @@
           <div class="inner">
             <p>Figure 4.34 shows the three-stage pipeline against the clock. Every 120 ps the clock rises and instructions move from one stage to the next. Figure 4.35 traces the circuit from time 240 to time 360: I1 propagates through stage C, I2 through B, and I3 through A. At 239 the registers still hold the previous state. At 241 the new values have been captured and combinational logic begins. By 359 the results are ready to load.</p>
             <p>Clocked registers between blocks of combinational logic are enough to keep the instructions from interfering. If the clock rises before the combinational outputs are valid, the register inputs are not yet meaningful and the captured state is wrong.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.4.2 A Detailed Look at Pipeline Operation</p>
+            <p class="cite">p.&nbsp;450 · 4.4.2 A Detailed Look at Pipeline Operation</p>
           </div>
         </details>
       </div>
@@ -616,7 +616,7 @@
           <div class="inner">
             <p>Figure 4.36 keeps the combinational total at 300 ps but splits it into 50, 150, and 100 ps. The clock is limited by the slowest stage: 150 + 20 = 170 ps, throughput about 5.88 GIPS, latency 510 ps. Stages A and C are idle for part of each cycle. Units such as the ALU and the memories often cannot be subdivided evenly.</p>
             <p>Figure 4.37 uses six stages of 50 ps. The clock is 50 + 20 = 70 ps, throughput about 14.29 GIPS. Doubling the stage count improves on the three-stage design by 14.29 / 8.33 = 1.71, not by 2, because register delay is 28.6% of the cycle. Real processors use 15 or more stages. Practice Problem 4.29 lets a design of k stages each take 300/k ps plus 20 ps. The solution’s limit, as k grows, is 1,000 / 20 = 50 GIPS, while latency grows without bound.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.4.3 Limitations of Pipelining</p>
+            <p class="cite">p.&nbsp;452 · 4.4.3 Limitations of Pipelining</p>
           </div>
         </details>
       </div>
@@ -644,7 +644,7 @@
           <div class="inner">
             <p>Until this section the pipeline carried independent objects. A machine program has dependencies. The sequence <code>irmovq $50, %rax</code>, <code>addq %rax, %rbx</code>, <code>mrmovq 100(%rbx), %rdx</code> is a chain of data dependencies. A <code>jne</code> creates a control dependency: the condition decides whether the next instruction is the fall-through or the target.</p>
             <p>In SEQ those dependencies use the feedback paths of Figure 4.22, sending updated register values back to the register file and the new PC back to the PC register. Figure 4.38 shows what a naive pipeline does with that feedback: the result of one instruction is not available to the instruction that needs it, only to some later one. The ISA behavior would not be preserved. The rest of the chapter is the repair.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.4.4 Pipelining a System with Feedback</p>
+            <p class="cite">p.&nbsp;455 · 4.4.4 Pipelining a System with Feedback</p>
           </div>
         </details>
       </div>
@@ -671,7 +671,7 @@
           <div class="inner">
             <p>SEQ+ moves the PC update to the start of the clock cycle (Figure 4.39). State registers hold the signals computed during an instruction — pIcode, pCnd, pValC, pValM, pValP — and the next cycle runs the same PC logic on those leftovers to produce the PC of the instruction that is now current. Figure 4.40 is the SEQ+ hardware: the same blocks as SEQ, with the PC logic at the bottom of the diagram instead of the top.</p>
             <p>The aside “Where is the PC in SEQ+?” points out that no hardware register stores the program counter. It is computed from state saved by the previous instruction. That is allowed as long as every machine-language program still sees the right PC. The shift is an example of circuit retiming: change the state representation without changing the logical behavior, often to balance pipeline delays.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.5.1 SEQ+: Rearranging the Computation Stages</p>
+            <p class="cite">p.&nbsp;457 · 4.5.1 SEQ+: Rearranging the Computation Stages</p>
           </div>
         </details>
       </div>
@@ -698,7 +698,7 @@
           <div class="inner">
             <p>PIPE− inserts pipeline registers into SEQ+ (Figure 4.41). F holds a predicted PC. D holds the newly fetched instruction. E holds decoded operands and destination ids. M holds the ALU result, the condition flag, and values the memory stage needs. W holds valE, valM, and the destination register ids for write-back. The white boxes inside those registers are hardware fields, not just names.</p>
             <p>Figure 4.42 runs <code>irmovq $1, %rax</code> through <code>irmovq $4, %rdx</code>, then <code>halt</code>. In cycle 5 the five stages hold five different instructions, the oldest in W and the newest in F. Destination register ids travel with the instruction so write-back updates that instruction’s register.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.5.2 Inserting Pipeline Registers</p>
+            <p class="cite">p.&nbsp;458 · 4.5.2 Inserting Pipeline Registers</p>
           </div>
         </details>
       </div>
@@ -725,7 +725,7 @@
           <div class="inner">
             <p>Signals stored in a pipeline register are written with an uppercase prefix, such as <code>M_stat</code>. Signals computed in a stage during the current cycle use a lowercase prefix, such as <code>m_stat</code>. PIPE’s HCL differs from SEQ’s mostly by those prefixes: <code>srcA</code> becomes <code>d_srcA</code>, and the instruction fields it reads come from <code>D_icode</code> and <code>D_rA</code>.</p>
             <p>Write-port register ids come from the write-back stage (<code>W_dstE</code> and <code>W_dstM</code>), not from decode. Otherwise a write would use whatever destination the instruction currently in decode happens to name. The destination travels in the pipeline registers with the rest of that instruction.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.5.3 Rearranging and Relabeling Signals</p>
+            <p class="cite">p.&nbsp;462 · 4.5.3 Rearranging and Relabeling Signals</p>
           </div>
         </details>
       </div>
@@ -752,7 +752,7 @@
           <div class="inner">
             <p>PIPE predicts the next PC in fetch. The HCL is <code>word f_predPC = [ f_icode in { IJXX, ICALL } : f_valC; 1 : f_valP; ];</code>. Conditional branches are predicted taken. The book cites success of about 60% for always-taken, about 40% for never-taken, and about 65% for backward taken, forward not taken.</p>
             <p><code>ret</code> is not predicted from valC. The return address is not known until the instruction has read memory. Select-PC, written in the next sections, prefers M_valA when a jump in the memory stage was not taken, W_valM when a return reaches write-back, and F_predPC otherwise. Fetch of a return therefore stalls rather than running ahead.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.5.4 Next PC Prediction</p>
+            <p class="cite">p.&nbsp;463 · 4.5.4 Next PC Prediction</p>
           </div>
         </details>
       </div>
@@ -781,7 +781,7 @@
             <p>Data hazards and control hazards are dependencies that would make the pipeline wrong. prog1 through prog4 are <code>irmovq $10, %rdx</code>, <code>irmovq $3, %rax</code>, then zero to three nops, then <code>addq %rdx, %rax</code>, with registers starting at 0. With no nops, <code>%rdx</code> is in M (M_valE = 10) and <code>%rax</code> is being computed in E (e_valE = 3) when the add is decoded. Forwarding compares source ids with destination ids in E, M, and W and substitutes the pending value. Newer stages win.</p>
             <p>Figure 4.53 prog5 is a load immediately followed by an add that uses the loaded register. The value appears as m_valM only on the following cycle, so forwarding cannot supply it in time. The load/use interlock stalls F and D and injects a bubble into E for one cycle, then forwards. Only <code>mrmovq</code> and <code>popq</code> create this case.</p>
             <p>Figure 4.56: <code>xorq %rax, %rax</code> then <code>jne target</code>, which is not taken. Fetch has already started the target. When execute sees Cnd = 0, the next cycle bubbles D and E and fetches the fall-through. Figure 4.55 and Figure 4.62: <code>ret</code> stalls fetch and injects bubbles until W_valM is the return address. Three cycles of work are wasted. A mispredicted branch wastes two.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.5.5 Pipeline Hazards</p>
+            <p class="cite">p.&nbsp;465 · 4.5.5 Pipeline Hazards</p>
           </div>
         </details>
       </div>
@@ -810,7 +810,7 @@
             <p>Y86-64 stops on halt, an illegal instruction, or an invalid address. In a pipeline, several exceptions can be in flight, and an instruction can be canceled after it has already raised one. The rule is to honor the exception of the instruction furthest along the pipeline, because that instruction is earlier in program order. An invalid instruction fetched on a mispredicted branch must not be reported after the branch cancels it.</p>
             <p>Each pipeline register carries <code>stat</code>. If an instruction faults, the status is recorded and travels with it. Updating of the condition codes and data memory is disabled while an excepting instruction is in memory or write-back, so younger instructions cannot change programmer-visible state. When the excepting instruction reaches W, execution stops and W_stat becomes the program status. The book’s example sets <code>%rsp</code> to 0 and then <code>pushq %rax</code>, which tries to write <code>0xfffffffffffffff8</code>. The following <code>addq</code> must not update the condition codes.</p>
             <p>The mispredict example fetches <code>.byte 0xFF</code> at the target of a not-taken <code>jne</code>. Decode can see an illegal instruction. The cancel throws that status away with the instruction.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.5.6 Exception Handling</p>
+            <p class="cite">p.&nbsp;480 · 4.5.6 Exception Handling</p>
           </div>
         </details>
       </div>
@@ -837,7 +837,7 @@
           <div class="inner">
             <p>The book sets SEQ’s <code>srcA</code> next to PIPE’s <code>d_srcA</code>. They match except for prefixes: <code>D_icode</code>, <code>D_rA</code>, and a result named <code>d_srcA</code>. Fetch selects <code>word f_pc = [ M_icode == IJXX &amp;&amp; !M_Cnd : M_valA; W_icode == IRET : W_valM; 1 : F_predPC; ];</code> and predicts <code>word f_predPC = [ f_icode in { IJXX, ICALL } : f_valC; 1 : f_valP; ];</code>.</p>
             <p>The solution for <code>f_stat</code> is <code>imem_error</code> then <code>!instr_valid</code> then halt, else SAOK. Data-memory errors are not known yet in fetch. The solution for <code>d_valB</code> tries e_dstE, then M_dstM, then M_dstE, then W_dstM, then W_dstE, and only then the value read from the register file. The solution for <code>d_dstE</code> sends rB for rrmovq, irmovq, and OPq, and <code>%rsp</code> for push, pop, call, and ret.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.5.7 PIPE Stage Implementations</p>
+            <p class="cite">p.&nbsp;483 · 4.5.7 PIPE Stage Implementations</p>
           </div>
         </details>
       </div>
@@ -865,7 +865,7 @@
             <p>Pipeline control handles load/use hazards, <code>ret</code>, mispredicted branches, and exceptions. Load/use: if the instruction in E is <code>mrmovq</code> or <code>popq</code> and its dstM matches a source of the instruction in D, keep F and D fixed and inject a bubble into E. Processing <code>ret</code>: stall until the return address is available. Fetch still reads memory every cycle, predicting valP, so the following instruction is fetched and then replaced by a bubble in D for three cycles (Figure 4.62).</p>
             <p>A mispredicted branch is discovered when the jump is in execute. The next cycle injects bubbles into D and E and fetches the fall-through (Figure 4.56). For an exception, status already travels in the pipeline registers. As the excepting instruction reaches memory, condition-code updates are disabled, a bubble is injected toward memory so data memory is not written, and write-back stalls when it holds the exception, halting the machine (Figure 4.63).</p>
             <p>The special cases can overlap. The book works through the combinations so that a single setting of the stall and bubble signals does the right thing when, for example, a load/use and a mispredicted branch are discovered together. The testing aside lists ctest: 22 control combinations.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.5.8 Pipeline Control Logic</p>
+            <p class="cite">p.&nbsp;491 · 4.5.8 Pipeline Control Logic</p>
           </div>
         </details>
       </div>
@@ -893,7 +893,7 @@
             <p>CPI is the average number of clock cycles per instruction, the reciprocal of throughput measured in cycles. If execute processes Ci instructions and Cb bubbles, CPI = (Ci + Cb) / Ci = 1 + Cb / Ci. Only three causes inject bubbles, so CPI = 1.0 + lp + mp + rp.</p>
             <p>The book’s frequencies, comparable to measurements it cites: loads (<code>mrmovq</code> and <code>popq</code>) are 25% of instructions and 20% of them cause a load/use hazard (1 bubble) so lp = 0.05. Conditional branches are 20%, 40% not taken, 2 bubbles, so mp = 0.16. Returns are 2%, always 3 bubbles, so rp = 0.06. Total penalty 0.27, CPI 1.27. Mispredicted branches are the largest part, 0.16 of 0.27.</p>
             <p>Practice Problem 4.43 asks about a predictor with a 65% success rate. The solution recomputes the mispredict penalty as 0.20 × 0.35 × 2 = 0.14, and the CPI as 1.25. The testing aside in this section lists optest (49), jtest (64), cmtest (28), htest (600), ctest (22), and etest (12). An earlier formal check of PIPE against SEQ found one bug, in a homework variant of control combination B.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.5.9 Performance Analysis</p>
+            <p class="cite">p.&nbsp;500 · 4.5.9 Performance Analysis</p>
           </div>
         </details>
       </div>
@@ -921,7 +921,7 @@
           <div class="inner">
             <p>Multicycle operations such as integer multiply and divide, and floating-point arithmetic, do not finish in one execute cycle. In a processor like PIPE, floating-point addition might take 3 or 4 cycles and integer division as many as 64. One approach expands execute and stalls fetch and decode while the instruction remains there. Better performance comes from separate functional units that accept an issued instruction and run alongside the main pipe, with forwarding and stalls to honor dependencies.</p>
             <p>PIPE also assumes instruction and data memory respond in one cycle, ignores self-modifying code, and treats virtual addresses as if they were physical. Caches and a TLB make the one-cycle assumption true most of the time. A cache miss typically costs 3 to 20 cycles and is handled by stalling the instruction in fetch or memory. A reference that reaches disk raises a page-fault exception; the operating system brings the page in, which can take millions of cycles, and the instruction is re-executed. Chapters 6 and 9 are the memory side of this story.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.5.10 Unfinished Business</p>
+            <p class="cite">p.&nbsp;504 · 4.5.10 Unfinished Business</p>
           </div>
         </details>
       </div>
@@ -949,7 +949,7 @@
             <p>The ISA is an abstraction between the instructions a program may use and the way a processor implements them. It presents sequential execution. The chapter defines Y86-64 by simplifying x86-64, organizes execution into stages, builds SEQ, then retimes it into SEQ+ and adds pipeline registers to make PIPE−. Forwarding and extra control logic turn that into PIPE, preserving the sequential behavior.</p>
             <p>The closing lessons: manage complexity by a simple uniform framework that shares hardware; you do not need to implement the ISA directly, because a pipeline can be made to match the sequential results; hardware designers must be meticulous, because a fabricated chip is nearly impossible to patch. The PIPE control logic had a subtle bug that showed up only under a systematic analysis of control combinations.</p>
             <p>A five-stage pipeline was the state of the art in the mid-1980s (the Berkeley RISC work that became SPARC, the Stanford work that became MIPS, and the Intel i486). CPI for such a pipe cannot drop below 1.0. Superscalar and out-of-order designs, the subject of Chapter 5, can. Most processors sold today are simpler pipes in embedded systems, where cost and power matter. The CPI discussion also notes that the measure people quote for superscalar chips is often IPC, the reciprocal of CPI.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.6 Summary</p>
+            <p class="cite">p.&nbsp;506 · 4.6 Summary</p>
           </div>
         </details>
       </div>
@@ -976,7 +976,7 @@
           <div class="inner">
             <p>The lab materials include simulators for SEQ and PIPE. Each has a GUI version, which shows memory, code, and processor state and can reset, single-step, or run, and a text version that prints to the terminal for automated testing. Control logic is generated by translating the HCL into C, then compiling and linking it with the simulator. Editing the HCL and rebuilding is how the exercises try new instructions and new pipeline behavior. Testing scripts exercise instructions and hazards.</p>
             <p>The solution to the write-back priority exercise uses <code>irmovq $5, %rdx</code>, <code>irmovq $0x100, %rsp</code>, a store of <code>%rdx</code> at <code>(%rsp)</code>, <code>popq %rsp</code>, two nops, and <code>rrmovq %rsp, %rax</code>. With the nops, the pop is in write-back when the move is in decode. Reversing the two write-back forwarding sources delivers the incremented stack pointer instead of the value read from memory. yis remains the reference for the programmer-visible result.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 4.6.1 Y86-64 Simulators</p>
+            <p class="cite">p.&nbsp;508 · 4.6.1 Y86-64 Simulators</p>
           </div>
         </details>
       </div>

@@ -223,8 +223,39 @@
   }
   const file = (n) => `ch${String(n).padStart(2, "0")}.html`;
 
+  /** Printed page → page of the book's PDF, via BOOK.pdf.offsets: [[first printed page, pages to add], …]. */
+  function pdfPage(p) {
+    let at = p;
+    for (const [first, add] of BOOK.pdf.offsets) if (p >= first) at = p + add;
+    return at;
+  }
+  /** A cite starts with its printed pages ("pp. 198–208 · …"): link them to the PDF, opened at that page in a new tab. */
+  function linkCites() {
+    if (!BOOK.pdf) return;
+    $$("p.cite").forEach((cite) => {
+      const t = cite.firstChild;
+      if (!t || t.nodeType !== 3 || !/^pp?\./.test(t.data)) return;
+      const pages = t.data.split(" · ")[0];
+      const link = (text, p) => h("a", { href: `${BOOK.pdf.file}#page=${pdfPage(p)}`, target: "_blank", rel: "noopener", title: `Open the book at page ${p}` }, text);
+      const groups = [...pages.matchAll(/\d+(?:–\d+)?/g)];
+      const parts = [];
+      if (groups.length === 1) parts.push(link(pages, parseInt(pages.match(/\d+/)[0], 10)));
+      else {
+        let i = 0;
+        for (const g of groups) {
+          parts.push(pages.slice(i, g.index), link(g[0], parseInt(g[0], 10)));
+          i = g.index + g[0].length;
+        }
+        parts.push(pages.slice(i));
+      }
+      t.data = t.data.slice(pages.length);
+      cite.insertBefore(add(document.createDocumentFragment(), parts), t);
+    });
+  }
+
   /** Call once per chapter page: K.page(n). Fills #topbar and #chapter-end. */
   function page(n) {
+    linkCites();
     const c = CHAPTERS[n - 1];
     const prev = CHAPTERS[n - 2], next = n < BUILT ? CHAPTERS[n] : null, upcoming = CHAPTERS[n];
     const top = $("#topbar");

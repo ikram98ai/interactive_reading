@@ -149,7 +149,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <div class="inner">
             <p><code>twiddle1</code> does <code>*xp += *yp</code> twice (six memory references). <code>twiddle2</code> does <code>*xp += 2 * *yp</code> (three). “The compiler knows nothing about how twiddle1 will be called, and so it must assume that arguments xp and yp can be equal.” Equal pointers: twiddle1 scales the cell by 4, twiddle2 by 3. The same trap appears with <code>*p</code> and <code>*q</code>: after <code>*q = 3000; *p = 1000</code>, a later read of <code>*q</code> is 3000 or 1000.</p>
             <p>With <code>counter</code> starting at 0, <code>f</code> as <code>return counter++</code>, <code>func1</code> returns 0+1+2+3 = 6 and <code>func2</code> returns 0. gcc inlines only functions defined in the same file (<code>-finline</code>, or <code>-O1</code> and higher). Inlining can turn four <code>counter++</code> updates into <code>4 * counter + 6</code>. Practice 5.1: the adding swap zeros a cell when both pointers match.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, <i>Computer Systems: A Programmer’s Perspective</i>, 3rd&nbsp;ed. · 5.1 Capabilities and Limitations of Optimizing Compilers</p>
+            <p class="cite">p.&nbsp;534 · 5.1 Capabilities and Limitations of Optimizing Compilers</p>
           </div>
         </details>
       </div>
@@ -176,7 +176,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <div class="inner">
             <p>For a vector a, the prefix sum is p<sub>0</sub> = a<sub>0</sub> and p<sub>i</sub> = p<sub>i−1</sub> + a<sub>i</sub>. Figure 5.1: <code>psum1</code> computes one element per iteration; <code>psum2</code> uses 2-way unrolling (<code>mid_val</code>, then <code>p[i]</code> and <code>p[i+1]</code>) and a cleanup when n is odd. A least-squares fit of Figure 5.2 gives the two lines. CPE is cycles per element, because unrolling changes how many iterations you need for the same n.</p>
             <p>Practice 5.2 gives three later fits: 60 + 35n, 136 + 4n, and 157 + 1.25n, and asks which version wins for which n.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.2 Expressing Program Performance</p>
+            <p class="cite">p.&nbsp;538 · 5.2 Expressing Program Performance</p>
           </div>
         </details>
       </div>
@@ -202,7 +202,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>Unoptimized CPE for combine1: integer + 22.68, integer * 20.02, float + 19.98, float * 20.18. With <code>-O1</code>: 10.12, 10.12, 10.17, 11.14. The book keeps the messy hundredths; integer sum is more likely 23.00 than 22.68. Integer 32-bit and 64-bit matched except for division; <code>float</code> matched <code>double</code>. Later tables use <code>-O1</code> and <code>-O2</code>.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.3 Program Example</p>
+            <p class="cite">p.&nbsp;540 · 5.3 Program Example</p>
           </div>
         </details>
       </div>
@@ -229,7 +229,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>combine2 CPE: integer + 7.02, integer * 9.03, float + 9.02, float * 11.03. Figure 5.8: for length 1,048,576, lower1 takes 1,049.89 seconds and lower2 takes 0.0020 seconds, over 500,000 times faster. Each doubling of n quadruples lower1’s time. Even an inlining compiler cannot prove the string never gains or loses a zero in the middle, so the programmer hoists.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.4 Eliminating Loop Inefficiencies</p>
+            <p class="cite">p.&nbsp;544 · 5.4 Eliminating Loop Inefficiencies</p>
           </div>
         </details>
       </div>
@@ -256,7 +256,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 5.9: <code>get_vec_start</code> returns <code>v-&gt;data</code>. combine3 CPE: integer + 7.17, integer * 9.02, float + 9.02, float * 11.03. “Surprisingly, there is no apparent performance improvement.” Section 5.11.2 shows why: the checks always succeed. The step still matters because it lets the next rewrite touch memory less often.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.5 Reducing Procedure Calls</p>
+            <p class="cite">p.&nbsp;548 · 5.5 Reducing Procedure Calls</p>
           </div>
         </details>
       </div>
@@ -282,7 +282,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 5.10 holds the accumulated value in a temporary. combine4 CPE: integer + 1.27, integer * 3.01, float + 3.01, float * 5.01 — the latency bounds of those operations, except integer addition, which sits a little above 1.00. The aliasing example is why a compiler must leave combine3’s memory updates in place.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.6 Eliminating Unneeded Memory References</p>
+            <p class="cite">p.&nbsp;550 · 5.6 Eliminating Unneeded Memory References</p>
           </div>
         </details>
       </div>
@@ -309,7 +309,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>The ICU reads an instruction cache, fetches well ahead, and uses branch prediction plus speculative execution. A wrong prediction resets state to the branch and starts the other path. Decode turns instructions into operations (micro-operations): an x86 memory operand often becomes a load plus the arithmetic. The EU’s functional units perform loads, stores, and arithmetic, then retirement updates the registers only for operations that were on the correct path.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.7 Understanding Modern Processors, 5.7.1 Overall Operation</p>
+            <p class="cite">p.&nbsp;553 · 5.7 Understanding Modern Processors, 5.7.1 Overall Operation</p>
           </div>
         </details>
       </div>
@@ -335,7 +335,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 5.12, Haswell. Integer: addition latency 1, issue 1, capacity 4; multiplication 3, 1, 1; division 3–30, 3–30, 1. Floating point: addition 3, 1, 1; multiplication 5, 1, 2; division 3–15, 3–15, 1. “Functional units with issue times of 1 cycle are said to be fully pipelined.” The divider is not.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.7.2 Functional Unit Performance</p>
+            <p class="cite">p.&nbsp;559 · 5.7.2 Functional Unit Performance</p>
           </div>
         </details>
       </div>
@@ -363,7 +363,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>combine4 measured CPE 1.27, 3.01, 3.01, 5.01 against latency bounds 1.00, 3.00, 3.00, 5.00 and throughput bounds 0.50, 1.00, 1.00, 0.50. Registers in the loop fall into classes: read-only (<code>%rax</code>, the end pointer), updated in a chain (<code>%rdx</code>, <code>%xmm0</code>), and values that pass between operations with no register (the load feeding the mul, the condition codes feeding <code>jne</code>). For latency L &gt; 1 the measured CPE is L. Integer addition’s 1.27 shows that a data-flow bound is only a lower bound.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.7.3 An Abstract Model of Processor Operation</p>
+            <p class="cite">p.&nbsp;561 · 5.7.3 An Abstract Model of Processor Operation</p>
           </div>
         </details>
       </div>
@@ -391,7 +391,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 5.16 is 2 × 1 unrolling. Figure 5.18–5.20 draw the data-flow: each iteration has two combining operations in series on the same accumulator. Measured CPE for combine5: integer + 1.01, and 3.01, 3.01, 5.01 for the other three. Only the integer-add case moved, and it moved onto the latency bound of 1.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.8 Loop Unrolling</p>
+            <p class="cite">p.&nbsp;567 · 5.8 Loop Unrolling</p>
           </div>
         </details>
       </div>
@@ -419,7 +419,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 5.21 is combine6. Figure 5.25: with k × k unrolling, integer + reaches CPE 0.54 at k = 7; integer * and float + reach 1.01 for k ≥ 3; float * reaches 0.51 for k ≥ 10. “For an operation with latency L and capacity C, this requires an unrolling factor k ≥ C · L.” Two’s-complement arithmetic stays associative even on overflow. Floating point does not, so most compilers will not reassociate it.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.9 Enhancing Parallelism, 5.9.1 Multiple Accumulators</p>
+            <p class="cite">p.&nbsp;572 · 5.9 Enhancing Parallelism, 5.9.1 Multiple Accumulators</p>
           </div>
         </details>
       </div>
@@ -446,7 +446,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 5.26 is combine7. Figures 5.27–5.28 draw the pair operation beside the accumulator chain. Figure 5.30 shows k × 1a unrolling improving CPE the same way multiple accumulators do. combine7’s table: 1.01, 1.51, 1.51, 2.51 against latency bounds 1, 3, 3, 5 and throughput bounds 0.50, 1.00, 1.00, 0.50.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.9.2 Reassociation Transformation</p>
+            <p class="cite">p.&nbsp;577 · 5.9.2 Reassociation Transformation</p>
           </div>
         </details>
       </div>
@@ -472,7 +472,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>Section 5.10’s scalar table, integer then floating point, for + and *: combine1 <code>-O1</code> 10.12, 10.12, 10.17, 11.14; combine6 0.81, 1.51, 1.51, 2.51; 10 × 10 unrolling 0.55, 1.00, 1.01, 0.52. Latency bounds 1.00, 3.00, 3.00, 5.00. Throughput bounds 0.50, 1.00, 1.00, 0.50. The web aside’s scalar 10 × 10 row is within a few hundredths of that summary. Its vector 8 × 8 row is far below the scalar bounds, except 64-bit integer multiply.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.10 Summary of Results for Optimizing Combining Code</p>
+            <p class="cite">p.&nbsp;583 · 5.10 Summary of Results for Optimizing Combining Code</p>
           </div>
         </details>
       </div>
@@ -498,7 +498,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>10 × 10 CPE 0.55, 1.00, 1.01, 0.52. 20 × 20 CPE 0.83, 1.03, 1.02, 0.68. Throughput bounds stay 0.50, 1.00, 1.00, 0.50. The 20 × 20 snippet is <code>vmovsd 40(%rsp), %xmm0</code>, then <code>vmulsd (%rdx), %xmm0, %xmm0</code>, then <code>vmovsd %xmm0, 40(%rsp)</code>. “Once a compiler must resort to register spilling, any advantage of maintaining multiple accumulators will most likely be lost.”</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.11 Some Limiting Factors, 5.11.1 Register Spilling</p>
+            <p class="cite">p.&nbsp;584 · 5.11 Some Limiting Factors, 5.11.1 Register Spilling</p>
           </div>
         </details>
       </div>
@@ -525,7 +525,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>The book measures a 19-cycle misprediction penalty on the reference machine. combine4 versus combine4b: 1.27 / 3.01 / 3.01 / 5.01 against 2.02 / 3.01 / 3.01 / 5.01. minmax1 is the imperative swap; minmax2 is the functional min/max. Practice 5.9: the merge loop’s data comparison is unpredictable (CPE around 15.0 on random data) and can be rewritten so gcc has a chance to emit a conditional move. The loop-limit tests in that merge are predictable.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.11.2 Branch Prediction and Misprediction Penalties</p>
+            <p class="cite">p.&nbsp;585 · 5.11.2 Branch Prediction and Misprediction Penalties</p>
           </div>
         </details>
       </div>
@@ -552,7 +552,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 5.31: <code>list_len</code> walks <code>ls = ls-&gt;next</code> until null. The inner loop is <code>addq $1, %rax</code>, <code>movq (%rdi), %rdi</code>, <code>testq</code>, <code>jne</code>. “The CPE of 4.00 for this function is determined by the latency of the load operation” and matches the documented 4-cycle L1 access in Section 6.4. Combining code never got below CPE 0.50 without SIMD, because of the two load units.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.12 Understanding Memory Performance, 5.12.1 Load Performance</p>
+            <p class="cite">p.&nbsp;589 · 5.12 Understanding Memory Performance, 5.12.1 Load Performance</p>
           </div>
         </details>
       </div>
@@ -578,7 +578,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 5.32 <code>clear_array</code> CPE 1.0. Figure 5.33 <code>write_read</code>: example A <code>write_read(&amp;a[0], &amp;a[1], 3)</code> CPE 1.3; example B <code>write_read(&amp;a[0], &amp;a[0], 3)</code> CPE 7.3, about six extra cycles. The store becomes a store-address op and a store-data op. The load checks pending stores, and a matching address ties the load to that store’s data. Practice 5.11–5.12: <code>psum1</code> reloads <code>p[i-1]</code> and measures CPE 9; keeping the prefix in a temporary brings it to 3.00, the float-add latency.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.12.2 Store Performance</p>
+            <p class="cite">p.&nbsp;591 · 5.12.2 Store Performance</p>
           </div>
         </details>
       </div>
@@ -605,7 +605,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>Three layers: high-level design; basic coding (avoid blockers, move calls, accept a little less modularity, introduce temporaries); low-level optimizations (unroll, multiple accumulators, reassociation, functional style for conditional moves). “Be vigilant to avoid introducing errors as you rewrite programs in the interest of efficiency.” Checking code compares each new version with the original, with more cases as the loop gets more special cases.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.13 Life in the Real World: Performance Improvement Techniques</p>
+            <p class="cite">p.&nbsp;597 · 5.13 Life in the Real World: Performance Improvement Techniques</p>
           </div>
         </details>
       </div>
@@ -632,7 +632,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>The sample flat profile: <code>sort_words</code> 97.58%, 203.66 seconds, 1 call; <code>find_ele_rec</code> 2.32%, 4.85 seconds, 965,027 calls; <code>Strlen</code> 0.14%, 0.30 seconds, 12,511,031 calls. The call graph shows 158,655,725 recursive calls of <code>find_ele_rec</code> against 965,027 top-level calls, a ratio of 164.4 to 1 — about 164 list elements scanned per lookup. It also called <code>save_string</code> and <code>new_ele</code> 363,039 times each.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.14 Identifying and Eliminating Performance Bottlenecks, 5.14.1 Program Profiling</p>
+            <p class="cite">p.&nbsp;598 · 5.14 Identifying and Eliminating Performance Bottlenecks, 5.14.1 Program Profiling</p>
           </div>
         </details>
       </div>
@@ -659,7 +659,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>Figure 5.38 splits time into sort, list scan, lowercase, and strlen across six versions. The initial insertion sort is 203.66 seconds of a 209-second run. After quicksort, the list implementation dominates; iter-first is slower than iter-last; a shift-and-xor hash with many buckets removes the long scans; <code>lower2</code> removes the remaining strlen traffic. “When one bottleneck is eliminated, a new one arises.”</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.14.2 Using a Profiler to Guide Optimization</p>
+            <p class="cite">p.&nbsp;601 · 5.14.2 Using a Profiler to Guide Optimization</p>
           </div>
         </details>
       </div>
@@ -686,7 +686,7 @@ unsafe extern "C" { fn strlen(s: *const u8) -&gt; usize; }   // lower1 / lower2<
           <summary>What the book says</summary>
           <div class="inner">
             <p>“No compiler can replace an inefficient algorithm or data structure.” The programmer’s job is to write code the compiler can turn into something close to the machine’s throughput, then to read the assembly and the measurements when a result is surprising. Single-precision multiplication in the chapter’s account falls from 11.14 to 0.06 with AVX, more than 180×. Practice problems in the chapter (prefix sums, polynomials, Horner’s method, merge, copying arrays) are the same ideas on new loops.</p>
-            <p class="cite">Bryant &amp; O’Hallaron, 3rd&nbsp;ed. · 5.15 Summary</p>
+            <p class="cite">p.&nbsp;604 · 5.15 Summary</p>
           </div>
         </details>
       </div>
