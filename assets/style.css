@@ -97,6 +97,8 @@ b, strong { font-weight: 700; }
 .dots a.done { background: var(--mint); }
 .dots .soon { width: 9px; height: 9px; border-radius: 3px; background: var(--line); opacity: .4; display: block; }
 .dots a.here { background: var(--blue); transform: scale(1.25); }
+.dot-tip { position: fixed; z-index: 60; display: none; background: var(--ink); color: var(--bg); padding: 6px 10px; border-radius: var(--r-s); font-size: 13px; font-weight: 700; white-space: nowrap; max-width: calc(100vw - 16px); overflow: hidden; text-overflow: ellipsis; pointer-events: none; box-shadow: var(--shadow); }
+.dot-tip.show { display: block; }
 .navbtn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); color: var(--ink); text-decoration: none; background: var(--surface); font-size: 18px; }
 .navbtn.wide { width: auto; padding-inline: 12px; font-size: 13px; font-weight: 700; font-family: var(--f-body); }
 .navbtn[aria-disabled="true"] { opacity: .35; pointer-events: none; }

@@ -217,9 +217,31 @@
     CHAPTERS.forEach((c) => {
       const ready = c.n <= BUILT;
       dots.appendChild(ready
-        ? h("a", { href: file(c.n), title: `${c.n}. ${c.title}`, "aria-label": `Chapter ${c.n}: ${c.title}`, class: (c.n === current ? "here " : "") + (p[c.n] ? "done" : "") })
-        : h("span", { class: "soon", title: `${c.n}. ${c.title} — coming soon` }));
+        ? h("a", { href: file(c.n), "data-tip": `${c.n}. ${c.title}`, "aria-label": `Chapter ${c.n}: ${c.title}`, class: (c.n === current ? "here " : "") + (p[c.n] ? "done" : "") })
+        : h("span", { class: "soon", "data-tip": `${c.n}. ${c.title} — coming soon`, "aria-label": `Chapter ${c.n}: ${c.title}, coming soon` }));
     });
+    dotTips(dots);
+  }
+  /** Instant tooltip under a chapter dot (the native title tooltip waits ~1s), kept inside the viewport. */
+  function dotTips(dots) {
+    if (dots.dataset.tips) return;
+    dots.dataset.tips = "1";
+    const tip = h("div", { class: "dot-tip", "aria-hidden": "true" });
+    document.body.appendChild(tip);
+    const show = (e) => {
+      const d = e.target.closest && e.target.closest("[data-tip]"); if (!d) return;
+      tip.textContent = d.dataset.tip;
+      tip.classList.add("show");
+      const r = d.getBoundingClientRect(), w = tip.offsetWidth;
+      tip.style.left = `${Math.max(8, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - 8))}px`;
+      tip.style.top = `${r.bottom + 8}px`;
+    };
+    const hide = () => tip.classList.remove("show");
+    dots.addEventListener("pointerover", show);
+    dots.addEventListener("focusin", show);
+    dots.addEventListener("pointerleave", hide);
+    dots.addEventListener("focusout", hide);
+    addEventListener("scroll", hide, { passive: true });
   }
   const file = (n) => `ch${String(n).padStart(2, "0")}.html`;
 
