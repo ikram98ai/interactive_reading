@@ -40,12 +40,12 @@ for any book. Chapters above `built` show as "coming soon" instead of broken lin
 ## Deployment
 
 `.github/workflows/deploy.yml` publishes to GitHub Pages on every push to `main`/`master`
-(and on manual run). It assembles `_site/`, strips any PDFs and `.DS_Store`, checks that
+(and on manual run). It assembles `_site/` (book PDFs included), strips `.DS_Store`, checks that
 every page's inline JavaScript parses and every local link resolves, then deploys.
 
 One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 
-Book PDFs are gitignored; only the explainer pages are published.
+Book PDFs are published next to their chapters, so the page-number links open the book.
 
 ## Local preview
 
