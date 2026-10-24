@@ -33,8 +33,7 @@ jobs:
           cp -R assets books _site/
           # GitHub Pages must not run Jekyll over these files.
           touch _site/.nojekyll
-          # Never ship book PDFs or OS cruft.
-          find _site -name '*.pdf' -delete
+          # Ship the book PDFs so page-number links work; never ship OS cruft.
           find _site -name '.DS_Store' -delete
 
       - name: Check every page parses and links resolve
