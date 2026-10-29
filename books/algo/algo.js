@@ -2,7 +2,8 @@
      <script src="book.js"></script><script src="../../assets/kit.js"></script><script src="algo.js"></script>
    then  const { cap, esc, box, txt, clickable, button, session, code, mem, cells, src, fmt, CODE_LANG } = AL;
 
-   code()  the panel under a machine: the book's pseudocode, or a runnable Rust twin (one toggle for the page)
+   code()  the panel under a machine: the book's pseudocode, or a runnable Rust twin (one toggle for the page);
+           a lens pins its running line to the window's foot, and Full screen puts machine, code and memory on one screen
    mem()   a small stack-and-heap strip that shows where the Rust program keeps its data
    cells() a row of array cells inside a machine's SVG, indexed from 1 (the book) or 0 (Rust)
    box / txt / clickable / button / session — the SVG and run helpers the other books copy into each page. */
@@ -100,6 +101,211 @@
   }
   const first = document.querySelector(".first");
   if (first) first.appendChild(langToggle());
+
+  /* ---------- full screen: one machine, its code and its memory on one screen ----------
+     The Full screen button in a machine's head row lifts that stage over the page (and into the browser's own
+     full screen where it is allowed): the picture fills the left, the code and the memory strip share the
+     right, and nothing scrolls the page. The picture fits its box at 100%; − and + (or ctrl/⌘ + wheel, a
+     trackpad pinch, or the - + 0 keys) zoom it, and a zoomed picture pans by dragging. The memory strip scales
+     down, whole, until it fits under the code. Esc or the button leaves. */
+  const FULL = (() => {
+    const STEPS = [1, 1.25, 1.5, 2, 2.5, 3, 4], narrow = window.matchMedia("(max-width: 899px), (max-height: 560px)");
+    let cur = null;
+    const ICON_IN = "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5", ICON_OUT = "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5";
+    function size() {
+      if (!cur) return;
+      const { scroller: sc, svg } = cur, vb = svg.viewBox.baseVal;
+      if (vb && vb.width && vb.height) {
+        const k = Math.max(0.1, Math.min((sc.clientWidth - 16) / vb.width, (sc.clientHeight - 16) / vb.height)) * cur.z;
+        svg.style.width = vb.width * k + "px"; svg.style.height = vb.height * k + "px";
+      }
+      sc.classList.toggle("zoomed", cur.z > 1);
+      cur.pct.textContent = Math.round(cur.z * 100) + "%";
+      const msvg = cur.mem && cur.mem.querySelector("svg");
+      if (msvg) {
+        msvg.style.maxHeight = "";
+        const used = [...cur.cp.children].reduce((a, c) => a + (c === cur.mem || c.classList.contains("cp-body") ? 0 : c.offsetHeight), 0);
+        const room = cur.cp.clientHeight - used - (narrow.matches ? 110 : 200) - (cur.mem.offsetHeight - msvg.getBoundingClientRect().height);
+        msvg.style.maxHeight = Math.max(narrow.matches ? 80 : 110, room) + "px";
+      }
+    }
+    /** zoom to z, keeping the point (x, y) of the scroller's box still */
+    function zoom(z, x, y) {
+      if (!cur) return;
+      const sc = cur.scroller;
+      z = Math.min(STEPS[STEPS.length - 1], Math.max(1, z));
+      if (x == null) { x = sc.clientWidth / 2; y = sc.clientHeight / 2; }
+      const fx = (sc.scrollLeft + x) / sc.scrollWidth, fy = (sc.scrollTop + y) / sc.scrollHeight;
+      cur.z = z; size();
+      sc.scrollLeft = fx * sc.scrollWidth - x; sc.scrollTop = fy * sc.scrollHeight - y;
+    }
+    const step = (dir) => cur && zoom(dir > 0 ? STEPS.find((v) => v > cur.z + 0.01) || cur.z : [...STEPS].reverse().find((v) => v < cur.z - 0.01) || 1);
+    function zoomBar() {
+      const bar = h("span", { class: "fs-zoom", role: "group", "aria-label": "Zoom the picture" });
+      const b = (label, aria, fn) => { const x = h("button", { type: "button", "aria-label": aria, title: aria }, label); x.addEventListener("click", fn); bar.appendChild(x); return x; };
+      b("−", "Zoom out", () => step(-1));
+      const pct = b("100%", "Fit the picture to the screen", () => zoom(1));
+      b("+", "Zoom in", () => step(1));
+      return { bar, pct };
+    }
+    function paint(st) {
+      const on = cur && cur.stage === st.stage;
+      st.btn.setAttribute("aria-pressed", String(on));
+      st.btn.querySelector("path").setAttribute("d", on ? ICON_OUT : ICON_IN);
+      st.btn.lastChild.textContent = on ? "Exit" : "Full screen";
+      st.btn.title = on ? "Leave full screen (Esc)" : "Show this machine, its code and its memory on one screen";
+    }
+    function enter(st) {
+      if (cur) exit();
+      cur = Object.assign(st, { z: 1, native: false });
+      st.stage.classList.add("is-full");
+      document.documentElement.classList.add("has-full");
+      if (st.mem) st.cp.appendChild(st.mem);
+      st.ro = new ResizeObserver(size); st.ro.observe(st.scroller); st.ro.observe(st.cp);
+      st.mo = new MutationObserver(size); st.mo.observe(st.svg, { attributes: true, attributeFilter: ["viewBox"] });
+      paint(st); size(); st.btn.focus();
+      try {
+        const p = st.stage.requestFullscreen && st.stage.requestFullscreen({ navigationUI: "hide" });
+        if (p && p.then) p.then(() => { if (cur === st) st.native = true; }, () => {});
+      } catch (e) {}
+      LENS.update();
+    }
+    function exit() {
+      const st = cur; if (!st) return;
+      cur = null;
+      st.ro.disconnect(); st.mo.disconnect();
+      st.stage.classList.remove("is-full");
+      document.documentElement.classList.remove("has-full");
+      st.scroller.classList.remove("zoomed", "panning");
+      st.svg.style.width = st.svg.style.height = "";
+      if (st.mem) { st.stage.insertBefore(st.mem, st.cp); const m = st.mem.querySelector("svg"); if (m) m.style.maxHeight = ""; }
+      if (document.fullscreenElement === st.stage) document.exitFullscreen().catch(() => {});
+      paint(st);
+      st.stage.scrollIntoView({ block: "nearest" });
+      LENS.update();
+    }
+    document.addEventListener("fullscreenchange", () => { if (cur && cur.native && document.fullscreenElement !== cur.stage) exit(); });
+    document.addEventListener("keydown", (e) => {
+      if (!cur || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+      if (e.key === "Escape") { e.preventDefault(); exit(); }
+      else if ((e.key === "+" || e.key === "=") && !e.ctrlKey && !e.metaKey) step(1);
+      else if (e.key === "-" && !e.ctrlKey && !e.metaKey) step(-1);
+      else if (e.key === "0" && !e.ctrlKey && !e.metaKey) zoom(1);
+    });
+    /** ctrl/⌘ + wheel (and a trackpad pinch, which arrives as one) zooms; a zoomed picture drags to pan */
+    function wire(st) {
+      const sc = st.scroller;
+      sc.addEventListener("wheel", (e) => {
+        if (cur !== st || !(e.ctrlKey || e.metaKey)) return;
+        e.preventDefault();
+        const r = sc.getBoundingClientRect();
+        zoom(st.z * Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+      }, { passive: false });
+      let drag = null, moved = false;
+      sc.addEventListener("pointerdown", (e) => {
+        if (cur !== st || st.z <= 1 || e.pointerType !== "mouse" || e.button !== 0) return;
+        drag = { x: e.clientX, y: e.clientY, l: sc.scrollLeft, t: sc.scrollTop }; moved = false;
+      });
+      window.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+        if (!moved && Math.hypot(dx, dy) < 5) return;
+        moved = true; sc.classList.add("panning");
+        sc.scrollLeft = drag.l - dx; sc.scrollTop = drag.t - dy;
+      });
+      window.addEventListener("pointerup", () => { drag = null; sc.classList.remove("panning"); });
+      // a drag that panned is not a click on whatever it started over
+      sc.addEventListener("click", (e) => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+    }
+    const stages = [];
+    return {
+      get on() { return !!cur; },
+      enter(stage) { const st = stages.find((x) => x.stage === stage); if (st) enter(st); },
+      add(stage, cp) {
+        const scroller = stage.querySelector(":scope > .stage-scroll"), svg = scroller && scroller.querySelector(":scope > svg");
+        const head = stage.querySelector(":scope > .stage-head");
+        if (!svg || !head || stages.some((x) => x.stage === stage)) return;
+        const btn = h("button", { type: "button", class: "fs-btn" },
+          s("svg", { viewBox: "0 0 24 24", "aria-hidden": "true" }, s("path", { d: ICON_IN })), h("span", {}, ""));
+        const { bar, pct } = zoomBar();
+        const st = { stage, cp, scroller, svg, btn, pct, mem: stage.querySelector(':scope > [id$="-mem"]') };
+        btn.addEventListener("click", () => (cur === st ? exit() : enter(st)));
+        head.append(bar, btn);
+        stages.push(st); wire(st); paint(st);
+      },
+    };
+  })();
+
+  /* ---------- the code lens ----------
+     While a machine is on screen but the line it is running is not (its panel is below the fold, or scrolled
+     away), a strip pinned to the bottom of the window shows that line with one line either side, live values
+     included. Tapping it brings the full listing into view. Panels register themselves in code(). */
+  const LENS = (() => {
+    const panels = [], LIT = ["on", "on2", "good", "bad", "dim"];
+    let el = null, ol, go, cur = null, sig = "", off = false, raf = 0, zone = 110;
+    const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function build() {
+      ol = h("ol", {});
+      go = h("button", { type: "button", class: "cp-lens-go", title: "Scroll to the full listing" }, "");
+      go.addEventListener("click", () => { if (cur) cur.root.scrollIntoView({ block: "nearest", behavior: reduced() ? "auto" : "smooth" }); });
+      const full = h("button", { type: "button", class: "cp-lens-full", title: "Show this machine, its code and its memory on one screen" }, "Full screen");
+      full.addEventListener("click", () => { if (cur) FULL.enter(cur.stage); });
+      const x = h("button", { type: "button", class: "cp-lens-x", "aria-label": "Hide the code lens" }, "×");
+      x.addEventListener("click", () => { off = true; hide(); K.toast("Code lens hidden until you reload"); });
+      const body = h("div", { class: "cp-body" }, ol);
+      body.addEventListener("click", () => go.click());
+      el = h("div", { class: "cp-lens", role: "region", "aria-label": "The line the machine is running" },
+        h("div", { class: "cp-lens-head" }, go, h("span", { class: "grow" }), full, x), body);
+      document.body.appendChild(el);
+    }
+    function hide() { if (el) el.classList.remove("show"); cur = null; sig = ""; }
+    function litLine(p) {
+      const lis = p.lis();
+      const i = lis.findIndex((li) => li.classList.contains("on"));
+      return i >= 0 ? i : lis.findIndex((li) => LIT.some((c) => li.classList.contains(c)));
+    }
+    function run() {
+      raf = 0;
+      if (off || FULL.on) { hide(); return; }
+      const vh = window.innerHeight, bar = document.querySelector(".topbar");
+      const top = bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
+      // the machine most on screen is the one the reader is watching
+      let p = null, most = 0;
+      panels.forEach((q) => {
+        const r = q.scroller.getBoundingClientRect();
+        const v = Math.min(r.bottom, vh) - Math.max(r.top, top);
+        if (v >= Math.min(120, r.height / 2) && v > most) { p = q; most = v; }
+      });
+      const i = p ? litLine(p) : -1;
+      if (i < 0) { hide(); return; }
+      const lis = p.lis();
+      const lr = lis[i].getBoundingClientRect(), br = p.body.getBoundingClientRect();
+      if (lr.top >= Math.max(br.top, top) - 1 && lr.bottom <= Math.min(br.bottom, vh - zone) + 1) { hide(); return; }
+      if (!el) build();
+      const key = p.ver + ":" + i;
+      if (p !== cur || key !== sig) {
+        K.clear(ol);
+        const from = Math.max(0, Math.min(i - 1, lis.length - 3));
+        lis.slice(from, from + 3).forEach((li) => ol.appendChild(li.cloneNode(true)));
+        const n = lis[i].dataset.n;
+        go.textContent = p.label() + (n ? " · line " + n : "") + " ↓";
+        cur = p; sig = key;
+      }
+      const sr = p.stage.getBoundingClientRect();
+      el.style.left = Math.max(0, sr.left) + "px";
+      el.style.width = Math.min(sr.width, document.documentElement.clientWidth) + "px";
+      el.classList.add("show");
+      zone = el.offsetHeight + 16;
+    }
+    const update = () => { if (!raf) raf = requestAnimationFrame(run); };
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return {
+      update,
+      add(p) { panels.push(p); p.body.addEventListener("scroll", update, { passive: true }); },
+      touch(p) { p.ver++; update(); },
+    };
+  })();
 
   /* ---------- syntax colours ---------- */
   const TOKENS = {
@@ -201,6 +407,15 @@
     body.appendChild(ol);
     const out = h("pre", { class: "cp-out", hidden: true, "aria-live": "polite" });
     root.append(body, out);
+    const stage = root.closest(".stage");
+    let lens = null;
+    if (stage) {
+      stage.classList.add("has-code");
+      lens = { root, body, stage, scroller: stage.querySelector(".stage-scroll") || stage, ver: 0, lis: () => lis, label: () => (rs() ? cur.rs.name : cur.name) };
+      LENS.add(lens);
+      FULL.add(stage, root);
+    }
+    const touched = () => { if (lens) LENS.touch(lens); };
     const clone = (f) => Object.assign({}, f, f.rs ? { rs: Object.assign({}, f.rs) } : {});
     let files = o.files.map(clone);
     let cur = null, lis = [], idx = null;
@@ -256,6 +471,7 @@
       const list = tr(req.marks[cls] || []).filter((n) => lis[n - 1]);
       list.forEach((n) => lis[n - 1].classList.add(cls));
       if (scroll && list.length) scrollTo(lis[list[0] - 1]);
+      touched();
     }
     function paintNotes() {
       lis.forEach((li) => { const n = li.querySelector(".cp-note"); if (n) n.remove(); });
@@ -267,6 +483,7 @@
         const [t, tone] = Array.isArray(v) ? v : [v];
         li.appendChild(h("span", { class: "cp-note" + (tone ? " " + tone : "") }, t));
       });
+      touched();
     }
     function paintOut() {
       let t2 = outReq[0];
@@ -289,7 +506,7 @@
       if (CODE_LANG.rust && !cur.rs) cmdText = cur.rsNote || "pseudocode only — no Rust for this listing";
       cmd.textContent = cmdText;
       Object.keys(req.marks).forEach((cls) => paintMarks(cls, false));
-      paintNotes(); paintOut(); drawTools();
+      paintNotes(); paintOut(); drawTools(); touched();
     }
     function show(name) {
       const f = files.find((x) => x.name === name) || files[0];
