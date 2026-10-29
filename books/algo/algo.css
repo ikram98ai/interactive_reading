@@ -1,0 +1,107 @@
+/* Algorithm Alley — styles every chapter of this book shares, on top of assets/style.css:
+   the code panel (book pseudocode | Rust), the stack-and-heap memory strip, and array cells.
+   CSS variables only, so both themes work. */
+.eyebrow { color: var(--lilac); }
+.keep { text-transform: none; } /* little o and ω must not be uppercased */
+.toc a:hover { border-color: var(--lilac); color: var(--lilac); }
+.toc a .n { font-family: var(--f-mono); font-size: 11.5px; color: var(--ink-3); margin-right: 6px; }
+.clickable { cursor: pointer; }
+.clickable:hover > rect:first-child, .clickable:focus-visible > rect:first-child { stroke: var(--lilac); stroke-width: 2.5; }
+.clickable:focus { outline: none; }
+.fade { transition: opacity .3s; }
+.first { font-size: 15.5px; color: var(--ink-2); background: var(--lilac-soft); border-radius: var(--r-m); padding: 12px 14px; }
+.first b { color: var(--ink); }
+.hero-stage { aspect-ratio: auto; }
+.stage [hidden] { display: none !important; }
+.statrow { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--surface); }
+.statrow .stat { min-width: 88px; }
+.statrow:empty { display: none; }
+.mono { font-family: var(--f-mono); }
+
+/* ---------- the code panel under every machine ---------- */
+.codepane { border-top: 1px solid var(--line); background: var(--surface-2); }
+.cp-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 14px; }
+.cp-k { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.cp-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.cp-tab { appearance: none; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-2); font: 700 12.5px/1 var(--f-mono); padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+.cp-tab[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.cp-file { font: 700 12.5px/1 var(--f-mono); color: var(--ink); padding: 6px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); }
+.cp-cmd { font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); flex-basis: 100%; }
+.cp-cmd:empty { display: none; }
+.cp-lang { margin-left: auto; display: inline-flex; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 9px; padding: 2px; gap: 2px; }
+.cp-lang button { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: 700 12px/1 var(--f-mono); padding: 6px 10px; border-radius: 7px; cursor: pointer; }
+.cp-lang button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.first .cp-lang { margin: 8px 0 0; display: flex; width: max-content; }
+.cp-tools { display: inline-flex; gap: 6px; }
+.cp-tools:empty { display: none; }
+.cp-tools a, .cp-tools button { appearance: none; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-2); font: 700 11.5px/1 var(--f-mono); padding: 6px 9px; border-radius: 8px; cursor: pointer; text-decoration: none; }
+.cp-tools a:hover, .cp-tools button:hover { border-color: var(--lilac); color: var(--lilac); }
+.cp-body { overflow: auto; max-height: 380px; background: var(--surface); border-top: 1px solid var(--line); position: relative; }
+.cp-body:focus-visible { outline-offset: -3px; }
+.cp-body ol { font-variant-ligatures: none; list-style: none; margin: 0; padding: 8px 0; min-width: 100%; width: max-content; font-family: var(--f-mono); font-size: 12.5px; line-height: 1.62; color: var(--ink); }
+.cp-body li { position: relative; white-space: pre; padding: 0 18px 0 46px; transition: background-color .18s; }
+.cp-body li::before { content: attr(data-n); position: absolute; left: 0; width: 32px; text-align: right; color: var(--ink-3); }
+.cp-body li.hd { margin-top: 2px; }
+.cp-body li.hd + li.hd { margin-top: 0; }
+.cp-body li.on { background: var(--sun-soft); box-shadow: inset 3px 0 0 var(--sun); }
+.cp-body li.on2 { background: var(--blue-soft); box-shadow: inset 3px 0 0 var(--blue); }
+.cp-body li.dim { background: color-mix(in srgb, var(--line) 55%, transparent); box-shadow: inset 3px 0 0 var(--line-strong); }
+.cp-body li.good { background: var(--mint-soft); box-shadow: inset 3px 0 0 var(--mint); }
+.cp-body li.bad { background: var(--coral-soft); box-shadow: inset 3px 0 0 var(--coral); }
+.cp-note { margin-left: 14px; padding: 1px 7px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--ink); font-size: 11.5px; font-weight: 700; }
+.cp-note.good { background: var(--mint-soft); border-color: var(--mint); }
+.cp-note.bad { background: var(--coral-soft); border-color: var(--coral); }
+.cp-note.warn { background: var(--sun-soft); border-color: var(--sun); }
+.cp-out { margin: 0; padding: 10px 14px; background: var(--ink); color: var(--bg); font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; min-height: 22px; }
+.cp-out .pr { opacity: .65; }
+.t-cm { color: var(--ink-3); font-style: italic; }
+.t-st { color: color-mix(in srgb, var(--mint) 70%, var(--ink)); }
+.t-nu { color: color-mix(in srgb, var(--coral) 78%, var(--ink)); }
+.t-kw { color: var(--blue); font-weight: 700; }
+.t-ty { color: var(--lilac); font-weight: 700; }
+.t-pp { color: var(--lilac); }
+.t-fn { font-weight: 700; }
+.t-pc { font-weight: 700; color: var(--ink); letter-spacing: .02em; }
+.t-lt { color: var(--sun); font-weight: 700; }
+.t-pr { color: color-mix(in srgb, var(--mint) 70%, var(--ink)); font-weight: 700; }
+
+/* ---------- memory strip: the Rust program's stack and heap ---------- */
+.memstrip { border-top: 1px solid var(--line); background: var(--surface-2); }
+.memstrip .mem-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 8px 14px 0; }
+.memstrip .mem-k { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.memstrip .mem-note { font-size: 13.5px; color: var(--ink-2); }
+.memstrip .mem-note:empty { display: none; }
+.mem-frame { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.2; }
+.mem-frame.top { stroke: var(--sun); stroke-width: 2; }
+.mem-frame.gone { opacity: .35; stroke-dasharray: 4 4; }
+.mem-fn { fill: var(--ink); font-family: var(--f-mono); font-size: 11px; font-weight: 700; }
+.mem-var { fill: var(--ink); font-family: var(--f-mono); font-size: 11px; }
+.mem-ty { fill: var(--lilac); font-family: var(--f-mono); font-size: 11px; }
+.mem-val { fill: var(--ink-2); font-family: var(--f-mono); font-size: 11px; font-weight: 700; }
+.mem-val.hot { fill: var(--ink); }
+.mem-hot { fill: var(--sun-soft); stroke: none; }
+.mem-cell { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.2; }
+.mem-cell.on { fill: var(--sun-soft); stroke: var(--sun); stroke-width: 2; }
+.mem-cell.on2 { fill: var(--blue-soft); stroke: var(--blue); stroke-width: 2; }
+.mem-cell.good { fill: var(--mint-soft); stroke: var(--mint); stroke-width: 2; }
+.mem-cell.bad { fill: var(--coral-soft); stroke: var(--coral); stroke-width: 2; }
+.mem-cell.dim { fill: var(--surface-2); stroke: var(--line); }
+.mem-cell.free { fill: var(--surface-2); stroke: var(--line); stroke-dasharray: 3 3; }
+.mem-cv { fill: var(--ink); font-family: var(--f-mono); font-size: 11px; font-weight: 700; }
+.mem-blk { fill: var(--ink-3); font-family: var(--f-mono); font-size: 10.5px; }
+.mem-ptr { fill: none; stroke: var(--lilac); stroke-width: 1.6; }
+.mem-ptr.weak { stroke-dasharray: 4 3; opacity: .7; }
+.mem-dot { fill: var(--lilac); }
+.mem-head2 { fill: var(--ink-3); font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .08em; }
+
+/* ---------- array cells inside a machine ---------- */
+.ac-cell { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; transition: fill .2s, stroke .2s; }
+.ac-cell.on { fill: var(--sun-soft); stroke: var(--sun); stroke-width: 2.5; }
+.ac-cell.on2 { fill: var(--blue-soft); stroke: var(--blue); stroke-width: 2.5; }
+.ac-cell.good { fill: var(--mint-soft); stroke: var(--mint); stroke-width: 2; }
+.ac-cell.bad { fill: var(--coral-soft); stroke: var(--coral); stroke-width: 2.5; }
+.ac-cell.dim { fill: var(--surface-2); stroke: var(--line); }
+.ac-cell.sorted { fill: var(--lilac-soft); stroke: var(--lilac); stroke-width: 2; }
+.ac-v { fill: var(--ink); font-family: var(--f-mono); font-size: 15px; font-weight: 700; }
+.ac-i { fill: var(--ink-3); font-family: var(--f-mono); font-size: 10.5px; }
+@media (prefers-reduced-motion: reduce) { .fade, .cp-body li, .ac-cell { transition: none; } }

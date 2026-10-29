@@ -26,6 +26,12 @@ Many ideas need no code at all (see "Code panel rules").
    `session`) and, if any scene will have a code panel, the `code` helper with its CSS. This applies
    whichever book you are building: the shared kit doesn't have these yet, so copy the ones you use into
    your page.
+6. **Algorithm Alley (`algo`) only:** don't copy those helpers. `books/algo/algo.js` and `algo.css` already
+   have them (`AL.box`, `AL.session`, …), plus `AL.code` — the book's pseudocode with a Pseudocode | Rust toggle,
+   engines highlighting by the book's own line numbers — `AL.mem` for a stack-and-heap strip, and `AL.cells`
+   for array cells. Load `algo.js` after `kit.js` and copy `books/algo/ch01.html`'s script header. Every scene
+   gets the book's pseudocode (from whichever chapter states the algorithm) and a complete Rust program in
+   `<script type="text/x-rust">` with its real output in `-out`; `tools/rustcheck.py` must pass.
 
 ## Step 2 — plan the scenes
 

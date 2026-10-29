@@ -14,6 +14,7 @@ books/books.js          the list of books shown on the shelf
 books/<slug>/book.js    one book's chapter list + how many chapters are built
 books/<slug>/index.html that book's chapter route map
 books/<slug>/chNN.html  one interactive chapter
+books/algo/algo.js|css Algorithm Alley's own helpers: pseudocode | Rust code panels, the stack-and-heap strip
 tools/                  local checks for chapter pages (not published) — see tools/README.md
 ```
 
