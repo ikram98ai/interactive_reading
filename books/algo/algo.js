@@ -108,7 +108,7 @@
       [/\/\/.*/, "cm"],
       [/"(?:[^"\\]|\\.)*"/, "st"],
       [/\b(?:NIL|TRUE|FALSE)\b/, "kw"],
-      [/\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+\b|\b[A-Z]{2,}[A-Z0-9]*(?=\()/, "pc"],
+      [/\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+′*|\b[A-Z]{2,}[A-Z0-9]*′*(?=\()/, "pc"],
       [/\b(?:for|to|downto|by|while|do|if|then|else|elseif|return|and|or|not|repeat|until|each|in|let|new|error|spawn|sync|parallel|print|break)\b/, "kw"],
       [/\b\d+(?:\.\d+)?\b/, "nu"],
     ],
@@ -151,7 +151,7 @@
      have none, and a call such as MERGE(A, p, q, r) inside a body is an ordinary line. Engines use the book's numbers:
        3          line 3 of the first procedure in the file      "MERGE:4"  line 4 of MERGE
        "MERGE"    MERGE's header line                            "rs:12"    Rust line 12 (Rust view only) */
-  const HEADER = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*\s*\(.*\)\s*$/;
+  const HEADER = /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*′*\s*\(.*\)\s*$/; // primes too: PARTITION′(A, p, r)
   function numberLines(lines, lang) {
     const labels = [], heads = new Set(), index = { procs: {}, first: null, plain: {} };
     if (lang !== "clrs") { lines.forEach((_, i) => { labels.push(String(i + 1)); index.plain[i + 1] = i + 1; }); return { labels, heads, index }; }
