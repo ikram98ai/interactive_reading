@@ -2,6 +2,7 @@
 """Flag names, numbers and quotations on a chapter page that don't appear in the book's own text.
 
   tools/factcheck.py ddia 11        books/ddia/ch11.html  against  tools/.text/ddia/ch11.txt (see extract.py)
+  tools/factcheck.py algo 2 --page=books/algo/_wip_x.html     a preview page, against chapter 2's text
 
 Checks the epigraph and every "What the book says" box, because those speak for the book:
   - proper nouns / product names / acronyms
@@ -40,10 +41,12 @@ def strip_tags(x):
 
 
 def main():
-    if len(sys.argv) != 3:
+    args = [a for a in sys.argv[1:] if not a.startswith("--page=")]
+    pages = [a[7:] for a in sys.argv[1:] if a.startswith("--page=")]
+    if len(args) != 2:
         sys.exit(__doc__)
-    slug, n = sys.argv[1], int(sys.argv[2])
-    page_path = ROOT / "books" / slug / f"ch{n:02d}.html"
+    slug, n = args[0], int(args[1])
+    page_path = pathlib.Path(pages[0]).resolve() if pages else ROOT / "books" / slug / f"ch{n:02d}.html"
     text_path = HERE / ".text" / slug / f"ch{n:02d}.txt"
     if not text_path.exists():
         sys.exit(f"{text_path.relative_to(ROOT)} is missing — run tools/extract.py first.")

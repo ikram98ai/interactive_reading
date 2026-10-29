@@ -5,6 +5,8 @@
   tools/extract.py books/ddia/ddia.pdf ddia 11                    outline entry "Chapter 11…" → tools/.text/ddia/ch11.txt
   tools/extract.py "books/csapp/….pdf" csapp 7 --title Linking    outline entry whose title contains "Linking"
   tools/extract.py "books/csapp/….pdf" csapp 7 --pages 696-746    explicit PDF page range (1-based, inclusive)
+  tools/extract.py books/algo/CLRS.pdf algo 2 --pages 39-70 --fix-glyphs
+                                                                  CLRS: undo its font's û (fi), ü (fl), 4 (em dash), <…= (quotes)
 
 A chapter found through the outline runs up to the page before the next top-level entry.
 The text is copyrighted: tools/.text/ is gitignored, like the PDFs. Needs pypdf (fonttools lets it decode
@@ -53,6 +55,16 @@ def top_level(reader):
     return out
 
 
+def fix_glyphs(t):
+    """The CLRS 4th-edition PDF's text layer maps ligatures and punctuation to odd glyphs; undo them so the
+    text can be quoted and fact-checked."""
+    t = t.replace("û", "fi").replace("ü", "fl")
+    t = re.sub(r"(?<=[a-z])4(?=[a-z])", "—", t)
+    t = re.sub(r"<(?=[A-Za-z])", "“", t)
+    t = re.sub(r"(?<=[A-Za-z.,])=", "”", t)
+    return t.replace("හ", "≤")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("pdf")
@@ -61,6 +73,7 @@ def main():
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--title", help="pick the outline entry whose title contains this (case-insensitive)")
     ap.add_argument("--pages", help="PDF page range A-B instead of using the outline")
+    ap.add_argument("--fix-glyphs", action="store_true", help="the CLRS PDF's font maps fi→û, fl→ü, em dash→4, quotes→< =")
     a = ap.parse_args()
 
     reader = pypdf.PdfReader(a.pdf)
@@ -88,6 +101,8 @@ def main():
         print(f"outline: {entries[i][0]!r}")
 
     parts = [f"\n\n=== PDF page {p} ===\n{reader.pages[p - 1].extract_text() or ''}" for p in range(first, last + 1)]
+    if a.fix_glyphs:
+        parts = [fix_glyphs(x) for x in parts]
     out = HERE / ".text" / a.slug / f"ch{a.chapter:02d}.txt"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("".join(parts))

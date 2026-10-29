@@ -90,7 +90,7 @@
       const dur = reduced ? 1 : ms / speed.value;
       const t0 = performance.now();
       function frame(now) {
-        const t = Math.min(1, (now - t0) / dur);
+        const t = Math.max(0, Math.min(1, (now - t0) / dur)); // a frame stamped before t0 must not run backwards
         fn(e(t));
         if (t < 1) requestAnimationFrame(frame); else resolve();
       }
