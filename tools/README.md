@@ -36,6 +36,7 @@ chapter of that book as the reference. Afterwards bump `built` in `books/<slug>/
 | `node tools/play.js books/ddia/ch11.html --light` | Presses each simulation's main button, waits for it to settle, and screenshots that. It never fails on looks — **you have to open the PNGs**. This is where overlapping labels and stray parcels show up. `--seg=1` plays each sim's second mode; `--presses=8` fills sandboxes. |
 | `python3 tools/audit.py books/ddia/ch1*.html` | Duplicate ids, links to missing anchors, scenes missing from the table of contents, unlabelled SVGs, hard-coded colours, emoji, a quiz whose right answer is always in the same spot. |
 | `python3 tools/factcheck.py ddia 11` | Every name, number and “quoted phrase” in the epigraph and the "What the book says" boxes must appear in the chapter's text. Exits 1 on a quotation that isn't the book's exact words. |
+| `python3 tools/rustcheck.py books/algo/ch01.html` | Algorithm Alley only: compiles and runs every Rust listing on the page (`<script type="text/x-rust">`) with `rustc --edition 2021`, and fails on a build error or warning, a crash, output that differs from the page's `-out` block, a line over 80 characters, or a comment run longer than two lines. Needs `rustc`. |
 | `node tools/check-site.js` | The same parse-and-links check the deploy workflow runs, for the whole site. If this passes, the push will deploy. |
 
 Run `smoke.js` and `play.js` once with `--light` and once with `--dark`: headless Chrome inherits the
