@@ -24,4 +24,16 @@ window.LIBRARY = [
     chapters: 14,
     built: 14,
   },
+  {
+    slug: "algo",
+    path: "books/algo/index.html",
+    title: "Algorithm Alley",
+    book: "Introduction to Algorithms",
+    author: "Cormen, Leiserson, Rivest & Stein",
+    spine: "CLRS · 4th ed.",
+    accent: "lilac",
+    blurb: "The book's pseudocode, beside runnable Rust, acted out by machines you can step through, line by line.",
+    chapters: 35,
+    built: 5,
+  },
 ];
