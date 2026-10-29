@@ -64,6 +64,80 @@
 .t-pc { font-weight: 700; color: var(--ink); letter-spacing: .02em; }
 .t-lt { color: var(--sun); font-weight: 700; }
 .t-pr { color: color-mix(in srgb, var(--mint) 70%, var(--ink)); font-weight: 700; }
+.codepane { scroll-margin: 72px 0 12px; }
+
+/* ---------- full screen: one machine, its code and its memory on one screen (algo.js adds .is-full) ----------
+   The picture fills the left and the code panel the right, with the memory strip moved under the code.
+   Every stage ends with its code panel, so no page markup changes. */
+.fs-btn {
+  appearance: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px 0 9px;
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  background: var(--surface); color: var(--ink-2); font: 700 12px/1 var(--f-body);
+}
+.fs-btn:hover { border-color: var(--lilac); color: var(--lilac); }
+.fs-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.fs-btn[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.stage.has-code > .stage-head > .stage-title { margin-right: auto; }
+.fs-zoom { display: none; }
+.is-full .fs-zoom { display: inline-flex; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px; gap: 2px; }
+.fs-zoom button { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: 700 13px/1 var(--f-mono); min-width: 28px; height: 24px; padding: 0 7px; border-radius: 999px; cursor: pointer; }
+.fs-zoom button:hover { background: var(--surface-2); color: var(--lilac); }
+.has-full, .has-full body { overflow: hidden; }
+.wrap .stage.is-full {
+  position: fixed; inset: 0; z-index: 70; margin: 0; max-width: none; width: auto; height: 100vh; height: 100dvh;
+  border: 0; border-radius: 0; box-shadow: none;
+  display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(360px, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+}
+.stage.is-full > * { grid-column: 1; min-width: 0; }
+.stage.is-full > .stage-head { grid-column: 1 / -1; }
+.stage.is-full .sim-zoom { display: none; }
+.stage.is-full > .stage-scroll { display: flex; overflow: auto; padding: 8px; overscroll-behavior: contain; }
+.stage.is-full > .stage-scroll > svg { flex: none; margin: auto; min-width: 0; max-width: none; }
+.stage.is-full > .stage-scroll.zoomed { cursor: grab; }
+.stage.is-full > .stage-scroll.panning { cursor: grabbing; user-select: none; }
+.stage.is-full > .codepane { grid-column: 2; grid-row: 2 / -1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-top: 0; border-left: 1px solid var(--line); }
+.stage.is-full .codepane > * { flex: none; }
+.stage.is-full .codepane > .cp-body { flex: 1 1 0; min-height: 0; max-height: none; }
+.stage.is-full .codepane > .cp-out { max-height: 22vh; overflow: auto; }
+.stage.is-full .memstrip .stage-scroll > svg { min-width: 0; }
+/* a narrow portrait screen stacks it all: picture, buttons, stats, caption, then code and memory */
+@media (max-width: 899px) and (orientation: portrait) {
+  .wrap .stage.is-full { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto auto minmax(0, 40%); }
+  .stage.is-full > .codepane { grid-column: 1; grid-row: 6; border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (max-width: 899px) and (orientation: landscape) { .wrap .stage.is-full { grid-template-columns: minmax(0, 1.2fr) minmax(300px, 1fr); } }
+/* small screens either way: one line of stats, and tighter strips */
+@media (max-width: 899px), (max-height: 560px) {
+  .stage.is-full > .stage-head { padding: 6px 10px; gap: 6px; }
+  .stage.is-full > .stage-head > .stage-title { display: none; }
+  .stage.is-full > .controls { padding: 6px 10px; }
+  .stage.is-full > .statrow { flex-wrap: nowrap; overflow-x: auto; padding: 6px 10px; gap: 6px; }
+  .stage.is-full > .statrow .stat { flex: none; padding: 3px 8px; flex-direction: row; align-items: baseline; gap: 6px; }
+  .stage.is-full > .statrow .stat .v { font-size: 14px; }
+  .stage.is-full > .caption { padding: 6px 12px; min-height: 0; font-size: 14px; }
+  .stage.is-full .codepane .cp-head { padding: 5px 10px; }
+}
+
+/* ---------- the code lens: the running line, pinned to the bottom of the window ---------- */
+.cp-lens {
+  position: fixed; z-index: 45; left: 0; width: 100%; bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-m); box-shadow: var(--shadow); overflow: hidden;
+  transform: translateY(calc(100% + 28px)); visibility: hidden; transition: transform .22s ease, visibility 0s linear .22s;
+}
+.cp-lens.show { transform: none; visibility: visible; transition: transform .22s ease; }
+.cp-lens-head { display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 8px; background: var(--surface-2); }
+.cp-lens-head .grow { flex: 1; }
+.cp-lens-go { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: 700 11.5px/1 var(--f-mono); letter-spacing: .04em; padding: 6px 4px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.cp-lens-go:hover { color: var(--lilac); }
+.cp-lens-full, .cp-lens-x { appearance: none; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-2); font: 700 11.5px/1 var(--f-mono); padding: 5px 8px; border-radius: 7px; cursor: pointer; }
+.cp-lens-full:hover, .cp-lens-x:hover { border-color: var(--lilac); color: var(--lilac); }
+.cp-lens-x { font-size: 14px; padding: 3px 8px; }
+.cp-lens .cp-body { max-height: none; overflow-x: auto; overflow-y: hidden; cursor: pointer; scrollbar-width: thin; }
+.cp-lens .cp-body ol { padding: 4px 0; }
+@media (max-width: 600px) {
+  .cp-lens { bottom: 0; border-radius: var(--r-m) var(--r-m) 0 0; border-inline: 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+}
 
 /* ---------- memory strip: the Rust program's stack and heap ---------- */
 .memstrip { border-top: 1px solid var(--line); background: var(--surface-2); }
@@ -104,4 +178,4 @@
 .ac-cell.sorted { fill: var(--lilac-soft); stroke: var(--lilac); stroke-width: 2; }
 .ac-v { fill: var(--ink); font-family: var(--f-mono); font-size: 15px; font-weight: 700; }
 .ac-i { fill: var(--ink-3); font-family: var(--f-mono); font-size: 10.5px; }
-@media (prefers-reduced-motion: reduce) { .fade, .cp-body li, .ac-cell { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .fade, .cp-body li, .ac-cell, .cp-lens, .cp-lens.show { transition: none; } }
