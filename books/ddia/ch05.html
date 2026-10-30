@@ -207,7 +207,8 @@
         <h2>You can’t mail a pointer</h2>
         <p class="story">Priya’s shopping list lives in her program’s memory as objects that point at each other: a <code>user</code> object holds the <i>address</i> of a list, and the list holds the addresses of two strings. If she sends those raw bytes to Tomás’s computer, the addresses point into <i>his</i> memory, where they mean nothing, or something else entirely.</p>
         <p class="story">So every program keeps data in two forms. <b>In memory</b>: objects, structs, lists, hash tables, trees, tuned for the CPU and full of pointers. <b>On disk or on the wire</b>: one <b>self-contained sequence of bytes</b>. Turning the first into the second is <b>encoding</b> (also <b>serialization</b> or <b>marshaling</b>); the reverse is <b>decoding</b> (<b>parsing</b>, <b>deserialization</b>, <b>unmarshaling</b>). This book says <i>encoding</i>, because <i>serialization</i> means something else in transactions (Chapter 8).</p>
-        <p class="imagine"><b>Try it:</b> press <b>Encode → send → decode</b> and watch the pointers become nested text and then new pointers in a different process. Switch to <b>Copy raw memory</b> and send again: the addresses arrive, the objects don’t.</p>
+        <p class="story">A few <b>zero-copy</b> formats, such as Cap’n Proto and FlatBuffers, skip the translation: they lay data out so the same bytes work in memory, on disk and on the network, using <b>offsets</b> instead of pointers. Databases do something similar when they work directly on compressed data loaded from disk.</p>
+        <p class="imagine"><b>Try it:</b> press <b>Encode → send → decode</b> and watch the pointers become nested text and then new pointers in a different process. Switch to <b>Copy raw memory</b> and send again: the addresses arrive, the objects don’t. Then try <b>Zero-copy</b>, where the bytes are usable as they are.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -329,7 +330,7 @@
         <h2>The doorkeeper who only knows what isn’t allowed</h2>
         <p class="story">Freya runs the door at a club. Her list says “guests named on the list must show a valid ticket.” Someone not on the list at all? With an <b>open</b> list, she waves them in. With a <b>closed</b> list, only named guests get in. That one setting decides whether a newer app can add fields that older readers never declared.</p>
         <p class="story"><b>JSON Schema</b> describes JSON with types (string, number, integer, object, array, boolean, null) plus <b>validation rules</b>: a <code>port</code> must be between 1 and 65,535. Its default is an <b>open content model</b> (<code>additionalProperties: true</code>): undeclared fields pass. So a schema usually says what <i>isn’t</i> permitted. JSON objects only have string keys, so a map from integer IDs to names needs <code>patternProperties</code> with a <code>^[0-9]+$</code> key pattern and <code>additionalProperties: false</code>.</p>
-        <p class="imagine"><b>Try it:</b> press <b>Validate</b> on each document under the <b>Port rule</b> schema, then flip it between open and closed. Switch to <b>Integer-keyed map</b> (the book’s Example 5-1) and validate the documents there. The highlighted line in the schema is the rule that decided.</p>
+        <p class="imagine"><b>Try it:</b> press <b>Validate</b> on each document under the <b>Port rule</b> schema, then flip it between open and closed. Switch to <b>Integer-keyed map</b> (the book’s Example 5-1) and validate the documents there. In <b>if / then</b>, validate the empty document and find out why it fails. The highlighted line in the schema is the rule that decided.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -360,7 +361,7 @@
         <h2>Binary JSON still spells out every field name</h2>
         <p class="story">Nadia shrinks her JSON messages with <b>MessagePack</b>, a binary encoding of JSON. Instead of quotes, colons and braces, each value starts with a small <b>type byte</b>: <code>0x83</code> means “an object with 3 fields,” <code>0xa8</code> means “a string of 8 bytes.” Because each string’s length comes first, the reader needs no closing quote and no escaping.</p>
         <p class="story">But MessagePack has no schema, so the reader can’t know the field names in advance. The names <code>userName</code>, <code>favoriteNumber</code> and <code>interests</code> travel inside every record. The book’s record shrinks from <b>81 bytes</b> of JSON to <b>66</b>: not much, for giving up human-readability.</p>
-        <p class="imagine"><b>Try it:</b> press <b>Next byte</b> to decode the record one piece at a time, or click any byte. Lilac bytes are field names, yellow are values, blue are type and length markers. Then change the name with <b>Change userName</b> and watch the encoder rebuild the bytes.</p>
+        <p class="imagine"><b>Try it:</b> press <b>Next byte</b> to decode the record one piece at a time, or click any byte. Lilac bytes are field names, yellow are values, blue are type and length markers. Then change the name with <b>Change userName</b> and watch the encoder rebuild the bytes, and press <b>Make it 16 fields</b> to see the header outgrow its single byte.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -390,7 +391,7 @@
         <h2>Numbered coat hooks instead of name tags</h2>
         <p class="story">At Kwame’s school every coat hook has a number. A letter home doesn’t say “the blue coat belongs on the hook marked <i>favouriteNumber</i>”; it says “hook 2.” Everyone has the same chart that maps numbers to names, so the names never need to travel.</p>
         <p class="story"><b>Protocol Buffers</b> (from Google, much like Apache Thrift) requires a <b>schema</b>, written in its IDL. Each field gets a <b>field tag</b> number, and a code generator turns the schema into classes for many languages. On the wire, one byte holds both the tag and a wire type: <code>(tag &lt;&lt; 3) | type</code>. Integers are <b>varints</b>: 7 bits per byte, the top bit saying “more bytes follow,” least significant group first. A <code>repeated</code> field is just the same tag appearing again. The book’s record becomes <b>33 bytes</b>.</p>
-        <p class="imagine"><b>Try it:</b> press <b>Next field</b> to decode the 33 bytes; the matching schema line lights up. Then open <b>Varint lab</b> and drag the number: watch it split into 7-bit groups, and see how many bytes small and large numbers need.</p>
+        <p class="imagine"><b>Try it:</b> press <b>Next field</b> to decode the 33 bytes; the matching schema line lights up. Press <b>Unset favorite_number</b> to see an unset field vanish from the bytes. Then open <b>Varint lab</b> and drag the number: watch it split into 7-bit groups, and see how many bytes small and large numbers need.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -512,7 +513,7 @@
         <h2>Only fields with a default may come and go</h2>
         <p class="story">Jonas edits the team’s Avro schema and asks the same two questions every time. Can new readers still read old data (<b>backward</b>)? Can old readers read new data (<b>forward</b>)? In Avro, “forward” means the writer is newer than the reader; “backward” means the writer is older.</p>
         <p class="story">The rule of thumb: <b>add or remove only fields that have a default</b>. Add a field without one, and new readers have nothing to fill in for old records. Remove one without a default, and old readers have nothing to fill in for new records. <code>null</code> isn’t automatically allowed: a nullable field is a <b>union</b> like <code>union { null, long }</code>, and <code>null</code> can be the default only if it is the <i>first</i> branch. Renames use <b>aliases</b> in the reader’s schema, and so do adding a union branch: both are backward but not forward compatible.</p>
-        <p class="imagine"><b>Try it:</b> pick a change and press <b>Check both directions</b>. The machine really runs two readers: a new reader on an old record, and an old reader on a new record. The schema below shows the change as a diff.</p>
+        <p class="imagine"><b>Try it:</b> pick a change, including the type promotion <b>int → long</b>, and press <b>Check both directions</b>. The machine really runs two readers: a new reader on an old record, and an old reader on a new record. The schema below shows the change as a diff.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -607,7 +608,7 @@
         <h2>A schema is documentation that can’t go stale</h2>
         <p class="story">Elif’s team keeps every version of every schema in a <b>registry</b>. Before anyone deploys, a check runs: “Can the new schema still read data written with each old one, and the other way round?” Twice this month it stopped a deploy that would have broken a reader nobody remembered.</p>
         <p class="story">Schema-based binary formats earn their keep four ways. They are <b>compact</b>, because names stay out of the data. The schema is <b>documentation</b> that must be accurate, because decoding needs it. A <b>schema database</b> lets you check compatibility <b>before</b> deploying. And <b>generated code</b> gives statically typed languages compile-time type checks. The idea isn’t new: <b>ASN.1</b>, standardized in 1984, used tag numbers too, and its DER encoding still carries SSL certificates (X.509). It is also very complex.</p>
-        <p class="imagine"><b>Try it:</b> in <b>Size</b>, press <b>Encode all four</b> and compare the bars, made by this page’s real encoders. In <b>Registry gate</b>, propose each change and press <b>Deploy</b>: the registry checks it against every stored version first.</p>
+        <p class="imagine"><b>Try it:</b> in <b>Size</b>, press <b>Encode all five</b> and compare the bars, made by this page’s real encoders (the XML is one plain way of writing the record). In <b>Registry gate</b>, propose each change and press <b>Deploy</b>: the registry checks it against every stored version first.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -1346,9 +1347,24 @@ const ENC = (() => {
   }
   const RECORD = { userName: "Martin", favoriteNumber: 1337, interests: ["daydreaming", "hacking"] };
 
+  /** split a text encoding into pieces: field names, punctuation/markup, values (ASCII text, so chars = bytes) */
+  function textSegs(str, re, classify) {
+    const segs = []; let m;
+    re.lastIndex = 0;
+    while ((m = re.exec(str))) classify(m).forEach(([len, kind]) => { const a = segs.length ? segs[segs.length - 1].b : 0; segs.push({ a, b: a + len, kind }); });
+    return segs;
+  }
   function json(rec) {
-    const b = utf8(JSON.stringify(rec));
-    return { bytes: b, segs: [{ a: 0, b: b.length, kind: "val", what: "text" }] };
+    const str = JSON.stringify(rec), b = utf8(str);
+    const segs = textSegs(str, /"((?:[^"\\]|\\.)*)"(:?)|(-?\d+(?:\.\d+)?|true|false|null)|([{}\[\],])/g, (m) =>
+      m[1] !== undefined ? (m[2] ? [[1, "mark"], [m[1].length, "name"], [2, "mark"]] : [[1, "mark"], [m[1].length, "val"], [1, "mark"]]) : m[3] ? [[m[3].length, "val"]] : [[1, "mark"]]);
+    return { bytes: b, segs };
+  }
+  function xml(rec) {
+    const el = (k, v) => (Array.isArray(v) ? `<${k}>${v.map((x) => el("item", x)).join("")}</${k}>` : `<${k}>${v}</${k}>`);
+    const str = `<Person>${Object.keys(rec).map((k) => el(k, rec[k])).join("")}</Person>`, b = utf8(str);
+    const segs = textSegs(str, /<(\/?)([A-Za-z]+)>|([^<]+)/g, (m) => (m[2] ? [[1 + m[1].length, "mark"], [m[2].length, "name"], [1, "mark"]] : [[m[3].length, "val"]]));
+    return { bytes: b, segs };
   }
 
   function msgpack(rec) {
@@ -1369,7 +1385,8 @@ const ENC = (() => {
       } else if (Array.isArray(v)) { put([0x90 | v.length], "mark", `0x${hex(0x90 | v.length)}: array (0x90) of ${v.length} items`, field); v.forEach((x) => val(x, field)); }
     };
     const keys = Object.keys(rec);
-    put([0x80 | keys.length], "mark", `0x${hex(0x80 | keys.length)}: object (top bits 0x80) with ${keys.length} fields (bottom bits 0x0${keys.length})`, null);
+    if (keys.length < 16) put([0x80 | keys.length], "mark", `0x${hex(0x80 | keys.length)}: object (top bits 0x80) with ${keys.length} fields (bottom bits 0x${hex(keys.length)})`, null);
+    else put([0xde, keys.length >> 8, keys.length & 255], "mark", `0xde = map16: ${keys.length} fields don’t fit in 4 bits, so the count takes 2 more bytes (0x${hex(keys.length >> 8)} 0x${hex(keys.length & 255)})`, null);
     keys.forEach((k) => { str(k, "name", k, true); val(rec[k], k); });
     return { bytes, segs };
   }
@@ -1493,7 +1510,7 @@ const ENC = (() => {
     return { out, steps };
   }
   const typeName = (t) => (Array.isArray(t) ? `union { ${t.join(", ")} }` : t.array ? `array<${t.array}>` : t);
-  return { utf8, unutf8, hex, varint, zig, unzig, readVarint, RECORD, json, msgpack, PB_SCHEMA, protobuf, protobufDecode, AVRO_SCHEMA, avro, avroDecode, typeName };
+  return { utf8, unutf8, hex, varint, zig, unzig, readVarint, RECORD, json, xml, msgpack, PB_SCHEMA, protobuf, protobufDecode, AVRO_SCHEMA, avro, avroDecode, typeName };
 })();
 const show = (v) => (v === null ? "null" : Array.isArray(v) ? `[${v.map(show).join(", ")}]` : typeof v === "string" ? `"${v}"` : String(v));
 
@@ -1544,7 +1561,7 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
     txt(g, X0, y + 58, f.note, { cls: "sv-label", anchor: "start" });
     const cells = f.enc.bytes.map((_, j) => {
       const kind = (f.enc.segs.find((sg) => j >= sg.a && j < sg.b) || {}).kind || "";
-      const r = s("rect", { x: X0 + j * PX, y: y + 26, width: PX - 0.8, height: 20, rx: 1, class: "byte " + (f.name === "JSON" ? "" : kind), style: { opacity: 0.18 } });
+      const r = s("rect", { x: X0 + j * PX, y: y + 26, width: PX - 0.8, height: 20, rx: 1, class: "byte " + kind, style: { opacity: 0.18 } });
       g.appendChild(r); return r;
     });
     clickable(g, `Send the record as ${f.name}`, () => play(i, true));
@@ -1829,7 +1846,7 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
 /* ================= 3. TWO REPRESENTATIONS ================= */
 (function encodeScene() {
   const svg = K.$("#s3-svg"), ctr = K.$("#s3-controls"), statBox = K.$("#s3-stats");
-  let raw = false, layer, G = {}, st;
+  let raw = false, zc = false, layer, G = {}, st;
   const btns = [];
   const S = session((v) => btns.forEach((b) => (b.disabled = v)));
   const JSONTXT = ['{"userName":"Martin",', '"interests":["daydreaming",', '"hacking"]}'];
@@ -1882,7 +1899,7 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
   function send() {
     S.run(async (w) => {
       blank(G.B); G.wire.forEach((t) => (t.textContent = "")); G.mid.textContent = ""; G.mid2.textContent = "";
-      if (!raw) {
+      if (!raw && !zc) {
         setCap("#s3-cap", "<b>Encoding</b>: the encoder follows every pointer and writes what it finds as one flat, self-contained string. No addresses survive.");
         for (let i = 0; i < 3; i++) {
           const p = draw.parcel("sv-data", 12); layer.appendChild(p);
@@ -1899,6 +1916,24 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
         G.mid.textContent = "same data, new pointers"; G.mid.style.fill = "var(--mint)";
         G.mid2.textContent = "pointers are rebuilt, not copied";
         setCap("#s3-cap", "Process B has the same <b>data</b> with completely different <b>addresses</b> (0x3a…). That translation is the whole job of encoding and decoding.");
+      } else if (zc) {
+        G.A.u1.textContent = "root @+0"; G.A.u2.textContent = "name→+12  list→+20";
+        G.A.n1.textContent = '@+12 len 6 "Martin"'; G.A.l1.textContent = "@+20 [2] → +28, +40";
+        K.clear(G.A.arrows);
+        setCap("#s3-cap", "A <b>zero-copy</b> format: process A builds the data <b>directly in its wire layout</b>. Instead of pointers it stores <b>relative offsets</b> (“name is 12 bytes in”), which mean the same thing in any process.");
+        await w(sleep(900));
+        const p = draw.tag("the buffer, as is"); layer.appendChild(p);
+        await w(fly(p, [200, 150], [330, 170], 600)); p.remove();
+        G.wire[0].textContent = "+0  root: +12, +20"; G.wire[1].textContent = '+12 6 "Martin"'; G.wire[2].textContent = "+20 [2] +28 +40 …";
+        st.bytes.set("52 (toy)");
+        await w(sleep(500));
+        G.B.u1.textContent = "mapped @0x9000"; G.B.u2.textContent = "no decode step";
+        G.B.n1.textContent = 'name: base+12 "Martin"'; G.B.l1.textContent = "list: base+20 → [2]"; G.B.l2.textContent = "read when touched";
+        [G.B.user, G.B.name, G.B.list].forEach((b) => { b.r.style.opacity = 1; b.r.setAttribute("class", "sv-good"); });
+        st.obj.set("0 · in place", "good"); st.ok.set("yes", "good");
+        G.mid.textContent = "usable as they are"; G.mid.style.fill = "var(--mint)";
+        G.mid2.textContent = "offsets, not pointers";
+        setCap("#s3-cap", "Process B uses the bytes <b>where they landed</b>: reading <code>name</code> means adding 12 to the buffer’s address. That’s the idea behind Cap’n Proto and FlatBuffers: <b>no explicit conversion step</b>. (A toy layout, not their real byte format.)");
       } else {
         setCap("#s3-cap", "Copying raw memory: the bytes of the user object are sent as they are, <b>addresses included</b>.");
         const p = draw.tag("40 7f 00 00 80 7f 00 00"); layer.appendChild(p);
@@ -1924,10 +1959,10 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
     fill(G.A, 0x7f00, true); blank(G.B);
     G.B.user.r.setAttribute("class", "sv-server"); G.B.name.r.setAttribute("class", "sv-server"); G.B.list.r.setAttribute("class", "sv-server");
     st = mkStats(statBox, [["bytes", "Bytes sent", 0], ["obj", "Objects rebuilt", 0], ["ok", "B has the data", "—"]]);
-    setCap("#s3-cap", raw ? "This time we copy the user object’s raw memory. Press <b>Send</b>." : "Process A holds a user object that points at a name and a list. Press <b>Encode → send → decode</b>.");
-    sendBtn.textContent = raw ? "Send raw memory" : "Encode → send → decode";
+    setCap("#s3-cap", raw ? "This time we copy the user object’s raw memory. Press <b>Send raw memory</b>." : zc ? "Process A will build its data in a <b>zero-copy</b> layout. Press <b>Send the buffer</b>." : "Process A holds a user object that points at a name and a list. Press <b>Encode → send → decode</b>.");
+    sendBtn.textContent = raw ? "Send raw memory" : zc ? "Send the buffer" : "Encode → send → decode";
   }
-  K.$("#s3-seg").appendChild(seg(["Encode & decode", "Copy raw memory"], 0, (i) => { raw = i === 1; reset(); }, "s3-mode"));
+  K.$("#s3-seg").appendChild(seg(["Encode & decode", "Copy raw memory", "Zero-copy"], 0, (i) => { raw = i === 1; zc = i === 2; reset(); }, "s3-mode"));
   const sendBtn = button(ctr, "Encode → send → decode", "primary", send); btns.push(sendBtn);
   button(ctr, "Reset", "", reset);
   reset();
@@ -2304,11 +2339,24 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
     "}",
   ].join("\n");
   const cv = code("#s7-code", { label: "The schema", files: [{ name: "port.schema.json", lang: "json", src: PORT(true) }] });
+  const COND = (strict) => [
+    "{",
+    '  "type": "object",',
+    '  "properties": {',
+    '    "tls":  { "type": "boolean" },',
+    '    "cert": { "type": "string" }',
+    "  },",
+    `  "if": { "properties": { "tls": { "const": true } }${strict ? "," : " },"}`,
+    ...(strict ? ['          "required": ["tls"] },'] : []),
+    '  "then": { "required": ["cert"] }',
+    "}",
+  ].join("\n");
   const DOCS = [
     [{ host: "db1", port: 5432 }, { host: "db1", port: 70000 }, { host: "db1", port: 5432, tls: true }, { host: "db1", port: "5432" }],
     [{ 1: "Ana", 42: "Kofi" }, { 1: "Ana", x: "Kofi" }, { 7: 12 }, {}],
+    [{ tls: true, cert: "a.pem" }, { tls: true }, { tls: false }, {}],
   ];
-  let mode = 0, open = true, pick = 0, layer, G = {}, st, nOk = 0, nBad = 0;
+  let mode = 0, open = true, strict = false, pick = 0, layer, G = {}, st, nOk = 0, nBad = 0;
   const btns = [];
   const S = session((v) => btns.forEach((b) => (b.disabled = v)));
   /** a tiny JSON Schema validator for the two schemas here; returns [{ msg, line }] */
@@ -2327,6 +2375,11 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
           }
         } else if (!open) errs.push({ msg: `${k}: not allowed (closed model)`, line: 8 });
       });
+    } else if (mode === 2) {
+      if ("tls" in doc && typeof doc.tls !== "boolean") errs.push({ msg: "tls: must be a boolean", line: 4 });
+      if ("cert" in doc && typeof doc.cert !== "string") errs.push({ msg: "cert: must be a string", line: 5 });
+      const ifHolds = strict ? doc.tls === true : !("tls" in doc) || doc.tls === true;
+      if (ifHolds && !("cert" in doc)) errs.push({ msg: `cert required: “if” matched${"tls" in doc ? "" : " with no tls at all"}`, line: strict ? 9 : 8 });
     } else {
       Object.keys(doc).forEach((k) => {
         const v = doc[k];
@@ -2349,13 +2402,13 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
       clickable(g, `Select document ${i + 1}`, () => { pick = i; paint(); });
       return { r, mark };
     });
-    G.gate = box(svg, 330, 120, 110, 70, "sv-server", "validator", mode === 0 ? (open ? "open model" : "closed model") : "Example 5-1");
+    G.gate = box(svg, 330, 120, 110, 70, "sv-server", "validator", mode === 0 ? (open ? "open model" : "closed model") : mode === 1 ? "Example 5-1" : strict ? "strict if" : "if / then");
     svg.insertBefore(s("path", { d: "M304,155 L330,155 M440,155 L460,155", class: "sv-wire" }), svg.firstChild);
     G.out = box(svg, 460, 42, 186, 236, "sv-panel", null);
     txt(svg, 472, 64, "VERDICT", { cls: "sv-label", anchor: "start" });
     G.v1 = txt(svg, 472, 94, "—", { anchor: "start", bold: true, size: 15 });
     G.err = [0, 1, 2, 3, 4].map((i) => txt(svg, 472, 124 + i * 22, "", { cls: "sv-label", anchor: "start" }));
-    txt(svg, 330, 316, mode === 0 ? "a schema lists what isn’t permitted; with an open model, everything else is" : "JSON keys are always strings, so “integer keys” need a pattern", { cls: "sv-label" });
+    txt(svg, 330, 316, ["a schema lists what isn’t permitted; with an open model, everything else is", "JSON keys are always strings, so “integer keys” need a pattern", "if / then: a rule that applies only when another rule matches"][mode], { cls: "sv-label" });
     layer = s("g"); svg.appendChild(layer);
     paint();
   }
@@ -2383,31 +2436,35 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
         const extra = Object.keys(DOCS[mode][i]).filter((k) => mode === 0 && !["host", "port"].includes(k));
         G.err[0].textContent = extra.length ? `“${extra[0]}” passed: not declared,` : "every rule satisfied";
         G.err[1].textContent = extra.length ? "but the model is open" : "";
-        cv.at(extra.length ? [8] : [mode === 0 ? 5 : 5], "good");
+        cv.at(extra.length ? [8] : mode === 2 ? [7] : [5], "good");
         if (extra.length) cv.notes({ 8: ["tls let through", "good"] });
       }
       st.ok.set(nOk, "good"); st.bad.set(nBad, nBad ? "bad" : "");
       const d = DOCS[mode][i];
       setCap("#s7-cap", errs.length
-        ? `<b>Invalid.</b> ${errs.map((e) => e.msg).join("; ")}.${mode === 0 && !open && d.tls ? " A closed model rejects fields it never heard of, including ones a newer app version adds." : ""}`
+        ? mode === 2 && !("tls" in d) ? "<b>Invalid, surprisingly.</b> <code>properties</code> only checks keys that are <b>present</b>, so an empty document satisfies the <code>if</code> and the <code>then</code> demands a cert. This is the kind of rule that makes JSON Schemas hard to reason about. Switch <b>if</b> to <b>strict</b> to fix it."
+          : `<b>Invalid.</b> ${errs.map((e) => e.msg).join("; ")}.${mode === 0 && !open && d.tls ? " A closed model rejects fields it never heard of, including ones a newer app version adds." : ""}`
+        : mode === 2 && d.tls === false ? "<b>Valid.</b> <code>tls</code> is false, so the <code>if</code> doesn’t match and the <code>then</code> rule is <b>never applied</b>: no cert needed."
+        : mode === 2 && !("tls" in d) ? "<b>Valid.</b> With <code>\"required\": [\"tls\"]</code> inside <code>if</code>, a document without <code>tls</code> no longer matches it, so no cert is demanded."
         : mode === 0 && d.tls ? "<b>Valid.</b> <code>tls</code> isn’t in the schema, but <code>additionalProperties</code> is true (the default), so anything undeclared passes. Good for forward compatibility, bad at catching typos." : "<b>Valid.</b> Every declared rule is satisfied.");
     });
   }
   function setControls() {
     K.clear(ctr); btns.length = 0;
     if (mode === 0) ctr.append(lab("model"), seg(["open", "closed"], open ? 0 : 1, (i) => { open = i === 0; cv.src("port.schema.json", PORT(open)); reset(true); }));
+    if (mode === 2) ctr.append(lab("if"), seg(["as written", "strict"], strict ? 1 : 0, (i) => { strict = i === 1; reset(true); }));
     btns.push(button(ctr, "Validate", "primary", () => run(pick)));
     btns.push(button(ctr, "Validate all", "", async () => { for (let i = 0; i < 4; i++) { if (!(await run(i))) return; await sleep(500); } }));
     button(ctr, "Reset", "", () => reset(false));
   }
   function reset(keepOpen) {
-    S.cancel(); if (!keepOpen) open = true; nOk = 0; nBad = 0; pick = 0;
-    cv.setFiles(mode === 0 ? [{ name: "port.schema.json", lang: "json", src: PORT(open) }] : [{ name: "Example 5-1 (the book’s)", lang: "json", src: MAP }]);
+    S.cancel(); if (!keepOpen) { open = true; strict = false; } nOk = 0; nBad = 0; pick = 0;
+    cv.setFiles(mode === 0 ? [{ name: "port.schema.json", lang: "json", src: PORT(open) }] : mode === 1 ? [{ name: "Example 5-1 (the book’s)", lang: "json", src: MAP }] : [{ name: "tls.schema.json", lang: "json", src: COND(strict) }]);
     setControls(); build();
     st = mkStats(statBox, [["ok", "Valid", 0], ["bad", "Invalid", 0]]);
-    setCap("#s7-cap", mode === 0 ? `A schema for a service address, with a ${open ? "<b>open</b>" : "<b>closed</b>"} content model. Tap a document and press <b>Validate</b>.` : "The book’s Example 5-1: a map from integer IDs to strings. Validate each document.");
+    setCap("#s7-cap", mode === 0 ? `A schema for a service address, with a ${open ? "<b>open</b>" : "<b>closed</b>"} content model. Tap a document and press <b>Validate</b>.` : mode === 1 ? "The book’s Example 5-1: a map from integer IDs to strings. Validate each document." : `A conditional rule: <b>if</b> tls is true, <b>then</b> a cert is required${strict ? ", and the if now also requires tls to be present" : ""}. Validate all four, especially the empty one.`);
   }
-  K.$("#s7-seg").appendChild(seg(["Port rule", "Integer-keyed map"], 0, (i) => { mode = i; reset(false); }, "s7-mode"));
+  K.$("#s7-seg").appendChild(seg(["Port rule", "Integer-keyed map", "if / then"], 0, (i) => { mode = i; reset(false); }, "s7-mode"));
   reset(false);
 })();
 
@@ -2415,19 +2472,21 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
 (function msgpackScene() {
   const svg = K.$("#s8-svg"), ctr = K.$("#s8-controls"), statBox = K.$("#s8-stats");
   const NAMES = ["Martin", "Ada", "Bartholomew"];
-  let ni = 0, rec, enc, cur, G = {}, st;
+  let ni = 0, big = false, rec, enc, cur, G = {}, st;
   const btns = [];
   const S = session((v) => btns.forEach((b) => (b.disabled = v)));
   function build() {
     K.clear(svg); G = {};
     rec = Object.assign({}, ENC.RECORD, { userName: NAMES[ni] });
+    if (big) for (let k = 4; k <= 16; k++) rec[`f${k}`] = k;
     enc = ENC.msgpack(rec);
-    G.strip = byteStrip(svg, 22, 22, enc.bytes, enc.segs, { per: 22, cw: 26, ch: 24, gap: 2, rowGap: 8 });
+    const PER = enc.bytes.length > 80 ? 28 : 22;
+    G.strip = byteStrip(svg, 18, 22, enc.bytes, enc.segs, PER === 22 ? { per: 22, cw: 26, ch: 24, gap: 2, rowGap: 8 } : { per: 28, cw: 20, ch: 24, gap: 2.5, rowGap: 8 });
     G.strip.cells.forEach((c, i) => {
       c.r.style.cursor = "pointer";
       c.r.addEventListener("click", () => { if (!S.busy) select(enc.segs.findIndex((g) => i >= g.a && i < g.b)); });
     });
-    const rows = Math.ceil(enc.bytes.length / 22);
+    const rows = Math.ceil(enc.bytes.length / PER);
     const y0 = 22 + rows * 32 + 10;
     G.y0 = y0;
     box(svg, 14, y0, 632, 66, "sv-panel", null);
@@ -2436,14 +2495,15 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
     const y1 = y0 + 82;
     box(svg, 14, y1, 300, 330 - y1 + 14, "sv-box", null);
     txt(svg, 26, y1 + 20, "DECODED SO FAR", { cls: "sv-label", anchor: "start" });
-    G.dec = [0, 1, 2].map((i) => txt(svg, 26, y1 + 44 + i * 20, "", { cls: "sv-label", anchor: "start", mono: true }));
+    G.dec = (big ? [0, 1] : [0, 1, 2]).map((i) => txt(svg, 26, y1 + 44 + i * 20, "", { cls: "sv-label", anchor: "start", mono: true }));
     const jl = ENC.json(rec).bytes.length;
     txt(svg, 340, y1 + 20, "SIZE", { cls: "sv-label", anchor: "start" });
     [["JSON", jl, ""], ["MessagePack", enc.bytes.length, "mark"]].forEach(([n, v, k], i) => {
-      const y = y1 + 34 + i * 34;
+      const y = big ? y1 + 28 + i * 26 : y1 + 34 + i * 34;
       txt(svg, 340, y + 14, n, { cls: "sv-label", anchor: "start" });
-      svg.appendChild(s("rect", { x: 430, y, width: v * 2.4, height: 20, rx: 4, class: "byte " + k }));
-      txt(svg, 436 + v * 2.4, y + 14, `${v}`, { cls: "sv-label", anchor: "start", bold: true });
+      const sc = Math.min(2.4, 170 / Math.max(jl, enc.bytes.length));
+      svg.appendChild(s("rect", { x: 430, y, width: v * sc, height: big ? 16 : 20, rx: 4, class: "byte " + k }));
+      txt(svg, 436 + v * sc, y + 14, `${v}`, { cls: "sv-label", anchor: "start", bold: true });
     });
     K.$("#s8-pill").lastChild.textContent = `${enc.bytes.length} bytes`;
     st = mkStats(statBox, [["json", "JSON bytes", jl], ["mp", "MessagePack bytes", enc.bytes.length], ["names", "Bytes spent on names", enc.segs.filter((g) => g.kind === "name").reduce((n, g) => n + g.b - g.a, 0)]]);
@@ -2473,7 +2533,8 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
     G.strip.cells.forEach((c, i) => (c.r.style.opacity = i < g.b ? 1 : 0.4));
     G.e1.textContent = `byte${g.b - g.a > 1 ? "s" : ""} ${g.a}${g.b - g.a > 1 ? "–" + (g.b - 1) : ""}: ${g.kind === "mark" ? "marker" : g.kind === "name" ? "field name" : "value"}`;
     G.e2.textContent = g.what;
-    decodedUpTo(k).forEach((l, i) => (G.dec[i].textContent = l));
+    const dl = decodedUpTo(k).filter(Boolean);
+    G.dec.forEach((t, i) => (t.textContent = dl.length > G.dec.length && i === G.dec.length - 1 ? `… ${dl.length - i} more fields so far` : dl[i] || ""));
     setCap("#s8-cap", g.kind === "mark" ? `A <b>type byte</b>: ${g.what}. Because lengths come first, the decoder never searches for a closing quote.` : g.kind === "name" ? `The field name <b>${g.field}</b>, spelled out in full. No schema means every record carries its own field names.` : `A value: ${g.what}.`);
   }
   function next() {
@@ -2483,7 +2544,8 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
   btns.push(button(ctr, "Next byte", "primary", next));
   btns.push(button(ctr, "Play all", "", () => S.run(async (w) => { while (cur < enc.segs.length - 1) { next(); await w(sleep(650)); } next(); })));
   btns.push(button(ctr, "Change userName", "", () => { S.cancel(); ni = (ni + 1) % NAMES.length; build(); setCap("#s8-cap", `userName is now <b>“${NAMES[ni]}”</b>. The encoder rebuilt the bytes: ${enc.bytes.length} of them, against ${ENC.json(rec).bytes.length} for JSON.`); }));
-  button(ctr, "Reset", "", () => { S.cancel(); ni = 0; build(); setCap("#s8-cap", "The record, encoded. Press <b>Next byte</b> to start decoding, or click any byte."); });
+  btns.push(button(ctr, "Make it 16 fields", "", () => { S.cancel(); big = !big; build(); select(0); setCap("#s8-cap", big ? `With <b>16 fields</b> the count no longer fits in the low four bits of one byte, so the header becomes <b>0xde</b> followed by a <b>two-byte count</b>. ${enc.bytes.length} bytes now, against ${ENC.json(rec).bytes.length} for JSON.` : "Back to three fields: the whole header fits in one byte, 0x83."); }));
+  button(ctr, "Reset", "", () => { S.cancel(); ni = 0; big = false; build(); setCap("#s8-cap", "The record, encoded. Press <b>Next byte</b> to start decoding, or click any byte."); });
   build();
 })();
 
@@ -2493,7 +2555,7 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
   const SRC = ['syntax = "proto3";', "", "message Person {", "    string user_name = 1;", "    int64 favorite_number = 2;", "    repeated string interests = 3;", "}"].join("\n");
   const cv = code("#s9-code", { label: "The schema (IDL)", files: [{ name: "person.proto", lang: "proto", src: SRC }] });
   const LINE = { user_name: 4, favorite_number: 5, interests: 6 };
-  let mode = 0, layer, G = {}, st, enc, cur, val = 1337;
+  let mode = 0, unset = false, layer, G = {}, st, enc, cur, val = 1337;
   const btns = [];
   const S = session((v) => btns.forEach((b) => (b.disabled = v)));
   // fields = groups of segs: key, (length), value
@@ -2511,7 +2573,7 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
     return g;
   }
   function buildDecode() {
-    enc = ENC.protobuf(ENC.RECORD);
+    enc = ENC.protobuf(unset ? Object.assign({}, ENC.RECORD, { favoriteNumber: null }) : ENC.RECORD);
     G.strip = byteStrip(svg, 22, 22, enc.bytes, enc.segs, { per: 17, cw: 33, ch: 26, gap: 4, rowGap: 8 });
     fields = [];
     enc.segs.forEach((g, i) => { if (g.kind === "mark" && g.what.startsWith("0x")) fields.push([i]); else fields[fields.length - 1].push(i); });
@@ -2585,14 +2647,16 @@ const lab = (t) => h("span", { class: "stage-title", style: { marginRight: "-2px
     cv.at(null); cv.notes({});
     if (mode === 0) {
       buildDecode();
-      btns.push(button(ctr, "Next field", "primary", () => { if (cur < fields.length - 1) showField(cur + 1); else setCap("#s9-cap", "All 33 bytes decoded: 5 keys, 2 lengths, and the values. Not one byte spent on a field name."); }));
+      btns.push(button(ctr, "Next field", "primary", () => { if (cur < fields.length - 1) showField(cur + 1); else setCap("#s9-cap", unset ? `All ${enc.bytes.length} bytes decoded. Tag 2 never appeared, so the reader filled <code>favorite_number</code> with the default <b>0</b>.` : "All 33 bytes decoded: 5 keys, 2 lengths, and the values. Not one byte spent on a field name."); }));
       btns.push(button(ctr, "Play all", "", () => S.run(async (w) => { while (cur < fields.length - 1) { showField(cur + 1); await w(sleep(1500)); } })));
+      const ub = button(ctr, unset ? "Set favorite_number" : "Unset favorite_number", unset ? "good" : "", () => { unset = !unset; reset(); setCap("#s9-cap", unset ? `<code>favorite_number</code> is now <b>not set</b>, so it is simply <b>omitted</b>: no key byte, no value. ${enc.bytes.length} bytes instead of 33. A reader fills in the default, 0.` : "favorite_number is back: 33 bytes."); });
+      btns.push(ub);
     } else { buildLab(); paintLab(); }
-    button(ctr, "Reset", "", reset);
+    button(ctr, "Reset", "", () => { unset = false; reset(); });
     layer = s("g"); svg.appendChild(layer);
   }
-  function reset() { S.cancel(); val = 1337; build(); if (mode === 0) setCap("#s9-cap", "33 bytes, and not one field name among them. Press <b>Next field</b>."); }
-  K.$("#s9-seg").appendChild(seg(["Decode", "Varint lab"], 0, (i) => { mode = i; reset(); }, "s9-mode"));
+  function reset() { S.cancel(); val = 1337; build(); if (mode === 0) setCap("#s9-cap", `${enc.bytes.length} bytes, and not one field name among them. Press <b>Next field</b>.`); }
+  K.$("#s9-seg").appendChild(seg(["Decode", "Varint lab"], 0, (i) => { mode = i; unset = false; reset(); }, "s9-mode"));
   reset();
 })();
 
@@ -2707,6 +2771,8 @@ const AVRO = (() => {
     }
     return null;
   }
+  /* type promotions the Avro spec allows a reader to apply (the numeric subset) */
+  const PROMOTE = { int: ["long", "float", "double"], long: ["float", "double"], float: ["double"] };
   function resolve(writer, reader, bytes) {
     const steps = [];
     const { out } = ENC.avroDecode(bytes, writer);
@@ -2716,6 +2782,8 @@ const AVRO = (() => {
       if (!r) { steps.push({ kind: "ignore", w: w.name }); continue; }
       const v = out[w.name];
       if (Array.isArray(r.type) && !r.type.includes(branchOf(v))) throw Object.assign(new Error(`${r.name}: the writer used union branch “${branchOf(v)}”, which the reader’s union doesn’t have`), { steps });
+      if (typeof r.type === "string" && typeof w.type === "string" && r.type !== w.type && !(PROMOTE[w.type] || []).includes(r.type))
+        throw Object.assign(new Error(`${r.name}: the writer’s ${w.type} can’t be read as ${r.type}`), { steps, field: r.name });
       if (!Array.isArray(r.type) && Array.isArray(w.type) && branchOf(v) !== r.type) throw Object.assign(new Error(`${r.name}: can’t convert ${branchOf(v)} to ${ENC.typeName(r.type)}`), { steps });
       result[r.name] = v;
       steps.push({ kind: r.name === w.name ? "match" : "alias", w: w.name, r: r.name, v });
@@ -2951,6 +3019,7 @@ const AVRO = (() => {
     { k: "Remove field, no default", v2: V1.filter((f) => f.name !== "name"), rec: {} },
     { k: "Rename via alias", v2: [V1[0], { name: "fullName", type: "string", aliases: ["name"] }, V1[2], V1[3]], rec: { fullName: "Ines" } },
     { k: "Add union branch", v2: [V1[0], V1[1], V1[2], { name: "score", type: ["null", "long", "string"], default: null }], rec: { score: "high" } },
+    { k: "Promote int → long", base: [{ name: "id", type: "int" }, ...V1.slice(1)], v2: V1, rec: { id: 5000000000 } },
     { k: "null default, not first", v2: [V1[0], V1[1], V1[2], { name: "score", type: ["long", "null"], default: null }], rec: {} },
   ];
   const cv = code("#s13-code", { label: "Schema v2 (Avro IDL)", files: [{ name: "user v2.avdl", lang: "proto", src: "" }] });
@@ -2960,7 +3029,7 @@ const AVRO = (() => {
   function newRec() { const c = C[ci], r = {}; c.v2.forEach((f) => { r[f.name] = f.name in c.rec ? c.rec[f.name] : f.name in OLD ? OLD[f.name] : f.default; }); return r; }
   function changedLines() {
     const c = C[ci];
-    return c.v2.map((f, i) => [f, i]).filter(([f]) => { const o = V1.find((x) => x.name === f.name); return !o || JSON.stringify(o) !== JSON.stringify(f); }).map(([, i]) => i + 2);
+    return c.v2.map((f, i) => [f, i]).filter(([f]) => { const o = (c.base || V1).find((x) => x.name === f.name); return !o || JSON.stringify(o) !== JSON.stringify(f); }).map(([, i]) => i + 2);
   }
   function row(y, title, wv, rv) {
     const g = {};
@@ -3013,9 +3082,9 @@ const AVRO = (() => {
         return;
       }
       cv.at(changedLines(), "on");
-      const bc = await one(w, G.bc, V1, c.v2, OLD);
+      const bc = await one(w, G.bc, c.base || V1, c.v2, OLD);
       await w(sleep(300));
-      const fc = await one(w, G.fc, c.v2, V1, newRec());
+      const fc = await one(w, G.fc, c.v2, c.base || V1, newRec());
       st.bc.set(bc === true ? "yes" : "no", bc === true ? "good" : "bad"); st.fc.set(fc === true ? "yes" : "no", fc === true ? "good" : "bad");
       cv.at(changedLines(), bc === true && fc === true ? "good" : "bad");
       const why = {
@@ -3024,6 +3093,7 @@ const AVRO = (() => {
         2: "The new reader ignores <code>email</code> in old data; the old reader fills in its default <code>\"\"</code> for new data. Removing a field that has a default is safe both ways.",
         3: "New data has no <code>name</code>, and the old reader has no default for it, so <b>forward</b> compatibility breaks.",
         4: "The new reader’s <b>alias</b> maps old data’s <code>name</code> to <code>fullName</code>. But an old reader knows nothing about aliases: it looks for <code>name</code>, finds none and has no default. Backward yes, forward no.",
+        6: "v1 stored <code>id</code> as an <b>int</b>; v2 says <b>long</b>. A new reader can <b>promote</b> old ints to longs, because Avro can convert that type. But an old reader can’t squeeze a long (here 5,000,000,000) into an int, so resolution fails. Backward yes, forward no.",
         5: "The new reader’s union includes every old branch. But when a new writer stores a <b>string</b> score, the old reader’s union has no string branch. Backward yes, forward no.",
       }[ci];
       setCap("#s13-cap", why);
@@ -3266,29 +3336,30 @@ const AVRO = (() => {
   const btns = [];
   const S = session((v) => btns.forEach((b) => (b.disabled = v)));
   function buildSize() {
-    const F = [["JSON", ENC.json(R)], ["MessagePack", ENC.msgpack(R)], ["Protocol Buffers", ENC.protobuf(R)], ["Avro", ENC.avro(R)]];
-    const PX = 5.0;
+    const F = [["XML", ENC.xml(R)], ["JSON", ENC.json(R)], ["MessagePack", ENC.msgpack(R)], ["Protocol Buffers", ENC.protobuf(R)], ["Avro", ENC.avro(R)]];
+    const PX = 400 / F[0][1].bytes.length;
     G.bars = F.map(([n, e], i) => {
-      const y = 36 + i * 64;
+      const y = 24 + i * 56;
       txt(svg, 22, y + 16, n, { anchor: "start", bold: true, size: 13 });
       const by = (k) => e.segs.filter((g) => g.kind === k).reduce((a, g) => a + g.b - g.a, 0);
-      const parts = n === "JSON" ? [["", e.bytes.length]] : [["name", by("name")], ["mark", by("mark")], ["val", by("val")]];
+      const parts = [["name", by("name")], ["mark", by("mark")], ["val", by("val")]];
       let x = 160;
       const rects = parts.filter(([, c]) => c).map(([k, c]) => { const r = s("rect", { x, y, width: 0, height: 24, rx: 3, class: "byte " + k }); r.dataset.w = c * PX; r.dataset.x = x; x += c * PX; svg.appendChild(r); return r; });
       const t = txt(svg, 160 + e.bytes.length * PX + 8, y + 17, "", { cls: "sv-label", anchor: "start", bold: true });
-      const sub = txt(svg, 160, y + 42, n === "JSON" ? "all text: names, quotes, digits" : `names ${by("name")} · markers ${by("mark")} · values ${by("val")}`, { cls: "sv-label", anchor: "start" });
+      const sub = txt(svg, 160, y + 40, `names ${by("name")} · ${n === "XML" ? "tag brackets" : n === "JSON" ? "quotes, colons, braces" : "type, length, tag"} ${by("mark")} · values ${by("val")}`, { cls: "sv-label", anchor: "start" });
       sub.style.opacity = 0;
       return { rects, t, sub, n: e.bytes.length };
     });
-    txt(svg, 330, 318, "lilac = field names · blue = type, length, tag · yellow = values", { cls: "sv-label" });
-    st = mkStats(statBox, [["j", "JSON", "—"], ["a", "Avro", "—"], ["r", "Saved", "—"]]);
-    btns.push(button(ctr, "Encode all four", "primary", () => S.run(async (w) => {
+    txt(svg, 330, 316, "lilac = field names · blue = markup, type, length, tag · yellow = values", { cls: "sv-label" });
+    st = mkStats(statBox, [["x", "XML", "—"], ["j", "JSON", "—"], ["a", "Avro", "—"], ["r", "Avro vs JSON", "—"]]);
+    btns.push(button(ctr, "Encode all five", "primary", () => S.run(async (w) => {
       for (const b of G.bars) {
         await w(tween(500, (t) => b.rects.forEach((r) => r.setAttribute("width", Number(r.dataset.w) * t))));
         b.t.textContent = `${b.n} bytes`; b.sub.style.opacity = 1;
       }
-      st.j.set(81); st.a.set(32, "good"); st.r.set(`${Math.round((1 - 32 / 81) * 100)}%`, "good");
-      setCap("#s16-cap", "Measured by this page’s encoders: <b>81, 66, 33 and 32 bytes</b>. Binary JSON saves little because it still carries the field names; schema-based formats leave them out.");
+      const xl = G.bars[0].n;
+      st.x.set(xl, "bad"); st.j.set(81); st.a.set(32, "good"); st.r.set(`−${Math.round((1 - 32 / 81) * 100)}%`, "good");
+      setCap("#s16-cap", `Measured by this page’s encoders: XML ${xl}, then the book’s <b>81, 66, 33 and 32 bytes</b>. XML spells every name <b>twice</b> (open and close tag), which is why it’s called verbose. Binary JSON saves little because it still carries the names; schema-based formats leave them out entirely.`);
     })));
   }
   const STORED = [
@@ -3377,7 +3448,7 @@ const AVRO = (() => {
   }
   function reset() {
     S.cancel(); build();
-    setCap("#s16-cap", ["Press <b>Encode all four</b>.", `The registry holds v1–v3. Proposed v4: <b>${PROPOSE[pi].k}</b>. Press <b>Deploy</b>.`, "Code generated from a schema, used by an app with two mistakes in it. Press <b>Compile</b>."][mode]);
+    setCap("#s16-cap", ["Press <b>Encode all five</b>.", `The registry holds v1–v3. Proposed v4: <b>${PROPOSE[pi].k}</b>. Press <b>Deploy</b>.`, "Code generated from a schema, used by an app with two mistakes in it. Press <b>Compile</b>."][mode]);
   }
   K.$("#s16-seg").appendChild(seg(["Size", "Registry gate", "Generated types"], 0, (i) => { mode = i; reset(); }, "s16-mode"));
   reset();
