@@ -178,4 +178,29 @@
 .ac-cell.sorted { fill: var(--lilac-soft); stroke: var(--lilac); stroke-width: 2; }
 .ac-v { fill: var(--ink); font-family: var(--f-mono); font-size: 15px; font-weight: 700; }
 .ac-i { fill: var(--ink-3); font-family: var(--f-mono); font-size: 10.5px; }
-@media (prefers-reduced-motion: reduce) { .fade, .cp-body li, .ac-cell, .cp-lens, .cp-lens.show { transition: none; } }
+
+/* ---------- binary trees inside a machine (AL.tree) ---------- */
+:root { --rb-black: #1B2232; --rb-black-line: #1B2232; }
+:root[data-theme="dark"] { --rb-black: #04060B; --rb-black-line: #7F8AA4; }
+.tr-edge { stroke: var(--line-strong); stroke-width: 2; }
+.tr-edge.on { stroke: var(--sun); stroke-width: 3; }
+.tr-edge.on2 { stroke: var(--blue); stroke-width: 3; }
+.tr-edge.good { stroke: var(--mint); stroke-width: 3; }
+.tr-edge.bad { stroke: var(--coral); stroke-width: 3; }
+.tr-edge.dim { stroke: var(--line); }
+.tr-node circle { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.8; transition: fill .2s, stroke .2s; }
+.tr-node.on circle { fill: var(--sun-soft); stroke: var(--sun); stroke-width: 2.5; }
+.tr-node.on2 circle { fill: var(--blue-soft); stroke: var(--blue); stroke-width: 2.5; }
+.tr-node.good circle { fill: var(--mint-soft); stroke: var(--mint); stroke-width: 2.5; }
+.tr-node.bad circle { fill: var(--coral-soft); stroke: var(--coral); stroke-width: 2.5; }
+.tr-node.dim circle { fill: var(--surface-2); stroke: var(--line); }
+.tr-node.ghost circle { fill: none; stroke: var(--line-strong); stroke-dasharray: 3 3; }
+.tr-node.red circle { fill: var(--coral); stroke: var(--coral); }
+.tr-node.black circle { fill: var(--rb-black); stroke: var(--rb-black-line); }
+.tr-node.red.on circle, .tr-node.black.on circle { stroke: var(--sun); stroke-width: 3.5; }
+.tr-node.red.on2 circle, .tr-node.black.on2 circle { stroke: var(--blue); stroke-width: 3.5; }
+.tr-k { fill: var(--ink); font-family: var(--f-mono); font-size: 13px; font-weight: 700; }
+.tr-node.red .tr-k, .tr-node.black .tr-k { fill: #fff; }
+.tr-node.dim .tr-k, .tr-node.ghost .tr-k { fill: var(--ink-3); }
+.tr-sub { fill: var(--ink-3); font-family: var(--f-mono); font-size: 10.5px; }
+@media (prefers-reduced-motion: reduce) { .fade, .cp-body li, .ac-cell, .tr-node circle, .cp-lens, .cp-lens.show { transition: none; } }

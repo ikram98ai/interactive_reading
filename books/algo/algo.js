@@ -656,5 +656,55 @@
     });
   }
 
-  window.AL = { cap, esc, fmt, box, txt, clickable, button, session, src, code, mem, cells, CODE_LANG, langToggle, highlight };
+  /* ---------- binary trees inside a machine ----------
+     nodes: { id: { key, l, r } } with l / r an id or null.
+     const L = tree.layout(nodes, root, { x: 30, w: 600, y: 36, dy: 58 });   x by in-order rank (a BST reads
+       left to right in key order), y by depth → { pos: Map(id → {x, y}), order: [ids], depth: Map, height }
+     tree.draw(g, nodes, L.pos, { r: 17, cls: (id) => "on", edge: (child) => "on", label: (id) => …, sub: (id) => … })
+       cls: "on" | "on2" | "good" | "bad" | "dim" | "red" | "black" | "ghost" (red-black colours keep their text white)
+       → Map(id → node <g>) so a machine can pulse or fly one.
+     tree.lerp(posA, posB, t) → a Map between two layouts (a rotation, an insertion) to draw every frame. */
+  const tree = {
+    layout(nodes, root, o = {}) {
+      const x = o.x == null ? 30 : o.x, w = o.w || 600, y = o.y == null ? 36 : o.y, dy = o.dy || 58;
+      const order = [], depth = new Map();
+      const walk = (id, d) => { const n = id == null ? null : nodes[id]; if (!n) return; walk(n.l, d + 1); order.push(id); depth.set(id, d); walk(n.r, d + 1); };
+      walk(root, 0);
+      const step = w / Math.max(1, order.length), pos = new Map();
+      order.forEach((id, i) => pos.set(id, { x: x + step * (i + 0.5), y: y + depth.get(id) * dy }));
+      return { pos, order, depth, height: order.length ? Math.max(...depth.values()) : -1, step };
+    },
+    draw(g, nodes, pos, o = {}) {
+      K.clear(g);
+      const r = o.r || 17, out = new Map();
+      const edges = s("g"), dots = s("g");
+      g.appendChild(edges); g.appendChild(dots);
+      for (const [id, p] of pos) {
+        const n = nodes[id]; if (!n) continue;
+        for (const c of [n.l, n.r]) {
+          if (c == null || !pos.has(c)) continue;
+          const q = pos.get(c), ec = o.edge && o.edge(c);
+          edges.appendChild(s("line", { x1: p.x, y1: p.y, x2: q.x, y2: q.y, class: "tr-edge" + (ec ? " " + ec : "") }));
+        }
+      }
+      for (const [id, p] of pos) {
+        const n = nodes[id]; if (!n) continue;
+        const c = o.cls && o.cls(id);
+        const ng = s("g", { class: "tr-node" + (c ? " " + c : ""), transform: `translate(${p.x.toFixed(1)},${p.y.toFixed(1)})` });
+        ng.appendChild(s("circle", { r }));
+        ng.appendChild(s("text", { y: 5, "text-anchor": "middle", class: "tr-k" }, String(o.label ? o.label(id) : n.key)));
+        const sub = o.sub && o.sub(id);
+        if (sub != null && sub !== "") ng.appendChild(s("text", { y: r + 13, "text-anchor": "middle", class: "tr-sub" }, String(sub)));
+        dots.appendChild(ng); out.set(id, ng);
+      }
+      return out;
+    },
+    lerp(a, b, t) {
+      const m = new Map();
+      for (const [id, q] of b) { const p = a.get(id) || q; m.set(id, { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t }); }
+      return m;
+    },
+  };
+
+  window.AL = { cap, esc, fmt, box, txt, clickable, button, session, src, code, mem, cells, tree, CODE_LANG, langToggle, highlight };
 })();
