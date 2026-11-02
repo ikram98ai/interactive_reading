@@ -203,4 +203,28 @@
 .tr-node.red .tr-k, .tr-node.black .tr-k { fill: #fff; }
 .tr-node.dim .tr-k, .tr-node.ghost .tr-k { fill: var(--ink-3); }
 .tr-sub { fill: var(--ink-3); font-family: var(--f-mono); font-size: 10.5px; }
-@media (prefers-reduced-motion: reduce) { .fade, .cp-body li, .ac-cell, .tr-node circle, .cp-lens, .cp-lens.show { transition: none; } }
+
+/* ---------- graphs inside a machine (AL.graph) ---------- */
+.gr-line { fill: none; stroke: var(--line-strong); stroke-width: 2; transition: stroke .2s; }
+.gr-head { fill: var(--line-strong); transition: fill .2s; }
+.gr-edge.on .gr-line { stroke: var(--sun); stroke-width: 3; } .gr-edge.on .gr-head { fill: var(--sun); }
+.gr-edge.on2 .gr-line { stroke: var(--blue); stroke-width: 3; } .gr-edge.on2 .gr-head { fill: var(--blue); }
+.gr-edge.good .gr-line { stroke: var(--mint); stroke-width: 3; } .gr-edge.good .gr-head { fill: var(--mint); }
+.gr-edge.bad .gr-line { stroke: var(--coral); stroke-width: 3; } .gr-edge.bad .gr-head { fill: var(--coral); }
+.gr-edge.dim .gr-line { stroke: var(--line); } .gr-edge.dim .gr-head { fill: var(--line); }
+.gr-edge.cut .gr-line { stroke: var(--coral); stroke-width: 2.5; stroke-dasharray: 5 4; } .gr-edge.cut .gr-head { fill: var(--coral); }
+.gr-w { fill: var(--ink-2); font-family: var(--f-mono); font-size: 11.5px; font-weight: 700; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.gr-node circle { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.8; transition: fill .2s, stroke .2s; }
+.gr-node.on circle { fill: var(--sun-soft); stroke: var(--sun); stroke-width: 2.5; }
+.gr-node.on2 circle { fill: var(--blue-soft); stroke: var(--blue); stroke-width: 2.5; }
+.gr-node.good circle { fill: var(--mint-soft); stroke: var(--mint); stroke-width: 2.5; }
+.gr-node.bad circle { fill: var(--coral-soft); stroke: var(--coral); stroke-width: 2.5; }
+.gr-node.dim circle { fill: var(--surface-2); stroke: var(--line); }
+.gr-node.ghost circle { fill: none; stroke: var(--line-strong); stroke-dasharray: 3 3; }
+.gr-node.src circle { fill: var(--lilac-soft); stroke: var(--lilac); stroke-width: 2.5; }
+.gr-node.red circle { fill: var(--coral); stroke: var(--coral); } .gr-node.black circle { fill: var(--rb-black); stroke: var(--rb-black-line); }
+.gr-k { fill: var(--ink); font-family: var(--f-mono); font-size: 13px; font-weight: 700; }
+.gr-node.red .gr-k, .gr-node.black .gr-k { fill: #fff; }
+.gr-node.dim .gr-k, .gr-node.ghost .gr-k { fill: var(--ink-3); }
+.gr-sub { fill: var(--ink-3); font-family: var(--f-mono); font-size: 10.5px; }
+@media (prefers-reduced-motion: reduce) { .fade, .cp-body li, .ac-cell, .tr-node circle, .gr-node circle, .gr-line, .cp-lens, .cp-lens.show { transition: none; } }

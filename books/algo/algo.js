@@ -706,5 +706,84 @@
     },
   };
 
-  window.AL = { cap, esc, fmt, box, txt, clickable, button, session, src, code, mem, cells, tree, CODE_LANG, langToggle, highlight };
+  /* ---------- 2-D tables inside a machine (dynamic-programming tables, matrices) ----------
+     const pos = grid(g, { x, y, rows, cols, cw: 40, ch: 34, gap: 4, val: (r, c) => 12 | "∞" | null,
+       mark: (r, c) => "on" | "on2" | "good" | "bad" | "dim" | "sorted" | "", rowLabels: ["", "a", "b"] | (r) => …,
+       colLabels: [...] | (c) => …, size: 13 });          → pos(r, c) = { x, y, w, h, cx, cy }  (0-based r, c)
+     Labels print above the columns / left of the rows; leave room: x ≥ 40 when rowLabels is set, y ≥ 22 for colLabels. */
+  function grid(g, o) {
+    K.clear(g);
+    const cw = o.cw || 40, ch = o.ch || 34, gap = o.gap == null ? 4 : o.gap;
+    const pos = (r, c) => { const x = o.x + c * (cw + gap), y = o.y + r * (ch + gap); return { x, y, w: cw, h: ch, cx: x + cw / 2, cy: y + ch / 2 }; };
+    const lab = (src, i) => (typeof src === "function" ? src(i) : src && src[i]);
+    for (let c = 0; c < o.cols; c++) { const l = lab(o.colLabels, c); if (l != null && l !== "") g.appendChild(s("text", { x: pos(0, c).cx, y: o.y - 7, class: "ac-i", "text-anchor": "middle" }, String(l))); }
+    for (let r = 0; r < o.rows; r++) {
+      const l = lab(o.rowLabels, r);
+      if (l != null && l !== "") g.appendChild(s("text", { x: o.x - 8, y: pos(r, 0).cy + 4, class: "ac-i", "text-anchor": "end" }, String(l)));
+      for (let c = 0; c < o.cols; c++) {
+        const p = pos(r, c), v = o.val ? o.val(r, c) : null, m = o.mark && o.mark(r, c);
+        g.appendChild(s("rect", { x: p.x, y: p.y, width: cw, height: ch, rx: 7, class: "ac-cell" + (m ? " " + m : "") }));
+        if (v != null && v !== "") g.appendChild(s("text", { x: p.cx, y: p.cy + 4.5, class: "ac-v", "text-anchor": "middle", style: { fontSize: (o.size || 13) + "px" } }, String(v)));
+      }
+    }
+    return pos;
+  }
+
+  /* ---------- graphs inside a machine (chapters 20–25) ----------
+     const G = { directed: true, nodes: { s: { x: 60, y: 120 }, a: { x: 200, y: 60, label: "a" } },
+                 edges: [{ u: "s", v: "a", w: 3, id: "sa", bend: 0 }] };        (ids are your own strings; w and id optional)
+     const R = graph.draw(g, G, { r: 17, node: (id) => "on", edge: (e, key) => "good", sub: (id) => "d=3",
+                                  wlabel: (e) => e.w, label: (id) => …, showW: true });
+       node cls: "on" | "on2" | "good" | "bad" | "dim" | "ghost" | "red" | "black" | "src" (any mix, space separated)
+       edge cls: "on" | "on2" | "good" | "bad" | "dim" | "cut"   (class sits on the edge's <g class="gr-edge …">)
+     → { nodes: Map(id → <g>), edges: Map(key → <g>), pos: (id) → {x, y} }.  key = e.id, else "u>v" (directed) or "u-v".
+     Antiparallel edges (u→v and v→u) are drawn as two curves automatically; e.bend (px) curves any other edge.
+     graph.ring(n, cx, cy, rx, ry, start) → [{x, y}, …] points around an ellipse (start angle in radians, default top). */
+  const graph = {
+    draw(g, G, o = {}) {
+      K.clear(g);
+      const R = o.r || 17, dir = !!G.directed, nodes = G.nodes;
+      const out = { nodes: new Map(), edges: new Map(), pos: (id) => nodes[id] };
+      const has = new Set(G.edges.map((e) => e.u + ">" + e.v));
+      const eg = s("g"), ng = s("g"); g.appendChild(eg); g.appendChild(ng);
+      const unit = (x, y) => { const l = Math.hypot(x, y) || 1; return [x / l, y / l]; };
+      G.edges.forEach((e) => {
+        const a = nodes[e.u], b = nodes[e.v]; if (!a || !b) return;
+        const key = e.id != null ? e.id : e.u + (dir ? ">" : "-") + e.v;
+        const cls = o.edge && o.edge(e, key);
+        const [ux, uy] = unit(b.x - a.x, b.y - a.y), nx = -uy, ny = ux;
+        const bend = dir && has.has(e.v + ">" + e.u) ? 16 : (e.bend || 0);
+        const cx = (a.x + b.x) / 2 + nx * bend * 2, cy = (a.y + b.y) / 2 + ny * bend * 2;
+        const [sx, sy] = unit(cx - a.x, cy - a.y), [tx, ty] = unit(cx - b.x, cy - b.y);
+        const x1 = a.x + sx * R, y1 = a.y + sy * R, x2 = b.x + tx * (R + (dir ? 2 : 0)), y2 = b.y + ty * (R + (dir ? 2 : 0));
+        const eg1 = s("g", { class: "gr-edge" + (cls ? " " + cls : "") });
+        eg1.appendChild(s("path", { d: bend ? `M${x1.toFixed(1)},${y1.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}` : `M${x1.toFixed(1)},${y1.toFixed(1)} L${x2.toFixed(1)},${y2.toFixed(1)}`, class: "gr-line" }));
+        if (dir) {
+          const [hx, hy] = unit(x2 - (bend ? cx : x1), y2 - (bend ? cy : y1)), px = -hy, py = hx, L = 10, W = 5;
+          eg1.appendChild(s("path", { d: `M${x2.toFixed(1)},${y2.toFixed(1)} L${(x2 - hx * L + px * W).toFixed(1)},${(y2 - hy * L + py * W).toFixed(1)} L${(x2 - hx * L - px * W).toFixed(1)},${(y2 - hy * L - py * W).toFixed(1)} Z`, class: "gr-head" }));
+        }
+        const wl = o.wlabel ? o.wlabel(e) : e.w;
+        if (wl != null && wl !== "") {
+          const lx = bend ? 0.25 * x1 + 0.5 * cx + 0.25 * x2 : (x1 + x2) / 2, ly = bend ? 0.25 * y1 + 0.5 * cy + 0.25 * y2 : (y1 + y2) / 2, off = bend ? (bend > 0 ? 1 : -1) * 8 : 0;
+          eg1.appendChild(s("text", { x: lx + nx * off, y: ly + ny * off + 4, class: "gr-w", "text-anchor": "middle" }, String(wl)));
+        }
+        eg.appendChild(eg1); out.edges.set(key, eg1);
+      });
+      Object.keys(nodes).forEach((id) => {
+        const n = nodes[id], c = o.node && o.node(id);
+        const gn = s("g", { class: "gr-node" + (c ? " " + c : ""), transform: `translate(${n.x},${n.y})` });
+        gn.appendChild(s("circle", { r: R }));
+        gn.appendChild(s("text", { y: 5, "text-anchor": "middle", class: "gr-k" }, String(o.label ? o.label(id) : n.label != null ? n.label : id)));
+        const sub = o.sub && o.sub(id);
+        if (sub != null && sub !== "") gn.appendChild(s("text", { y: R + 13, "text-anchor": "middle", class: "gr-sub" }, String(sub)));
+        ng.appendChild(gn); out.nodes.set(id, gn);
+      });
+      return out;
+    },
+    ring(n, cx, cy, rx, ry, start = -Math.PI / 2) {
+      return Array.from({ length: n }, (_, i) => ({ x: cx + rx * Math.cos(start + (2 * Math.PI * i) / n), y: cy + (ry == null ? rx : ry) * Math.sin(start + (2 * Math.PI * i) / n) }));
+    },
+  };
+
+  window.AL = { cap, esc, fmt, box, txt, clickable, button, session, src, code, mem, cells, grid, tree, graph, CODE_LANG, langToggle, highlight };
 })();
