@@ -28,8 +28,9 @@ Many ideas need no code at all (see "Code panel rules").
    your page.
 6. **Algorithm Alley (`algo`) only:** don't copy those helpers. `books/algo/algo.js` and `algo.css` already
    have them (`AL.box`, `AL.session`, …), plus `AL.code` — the book's pseudocode with a Pseudocode | Rust toggle,
-   engines highlighting by the book's own line numbers — `AL.mem` for a stack-and-heap strip, and `AL.cells`
-   for array cells. Load `algo.js` after `kit.js` and copy `books/algo/ch01.html`'s script header. Every scene
+   engines highlighting by the book's own line numbers — `AL.mem` for a stack-and-heap strip, `AL.cells` for
+   array cells, `AL.grid` for 2-D tables, `AL.tree` for binary trees and `AL.graph` for directed/undirected
+   weighted graphs (read each one's comment block in `algo.js`). Load `algo.js` after `kit.js` and copy `books/algo/ch01.html`'s script header. Every scene
    gets the book's pseudocode (from whichever chapter states the algorithm) and a complete Rust program in
    `<script type="text/x-rust">` with its real output in `-out`; `tools/rustcheck.py` must pass.
 
