@@ -10,7 +10,7 @@ window.BOOK = {
   accent: "lilac",
   // Cites link here; printed page p is PDF page p + 22 (the front matter comes first).
   pdf: { file: "CLRS.pdf", offsets: [[1, 22]] },
-  built: 17, // chapters 1..17 have pages
+  built: 20, // chapters 1..20 have pages
   chapters: [
     { n: 1, short: "Why algorithms", title: "The Role of Algorithms in Computing", kid: "What an algorithm is, and why a better one beats a faster computer." },
     { n: 2, short: "Getting started", title: "Getting Started", kid: "Insertion sort, merge sort, and how to count their steps." },
