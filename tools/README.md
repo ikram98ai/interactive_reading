@@ -53,3 +53,20 @@ copyrighted, like the PDFs), `node_modules/` and `.venv/` are all gitignored.
   replace reading the chapter.
 - `smoke.js` proves a page doesn't throw; it can't tell whether a simulation teaches the right thing.
 - Nothing here tests `prefers-reduced-motion`, keyboard-only use, or a screen reader.
+
+
+## Narrated scene videos (`tools/video/`)
+
+`node tools/video/record.js /videos/scripts/<script>.json <out.mp4>` records one interactive scene in its
+full-screen view (machine, controls, live caption, code panel and memory strip), pressing the buttons the script
+lists while a narration plays. A script is JSON: the page, the scene id, a title card, a `voice`, an optional `seed`
+(fixes `Math.random` so random scenes repeat) and `steps`, each with `say` (the narration), `click` (a button's
+label), `slider: [index, value]`, `rust` / `pseudo` (switch the code panel), `speed` (the page'ss speed control),
+`delay` (ms before the action) and `settle`. Each step waits for the animation and for the narration to finish, and
+the log prints the live caption and counters after every step so the narration can be checked aginst what happened.
+
+Voice `kokoro:af_heart` is Kokoro-82M (Apache 2.0) run locally by `tts_kokoro.py`; any other voice name is passed to
+macOS `say`. One-time setup: `python3 -m venv tools/video/.venv && tools/video/.venv/bin/pip install kokoro-onnx
+soundfile`, then put `kokoro-v1.0.onnx` and `voices-v1.0.bin` (kokoro-onnx release `model-files-v1.0`) in
+`tools/video/models/`. Needs `ffmpeg`. `tools/video/make-all.sh` records every chapter-1 script into `videos/`
+(gitignored). Output is 1280×720; audio is loudness-normalised.
