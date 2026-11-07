@@ -12,6 +12,11 @@ overlaps, clips, or looks crowded. When a section's idea is a program or an algo
 also have a code panel — real code or pseudocode, with the line it is executing right now highlighted.
 Many ideas need no code at all (see "Code panel rules").
 
+**Algorithm Alley's reference is always the elevator scene of `books/algo/ch27.html`** (`#elevator`), the standard for
+copy, machine, narration and code. Read that page's head, hero, journey section, that scene (the HTML and the `s1`
+script) and the end of the page. The file is large, so skip its other scenes unless you want an example. Older pages
+were built before some of these rules and don't all meet them: where a page and this brief differ, follow this brief.
+
 ## Step 1 — read, in full, before writing anything
 
 1. The chapter text: `tools/.text/<slug>/chNN.txt` (made by `tools/extract.py`). Read ALL of it,
@@ -32,7 +37,8 @@ Many ideas need no code at all (see "Code panel rules").
    array cells, `AL.grid` for 2-D tables, `AL.tree` for binary trees and `AL.graph` for directed/undirected
    weighted graphs (read each one's comment block in `algo.js`). Load `algo.js` after `kit.js` and copy `books/algo/ch01.html`'s script header. Every scene
    gets the book's pseudocode (from whichever chapter states the algorithm) and a complete Rust program in
-   `<script type="text/x-rust">` with its real output in `-out`; `tools/rustcheck.py` must pass.
+   `<script type="text/x-rust">` with its real output in `-out`; `tools/rustcheck.py` must pass. Also read the
+   "Step-through toolkit" section near the end of `algo.js` and the same block at the end of `algo.css`.
 
 ## Step 2 — plan the scenes
 
@@ -83,6 +89,18 @@ none (see "Code panel rules").
   that starts with the reference chapter's destructuring line and `K.page(N);`. Each sim is its own IIFE
   so a bug in one can't break the rest.
 
+**Algorithm Alley adds to this skeleton:**
+
+- A scene's copy column, in order: eyebrow, `<h2>`, `.gist`, 2–3 short `.story` paragraphs, `.decode` (0–2),
+  `.whyworks` (0–1), `.mixup` (0–1), `.imagine`, `details.book`.
+- Between the hero and the first scene comes `<section class="scene" id="journey">`: an `ol.journey` with one stop per
+  main idea in the chapter (3–6 stops, each a `<b>` title and one or two plain sentences), and a `.prep` box saying
+  what the reader needs to know. They tell the chapter's story before any machine appears.
+- The hero's `.first` box uses the reference page's wording (Next and Back, dotted words).
+- Stage order: `.stage-head`, `.stage-scroll > svg`, optional `.controls` for inputs, `.controls` for the walk,
+  `.statrow`, `.caption`, optional mem, code. `walk({ id: "s3" })` needs `#s3-controls` and `#s3-cap`.
+- Scene ids are short, readable words. Cite printed pages: printed page = PDF page − 22.
+
 ## Writing rules
 
 - Story first, jargon second. Short sentences. Everyday pictures (a school, a bakery, a post office, a
@@ -93,6 +111,33 @@ none (see "Code panel rules").
   if you are paraphrasing, don't use them. (`tools/factcheck.py` enforces this.)
 - Captions narrate cause and effect ("Because X, Y happens"), not just "done".
 - Use varied, international first names.
+
+### Explain it simply
+
+The reader is a curious person who can program a little and has forgotten most school maths. Assume nothing else.
+The class names below are Algorithm Alley's (`algo.css`); other books follow the same rules with their own markup.
+
+1. **Concrete first.** Open with one specific situation with real numbers. The general rule comes after it.
+2. **A one-line gist under every `<h2>`** (`.gist`). One sentence, at most 25 words, no symbols and no jargon. If
+   someone reads only the gists, they should still get the chapter's story.
+3. **Short and plain.** One idea per sentence. Most sentences under 20 words. Common words: "use", not "utilize".
+   Banned: clearly, obviously, trivially, simply, note that, it is easy to see, we observe.
+4. **Name things last.** Explain the idea, then give it the book's name. Mark a word in `<b>` or
+   `<span class="term">` the first time, with its meaning in that same sentence. Every `.term` needs an entry
+   in "Words to know" (use `data-w="…"` when the text says it differently, such as a plural).
+5. **Every formula gets a `.decode` box**: the formula, what each symbol means in plain words, and a
+   **With numbers** line with the arithmetic worked out. Say it in words before showing symbols. Never leave a
+   symbol on the page that the reader hasn't been told the meaning of.
+6. **Reasons, not proofs.** `.whyworks` gives the intuition for why a method works, in 1–3 sentences. Formal lemmas
+   and proofs belong in "What the book says". Use `.mixup` only for a confusion readers really do have.
+7. **Check the analogy.** An everyday picture must match the mechanism. If it breaks somewhere important, say where.
+8. **Warm up when needed.** If a chapter needs maths the reader may have lost (complex numbers, modular arithmetic,
+   matrix equations), add a warm-up scene before its first use, with its own machine. Its eyebrow starts `warm-up ·`,
+   and its toc entry uses `<span class="n">start</span>`. Keep it elementary and short, and list it in your report.
+9. **Keep rigour too.** "What the book says" stays precise and faithful. Simple copy is not vague copy: nothing in a
+   story, caption or gist may be false. If a simplification hides a condition that matters, state the condition.
+10. **If the book looks wrong.** Say so only after working the book's own example by hand. Then quote the book exactly,
+    mark the correction as this page's reading, and raise it first in your report.
 
 ## Simulation rules
 
@@ -121,8 +166,9 @@ nothing. `smoke.js` can't catch this, because a cancelled run throws no error; o
 - viewBox width 660; keep every shape and label at least 14px inside its edges.
 - Lay out on a grid: aligned columns and rows, equal gaps, consistent box sizes.
 - No overlapping text, ever. Estimate ~6.8px per character for 11px mono labels and ~7.5px for 14px body
-  text; make boxes wide enough; shorten a label rather than shrink the font (minimum 10.5px) or hyphenate it.
-- At most ~35 text labels visible in one SVG. If it's crowded, split into modes or steps.
+  text; make boxes wide enough; shorten a label rather than shrink the font (minimum 11px) or hyphenate it.
+- Under about 25 text labels visible in one SVG; rows of cells can go over that if dimming makes the live ones
+  obvious. If it's crowded, split into modes or steps.
 - Colour has meaning: blue = computers/services (`sv-server`), lilac = storage (`sv-db`), yellow = data
   in motion (`sv-data`, `sv-data-soft`), mint = good (`sv-good`), coral = failure (`sv-bad`), grey =
   neutral (`sv-box`, `sv-panel`). `sv-*` classes and CSS variables only.
@@ -132,6 +178,49 @@ nothing. `smoke.js` can't catch this, because a cancelled run throws no error; o
 - Clickable SVG things: `class="clickable" tabindex="0" role="button" aria-label="…"`, handling click
   and Enter/Space.
 - Long sentences belong in the caption, not inside the SVG.
+
+### Keep the animation clean
+
+1. **One change per step.** If two things happen, make two steps. A reader should never ask "what just changed?"
+2. **Show where to look.** At most two highlights at a time. Dim what is out of play.
+3. **Nothing jumps.** A thing keeps its position from step to step, and space is reserved for things that appear
+   later. The viewBox doesn't change between steps. Scales stay fixed, or glide.
+4. **Movement means something.** Motion shows data travelling or a value changing. Keep it to 400–600 ms, with no
+   bounce, spin or decoration.
+5. **Narrate cause and effect, with the actual values.** Talk about the idea, not the line number. Not "Line 7 runs"
+   but "7 is smaller than 9, so it moves left." Captions must make sense read aloud with the screen off.
+6. **Start and finish well.** Step 1 shows the setup and says what to watch. The last step states the outcome in one
+   sentence with its number.
+7. **Keep runs short.** 6–30 steps, with an example small enough to check in your head (4–8 items). Use a bigger
+   input only to show a trend, in a separate mode, and collapse repetition into one step.
+8. **Compute, never type.** Every number on screen comes from a real implementation in the page's script, so changing
+   an input honestly changes the outcome. Where the book has a figure, use its numbers as the first example.
+
+### Algorithm Alley: use `AL.walk` for anything with steps
+
+It gives Start over / Back / Next / Play and a step slider, and a two-part caption. All steps are computed up front as
+plain data, and `paint(frame)` redraws from one frame. That is why Back works. Free-play machines are fine only when
+experimenting is the point, and they still narrate. `morph: 520` glides between frames, and `w.send` flies a value.
+`say` is what happened, `why` is the reason when one is worth saying, and the last step has `phase: "Result"` and a
+`tone`. Colour classes: `on` (amber) the thing being worked on now, `on2` (blue) its partner or a second flow, `good`
+(mint) finished or correct, `bad` (coral) wrong or in conflict, `sorted` (lilac) settled or yours, `dim` out of play.
+Add an `AL.legend` at a fixed place when colours carry meaning. The viewBox can go up to about 420 tall.
+
+Pitfalls the toolkit can't catch for you:
+
+- `paint` must not read anything except the frame it is given (plus constants). Inputs go into the frames.
+- With `morph`, numeric frame fields are in-between values while moving. Use `Math.round` wherever a whole number
+  is printed, and keep ids and indices as strings or look them up from the destination frame, so they don't
+  interpolate into nonsense. Check any division for a zero.
+- Inside `enter`, animate only through `w` (`w.morph`, `w.tween`, `w.send`, `w(K.sleep(…))`). A plain `K.tween` keeps
+  running after Back and paints over the new step.
+- `lines`, `notes`, `notesRust`, `mark`, `out`, `say`, `why`, `phase`, `tone` and `hold` are reserved frame fields:
+  `walk` acts on them. Name your own state something else.
+- `AL.matrix`, `AL.grid`, `AL.cells`, `AL.tree.draw` and `AL.graph.draw` clear the group you give them, so give each
+  one its own `<g>`, or a title drawn into it first silently vanishes. Check every number fits its cell at the slider
+  extremes; `steps.js` tests those too.
+- Use `AL.plot` for anything on axes, `AL.bars` for comparisons, `AL.matrix` for matrices, `AL.point` for arrows,
+  `AL.note` for labels over lines. Add a page `<style>` rule only for what they don't cover, using CSS variables only.
 
 ## Code panel rules
 
@@ -171,6 +260,13 @@ step? If not, leave the panel out. A page can mix all three kinds.
   single character; `cv.out(text)` / `cv.print(text)` show what the program printed.
 - The highlight must move in step with the animation, and Reset clears it.
 
+**Algorithm Alley's Rust.** Use the book's pseudocode where it gives one. Where it states only a formula, write it as
+short procedures and say so in the book box. Build each panel's `map` with `AL.rmap(src("rs-s1"), { 3: "let mut worst" })`,
+which finds Rust lines by their text, so the highlight can't drift when the program changes; don't hand-count line
+numbers. Rust stays standard-library only and deterministic: printed output must not vary between runs (write a small
+LCG where you need randomness; join threads before printing). Comments explain the idea in plain words. `AL.mem` is
+optional: use it only where ownership or memory really teaches something.
+
 ## Technical constraints
 
 - No external libraries, no images, no build step. Plain ES2020 in one inline `<script>`.
@@ -181,7 +277,8 @@ step? If not, leave the panel out. A page can mix all three kinds.
   flag. Every element id unique; prefix sim ids `s1-…`, `s2-…`.
 - No horizontal page scroll at 390px wide (wide SVGs go inside `.stage-scroll`).
 - **Only create or modify your own `chNN.html`.** The shared kit, the stylesheet, `book.js` and the index
-  pages are someone else's job.
+  pages are someone else's job. If a shared helper has a bug or a gap, work around it in your page and say so in your
+  report. Don't commit.
 
 ## Writing a 250 KB file without choking
 
@@ -200,6 +297,20 @@ python3 tools/audit.py books/<slug>/chNN.html
 python3 tools/factcheck.py <slug> N
 node tools/check-site.js
 ```
+
+Algorithm Alley also runs these, and steps.js must pass:
+
+```
+node tools/steps.js    books/algo/chNN.html --light        # every step of every mode: overlaps, clipping, Back works
+node tools/steps.js    books/algo/chNN.html --dark --shots=2
+node tools/rustview.js books/algo/chNN.html                # steps where the Rust listing lights up nothing
+node tools/interact.js books/algo/chNN.html                # used as a reader would: speed, keys, touch
+python3 tools/rustcheck.py books/algo/chNN.html
+```
+
+Open at least the first, middle and last step of every scene, and judge them as a reader would. Passing the checks is
+not the bar: could someone new to this topic tell what is happening from the picture and caption alone? If not, change
+it. Then reread your copy against "Explain it simply".
 
 Fix everything `smoke.js` prints. Then **look at the screenshots** in `tools/.shots/` — every
 `-played` shot and the `-b` shots — and fix what looks wrong: overlapping or clipped text, misalignment,
@@ -221,7 +332,7 @@ if it does, paraphrase it without curly quotes rather than splitting it into fra
 ## Final report
 
 List the scenes (id, section number, title, what the machine does, and its code panel: real code,
-pseudocode, or none), anything from the chapter you left out and why, the final output of each check,
-and any rough edges. Say plainly what is unfinished or unverified; which details are your own
+pseudocode, or none), anything from the chapter you left out and why, warm-up scenes you added, shared-helper gaps you
+worked around, the final output of each check, and any rough edges. Say plainly what is unfinished or unverified; which details are your own
 illustrations or toy numbers rather than the book's; which code panels were compiled or run and which
 are sketches or pseudocode; and any place where real output disagreed with the book.
