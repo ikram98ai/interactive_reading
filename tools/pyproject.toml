@@ -1,0 +1,18 @@
+[project]
+name = "interactive-reading-tools"
+version = "0"
+description = "Local checks and video tools for chapter pages. Not part of the published site."
+requires-python = "==3.11.*"
+dependencies = [
+    "faster-whisper>=1.2.1",
+    "fonttools>=4.68.0",
+    "kokoro-onnx>=0.6.1",
+    "num2words>=0.5.14",
+    "numpy>=2.4.6",
+    "pypdf>=7.0.0",
+    "soundfile>=0.14.0",
+    "soxr>=1.1.0",
+]
+
+[tool.uv]
+package = false

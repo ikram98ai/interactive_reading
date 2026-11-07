@@ -1,6 +1,6 @@
 /* Review helper: press each stage's main button, wait for the sim to settle, screenshot the result.
 
-   node tools/play.js books/ddia/ch11.html [--light|--dark] [--presses=N] [--seg=K] [--out=<dir>]
+   node tools/browser/play.js books/ddia/ch11.html [--light|--dark] [--presses=N] [--seg=K] [--out=<dir>]
 
    smoke.js ends most stages on "Reset", which hides the busiest moments. This captures them instead —
    that is where overlapping labels and leftover flying parcels show up. Look at the PNGs afterwards.
@@ -10,7 +10,7 @@ const path = require("path");
 const { parseArgs, open, wait, frame } = require("./browser");
 
 (async () => {
-  const a = parseArgs(process.argv, "usage: node tools/play.js <chapter.html> [--light|--dark] [--presses=N] [--seg=K] [--out=dir]");
+  const a = parseArgs(process.argv, "usage: node tools/browser/play.js <chapter.html> [--light|--dark] [--presses=N] [--seg=K] [--out=dir]");
   const presses = a.num("presses", 1), segIdx = a.num("seg", -1);
   const tag = a.base + (segIdx >= 0 ? `-seg${segIdx}` : "") + (presses > 1 ? `-x${presses}` : "") + (a.theme ? "-" + a.theme : "") + "-played";
   const { browser, page, errors } = await open(a.file, { theme: a.theme, speed: 5, height: 1000 });

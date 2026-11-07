@@ -3,9 +3,10 @@
   "private": true,
   "description": "Local checks for chapter pages. Not part of the published site.",
   "scripts": {
-    "check": "node check-site.js"
+    "check": "node static/check-site.js"
   },
   "dependencies": {
+    "playwright-core": "^1.65.0",
     "puppeteer-core": "^25.11.0"
   }
 }

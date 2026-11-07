@@ -1,6 +1,6 @@
 /* Walk through every step of every step-through machine (AL.walk), in every mode, and check each picture.
 
-   node tools/steps.js books/algo/ch27.html [--only=<stage index>] [--dark] [--shots=N] [--no-sweep] [--out=<dir>]
+   node tools/browser/steps.js books/algo/ch27.html [--only=<stage index>] [--dark] [--shots=N] [--no-sweep] [--out=<dir>]
 
    For each stage with a step slider, for each option of its segmented control, for every step:
      - SVG labels must not overlap each other, or leave the viewBox
@@ -14,7 +14,7 @@ const path = require("path");
 const { parseArgs, open, wait, frame } = require("./browser");
 
 (async () => {
-  const a = parseArgs(process.argv, "usage: node tools/steps.js <chapter.html> [--only=N] [--dark] [--shots=N] [--out=dir]");
+  const a = parseArgs(process.argv, "usage: node tools/browser/steps.js <chapter.html> [--only=N] [--dark] [--shots=N] [--out=dir]");
   const only = a.num("only", null), shots = a.num("shots", 3), noSweep = process.argv.includes("--no-sweep");
   let swept = 0;
   const { browser, page, errors } = await open(a.file, { theme: a.theme, speed: 6, height: 1000 });

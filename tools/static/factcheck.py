@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Flag names, numbers and quotations on a chapter page that don't appear in the book's own text.
 
-  tools/factcheck.py ddia 11        books/ddia/ch11.html  against  tools/.text/ddia/ch11.txt (see extract.py)
-  tools/factcheck.py algo 2 --page=books/algo/_wip_x.html     a preview page, against chapter 2's text
+  tools/static/factcheck.py ddia 11        books/ddia/ch11.html  against  tools/.text/ddia/ch11.txt (see extract.py)
+  tools/static/factcheck.py algo 2 --page=books/algo/_wip_x.html     a preview page, against chapter 2's text
 
 Checks the epigraph and every "What the book says" box, because those speak for the book:
   - proper nouns / product names / acronyms
@@ -15,7 +15,8 @@ quotation or the epigraph is not verbatim, since those are always worth fixing."
 import html, pathlib, re, sys, unicodedata
 
 HERE = pathlib.Path(__file__).resolve().parent
-ROOT = HERE.parent
+TOOLS = HERE.parent
+ROOT = TOOLS.parent
 
 STOP = set("""The A An In It If But And Or So This That These Those When Where While With Without For From To Of On At By As Is Are
 Was Were Be Both Each Every Some Many Most Other Another Its Their They We You Not No Only Even Also Then There Here One Two Three
@@ -47,9 +48,9 @@ def main():
         sys.exit(__doc__)
     slug, n = args[0], int(args[1])
     page_path = pathlib.Path(pages[0]).resolve() if pages else ROOT / "books" / slug / f"ch{n:02d}.html"
-    text_path = HERE / ".text" / slug / f"ch{n:02d}.txt"
+    text_path = TOOLS / ".text" / slug / f"ch{n:02d}.txt"
     if not text_path.exists():
-        sys.exit(f"{text_path.relative_to(ROOT)} is missing — run tools/extract.py first.")
+        sys.exit(f"{text_path.relative_to(ROOT)} is missing — run tools/authoring/extract.py first.")
     page, src = page_path.read_text(), norm(text_path.read_text())
     tight = re.sub(r"[^a-z0-9]", "", src)
 

@@ -19,7 +19,7 @@ were built before some of these rules and don't all meet them: where a page and 
 
 ## Step 1 — read, in full, before writing anything
 
-1. The chapter text: `tools/.text/<slug>/chNN.txt` (made by `tools/extract.py`). Read ALL of it,
+1. The chapter text: `tools/.text/<slug>/chNN.txt` (made by `tools/authoring/extract.py`). Read ALL of it,
    sidebars and summary included; ignore the reference list at the end. Page breaks look like
    `=== PDF page N ===`. **Everything the page states as a fact must come from this text** — do not
    import claims, product names, or numbers from memory of other editions or other books.
@@ -37,7 +37,7 @@ were built before some of these rules and don't all meet them: where a page and 
    array cells, `AL.grid` for 2-D tables, `AL.tree` for binary trees and `AL.graph` for directed/undirected
    weighted graphs (read each one's comment block in `algo.js`). Load `algo.js` after `kit.js` and copy `books/algo/ch01.html`'s script header. Every scene
    gets the book's pseudocode (from whichever chapter states the algorithm) and a complete Rust program in
-   `<script type="text/x-rust">` with its real output in `-out`; `tools/rustcheck.py` must pass. Also read the
+   `<script type="text/x-rust">` with its real output in `-out`; `tools/static/rustcheck.py` must pass. Also read the
    "Step-through toolkit" section near the end of `algo.js` and the same block at the end of `algo.css`.
 
 ## Step 2 — plan the scenes
@@ -108,7 +108,7 @@ none (see "Code panel rules").
 - Never talk down, no baby talk, no emoji. Friendly, precise, a bit playful.
 - "What the book says" is for grown-ups: the book's precise terms, the systems it names, its caveats and
   numbers. 3–5 compact paragraphs, faithful to the text. **Curly quotes mean the book's exact words** —
-  if you are paraphrasing, don't use them. (`tools/factcheck.py` enforces this.)
+  if you are paraphrasing, don't use them. (`tools/static/factcheck.py` enforces this.)
 - Captions narrate cause and effect ("Because X, Y happens"), not just "done".
 - Use varied, international first names.
 
@@ -291,21 +291,21 @@ add the sims three to five at a time, inserting above the marker, and run the sm
 ## Step 3 — test until clean (mandatory)
 
 ```
-node tools/smoke.js    books/<slug>/chNN.html --light      # and again with --dark
-node tools/play.js     books/<slug>/chNN.html --light      # then --seg=1 for the second mode of each sim
-python3 tools/audit.py books/<slug>/chNN.html
-python3 tools/factcheck.py <slug> N
-node tools/check-site.js
+node tools/browser/smoke.js    books/<slug>/chNN.html --light      # and again with --dark
+node tools/browser/play.js     books/<slug>/chNN.html --light      # then --seg=1 for the second mode of each sim
+python3 tools/static/audit.py books/<slug>/chNN.html
+python3 tools/static/factcheck.py <slug> N
+node tools/static/check-site.js
 ```
 
 Algorithm Alley also runs these, and steps.js must pass:
 
 ```
-node tools/steps.js    books/algo/chNN.html --light        # every step of every mode: overlaps, clipping, Back works
-node tools/steps.js    books/algo/chNN.html --dark --shots=2
-node tools/rustview.js books/algo/chNN.html                # steps where the Rust listing lights up nothing
-node tools/interact.js books/algo/chNN.html                # used as a reader would: speed, keys, touch
-python3 tools/rustcheck.py books/algo/chNN.html
+node tools/browser/steps.js    books/algo/chNN.html --light        # every step of every mode: overlaps, clipping, Back works
+node tools/browser/steps.js    books/algo/chNN.html --dark --shots=2
+node tools/browser/rustview.js books/algo/chNN.html                # steps where the Rust listing lights up nothing
+node tools/browser/interact.js books/algo/chNN.html                # used as a reader would: speed, keys, touch
+python3 tools/static/rustcheck.py books/algo/chNN.html
 ```
 
 Open at least the first, middle and last step of every scene, and judge them as a reader would. Passing the checks is

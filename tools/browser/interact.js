@@ -1,6 +1,6 @@
 /* Use Algorithm Alley's step-through machines the way a person does, at normal speed, and fail on what breaks.
 
-   node tools/interact.js books/algo/ch27.html [--only=<stage index>]
+   node tools/browser/interact.js books/algo/ch27.html [--only=<stage index>]
 
    smoke.js and steps.js jump between steps at high speed. This one presses things as a reader would:
      - Next plays its real animation and lands on the same picture as jumping there
@@ -35,7 +35,7 @@ const settled = async (stage, want, ms = 2600) => {
 };
 
 (async () => {
-  const a = parseArgs(process.argv, "usage: node tools/interact.js <chapter.html> [--only=N]");
+  const a = parseArgs(process.argv, "usage: node tools/browser/interact.js <chapter.html> [--only=N]");
   const only = a.num("only", null), bad = [];
   let tried = 0;
 

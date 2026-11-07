@@ -26,7 +26,7 @@ for any book. Chapters above `built` show as "coming soon" instead of broken lin
 1. Read the chapter.
 2. Ask for the interactive chapter page — it writes `books/<slug>/chNN.html`
    and bumps `built` in `books/<slug>/book.js` and `books/books.js`.
-   [`tools/CHAPTER_BRIEF.md`](tools/CHAPTER_BRIEF.md) is the brief to build from.
+   [`tools/authoring/CHAPTER_BRIEF.md`](tools/authoring/CHAPTER_BRIEF.md) is the brief to build from.
 3. Check it: [`tools/`](tools/README.md) clicks through every simulation in a headless browser,
    screenshots them, and checks the page's claims against the book's text.
 4. `git push` — the site redeploys itself.

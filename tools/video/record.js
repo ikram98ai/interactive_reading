@@ -22,7 +22,7 @@ const ROOT = path.resolve(__dirname, "../..");
   if (kokoro) {
     const jobs = path.join(work, "jobs.json");
     fs.writeFileSync(jobs, JSON.stringify({ voice: voice.slice(7), speed: S.speed || 1.0, items: S.steps.map((st, i) => st.say && { text: st.say, out: clips[i].f }).filter(Boolean) }));
-    cp.execFileSync(path.join(__dirname, ".venv/bin/python"), [path.join(__dirname, "tts_kokoro.py"), jobs], { stdio: "inherit" });
+    cp.execFileSync(path.join(__dirname, "../.venv/bin/python"), [path.join(__dirname, "tts_kokoro.py"), jobs], { stdio: "inherit" });
   } else S.steps.forEach((st, i) => { if (st.say) cp.execFileSync("say", ["-v", voice, "-r", String(S.rate || 175), "-o", clips[i].f, st.say]); });
   clips.forEach((c) => { if (c.f) c.dur = clipMs(c.f); });
 

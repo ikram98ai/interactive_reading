@@ -1,6 +1,6 @@
 /* Step every step-through machine (AL.walk) in the Rust view, and find steps where the listing lights up nothing.
 
-   node tools/rustview.js books/algo/ch34.html [--only=<scene id>] [--detail]
+   node tools/browser/rustview.js books/algo/ch34.html [--only=<scene id>] [--detail]
 
    A step with no highlight is fine when the step really has no Rust line (a setup step, a line the program does in
    another way). Past that, it means the code panel's map is missing an entry, and the panel goes dead while the
@@ -9,7 +9,7 @@
 const { parseArgs, open } = require("./browser");
 
 (async () => {
-  const a = parseArgs(process.argv, "usage: node tools/rustview.js <chapter.html> [--only=sceneId] [--detail]");
+  const a = parseArgs(process.argv, "usage: node tools/browser/rustview.js <chapter.html> [--only=sceneId] [--detail]");
   const only = a.opt("only"), detail = process.argv.includes("--detail");
   const { browser, page, errors } = await open(a.file, {});
   const res = await page.evaluate((onlyId) => {

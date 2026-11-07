@@ -1,0 +1,86 @@
+# Local tools for building and checking chapters. Run from the repository root; `make` lists the commands.
+# Extra flags go in ARGS, e.g.  make smoke PAGE=books/algo/ch01.html ARGS="--dark --only=3"
+
+PY := uv run --project tools python
+KOKORO_URL := https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0
+MODELS := tools/video/models
+
+need = $(if $($(1)),,$(error $(1) is required, e.g. make $@ $(1)=$(2)))
+
+.DEFAULT_GOAL := help
+.PHONY: help setup models extract site audit factcheck rustcheck smoke play steps rustview interact narrate metrics record scenes series
+
+help: ## List the commands
+	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  %-11s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+# --- setup
+setup: ## Install the Python (uv) and node dependencies
+	cd tools && npm install --no-audit --no-fund
+	uv sync --project tools
+
+models: ## Download Kokoro's weights into tools/video/models/ (resumes if interrupted)
+	mkdir -p $(MODELS)
+	curl -fL -C - --retry 5 -o $(MODELS)/kokoro-v1.0.onnx $(KOKORO_URL)/kokoro-v1.0.onnx
+	curl -fL -C - --retry 5 -o $(MODELS)/voices-v1.0.bin $(KOKORO_URL)/voices-v1.0.bin
+
+# --- authoring
+extract: ## Extract book text: PDF=books/ddia/DDIA.pdf ARGS="ddia 11" (or ARGS=--list)
+	$(call need,PDF,books/ddia/DDIA.pdf)
+	$(PY) tools/authoring/extract.py $(PDF) $(ARGS)
+
+# --- static checks, no browser
+site: ## Parse every page and check its links, as the deploy does
+	node tools/static/check-site.js
+
+audit: ## Check a page's structure: PAGE=books/ddia/ch11.html
+	$(call need,PAGE,books/ddia/ch11.html)
+	python3 tools/static/audit.py $(PAGE) $(ARGS)
+
+factcheck: ## Check a chapter's claims against the book: BOOK=ddia CH=11
+	$(call need,BOOK,ddia)
+	$(call need,CH,11)
+	python3 tools/static/factcheck.py $(BOOK) $(CH) $(ARGS)
+
+rustcheck: ## Compile and run a page's Rust listings: PAGE=books/algo/ch01.html
+	$(call need,PAGE,books/algo/ch01.html)
+	python3 tools/static/rustcheck.py $(PAGE) $(ARGS)
+
+# --- browser checks, headless Chrome
+smoke: ## Click every control in every simulation: PAGE=… ARGS=--light
+	$(call need,PAGE,books/ddia/ch11.html)
+	node tools/browser/smoke.js $(PAGE) $(ARGS)
+
+play: ## Press each simulation's main button and screenshot it: PAGE=… ARGS=--light
+	$(call need,PAGE,books/ddia/ch11.html)
+	node tools/browser/play.js $(PAGE) $(ARGS)
+
+steps: ## Visit every step of every Algorithm Alley machine: PAGE=… ARGS=--light
+	$(call need,PAGE,books/algo/ch27.html)
+	node tools/browser/steps.js $(PAGE) $(ARGS)
+
+rustview: ## Report steps where the Rust listing lights up nothing: PAGE=…
+	$(call need,PAGE,books/algo/ch27.html)
+	node tools/browser/rustview.js $(PAGE) $(ARGS)
+
+interact: ## Use each machine as a reader would: PAGE=…
+	$(call need,PAGE,books/algo/ch27.html)
+	node tools/browser/interact.js $(PAGE) $(ARGS)
+
+# --- video
+narrate: ## Turn a video script into timed narration: SCRIPT=tools/video/scripts/00-chapter-1.md ARGS="--voice kokoro:am_liam"
+	$(call need,SCRIPT,tools/video/scripts/00-chapter-1.md)
+	$(PY) tools/video/narrate.py $(SCRIPT) $(ARGS)
+
+metrics: ## Report a voice's pitch and pauses: WAV="a.wav b.wav"
+	$(call need,WAV,a.wav)
+	$(PY) tools/video/voice_metrics.py $(WAV)
+
+record: ## Record one narrated scene: SCENE=videos/scripts/<scene>.json OUT=videos/<scene>.mp4
+	$(call need,SCENE,videos/scripts/<scene>.json)
+	node tools/video/record.js $(SCENE) $(OUT)
+
+scenes: ## Record every chapter-1 scene into videos/
+	tools/video/make-all.sh
+
+series: ## Build the YouTube series: VOICE=kokoro:am_liam ONLY=00 (both optional, default voice kokoro:bm_fable)
+	tools/video/make-series.sh "$(VOICE)" "$(ONLY)"

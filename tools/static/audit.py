@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Structural audit of chapter pages — the things a browser won't complain about.
 
-  tools/audit.py books/ddia/ch11.html [more pages…]
+  tools/static/audit.py books/ddia/ch11.html [more pages…]
 
 Fails (exit 1) on: duplicate ids, in-page links to missing anchors, a table of contents that doesn't match
 the scenes, SVGs without an accessible label, hard-coded hex colours (they break the dark theme), emoji,

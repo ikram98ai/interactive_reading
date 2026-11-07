@@ -1,13 +1,13 @@
 /* Will the next push deploy? Runs the same check as .github/workflows/deploy.yml, in place, without building _site/.
 
-   node tools/check-site.js
+   node tools/static/check-site.js
 
    For every published page: inline <script> blocks must parse, and every local href/src must exist.
    Keep this in step with the "Check every page parses and links resolve" step of the workflow. */
 const fs = require("fs");
 const path = require("path");
 
-const ROOT = path.resolve(__dirname, "..");
+const ROOT = path.resolve(__dirname, "../..");
 const pages = [path.join(ROOT, "index.html")];
 (function walk(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {

@@ -1,6 +1,6 @@
 /* Smoke-test one chapter page in headless Chrome.
 
-   node tools/smoke.js books/ddia/ch11.html [--light|--dark] [--only=<stage index>] [--out=<dir>]
+   node tools/browser/smoke.js books/ddia/ch11.html [--light|--dark] [--only=<stage index>] [--out=<dir>]
 
    Clicks every control in every .stage (rapidly, in a dumb order, even mid-animation) and fails on:
      - JavaScript errors
@@ -11,7 +11,7 @@ const path = require("path");
 const { parseArgs, open, wait, frame } = require("./browser");
 
 (async () => {
-  const a = parseArgs(process.argv, "usage: node tools/smoke.js <chapter.html> [--light|--dark] [--only=N] [--out=dir]");
+  const a = parseArgs(process.argv, "usage: node tools/browser/smoke.js <chapter.html> [--light|--dark] [--only=N] [--out=dir]");
   const only = a.num("only", null);
   const tag = a.base + (a.theme ? "-" + a.theme : "");
   const { browser, page, errors } = await open(a.file, { theme: a.theme });

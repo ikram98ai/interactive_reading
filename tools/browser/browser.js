@@ -3,7 +3,7 @@ const puppeteer = require("puppeteer-core");
 const fs = require("fs");
 const path = require("path");
 
-const ROOT = path.resolve(__dirname, "..");
+const ROOT = path.resolve(__dirname, "../..");
 
 function chromePath() {
   const candidates = [
@@ -30,7 +30,7 @@ function parseArgs(argv, usage) {
   const theme = args.includes("--dark") ? "dark" : args.includes("--light") ? "light" : null;
   // books/ddia/ch11.html → ddia-ch11
   const base = path.basename(path.dirname(file)) + "-" + path.basename(file, ".html");
-  const out = path.resolve(opt("out") || path.join(__dirname, ".shots", base));
+  const out = path.resolve(opt("out") || path.join(__dirname, "..", ".shots", base));
   fs.mkdirSync(out, { recursive: true });
   return { file, base, theme, out, opt, num: (name, d) => (opt(name) === null ? d : Number(opt(name))) };
 }

@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 """Pull one chapter's text out of a book PDF, so it can be read in full and fact-checked against.
 
-  tools/extract.py books/ddia/ddia.pdf --list                     show the PDF's top-level outline with page numbers
-  tools/extract.py books/ddia/ddia.pdf ddia 11                    outline entry "Chapter 11…" → tools/.text/ddia/ch11.txt
-  tools/extract.py "books/csapp/….pdf" csapp 7 --title Linking    outline entry whose title contains "Linking"
-  tools/extract.py "books/csapp/….pdf" csapp 7 --pages 696-746    explicit PDF page range (1-based, inclusive)
-  tools/extract.py books/algo/CLRS.pdf algo 2 --pages 39-70 --fix-glyphs
+  tools/authoring/extract.py books/ddia/ddia.pdf --list                     show the PDF's top-level outline with page numbers
+  tools/authoring/extract.py books/ddia/ddia.pdf ddia 11                    outline entry "Chapter 11…" → tools/.text/ddia/ch11.txt
+  tools/authoring/extract.py "books/csapp/….pdf" csapp 7 --title Linking    outline entry whose title contains "Linking"
+  tools/authoring/extract.py "books/csapp/….pdf" csapp 7 --pages 696-746    explicit PDF page range (1-based, inclusive)
+  tools/authoring/extract.py books/algo/CLRS.pdf algo 2 --pages 39-70 --fix-glyphs
                                                                   CLRS: undo its font's û (fi), ü (fl), 4 (em dash), <…= (quotes)
 
 A chapter found through the outline runs up to the page before the next top-level entry.
 The text is copyrighted: tools/.text/ is gitignored, like the PDFs. Needs pypdf (fonttools lets it decode
 the CFF fonts some PDFs use, e.g. the CS:APP one):
-  python3 -m venv tools/.venv && tools/.venv/bin/pip install pypdf fonttools     then run with tools/.venv/bin/python
+  make setup     then run with make extract
 """
 import argparse, logging, pathlib, re, sys
 
 try:
     import pypdf
 except ImportError:
-    sys.exit("pypdf is missing. Run:  python3 -m venv tools/.venv && tools/.venv/bin/pip install pypdf fonttools\n"
-             "then:  tools/.venv/bin/python tools/extract.py …")
+    sys.exit("pypdf is missing. Run:  make setup\n"
+             "then:  make extract PDF=… ARGS=…")
 
 HERE = pathlib.Path(__file__).resolve().parent
 
@@ -103,13 +103,13 @@ def main():
     parts = [f"\n\n=== PDF page {p} ===\n{reader.pages[p - 1].extract_text() or ''}" for p in range(first, last + 1)]
     if a.fix_glyphs:
         parts = [fix_glyphs(x) for x in parts]
-    out = HERE / ".text" / a.slug / f"ch{a.chapter:02d}.txt"
+    out = HERE.parent / ".text" / a.slug / f"ch{a.chapter:02d}.txt"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("".join(parts))
-    print(f"pages {first}-{last} → {out.relative_to(HERE.parent)}  ({len(''.join(parts).split())} words)")
+    print(f"pages {first}-{last} → {out.relative_to(HERE.parent.parent)}  ({len(''.join(parts).split())} words)")
     if FontNote.seen:
         print(f"note: this PDF uses CFF fonts and fonttools is not installed ({FontNote.seen} warnings hidden). The text is "
-              "usually still fine — skim the output — but `tools/.venv/bin/pip install fonttools` removes the doubt.")
+              "usually still fine — skim the output — but `make setup` removes the doubt.")
 
 
 if __name__ == "__main__":
