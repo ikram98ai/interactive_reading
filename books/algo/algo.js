@@ -6,7 +6,8 @@
            a lens pins its running line to the window's foot, and Full screen puts machine, code and memory on one screen
    mem()   a small stack-and-heap strip that shows where the Rust program keeps its data
    cells() a row of array cells inside a machine's SVG, indexed from 1 (the book) or 0 (Rust)
-   box / txt / clickable / button / session — the SVG and run helpers the other books copy into each page. */
+   box / txt / clickable / button / session — the SVG and run helpers the other books copy into each page.
+   walk, plot, bars, legend, matrix, point, note, send, mix, rmap and .term — the step-through toolkit, documented where it is defined. */
 (function () {
   const { h, s } = K;
   const cap = (id, html) => { K.$(id).innerHTML = html; };
@@ -432,7 +433,9 @@
         if (!rs()) { const n = resolve(r, idx.pseudo); if (n) outL.push(n); return; }
         const m = cur.rs.map || {};
         const key = typeof r === "number" ? String(r) : str;
-        const v = m[key] != null ? m[key] : (/^\d+$/.test(key) && idx.pseudo.first && m[`${idx.pseudo.first}:${key}`]);
+        // 3 and "FIRST-PROC:3" mean the same line, whichever way the map spells it
+        const first = idx.pseudo.first, short = first && key.startsWith(first + ":") ? key.slice(first.length + 1) : null;
+        const v = m[key] != null ? m[key] : (/^\d+$/.test(key) && first && m[`${first}:${key}`]) || (short != null && m[short]);
         if (v != null && v !== false) outL.push(...[].concat(v));
       });
       return outL;
@@ -785,5 +788,351 @@
     },
   };
 
-  window.AL = { cap, esc, fmt, box, txt, clickable, button, session, src, code, mem, cells, grid, tree, graph, CODE_LANG, langToggle, highlight };
+  /* ==================================================================================================
+     Step-through toolkit: for harder ideas, machines that explain more and move less.
+     walk()   step forwards AND backwards through a precomputed run, with a plain-words narration per step
+     plot()   axes and marks for anything drawn on a number line or a plane
+     bars()   horizontal bars for "this much against that much"
+     legend() the colour key, always in the same style
+     matrix() a table with square brackets
+     point()  a curved arrow from one thing to another, with an optional label
+     note()   an SVG label with a halo, safe to place over lines
+     send()   a value that travels from one place to another, then disappears
+     mix()    in-between of two frames, for smooth movement
+     Terms:   <span class="term">pivot</span> in the copy shows that word's "Words to know" entry on hover or tap.
+     ================================================================================================== */
+
+  /** In-between of two frames: numbers interpolate, everything else takes b's value. Round in paint() what must
+      read as a whole number: mix(a, b, .5) of 3 and 4 is 3.5. */
+  function mix(a, b, t) {
+    if (typeof a === "number" && typeof b === "number") return a + (b - a) * t;
+    if (Array.isArray(a) && Array.isArray(b) && a.length === b.length) return a.map((v, i) => mix(v, b[i], t));
+    if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) {
+      const o = {}; for (const k in b) o[k] = k in a ? mix(a[k], b[k], t) : b[k]; return o;
+    }
+    return b;
+  }
+
+  /* ---------- walk: step through a run, forwards and backwards ----------
+     const W = walk({
+       id: "s1",                       // fills #s1-controls and narrates in #s1-cap
+       frames() { return [ { say, why, phase, tone, lines, notes, notesRust, out, ...yourState }, … ]; },
+       paint(f, i, all) { … },         // draw the WHOLE picture from one frame; never look at what was drawn before
+       morph: 520,                     // optional: glide from step to step, painting mix(prev, f, t) each frame
+       enter: async (w, f, prev, fx) => { … },  // optional instead: your own movement from prev to f (forward steps only)
+       svg: "#s1-svg",                 // needed with enter: the moving things go on an overlay group inside it
+       code: cv,                       // optional: lines, notes and out drive the code panel
+       before: [button, …],            // optional: your own buttons, placed left of Back
+     });
+     W.rebuild()   the viewer changed an input: run frames() again and go to step 1
+     W.go(i)       jump to a step · W.i, W.frame, W.frames · W.stop() stop playing
+
+     A frame:  say    what just happened, in plain words (html). Always set.
+               why    why that is allowed, or why it matters (html). Optional; one sentence.
+               phase  the current stage of the algorithm, shown before the step count. Optional.
+               tone   "good" | "bad": a finished result or a failure. Optional.
+               lines  book line numbers to highlight ("MERGE:4", 3, …). notes / notesRust: live values at line ends.
+               mark   { good: [lines], bad: [lines], on2: [lines] }: extra highlight classes. out: the run's output.
+               hold   extra milliseconds Play stays on this step.
+     All of the frames are computed up front from the inputs, so Back, the slider and Next all land on the same
+     picture. paint() redraws from the frame; enter() only adds movement on top, on the fx layer, and the final
+     picture always comes from paint(). So a cancelled animation can never leave the machine in a broken state.
+
+     Inside enter, animate only through w: a plain K.tween keeps calling its function after Back or Next, and would
+     paint over the new step. await w.morph(ms) · await w.tween(ms, (t) => …, ease) · await w.send("7", [x, y], [x2, y2])
+     · await w(K.sleep(200)) · await w(K.fly(tagOnFx, a, b, ms)) (only for things on fx, which is cleared afterwards). */
+  function walk(o) {
+    const ctr = K.$(`#${o.id}-controls`), capEl = K.$(`#${o.id}-cap`);
+    const svg = o.svg ? K.$(o.svg) : null;
+    let fx = null;
+    const fxLayer = () => { if (svg && (!fx || !fx.isConnected)) { fx = s("g", { class: "wk-fx", "aria-hidden": "true" }); } if (svg && fx) svg.appendChild(fx); return fx; };
+    const S = session();
+    let frames = [], i = 0, playing = false, playGen = 0, animGen = 0;
+    const enter = o.enter || (o.morph ? (w) => w.morph(o.morph) : null);
+    if (capEl) capEl.classList.add("wk-cap");
+    (o.before || []).forEach((b) => ctr.appendChild(b));
+    const bStart = button(ctr, "Start over", "", () => { stop(); go(0); });
+    const bBack = button(ctr, "Back", "", () => { stop(); go(i - 1); });
+    const bNext = button(ctr, "Next", "", () => { stop(); go(i + 1, true); });
+    const bPlay = button(ctr, "Play", "primary", () => (playing ? stop() : play()));
+    const label = `${o.id}-scrub`;
+    const range = h("input", { type: "range", id: label, min: 0, max: 0, step: 1, value: 0, "aria-label": "Jump to a step" });
+    range.addEventListener("input", () => { const v = Number(range.value); stop(); go(v); }); // read first: stop() redraws the slider
+    const count = h("span", { class: "wk-count" }, "");
+    ctr.appendChild(h("span", { class: "wk-scrub" }, range, count));
+
+    function chrome() {
+      bStart.disabled = bBack.disabled = i === 0;
+      bNext.disabled = i >= frames.length - 1;
+      bPlay.textContent = playing ? "Pause" : i >= frames.length - 1 && frames.length > 1 ? "Play again" : "Play";
+      range.max = String(Math.max(0, frames.length - 1)); range.value = String(i);
+      count.textContent = `${i + 1} / ${frames.length}`;
+    }
+    function narrate(f) {
+      if (!capEl) return;
+      const head = (f.phase ? `<span class="wk-ph">${f.phase}</span>` : "") + `<span class="wk-n">Step ${i + 1} of ${frames.length}</span>`;
+      capEl.className = "caption wk-cap" + (f.tone ? " " + f.tone : "");
+      capEl.innerHTML = `<div class="wk-head">${head}</div><div class="wk-say">${f.say || ""}</div>` + (f.why ? `<div class="wk-why">${f.why}</div>` : "");
+    }
+    function codeFor(f) {
+      if (!o.code) return;
+      o.code.clear();
+      if (f.lines != null) o.code.at(f.lines, "on");
+      if (f.mark) Object.entries(f.mark).forEach(([c, l]) => o.code.at(l, c, false));
+      if (f.notes || f.notesRust) o.code.notes(f.notes || {}, f.notesRust);
+      o.code.out(f.out === undefined ? null : f.out);
+    }
+    function settle(f) { if (fx) K.clear(fx); o.paint(f, i, frames); }
+    function go(n, animate) {
+      if (!frames.length) return;
+      const wasBusy = S.busy;
+      S.cancel();
+      const my = ++animGen; // any tween still running from the last step stops touching the picture now
+      const prevI = i;
+      n = Math.max(0, Math.min(frames.length - 1, n));
+      if (wasBusy) settle(frames[prevI]);
+      i = n;
+      const f = frames[i];
+      narrate(f); codeFor(f); chrome();
+      if (animate && enter && !K.reduced && i === prevI + 1) {
+        if (fx) K.clear(fx);
+        const prev = frames[prevI], layer = fxLayer();
+        return S.run(async (w) => {
+          const tw = (ms, fn, e) => w(K.tween(ms, (t) => { if (my === animGen) fn(t); }, e));
+          const W2 = Object.assign((p) => w(p), { tween: tw,
+            morph: (ms = 520) => tw(ms, (t) => o.paint(mix(prev, f, t), i, frames)),
+            send: (text, a, b, ms, cls) => send(w, layer || svg, text, a, b, ms, cls) });
+          await enter(W2, f, prev, layer);
+          settle(f);
+        });
+      }
+      settle(f);
+      return Promise.resolve(true);
+    }
+    /** reading time: longer narration stays up longer, and the page's speed control scales it (K.sleep) */
+    const readMs = (f) => {
+      const n = ((f.say || "") + (f.why || "")).replace(/<[^>]+>/g, "").length;
+      return Math.min(5200, 800 + n * 34) + (f.hold || 0);
+    };
+    async function play() {
+      const my = ++playGen;
+      playing = true;
+      if (i >= frames.length - 1) await go(0);
+      chrome();
+      await K.sleep(i === 0 ? readMs(frames[0]) : 300);
+      while (playing && my === playGen && i < frames.length - 1) {
+        const ok = await go(i + 1, true);
+        if (my !== playGen || !playing || ok === false) break;
+        if (i < frames.length - 1) await K.sleep(readMs(frames[i]));
+      }
+      if (my === playGen) { playing = false; chrome(); }
+    }
+    function stop() { playGen++; playing = false; chrome(); }
+    function rebuild() {
+      stop(); S.cancel();
+      frames = o.frames();
+      if (!frames.length) throw new Error(`walk ${o.id}: frames() returned nothing`);
+      i = 0;
+      const f = frames[0];
+      narrate(f); codeFor(f); chrome(); settle(f);
+    }
+    const stageEl = ctr.closest(".stage");
+    if (stageEl) stageEl.addEventListener("keydown", (e) => {
+      if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.key === "ArrowRight") { e.preventDefault(); stop(); go(i + 1, true); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); stop(); go(i - 1); }
+    });
+    rebuild();
+    return { rebuild, go, stop, get i() { return i; }, get frame() { return frames[i]; }, get frames() { return frames; }, controls: ctr };
+  }
+
+  /** The rs.map of a code panel, found by searching the Rust text, so it can't drift when the program changes:
+      rmap(src("rs-s1"), { 1: "let mut worst", "MERGE:4": ["for m in", "worst = worst"] }) → { 1: 28, "MERGE:4": [29, 30] }.
+      Each snippet must appear in the listing; the first matching line wins. A missing one is a console error. */
+  function rmap(rust, spec) {
+    const lines = rust.split("\n"), out = {};
+    const find = (snip) => { const i = lines.findIndex((l) => l.includes(snip)); if (i < 0) console.error(`rmap: no Rust line contains "${snip}"`); return i + 1; };
+    Object.entries(spec).forEach(([k, v]) => { const hits = [].concat(v).map(find).filter(Boolean); if (hits.length) out[k] = hits.length === 1 ? hits[0] : hits; });
+    return out;
+  }
+
+  /** A value travels from a to b and vanishes: await send(w, fx, "7", [x, y], [x2, y2]). */
+  async function send(w, layer, text, a, b, ms = 520, cls = "sv-data-soft") {
+    const t = K.draw.tag(text, cls);
+    layer.appendChild(t);
+    t.setAttribute("transform", `translate(${a[0]},${a[1]})`);
+    await w(K.fly(t, a, b, ms));
+    t.remove();
+  }
+
+  /** An SVG label with a halo, so it stays readable over lines and cells. tone: on | on2 | good | bad | mute. */
+  function note(g, x, y, str, o = {}) {
+    const t = s("text", { x, y, class: "pt-note" + (o.tone ? " " + o.tone : "") + (o.mono === false ? "" : " mono"), "text-anchor": o.anchor || "middle", style: Object.assign({}, o.size ? { fontSize: o.size + "px" } : {}, o.bold === false ? { fontWeight: 400 } : {}) }, str);
+    g.appendChild(t); return t;
+  }
+
+  /** A curved arrow "this comes from there": point(g, [x1, y1], [x2, y2], { bend: 20, tone: "on", label: "+3" }). */
+  function point(g, a, b, o = {}) {
+    const bend = o.bend == null ? 0 : o.bend, tone = o.tone ? " " + o.tone : "";
+    const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
+    const cx = (a[0] + b[0]) / 2 + nx * bend, cy = (a[1] + b[1]) / 2 + ny * bend;
+    const gg = s("g", { class: "pt-arrow" + tone });
+    gg.appendChild(s("path", { d: `M${a[0]},${a[1]} Q${cx},${cy} ${b[0]},${b[1]}`, class: "pt-line" }));
+    const ang = Math.atan2(b[1] - cy, b[0] - cx), L = 9;
+    gg.appendChild(s("path", { d: `M${b[0]},${b[1]} L${b[0] - L * Math.cos(ang - 0.42)},${b[1] - L * Math.sin(ang - 0.42)} L${b[0] - L * Math.cos(ang + 0.42)},${b[1] - L * Math.sin(ang + 0.42)} Z`, class: "pt-head" }));
+    if (o.label != null) note(gg, 0.25 * a[0] + 0.5 * cx + 0.25 * b[0] + nx * 10, 0.25 * a[1] + 0.5 * cy + 0.25 * b[1] + ny * 10 + 4, o.label, { tone: o.tone });
+    g.appendChild(gg); return gg;
+  }
+
+  /** The colour key: legend(g, x, y, [["on", "being read"], ["good", "finished"]], { dir: "row" | "col", gap }).
+      A tone is on | on2 | good | bad | dim | sorted. In a row, width is estimated at 6.4 px a character. */
+  function legend(g, x, y, items, o = {}) {
+    let cx = x, cy = y;
+    items.forEach(([tone, text]) => {
+      g.appendChild(s("rect", { x: cx, y: cy - 10, width: 13, height: 13, rx: 4, class: "ac-cell " + tone, style: { strokeWidth: 1.5 } }));
+      g.appendChild(s("text", { x: cx + 19, y: cy + 1, class: "sv-label" }, text));
+      if (o.dir === "col") cy += o.gap || 19; else cx += 19 + String(text).length * 6.4 + (o.gap || 16);
+    });
+    return { x: cx, y: cy };
+  }
+
+  /** Horizontal bars: bars(g, { x, y, w, labelW: 110, h: 24, gap: 10, max, items: [{ label, v, tone, text }] }).
+      v draws the bar (tone: on | on2 | good | bad | dim | sorted); text prints after it (defaults to v). */
+  function bars(g, o) {
+    const hgt = o.h || 24, gap = o.gap == null ? 10 : o.gap, lw = o.labelW == null ? 110 : o.labelW, W = o.w - lw - (o.valueW == null ? 52 : o.valueW);
+    const max = o.max || Math.max(1e-9, ...o.items.map((b) => b.v));
+    return o.items.map((b, i) => {
+      const y = o.y + i * (hgt + gap), w = Math.max(b.v > 0 ? 2 : 0, (b.v / max) * W);
+      g.appendChild(s("text", { x: o.x + lw - 8, y: y + hgt / 2 + 4, class: "sv-label", "text-anchor": "end" }, b.label));
+      g.appendChild(s("rect", { x: o.x + lw, y, width: W, height: hgt, rx: 6, class: "pl-track" }));
+      g.appendChild(s("rect", { x: o.x + lw, y, width: w, height: hgt, rx: 6, class: "ac-cell " + (b.tone || "on2") }));
+      const tx = b.text != null ? b.text : b.v;
+      if (tx !== "") g.appendChild(s("text", { x: o.x + lw + W + 8, y: y + hgt / 2 + 4.5, class: "pl-val" }, String(tx)));
+      return { x: o.x + lw, y, w, h: hgt, cy: y + hgt / 2, end: o.x + lw + w };
+    });
+  }
+
+  /** A table in square brackets. Same options as grid(), plus label: a name printed above it. Returns pos(r, c). */
+  function matrix(g, o) {
+    const pos = grid(g, o);
+    const a = pos(0, 0), b = pos(o.rows - 1, o.cols - 1), T = 7, P = 6;
+    const x0 = a.x - P, x1 = b.x + b.w + P, y0 = a.y - P, y1 = b.y + b.h + P;
+    g.appendChild(s("path", { d: `M${x0 + T},${y0} H${x0} V${y1} H${x0 + T}`, class: "mx-br" }));
+    g.appendChild(s("path", { d: `M${x1 - T},${y0} H${x1} V${y1} H${x1 - T}`, class: "mx-br" }));
+    if (o.label) g.appendChild(s("text", { x: (x0 + x1) / 2, y: y0 - (o.colLabels ? 20 : 8), class: "mx-name", "text-anchor": "middle" }, o.label));
+    return pos;
+  }
+
+  /* ---------- plot: a number plane inside a machine ----------
+     const P = plot(g, { x: 60, y: 16, w: 560, h: 240, xr: [0, 10], yr: [0, 8], xt: [0, 5, 10], yt: [0, 4, 8],
+                         xlabel: "minutes", ylabel: "cost", grid: true });
+     P.X(v), P.Y(v), P.xy(a, b) → [x, y] in SVG units
+     P.line([[a, b], …], tone, { dash: true, width: 3 })   tone: on | on2 | good | bad | dim | lilac
+     P.area([[a, b], …], tone)                             a filled polygon
+     P.dot(a, b, { r: 6, tone, label: "A", dx: 10, dy: -8, anchor: "start" })
+     P.vline(a, tone, "label") · P.hline(b, tone, "label") · P.text(a, b, "label", { tone, dx, dy, anchor })
+     Marks go on top of the axes, in the order they are called. Keep points inside xr and yr, or pass clip: true
+     to P.line / P.area to clip to the plot's rectangle. */
+  let plotClip = 0;
+  function plot(g, o) {
+    const xa = o.xr[0], xb = o.xr[1], ya = o.yr[0], yb = o.yr[1];
+    const X = (v) => o.x + ((v - xa) / (xb - xa)) * o.w, Y = (v) => o.y + o.h - ((v - ya) / (yb - ya)) * o.h;
+    const fmtT = o.fmt || ((v) => String(v));
+    const clipId = `pl-clip-${++plotClip}`;
+    g.appendChild(s("clipPath", { id: clipId }, s("rect", { x: o.x, y: o.y, width: o.w, height: o.h })));
+    const zx = Math.max(xa, Math.min(xb, 0)), zy = Math.max(ya, Math.min(yb, 0));
+    (o.xt || []).forEach((v) => {
+      if (o.grid) g.appendChild(s("line", { x1: X(v), y1: o.y, x2: X(v), y2: o.y + o.h, class: "pl-grid" }));
+      g.appendChild(s("text", { x: X(v), y: o.y + o.h + 15, class: "pl-tick", "text-anchor": "middle" }, fmtT(v)));
+    });
+    (o.yt || []).forEach((v) => {
+      if (o.grid) g.appendChild(s("line", { x1: o.x, y1: Y(v), x2: o.x + o.w, y2: Y(v), class: "pl-grid" }));
+      g.appendChild(s("text", { x: o.x - 7, y: Y(v) + 4, class: "pl-tick", "text-anchor": "end" }, fmtT(v)));
+    });
+    g.appendChild(s("line", { x1: o.x, y1: Y(zy), x2: o.x + o.w, y2: Y(zy), class: "pl-axis" }));
+    g.appendChild(s("line", { x1: X(zx), y1: o.y, x2: X(zx), y2: o.y + o.h, class: "pl-axis" }));
+    if (o.xlabel) g.appendChild(s("text", { x: o.x + o.w, y: o.y + o.h + 31, class: "pl-name", "text-anchor": "end" }, o.xlabel));
+    if (o.ylabel) g.appendChild(s("text", { x: o.x, y: o.y - 7, class: "pl-name", "text-anchor": "start" }, o.ylabel));
+    const P = {
+      X, Y, xy: (a, b) => [X(a), Y(b)],
+      line(pts, tone, op = {}) {
+        const d = pts.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ");
+        const el = s("path", { d, class: "pl-line" + (tone ? " " + tone : "") + (op.dash ? " dash" : ""), style: op.width ? { strokeWidth: op.width } : {}, "clip-path": op.clip ? `url(#${clipId})` : null });
+        g.appendChild(el); return el;
+      },
+      area(pts, tone, op = {}) {
+        const d = pts.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ") + " Z";
+        const el = s("path", { d, class: "pl-area" + (tone ? " " + tone : ""), "clip-path": op.clip ? `url(#${clipId})` : null });
+        g.appendChild(el); return el;
+      },
+      dot(a, b, op = {}) {
+        const el = s("circle", { cx: X(a), cy: Y(b), r: op.r || 6, class: "pl-dot" + (op.tone ? " " + op.tone : "") });
+        g.appendChild(el);
+        if (op.label != null) note(g, X(a) + (op.dx == null ? 11 : op.dx), Y(b) + (op.dy == null ? -9 : op.dy), op.label, { tone: op.tone, anchor: op.anchor || "start" });
+        return el;
+      },
+      vline(a, tone, label) {
+        g.appendChild(s("line", { x1: X(a), y1: o.y, x2: X(a), y2: o.y + o.h, class: "pl-line thin dash" + (tone ? " " + tone : "") }));
+        if (label != null) note(g, X(a), o.y - 6, label, { tone });
+      },
+      hline(b, tone, label) {
+        g.appendChild(s("line", { x1: o.x, y1: Y(b), x2: o.x + o.w, y2: Y(b), class: "pl-line thin dash" + (tone ? " " + tone : "") }));
+        if (label != null) note(g, o.x + o.w - 4, Y(b) - 6, label, { tone, anchor: "end" });
+      },
+      text(a, b, str, op = {}) { return note(g, X(a) + (op.dx || 0), Y(b) + (op.dy || 0), str, op); },
+    };
+    return P;
+  }
+
+  /* ---------- terms: tap a word to see what it means ----------
+     <span class="term">pivot</span> shows the matching entry from the page's "Words to know" list. Use
+     data-w="pivot" when the running text says it differently ("pivots"). An entry "a / b" answers to a or b.
+     A term with no entry is reported as a console error, which smoke.js catches. */
+  function initTerms() {
+    const terms = K.$$(".term");
+    if (!terms.length) return;
+    const norm = (t) => t.toLowerCase().replace(/\s+/g, " ").trim();
+    const defs = new Map();
+    K.$$(".word").forEach((w) => {
+      const dt = w.querySelector("dt"), dd = w.querySelector("dd");
+      if (!dt || !dd) return;
+      defs.set(norm(dt.textContent), { name: dt.innerHTML, text: dd.innerHTML });
+      dt.textContent.split(/\s*[\/,]\s*/).forEach((p) => { if (p.trim()) defs.set(norm(p), { name: dt.innerHTML, text: dd.innerHTML }); });
+    });
+    const tip = h("div", { class: "term-tip", role: "tooltip", id: "term-tip" });
+    document.body.appendChild(tip);
+    let holder = null;
+    const hide = () => { tip.classList.remove("show"); holder = null; };
+    const show = (el) => {
+      const d = defs.get(norm(el.dataset.w || el.textContent));
+      if (!d) return;
+      holder = el;
+      tip.innerHTML = `<b>${d.name}</b>${d.text}`;
+      tip.classList.add("show");
+      const r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+      tip.style.left = Math.max(8, Math.min(r.left + r.width / 2 - tw / 2, innerWidth - tw - 8)) + "px";
+      tip.style.top = (r.top - th - 8 > 66 ? r.top - th - 8 : r.bottom + 8) + "px";
+    };
+    terms.forEach((el) => {
+      const key = norm(el.dataset.w || el.textContent);
+      if (!defs.has(key)) { console.error(`term with no "Words to know" entry: ${key}`); return; }
+      el.setAttribute("tabindex", "0");
+      el.setAttribute("aria-describedby", "term-tip");
+      el.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") show(el); });
+      el.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") hide(); });
+      el.addEventListener("focus", () => show(el));
+      el.addEventListener("blur", hide);
+      // a tap focuses first, which opens the meaning: only a word already open before this press may close
+      let wasOpen = false;
+      el.addEventListener("pointerdown", () => { wasOpen = holder === el; });
+      el.addEventListener("click", (e) => { e.preventDefault(); wasOpen ? hide() : show(el); wasOpen = false; });
+    });
+    // tabbing to a word scrolls it into view, so a focused word keeps its meaning and it moves along
+    addEventListener("scroll", () => { if (!holder) return; if (holder === document.activeElement) show(holder); else hide(); }, { passive: true });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") hide(); });
+  }
+  initTerms();
+
+  window.AL = { cap, esc, fmt, box, txt, clickable, button, session, src, code, mem, cells, grid, tree, graph, CODE_LANG, langToggle, highlight,
+    walk, mix, send, note, point, legend, bars, matrix, plot, rmap };
 })();

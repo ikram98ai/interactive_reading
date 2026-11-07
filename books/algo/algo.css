@@ -228,3 +228,75 @@
 .gr-node.dim .gr-k, .gr-node.ghost .gr-k { fill: var(--ink-3); }
 .gr-sub { fill: var(--ink-3); font-family: var(--f-mono); font-size: 10.5px; }
 @media (prefers-reduced-motion: reduce) { .fade, .cp-body li, .ac-cell, .tr-node circle, .gr-node circle, .gr-line, .cp-lens, .cp-lens.show { transition: none; } }
+
+/* ==========================================================================================
+   Step-through toolkit: explanation boxes, the step-through controls, and plots.
+   ========================================================================================== */
+/* --- the copy column --- */
+.gist { font-family: var(--f-display); font-size: 20px; line-height: 1.32; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); border-left: 4px solid var(--lilac); padding-left: 13px; max-width: 48ch; text-wrap: pretty; }
+.decode { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 13px 15px; display: flex; flex-direction: column; gap: 9px; }
+.dc-k, .prep-k { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.dc-f { font-family: var(--f-mono); font-size: 16px; line-height: 1.4; font-weight: 700; color: var(--ink); padding-block: 2px; overflow-wrap: anywhere; }
+.decode dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 12px; align-items: baseline; }
+.decode dt { font-family: var(--f-mono); font-size: 14px; font-weight: 700; color: var(--lilac); }
+.decode dd { margin: 0; font-size: 15.5px; line-height: 1.42; color: var(--ink-2); }
+.dc-eg { font-size: 15.5px; line-height: 1.42; color: var(--ink); background: var(--lilac-soft); border-radius: var(--r-s); padding: 8px 11px; }
+.whyworks, .mixup { border-radius: var(--r-m); padding: 12px 15px; font-size: 16px; line-height: 1.48; color: var(--ink); }
+.whyworks { background: var(--mint-soft); }
+.mixup { background: var(--coral-soft); }
+.whyworks b:first-child, .mixup b:first-child { font-family: var(--f-display); }
+.term { border-bottom: 1.5px dotted var(--lilac); cursor: help; }
+.term:focus-visible { outline-offset: 1px; }
+.term-tip { position: fixed; z-index: 80; width: max-content; max-width: min(320px, calc(100vw - 16px)); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: var(--r-s); font-size: 14px; line-height: 1.4; box-shadow: var(--shadow); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .12s; }
+.term-tip.show { opacity: 1; visibility: visible; }
+.term-tip b { display: block; font-family: var(--f-mono); font-size: 12.5px; margin-bottom: 2px; }
+/* --- the journey: the chapter's plot, before the first machine --- */
+.journey { list-style: none; counter-reset: stop; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 12px; }
+.journey li { counter-increment: stop; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 14px 15px 14px 50px; position: relative; font-size: 15.5px; line-height: 1.44; color: var(--ink-2); }
+.journey li::before { content: counter(stop); position: absolute; left: 13px; top: 13px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; background: var(--lilac-soft); color: var(--ink); font: 800 14px/1 var(--f-display); }
+.journey li b { display: block; color: var(--ink); font-family: var(--f-display); font-size: 16.5px; line-height: 1.2; margin-bottom: 3px; }
+.prep { margin-top: 14px; background: var(--surface-2); border: 1px dashed var(--line-strong); border-radius: var(--r-m); padding: 12px 15px; font-size: 15.5px; line-height: 1.45; color: var(--ink-2); display: flex; flex-direction: column; gap: 4px; }
+/* --- walk(): step-through controls and the two-part caption --- */
+.wk-scrub { flex: 1 1 150px; display: inline-flex; align-items: center; gap: 10px; min-width: 130px; }
+.wk-scrub input[type="range"] { flex: 1; width: auto; min-width: 70px; accent-color: var(--lilac); }
+.wk-count { font-family: var(--f-mono); font-size: 12.5px; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.caption.wk-cap { display: flex; flex-direction: column; gap: 4px; min-height: 104px; box-shadow: inset 4px 0 0 var(--line-strong); }
+.caption.wk-cap.good { background: color-mix(in srgb, var(--mint-soft) 55%, var(--surface)); box-shadow: inset 4px 0 0 var(--mint); }
+.caption.wk-cap.bad { background: color-mix(in srgb, var(--coral-soft) 55%, var(--surface)); box-shadow: inset 4px 0 0 var(--coral); }
+.wk-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .04em; color: var(--ink-3); }
+.wk-ph { background: var(--lilac-soft); color: var(--ink); font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+.wk-say { font-size: 16px; line-height: 1.45; color: var(--ink); }
+.wk-why { font-size: 14.5px; line-height: 1.42; color: var(--ink-2); }
+.wk-why::before { content: "Why: "; font-weight: 700; color: var(--ink); }
+.stage.is-full .caption.wk-cap { min-height: 0; }
+/* a step-through machine fades the numbers of dimmed cells too, so the live ones stand out */
+.stage:has(.wk-scrub) .ac-cell.dim + .ac-v { fill: var(--ink-3); font-weight: 400; }
+/* small extra buttons stay easy to tap on a phone */
+@media (max-width: 600px) { .stage:has(.wk-scrub) .controls .btn.small { min-height: 36px; } }
+/* --- notes, arrows, brackets, bars and plots inside a machine --- */
+.pt-note { fill: var(--ink-2); font-family: var(--f-body); font-size: 12.5px; font-weight: 700; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.pt-note.mono { font-family: var(--f-mono); font-size: 12px; }
+.pt-note.on { fill: color-mix(in srgb, var(--sun) 62%, var(--ink)); } .pt-note.on2 { fill: var(--blue); } .pt-note.good { fill: var(--mint); } .pt-note.bad { fill: var(--coral); } .pt-note.lilac { fill: var(--lilac); } .pt-note.mute { fill: var(--ink-3); font-weight: 400; }
+.pt-line { fill: none; stroke: var(--line-strong); stroke-width: 2; }
+.pt-head { fill: var(--line-strong); }
+.pt-arrow.on .pt-line { stroke: var(--sun); } .pt-arrow.on .pt-head { fill: var(--sun); }
+.pt-arrow.on2 .pt-line { stroke: var(--blue); } .pt-arrow.on2 .pt-head { fill: var(--blue); }
+.pt-arrow.good .pt-line { stroke: var(--mint); } .pt-arrow.good .pt-head { fill: var(--mint); }
+.pt-arrow.bad .pt-line { stroke: var(--coral); } .pt-arrow.bad .pt-head { fill: var(--coral); }
+.pt-arrow.lilac .pt-line { stroke: var(--lilac); } .pt-arrow.lilac .pt-head { fill: var(--lilac); }
+.mx-br { fill: none; stroke: var(--ink-2); stroke-width: 2; }
+.mx-name { fill: var(--ink); font-family: var(--f-mono); font-size: 12.5px; font-weight: 700; }
+.pl-track { fill: var(--surface-2); stroke: var(--line); stroke-width: 1; }
+.pl-val { fill: var(--ink); font-family: var(--f-mono); font-size: 12.5px; font-weight: 700; }
+.pl-grid { stroke: var(--line); stroke-width: 1; }
+.pl-axis { stroke: var(--ink-3); stroke-width: 1.6; }
+.pl-tick { fill: var(--ink-3); font-family: var(--f-mono); font-size: 10.5px; }
+.pl-name { fill: var(--ink-2); font-family: var(--f-mono); font-size: 11px; }
+.pl-line { fill: none; stroke: var(--ink-3); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.pl-line.thin { stroke-width: 1.5; } .pl-line.dash { stroke-dasharray: 5 5; }
+.pl-line.on { stroke: var(--sun); } .pl-line.on2 { stroke: var(--blue); } .pl-line.good { stroke: var(--mint); } .pl-line.bad { stroke: var(--coral); } .pl-line.lilac { stroke: var(--lilac); } .pl-line.dim { stroke: var(--line-strong); }
+.pl-area { fill: var(--surface-2); stroke: none; }
+.pl-area.on { fill: var(--sun-soft); } .pl-area.on2 { fill: var(--blue-soft); } .pl-area.good { fill: var(--mint-soft); } .pl-area.bad { fill: var(--coral-soft); } .pl-area.lilac { fill: var(--lilac-soft); }
+.pl-dot { fill: var(--surface); stroke: var(--ink-2); stroke-width: 2; }
+.pl-dot.on { fill: var(--sun); stroke: var(--surface); } .pl-dot.on2 { fill: var(--blue); stroke: var(--surface); } .pl-dot.good { fill: var(--mint); stroke: var(--surface); } .pl-dot.bad { fill: var(--coral); stroke: var(--surface); } .pl-dot.lilac { fill: var(--lilac); stroke: var(--surface); } .pl-dot.dim { fill: var(--line-strong); stroke: var(--surface); }
+@media (prefers-reduced-motion: reduce) { .term-tip { transition: none; } }
