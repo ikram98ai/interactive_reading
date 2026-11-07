@@ -22,7 +22,7 @@ window.LIBRARY = [
     accent: "lilac",
     blurb: "The book's pseudocode, beside runnable Rust, acted out by machines you can step through, line by line.",
     chapters: 35,
-    built: 25,
+    built: 35,
   },
   {
     slug: "ddia",
