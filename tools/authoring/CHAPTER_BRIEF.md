@@ -12,7 +12,7 @@ overlaps, clips, or looks crowded. When a section's idea is a program or an algo
 also have a code panel — real code or pseudocode, with the line it is executing right now highlighted.
 Many ideas need no code at all (see "Code panel rules").
 
-**Algorithm Alley's reference is always the elevator scene of `books/algo/ch27.html`** (`#elevator`), the standard for
+**Algorithm Alley's reference is always the elevator scene of `books/clrs/ch27.html`** (`#elevator`), the standard for
 copy, machine, narration and code. Read that page's head, hero, journey section, that scene (the HTML and the `s1`
 script) and the end of the page. The file is large, so skip its other scenes unless you want an example. Older pages
 were built before some of these rules and don't all meet them: where a page and this brief differ, follow this brief.
@@ -31,11 +31,11 @@ were built before some of these rules and don't all meet them: where a page and 
    `session`) and, if any scene will have a code panel, the `code` helper with its CSS. This applies
    whichever book you are building: the shared kit doesn't have these yet, so copy the ones you use into
    your page.
-6. **Algorithm Alley (`algo`) only:** don't copy those helpers. `books/algo/algo.js` and `algo.css` already
+6. **Algorithm Alley (`algo`) only:** don't copy those helpers. `books/clrs/algo.js` and `algo.css` already
    have them (`AL.box`, `AL.session`, …), plus `AL.code` — the book's pseudocode with a Pseudocode | Rust toggle,
    engines highlighting by the book's own line numbers — `AL.mem` for a stack-and-heap strip, `AL.cells` for
    array cells, `AL.grid` for 2-D tables, `AL.tree` for binary trees and `AL.graph` for directed/undirected
-   weighted graphs (read each one's comment block in `algo.js`). Load `algo.js` after `kit.js` and copy `books/algo/ch01.html`'s script header. Every scene
+   weighted graphs (read each one's comment block in `algo.js`). Load `algo.js` after `kit.js` and copy `books/clrs/ch01.html`'s script header. Every scene
    gets the book's pseudocode (from whichever chapter states the algorithm) and a complete Rust program in
    `<script type="text/x-rust">` with its real output in `-out`; `tools/static/rustcheck.py` must pass. Also read the
    "Step-through toolkit" section near the end of `algo.js` and the same block at the end of `algo.css`.
@@ -46,8 +46,8 @@ were built before some of these rules and don't all meet them: where a page and 
 fixed number. A 20-section chapter gets about 20 scenes. Each scene = one section = one story = one
 machine, plus a code panel only where it helps.
 
-- A subsection with named parts that are each a separate mechanism (CS:APP 1.4.1's *Buses*, *Main
-  Memory*, *Processor*; 1.9.2's thread-level, instruction-level and SIMD parallelism) gets one scene per
+- A subsection with named parts that are each a separate mechanism (CS:APP 1.4.1's _Buses_, _Main
+  Memory_, _Processor_; 1.9.2's thread-level, instruction-level and SIMD parallelism) gets one scene per
   part.
 - A section intro that only sets up its subsections (CS:APP 1.9 "Important Themes") shares a scene with
   its first subsection; one whose text has its own idea (1.4's shell, 1.7's two purposes of the OS) gets
@@ -74,7 +74,7 @@ none (see "Code panel rules").
   paragraphs, an `.imagine` box starting `<b>Try it:</b>` that says exactly what to press, and
   `<details class="book"><summary>What the book says</summary>`, ending with a `<p class="cite">` that
   gives the book's printed page numbers and then the section title, e.g. `pp.&nbsp;198–208 · Single-Leader
-  Replication` — no author, book title or edition. `kit.js` turns the page numbers into links that open the
+Replication` — no author, book title or edition. `kit.js` turns the page numbers into links that open the
   book's PDF at that page.
   Right: `.stage` with `.stage-head` (title + pill / seg / stats), `.stage-scroll > svg` (viewBox 660
   wide, about 300–380 tall, `role="img"` + `aria-label`), `.controls`, an optional `.statrow`, a
@@ -151,7 +151,7 @@ numbers with `K.stat` when there is something to count.
 glance. Keep each example small (4–8 items).
 
 **Animate the mechanism.** Data should visibly travel (`K.fly`, `K.path`, `K.tween`) so the viewer sees
-*how* the result came about. Use a Step / Play / Reset flow for multi-step stories and free-play buttons
+_how_ the result came about. Use a Step / Play / Reset flow for multi-step stories and free-play buttons
 for sandboxes. All waits go through `K.sleep` / `K.tween` (they respect reduced motion and the speed
 setting). Anything that auto-plays runs only while on screen (`K.whenVisible`) and when
 `!document.hidden && !K.reduced`. Reset fully restores the start state.
@@ -163,6 +163,7 @@ touching the fresh state. Keep two functions: `reset()` = `S.cancel()` + redraw,
 nothing. `smoke.js` can't catch this, because a cancelled run throws no error; only the screenshots show it.
 
 **Keep it clean.**
+
 - viewBox width 660; keep every shape and label at least 14px inside its edges.
 - Lay out on a grid: aligned columns and rows, equal gaps, consistent box sizes.
 - No overlapping text, ever. Estimate ~6.8px per character for 11px mono labels and ~7.5px for 14px body
@@ -172,8 +173,8 @@ nothing. `smoke.js` can't catch this, because a cancelled run throws no error; o
 - Colour has meaning: blue = computers/services (`sv-server`), lilac = storage (`sv-db`), yellow = data
   in motion (`sv-data`, `sv-data-soft`), mint = good (`sv-good`), coral = failure (`sv-bad`), grey =
   neutral (`sv-box`, `sv-panel`). `sv-*` classes and CSS variables only.
-- Flying things go in a `layer` group appended last — unless they travel *through* boxes, in which case
-  put that layer *under* the boxes so parcels never cover the labels.
+- Flying things go in a `layer` group appended last — unless they travel _through_ boxes, in which case
+  put that layer _under_ the boxes so parcels never cover the labels.
 - Don't put a label on a `K.draw.db` cylinder's middle band: it spans `cy - 2` to `cy - 2 + 0.16 * w`.
 - Clickable SVG things: `class="clickable" tabindex="0" role="button" aria-label="…"`, handling click
   and Enter/Space.
@@ -241,6 +242,7 @@ The test: would the viewer understand the machine better by following a highligh
 step? If not, leave the panel out. A page can mix all three kinds.
 
 **Pick the code.**
+
 - Real code does what the machine shows. **Verify it:** compile, run, assemble or disassemble it
   (`clang -target x86_64-linux-gnu` works on a Mac) and show the real output, bytes and instruction
   names — never ones recalled from memory. If the book's numbers disagree with the real output, show the
@@ -254,7 +256,8 @@ step? If not, leave the panel out. A page can mix all three kinds.
   mode through `onTab`).
 
 **Make it live.**
-- `cv.at([lines])` highlights what the machine is doing *now* (`"on"`). Use `"on2"` for a second flow of
+
+- `cv.at([lines])` highlights what the machine is doing _now_ (`"on"`). Use `"on2"` for a second flow of
   control, `"dim"` for a paused one, and `"good"` / `"bad"` for outcomes.
 - `cv.notes({ line: "i = 2" })` puts live values at the ends of lines; `cv.caret(line, col)` marks a
   single character; `cv.out(text)` / `cv.print(text)` show what the program printed.
@@ -307,11 +310,11 @@ node tools/static/check-site.js
 Algorithm Alley also runs these, and steps.js must pass:
 
 ```
-node tools/browser/steps.js    books/algo/chNN.html --light        # every step of every mode: overlaps, clipping, Back works
-node tools/browser/steps.js    books/algo/chNN.html --dark --shots=2
-node tools/browser/rustview.js books/algo/chNN.html                # steps where the Rust listing lights up nothing
-node tools/browser/interact.js books/algo/chNN.html                # used as a reader would: speed, keys, touch
-python3 tools/static/rustcheck.py books/algo/chNN.html
+node tools/browser/steps.js    books/clrs/chNN.html --light        # every step of every mode: overlaps, clipping, Back works
+node tools/browser/steps.js    books/clrs/chNN.html --dark --shots=2
+node tools/browser/rustview.js books/clrs/chNN.html                # steps where the Rust listing lights up nothing
+node tools/browser/interact.js books/clrs/chNN.html                # used as a reader would: speed, keys, touch
+python3 tools/static/rustcheck.py books/clrs/chNN.html
 ```
 
 Open at least the first, middle and last step of every scene, and judge them as a reader would. Passing the checks is

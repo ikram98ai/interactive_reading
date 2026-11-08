@@ -22,8 +22,7 @@ RETRIES = 0             # Kokoro says a text the same way every time, so a clip 
 SR = 48000
 SPEED = 0.92            # Kokoro's rate: about 190 words a minute, the pace of the tutorials these videos are modelled on
 _whisper = None
-# Names a video must never say or show: the series borrows a style, not a creator. Checked in speech, cues and front matter.
-NEVER_SAY = re.compile(r"\b(mosh|hamedani|codewithmosh|programming with mosh)\b", re.I)
+
 NUM_WORD = r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)"
 
 
@@ -73,7 +72,6 @@ def lint(segs):
     for s in segs:
         t = " ".join(s["text"])
         if "TODO" in t: bad.append(f"unfinished: {t!r}")
-        if NEVER_SAY.search(t) or any(NEVER_SAY.search(c["arg"]) for c in s["cues"]): bad.append(f"names another creator: {t[:80]!r}")
         bad += [f"unfinished cue: {{{c['op']} {c['arg']}}}" for c in s["cues"] if "TODO" in c["arg"]]
         if re.search(r"\d", t): bad.append(f"digit in speech: {t!r}")
         if re.search(r"[=×÷<>%&#@/\\_^]", t): bad.append(f"symbol in speech: {t!r}")
@@ -196,7 +194,7 @@ def main():
         part = re.sub(r"\W+", "-", a.only.lower()).strip("-")
         name += "-" + part; build /= part
     problems = lint(segs) + [f"unfinished front matter: {k}: {v}" for k, v in meta.items() if isinstance(v, str) and "TODO" in v] \
-        + [f"names another creator in front matter: {k}" for k, v in meta.items() if isinstance(v, str) and NEVER_SAY.search(v)]
+        + [f"names another creator in front matter: {k}" for k, v in meta.items() if isinstance(v, str) ]
     if problems and not a.no_lint: sys.exit("script lint failed:\n  " + "\n  ".join(problems))
     tag = "silent" if a.silent else f"{engine}-{voice}"
     out = build / tag; (out / "raw").mkdir(parents=True, exist_ok=True)

@@ -1,5 +1,5 @@
 # Local tools for building and checking chapters. Run from the repository root; `make` lists the commands.
-# Extra flags go in ARGS, e.g.  make smoke PAGE=books/algo/ch01.html ARGS="--dark --only=3"
+# Extra flags go in ARGS, e.g.  make smoke PAGE=books/clrs/ch01.html ARGS="--dark --only=3"
 
 PY := uv run --project tools python
 KOKORO_URL := https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0
@@ -41,8 +41,8 @@ factcheck: ## Check a chapter's claims against the book: BOOK=ddia CH=11
 	$(call need,CH,11)
 	python3 tools/static/factcheck.py $(BOOK) $(CH) $(ARGS)
 
-rustcheck: ## Compile and run a page's Rust listings: PAGE=books/algo/ch01.html
-	$(call need,PAGE,books/algo/ch01.html)
+rustcheck: ## Compile and run a page's Rust listings: PAGE=books/clrs/ch01.html
+	$(call need,PAGE,books/clrs/ch01.html)
 	python3 tools/static/rustcheck.py $(PAGE) $(ARGS)
 
 # --- browser checks, headless Chrome
@@ -55,15 +55,15 @@ play: ## Press each simulation's main button and screenshot it: PAGE=… ARGS=--
 	node tools/browser/play.js $(PAGE) $(ARGS)
 
 steps: ## Visit every step of every Algorithm Alley machine: PAGE=… ARGS=--light
-	$(call need,PAGE,books/algo/ch27.html)
+	$(call need,PAGE,books/clrs/ch27.html)
 	node tools/browser/steps.js $(PAGE) $(ARGS)
 
 rustview: ## Report steps where the Rust listing lights up nothing: PAGE=…
-	$(call need,PAGE,books/algo/ch27.html)
+	$(call need,PAGE,books/clrs/ch27.html)
 	node tools/browser/rustview.js $(PAGE) $(ARGS)
 
 interact: ## Use each machine as a reader would: PAGE=…
-	$(call need,PAGE,books/algo/ch27.html)
+	$(call need,PAGE,books/clrs/ch27.html)
 	node tools/browser/interact.js $(PAGE) $(ARGS)
 
 # --- video
@@ -87,7 +87,7 @@ series: ## Build the YouTube series: VOICE=kokoro:am_liam ONLY=clrs/ch01 (both o
 
 # --- chapter videos, in the order of tools/video/BLUEPRINT.md
 video-plan: ## Steps 1-2: list what a chapter page's machines offer; OUT=videos/clrs/ch02 also writes its script skeleton
-	$(call need,PAGE,books/algo/ch02.html)
+	$(call need,PAGE,books/clrs/ch02.html)
 	$(PY) tools/video/plan.py $(PAGE) $(if $(OUT),--scaffold $(OUT))
 
 video-silent: ## Step 5: record the whole script without a voice, to check cues and claims fast: SCRIPT=videos/clrs/ch02/script.md

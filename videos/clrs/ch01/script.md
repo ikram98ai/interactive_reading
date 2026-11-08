@@ -1,7 +1,7 @@
 ---
 title: What Algorithms Are, and Why They Matter
 kicker: Introduction to Algorithms · Chapter 1
-page: books/algo/ch01.html
+page: books/clrs/ch01.html
 scene: race
 seed: 1
 targets:
@@ -37,6 +37,7 @@ targets:
   chip: svg:20,40,300,250
   power: svg:320,40,320,230
 ---
+
 {scene}{focus laneA} Here are two computers. This computer is a thousand times faster than {focus laneB} that computer. {focus size} We give them both the same job, to sort ten million numbers. {focus off} So which one finishes first?
 
 {speed 2}{click Race}{focus barA+barB} Both computers start at the same moment. {await}

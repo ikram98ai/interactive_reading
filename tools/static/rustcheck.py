@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Compile and run every Rust listing on a chapter page, and check it prints what the page says it prints.
 
-  python3 tools/static/rustcheck.py books/algo/ch01.html            all listings
-  python3 tools/static/rustcheck.py books/algo/ch01.html rs-s4      just one (by block id)
+  python3 tools/static/rustcheck.py books/clrs/ch01.html            all listings
+  python3 tools/static/rustcheck.py books/clrs/ch01.html rs-s4      just one (by block id)
 
 A listing is a <script type="text/x-rust" id="rs-…"> block; the page shows its real output from the block
 <script type="text/x-rust-out" id="rs-…-out">. Each listing must build with `rustc --edition 2021` without

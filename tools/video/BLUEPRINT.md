@@ -7,23 +7,23 @@ steps, the fixed shape of a video, and the rules for its voice, picture and Rust
 The style comes from measuring well-regarded programming tutorials: a still, nearly empty screen where each change is named as
 it happens, and a voice that explains instead of performing. The targets in step 7 are those measurements.
 
-Algorithm Alley (`books/algo`, the CLRS book) is the only book whose pages the recorder can drive. Its videos go in
+Algorithm Alley (`books/clrs`, the CLRS book) is the only book whose pages the recorder can drive. Its videos go in
 `videos/clrs/`.
 
 ## Steps
 
 Each step has a gate. Don't start the next step until the gate passes.
 
-| # | Step | Command | Gate |
-|---|---|---|---|
-| 1 | **Plan** | `make video-plan PAGE=books/algo/ch02.html` | You have picked six to eight parts, each one a question with a machine that answers it |
-| 2 | **Scaffold** | `make video-plan PAGE=books/algo/ch02.html OUT=videos/clrs/ch02` | `videos/clrs/ch02/script.md` exists, in the fixed shape |
-| 3 | **Ready the machines** | edit `books/algo/chNN.html` | Every layer the video won't explain has a `data-part`; `make smoke` and `make steps` still pass |
-| 4 | **Write** | edit `script.md` | No TODO left; every number said aloud has a `{check}` |
-| 5 | **Silent pass** | `make video-silent SCRIPT=videos/clrs/ch02/script.md` | No `CHECK FAILED`, `no button` or unknown target |
-| 6 | **Pilot one part** | `make video-part SCRIPT=… ONLY="Part 1"` | You've watched it: the voice, the pacing, and one Rust segment, at full size |
-| 7 | **Full render and QA** | `make series ONLY=clrs/ch02`, then `make video-qa VIDEO=videos/clrs/ch02/ch02-bm_fable.mp4` | No FAIL. Fix every WARN, or write down why it stays |
-| 8 | **Publish** | upload the `.mp4`; paste `.chapters.txt` into the description; upload the `.srt` | The description links the chapter's page |
+| #   | Step                   | Command                                                                                     | Gate                                                                                            |
+| --- | ---------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 1   | **Plan**               | `make video-plan PAGE=books/clrs/ch02.html`                                                 | You have picked six to eight parts, each one a question with a machine that answers it          |
+| 2   | **Scaffold**           | `make video-plan PAGE=books/clrs/ch02.html OUT=videos/clrs/ch02`                            | `videos/clrs/ch02/script.md` exists, in the fixed shape                                         |
+| 3   | **Ready the machines** | edit `books/clrs/chNN.html`                                                                 | Every layer the video won't explain has a `data-part`; `make smoke` and `make steps` still pass |
+| 4   | **Write**              | edit `script.md`                                                                            | No TODO left; every number said aloud has a `{check}`                                           |
+| 5   | **Silent pass**        | `make video-silent SCRIPT=videos/clrs/ch02/script.md`                                       | No `CHECK FAILED`, `no button` or unknown target                                                |
+| 6   | **Pilot one part**     | `make video-part SCRIPT=… ONLY="Part 1"`                                                    | You've watched it: the voice, the pacing, and one Rust segment, at full size                    |
+| 7   | **Full render and QA** | `make series ONLY=clrs/ch02`, then `make video-qa VIDEO=videos/clrs/ch02/ch02-bm_fable.mp4` | No FAIL. Fix every WARN, or write down why it stays                                             |
+| 8   | **Publish**            | upload the `.mp4`; paste `.chapters.txt` into the description; upload the `.srt`            | The description links the chapter's page                                                        |
 
 Step 1 prints every scene with its modes, buttons, sliders and stats. It tags scenes that have a Rust listing and a
 stack-and-heap strip with `RUST+MEMORY`, which means they can carry a Rust segment. It also lists the `data-part` layers.
@@ -133,11 +133,11 @@ The video drives the page's own machines with their controls and captions hidden
 
 `make video-qa` measures these and exits 1 on a FAIL.
 
-| Measure | Target | Reference tutorials | CLRS ch01 |
-|---|---|---|---|
-| Pace, words over the whole running time | 180–195 wpm | 185–193 | 178 |
-| Picture moving | 5–11% of the time | 5–11% | 8.4% |
-| Visual changes | 6–10 a minute | 6–10 | 12 |
-| Longest pause, excluding the ends | under 3 s (section cards are about 2.8) | about 3 | 2.8 |
-| Silent motion, the picture moving with nobody talking | under 1.5 s | none | 2.0 |
-| Clutter, the share of the frame that isn't background | under 6% | 2–6% | 3.7% |
+| Measure                                               | Target                                  | Reference tutorials | CLRS ch01 |
+| ----------------------------------------------------- | --------------------------------------- | ------------------- | --------- |
+| Pace, words over the whole running time               | 180–195 wpm                             | 185–193             | 178       |
+| Picture moving                                        | 5–11% of the time                       | 5–11%               | 8.4%      |
+| Visual changes                                        | 6–10 a minute                           | 6–10                | 12        |
+| Longest pause, excluding the ends                     | under 3 s (section cards are about 2.8) | about 3             | 2.8       |
+| Silent motion, the picture moving with nobody talking | under 1.5 s                             | none                | 2.0       |
+| Clutter, the share of the frame that isn't background | under 6%                                | 2–6%                | 3.7%      |

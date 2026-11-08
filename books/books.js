@@ -8,19 +8,21 @@ window.LIBRARY = [
     author: "Randal E. Bryant & David R. O'Hallaron",
     spine: "CS:APP · 3rd ed.",
     accent: "mint",
-    blurb: "What really happens between your program and the machine that runs it — bits, instructions, caches and processes.",
+    blurb:
+      "What really happens between your program and the machine that runs it — bits, instructions, caches and processes.",
     chapters: 12,
     built: 12,
   },
-   {
+  {
     slug: "algo",
-    path: "books/algo/index.html",
+    path: "books/clrs/index.html",
     title: "Algorithm Alley",
     book: "Introduction to Algorithms",
     author: "Cormen, Leiserson, Rivest & Stein",
     spine: "CLRS · 4th ed.",
     accent: "lilac",
-    blurb: "The book's pseudocode, beside runnable Rust, acted out by machines you can step through, line by line.",
+    blurb:
+      "The book's pseudocode, beside runnable Rust, acted out by machines you can step through, line by line.",
     chapters: 35,
     built: 35,
   },
@@ -32,9 +34,9 @@ window.LIBRARY = [
     author: "Martin Kleppmann & Chris Riccomini",
     spine: "DDIA · 2nd ed.",
     accent: "blue",
-    blurb: "How real data systems store, copy, and agree on data — as machines you can poke, break, and fix.",
+    blurb:
+      "How real data systems store, copy, and agree on data — as machines you can poke, break, and fix.",
     chapters: 14,
     built: 14,
   },
- 
 ];

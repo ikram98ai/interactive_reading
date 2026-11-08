@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plan.py books/algo/chNN.html [--scaffold videos/clrs/chNN] — step 1 of tools/video/BLUEPRINT.md.
+"""plan.py books/clrs/chNN.html [--scaffold videos/clrs/chNN] — step 1 of tools/video/BLUEPRINT.md.
 
 Reads a chapter page and lists what a video can drive in each scene: the machine's modes, buttons, sliders and stats,
 whether it has a Rust listing and a stack-and-heap strip (a Rust segment), and which layers are tagged data-part (so the

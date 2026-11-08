@@ -5,7 +5,7 @@
   tools/authoring/extract.py books/ddia/ddia.pdf ddia 11                    outline entry "Chapter 11…" → tools/.text/ddia/ch11.txt
   tools/authoring/extract.py "books/csapp/….pdf" csapp 7 --title Linking    outline entry whose title contains "Linking"
   tools/authoring/extract.py "books/csapp/….pdf" csapp 7 --pages 696-746    explicit PDF page range (1-based, inclusive)
-  tools/authoring/extract.py books/algo/CLRS.pdf algo 2 --pages 39-70 --fix-glyphs
+  tools/authoring/extract.py books/clrs/CLRS.pdf algo 2 --pages 39-70 --fix-glyphs
                                                                   CLRS: undo its font's û (fi), ü (fl), 4 (em dash), <…= (quotes)
 
 A chapter found through the outline runs up to the page before the next top-level entry.

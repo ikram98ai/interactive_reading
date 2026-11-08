@@ -41,17 +41,17 @@ chapter of that book as the reference. Afterwards bump `built` in `books/<slug>/
 
 ## Checking a chapter
 
-| Command | What it catches |
-|---|---|
-| `make smoke PAGE=books/ddia/ch11.html ARGS=--light` | Clicks every control in every simulation, rapidly and mid-animation. Fails on JS errors, SVG labels clipped by their viewBox, and sideways scrolling on a phone. Saves before/after screenshots of each stage. |
-| `make play PAGE=books/ddia/ch11.html ARGS=--light` | Presses each simulation's main button, waits for it to settle, and screenshots that. It never fails on looks — **you have to open the PNGs**. This is where overlapping labels and stray parcels show up. `--seg=1` plays each sim's second mode; `--presses=8` fills sandboxes. |
-| `make steps PAGE=books/algo/ch27.html ARGS=--light` | Algorithm Alley's step-through machines (`AL.walk`): visits every step of every mode, and fails on overlapping or clipped labels, an empty caption, or a picture that differs depending on whether you got there by Next, Back or the slider. Saves evenly spaced screenshots (`--shots=N`). |
-| `make rustview PAGE=books/algo/ch27.html` | Steps every `AL.walk` machine in the Rust view and reports steps where the listing lights up nothing, so a missing line-map entry doesn't leave the panel dead. `--detail` names the lines. It reports and never fails, because some steps really have no Rust line. |
-| `make interact PAGE=books/algo/ch27.html` | Uses each `AL.walk` machine as a reader would, at normal speed: the real animation, Back mid-animation, arrow keys, Pause, Rust during a run, full screen, reduced motion, touch at phone size, and every dotted word. Fails on what breaks. |
-| `make audit PAGE=books/ddia/ch1*.html` | Duplicate ids, links to missing anchors, scenes missing from the table of contents, unlabelled SVGs, hard-coded colours, emoji, a quiz whose right answer is always in the same spot. |
-| `make factcheck BOOK=ddia CH=11` | Every name, number and “quoted phrase” in the epigraph and the "What the book says" boxes must appear in the chapter's text. Exits 1 on a quotation that isn't the book's exact words. |
-| `make rustcheck PAGE=books/algo/ch01.html` | Algorithm Alley only: compiles and runs every Rust listing on the page (`<script type="text/x-rust">`) with `rustc --edition 2021`, and fails on a build error or warning, a crash, output that differs from the page's `-out` block, a line over 80 characters, or a comment run longer than two lines. Needs `rustc`. |
-| `make site` | The same parse-and-links check the deploy workflow runs, for the whole site. If this passes, the push will deploy. |
+| Command                                             | What it catches                                                                                                                                                                                                                                                                                                         |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `make smoke PAGE=books/ddia/ch11.html ARGS=--light` | Clicks every control in every simulation, rapidly and mid-animation. Fails on JS errors, SVG labels clipped by their viewBox, and sideways scrolling on a phone. Saves before/after screenshots of each stage.                                                                                                          |
+| `make play PAGE=books/ddia/ch11.html ARGS=--light`  | Presses each simulation's main button, waits for it to settle, and screenshots that. It never fails on looks — **you have to open the PNGs**. This is where overlapping labels and stray parcels show up. `--seg=1` plays each sim's second mode; `--presses=8` fills sandboxes.                                        |
+| `make steps PAGE=books/clrs/ch27.html ARGS=--light` | Algorithm Alley's step-through machines (`AL.walk`): visits every step of every mode, and fails on overlapping or clipped labels, an empty caption, or a picture that differs depending on whether you got there by Next, Back or the slider. Saves evenly spaced screenshots (`--shots=N`).                            |
+| `make rustview PAGE=books/clrs/ch27.html`           | Steps every `AL.walk` machine in the Rust view and reports steps where the listing lights up nothing, so a missing line-map entry doesn't leave the panel dead. `--detail` names the lines. It reports and never fails, because some steps really have no Rust line.                                                    |
+| `make interact PAGE=books/clrs/ch27.html`           | Uses each `AL.walk` machine as a reader would, at normal speed: the real animation, Back mid-animation, arrow keys, Pause, Rust during a run, full screen, reduced motion, touch at phone size, and every dotted word. Fails on what breaks.                                                                            |
+| `make audit PAGE=books/ddia/ch1*.html`              | Duplicate ids, links to missing anchors, scenes missing from the table of contents, unlabelled SVGs, hard-coded colours, emoji, a quiz whose right answer is always in the same spot.                                                                                                                                   |
+| `make factcheck BOOK=ddia CH=11`                    | Every name, number and “quoted phrase” in the epigraph and the "What the book says" boxes must appear in the chapter's text. Exits 1 on a quotation that isn't the book's exact words.                                                                                                                                  |
+| `make rustcheck PAGE=books/clrs/ch01.html`          | Algorithm Alley only: compiles and runs every Rust listing on the page (`<script type="text/x-rust">`) with `rustc --edition 2021`, and fails on a build error or warning, a crash, output that differs from the page's `-out` block, a line over 80 characters, or a comment run longer than two lines. Needs `rustc`. |
+| `make site`                                         | The same parse-and-links check the deploy workflow runs, for the whole site. If this passes, the push will deploy.                                                                                                                                                                                                      |
 
 Run `smoke.js` and `play.js` once with `--light` and once with `--dark`: headless Chrome inherits the
 OS theme, so without a flag you only ever test one of them. `--only=N` re-runs a single stage while you
@@ -67,7 +67,6 @@ copyrighted, like the PDFs), `node_modules/` and `.venv/` are all gitignored.
   replace reading the chapter.
 - `smoke.js` proves a page doesn't throw; it can't tell whether a simulation teaches the right thing.
 - Nothing here tests `prefers-reduced-motion`, keyboard-only use, or a screen reader.
-
 
 ## Narrated scene videos (`tools/video/`)
 
