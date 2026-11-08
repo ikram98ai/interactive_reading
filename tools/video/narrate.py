@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""narrate.py <script.md> --voice kokoro:bm_fable [--silent] — turn a video script into timed narration.
+"""narrate.py videos/<book>/<ch>/script.md --voice kokoro:bm_fable [--silent] — turn a video script into timed narration.
+Everything a chapter's video needs stays in its folder: script.md, build/ (clips, manifest, frames) and the finished video.
 
   1. parse the script: spoken text plus {cues}, which fire at the word they sit in front of
   2. lint the spoken text: no digits, no recited runs of numbers (see LINT)
   3. synthesize each block (cached by text + voice) with tts_kokoro.py
   4. transcribe each clip with Whisper: word times place the cues, and a clip that does not say what the script
      says (a TTS slip) is reported
-  5. trim, level and write build/<script>/<voice>/manifest.json for studio.js
+  5. trim, level and write build/<voice>/manifest.json for studio.js
 
---silent skips 3 and 4 and estimates timing at 150 words a minute: a fast way to check the highlights."""
+--silent skips 3 and 4 and estimates timing at 150 words a minute: a fast way to check the highlights.
+--only "Part 1" narrates just the section whose {goto} contains that text, into its own build folder: a fast way to judge one part."""
 import argparse, difflib, hashlib, json, pathlib, random, re, subprocess, sys
 import numpy as np
 import soundfile as sf
@@ -18,7 +20,10 @@ MAX_WORDS = 48          # longer blocks drift; split at a sentence end
 MAX_WER = 0.10          # above this, the clip probably misread the script
 RETRIES = 0             # Kokoro says a text the same way every time, so a clip that differs is reported, not regenerated
 SR = 48000
+SPEED = 0.92            # Kokoro's rate: about 190 words a minute, the pace of the tutorials these videos are modelled on
 _whisper = None
+# Names a video must never say or show: the series borrows a style, not a creator. Checked in speech, cues and front matter.
+NEVER_SAY = re.compile(r"\b(mosh|hamedani|codewithmosh|programming with mosh)\b", re.I)
 NUM_WORD = r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)"
 
 
@@ -33,7 +38,8 @@ def parse(path):
         k, v = line.split(":", 1); meta[k.strip()] = v.strip(); inT = False
     meta["targets"] = targets
     segs = []
-    for para in re.split(r"\n\s*\n", m.group(2).strip()):
+    body = re.sub(r"<!--.*?-->", "", m.group(2), flags=re.S)  # notes for the author: never spoken, never cued
+    for para in re.split(r"\n\s*\n", body.strip()):
         cur = {"text": [], "cues": [], "then": None}
         for tok in re.findall(r"\{[^}]*\}|[^\s{]+", para):
             if tok.startswith("{"):
@@ -66,6 +72,9 @@ def lint(segs):
     bad = []
     for s in segs:
         t = " ".join(s["text"])
+        if "TODO" in t: bad.append(f"unfinished: {t!r}")
+        if NEVER_SAY.search(t) or any(NEVER_SAY.search(c["arg"]) for c in s["cues"]): bad.append(f"names another creator: {t[:80]!r}")
+        bad += [f"unfinished cue: {{{c['op']} {c['arg']}}}" for c in s["cues"] if "TODO" in c["arg"]]
         if re.search(r"\d", t): bad.append(f"digit in speech: {t!r}")
         if re.search(r"[=×÷<>%&#@/\\_^]", t): bad.append(f"symbol in speech: {t!r}")
         for sent in re.split(r"(?<=[.?!])\s+", t):
@@ -155,10 +164,10 @@ def gap_after(seg, rng):
     if not seg["text"]: return 0.0
     last = seg["text"][-1]
     if seg.get("para_end"):
-        base = (0.75, 1.1)
-    elif last.endswith("?"): base = (0.55, 0.8)
-    elif last.endswith("..."): base = (0.6, 0.85)
-    else: base = (0.32, 0.55)
+        base = (0.12, 0.28)   # on top of the air finish() leaves and the voice's own tail, which together come to about 0.6 s
+    elif last.endswith("?"): base = (0.1, 0.22)
+    elif last.endswith("..."): base = (0.15, 0.3)
+    else: base = (0.04, 0.14)
     return round(rng.uniform(*base), 3)
 
 
@@ -166,21 +175,31 @@ def synth(engine, voice, items, work):
     if not items: return
     if engine != "kokoro": sys.exit(f"narrate: {len(items)} clips are not cached for {engine}:{voice}, and only kokoro: voices can make new ones.")
     jobs = work / f"jobs-{hashlib.md5(json.dumps(items).encode()).hexdigest()[:8]}.json"
-    jobs.write_text(json.dumps({"voice": voice, "speed": 0.97, "items": items}))
+    jobs.write_text(json.dumps({"voice": voice, "speed": SPEED, "items": items}))
     subprocess.run([sys.executable, str(HERE / "tts_kokoro.py"), str(jobs)], check=True)
     jobs.unlink()
 
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("script"); ap.add_argument("--voice", default="kokoro:bm_fable"); ap.add_argument("--silent", action="store_true"); ap.add_argument("--no-lint", action="store_true")
+    ap = argparse.ArgumentParser(); ap.add_argument("script"); ap.add_argument("--voice", default="kokoro:bm_fable"); ap.add_argument("--silent", action="store_true"); ap.add_argument("--no-lint", action="store_true"); ap.add_argument("--only")
     a = ap.parse_args()
     engine, voice = a.voice.split(":", 1)
     meta, segs = parse(a.script)
-    problems = lint(segs)
+    home = pathlib.Path(a.script).resolve().parent
+    name, build = home.name, home / "build"
+    if a.only:
+        heads = [i for i, s in enumerate(segs) if any(c["op"] == "goto" for c in s["cues"])]
+        hit = next((i for i in heads if a.only.lower() in next(c["arg"] for c in segs[i]["cues"] if c["op"] == "goto").lower()), None)
+        if hit is None: sys.exit(f"narrate: no {{goto}} contains {a.only!r}")
+        meta["scene"] = next(c["arg"] for c in segs[hit]["cues"] if c["op"] == "goto").split("|")[0].strip()
+        segs = segs[hit:next((i for i in heads if i > hit), len(segs))]
+        part = re.sub(r"\W+", "-", a.only.lower()).strip("-")
+        name += "-" + part; build /= part
+    problems = lint(segs) + [f"unfinished front matter: {k}: {v}" for k, v in meta.items() if isinstance(v, str) and "TODO" in v] \
+        + [f"names another creator in front matter: {k}" for k, v in meta.items() if isinstance(v, str) and NEVER_SAY.search(v)]
     if problems and not a.no_lint: sys.exit("script lint failed:\n  " + "\n  ".join(problems))
-    name = pathlib.Path(a.script).stem
     tag = "silent" if a.silent else f"{engine}-{voice}"
-    out = HERE / "build" / name / tag; (out / "raw").mkdir(parents=True, exist_ok=True)
+    out = build / tag; (out / "raw").mkdir(parents=True, exist_ok=True)
     rng = random.Random(meta.get("seed", 1))
     base = int(meta.get("seed", 1))
     res = []
@@ -189,7 +208,7 @@ def main():
         rec = {"i": i, "text": text, "words": words, "cues": s["cues"], "then": s["then"], "gap": gap_after(s, rng), "dur": 0.0, "wav": None}
         res.append(rec)
         if not words: continue
-        rec["key"] = hashlib.md5(f"{tag}|{text}".encode()).hexdigest()[:12]
+        rec["key"] = hashlib.md5(f"{tag}|{SPEED}|{text}".encode()).hexdigest()[:12]
     if a.silent:
         for r in res:
             r["dur"] = len(r["words"]) * 0.4
@@ -219,7 +238,7 @@ def main():
     for r in res:
         for c in r["cues"]:
             c["t"] = 0.0 if c["w"] == 0 or not r["words"] else (r["start"][c["w"]] if c["w"] < len(r["words"]) else r["dur"])
-    (out / "manifest.json").write_text(json.dumps({"meta": meta, "name": name, "voice": a.voice, "silent": a.silent, "segments": res}, indent=1, default=float))
+    (out / "manifest.json").write_text(json.dumps({"meta": meta, "name": name, "out": str(home / f"{name}-{'silent' if a.silent else voice}.mp4"), "voice": a.voice, "silent": a.silent, "segments": res}, indent=1, default=float))
     words = sum(len(r["words"]) for r in res); dur = sum(r["dur"] + r["gap"] for r in res)
     print(f"{name}: {len(res)} blocks, {words} words, about {dur / 60:.1f} min of speech. → {out}/manifest.json")
 

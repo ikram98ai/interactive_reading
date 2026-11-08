@@ -8,7 +8,7 @@ MODELS := tools/video/models
 need = $(if $($(1)),,$(error $(1) is required, e.g. make $@ $(1)=$(2)))
 
 .DEFAULT_GOAL := help
-.PHONY: help setup models extract site audit factcheck rustcheck smoke play steps rustview interact narrate metrics record scenes series
+.PHONY: help setup models extract site audit factcheck rustcheck smoke play steps rustview interact narrate metrics record scenes series video-plan video-silent video-part video-qa
 
 help: ## List the commands
 	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  %-11s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -67,8 +67,8 @@ interact: ## Use each machine as a reader would: PAGE=…
 	node tools/browser/interact.js $(PAGE) $(ARGS)
 
 # --- video
-narrate: ## Turn a video script into timed narration: SCRIPT=tools/video/scripts/00-chapter-1.md ARGS="--voice kokoro:am_liam"
-	$(call need,SCRIPT,tools/video/scripts/00-chapter-1.md)
+narrate: ## Turn a video script into timed narration: SCRIPT=videos/clrs/ch01/script.md ARGS="--voice kokoro:am_liam"
+	$(call need,SCRIPT,videos/clrs/ch01/script.md)
 	$(PY) tools/video/narrate.py $(SCRIPT) $(ARGS)
 
 metrics: ## Report a voice's pitch and pauses: WAV="a.wav b.wav"
@@ -82,5 +82,23 @@ record: ## Record one narrated scene: SCENE=videos/scripts/<scene>.json OUT=vide
 scenes: ## Record every chapter-1 scene into videos/
 	tools/video/make-all.sh
 
-series: ## Build the YouTube series: VOICE=kokoro:am_liam ONLY=00 (both optional, default voice kokoro:bm_fable)
+series: ## Build the YouTube series: VOICE=kokoro:am_liam ONLY=clrs/ch01 (both optional, default voice kokoro:bm_fable)
 	tools/video/make-series.sh "$(VOICE)" "$(ONLY)"
+
+# --- chapter videos, in the order of tools/video/BLUEPRINT.md
+video-plan: ## Steps 1-2: list what a chapter page's machines offer; OUT=videos/clrs/ch02 also writes its script skeleton
+	$(call need,PAGE,books/algo/ch02.html)
+	$(PY) tools/video/plan.py $(PAGE) $(if $(OUT),--scaffold $(OUT))
+
+video-silent: ## Step 5: record the whole script without a voice, to check cues and claims fast: SCRIPT=videos/clrs/ch02/script.md
+	$(call need,SCRIPT,videos/clrs/ch02/script.md)
+	node tools/video/studio.js $$($(PY) tools/video/narrate.py $(SCRIPT) --silent | sed -n 's/.*→ //p')
+
+video-part: ## Step 6: narrate and record one part: SCRIPT=videos/clrs/ch02/script.md ONLY="Part 1" (VOICE optional)
+	$(call need,SCRIPT,videos/clrs/ch02/script.md)
+	$(call need,ONLY,Part 1)
+	node tools/video/studio.js $$($(PY) tools/video/narrate.py $(SCRIPT) --only "$(ONLY)" --voice $(or $(VOICE),kokoro:bm_fable) | sed -n 's/.*→ //p')
+
+video-qa: ## Step 7: measure a finished video against the series' quality bar: VIDEO=videos/clrs/ch01/ch01-bm_fable.mp4
+	$(call need,VIDEO,videos/clrs/ch01/ch01-bm_fable.mp4)
+	$(PY) tools/video/qa.py $(VIDEO)

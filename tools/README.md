@@ -85,22 +85,25 @@ macOS `say`. One-time setup: `make setup models`. Needs `ffmpeg`. `make scenes` 
 
 ## Videos for YouTube (`tools/video/`, 1080p60, dark mode, highlights)
 
-`tools/video/scripts/*.md` are the scripts: plain spoken text, with `{cues}` that fire on the word they sit in front of.
+[video/BLUEPRINT.md](video/BLUEPRINT.md) is how every chapter's video is made: the steps with their gates, the fixed shape, the voice, picture and Rust rules, and the quality bar. `plan.py` inventories a chapter page and scaffolds its script; `qa.py` measures the finished video. Each chapter's video lives in `videos/<book>/<ch>/`: `script.md`, `build/` and the finished video with its `.srt`. Git tracks only `script.md`. A script is plain spoken text, with `{cues}` that fire on the word they sit in front of.
 Each paragraph is one breath group, and the numbers on screen are left for the viewer to read: `narrate.py` refuses a
 script with digits, symbols, a sentence reciting more than two numbers, or a sentence too long to say in one breath.
 
 ```
-{focus laneA+barA}         spotlight (names come from the script's targets: block; or svg:x,y,w,h · css: · stat: · btn: · code:1-2 · slider:0)
-{click Race}               the cursor moves there and presses it · {slider 1 11} · {speed 0.5} (the page's animation speed)
+{focus laneA+barA}         a thin ring, with nothing dimmed (names come from the script's targets: block; or svg:x,y,w,h · css: · stat: · btn: · code:1-2 · slider:0)
+{show code} {hide stats}   fade something in or out, css: targets only: keep it hidden until the narration names it
+{center} {split}           the picture alone in the middle, or on the left beside the code panel
+{label Insertion sort}     a small heading at the top of the frame · {label} clears it
+{click Race} {click Step x3}   press a button, unseen: no cursor and no controls on screen · {slider 1 11} · {speed 0.5} (the page's animation speed)
 {await}                    hold the narration until the animation ends · {pause 0.8}
 {check #s21-stats ~ 5.6 hours}   the run fails if the page does not show what the narration claims
 {card Big line | small line}     full-screen takeaway · {scene} leaves the title card
 {goto correct | Part 2 | What correct means}{pause 0.6}   one video, several scenes: a section card covers the switch, {scene} lifts it, and each goto becomes a chapter in <video>.chapters.txt
 ```
 
-`make series VOICE=<voice> ONLY=<script prefix>` builds into `videos/beginners/<voice>/`, with a `.srt` beside each
-video for YouTube. `narrate.py` speaks every block with Kokoro, transcribes the clip with Whisper (`faster-whisper`, on the CPU, downloaded
+`make series VOICE=<voice> ONLY=clrs/ch01` builds into the chapter's folder, with a `.srt` beside each
+video for YouTube. To judge one section first, run `narrate.py videos/clrs/ch01/script.md --only "Part 1"` and then `studio.js` on the manifest it prints. `narrate.py` speaks every block with Kokoro, transcribes the clip with Whisper (`faster-whisper`, on the CPU, downloaded
 on first use), reports clips that don't say what the script says, and uses the word times to place the cues. Both are cached in
-`tools/video/build/`, so only changed blocks are redone. The voices for YouTube are `kokoro:bm_fable` (the default) and `kokoro:am_liam`; any other
+the chapter's `build/`, so only changed blocks are redone. The voices for YouTube are `kokoro:bm_fable` (the default) and `kokoro:am_liam`; any other
 Kokoro voice also works. `--silent` skips the speech (150 words a minute), for checking highlights fast.
 `make metrics WAV="a.wav b.wav"` reports pitch, pitch range and pause spread.

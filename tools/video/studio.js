@@ -1,32 +1,69 @@
 #!/usr/bin/env node
-/* studio.js <manifest.json> [out.mp4] — record a narrated video of one or more scenes: 1920×1080, dark mode, spotlight on whatever the
-   narration is talking about. Playwright drives the page; frames come straight from Chrome (lossless PNG, Page.startScreencast)
-   because Playwright's own recordVideo is capped at a low bitrate that blurs text.
+/* studio.js <manifest.json> [out.mp4] — by default the video lands in its chapter's folder, videos/<book>/<ch>/. Record a narrated video of one or more scenes at 1920×1080 in dark mode.
+   Playwright drives the page; frames come straight from Chrome (lossless PNG, Page.startScreencast) because Playwright's own
+   recordVideo is capped at a low bitrate that blurs text.
+
+   The look: only the picture is on screen. Controls, captions and the page's chrome are gone, nothing shows a cursor or a click,
+   and the code and counters stay hidden until the narration names them. A viewer looks at whatever just changed, so each cue
+   should change one thing, and most of the time nothing should be moving.
 
    manifest.json comes from narrate.py. Each segment plays its clip, firing its cues at their word times; `then` is a silent
    pause or {await}, which holds the narration until the animation has finished. So the narration can never talk over a
    machine that is still running, and the audio is laid down afterwards at the moments each clip really started.
 
-   Cues: scene · focus <target[+target]> | off · click <label> · slider <index> <value> · speed <x> · card <big | small>
+   Cues: scene · focus <target[+target]> | off · click <label> [xN] · slider <index> <value> · speed <x> · card <big | small>
+         show <target[+target]> · hide <target[+target]>  (fades; css: targets only, and instant while a card covers the screen)
+         center · split  (the picture alone in the middle, or on the left with the code panel beside it)
+         label <text>  (a small heading at the top of the frame; {label} alone clears it)
+         rust · pseudo  (the code panel shows the Rust program, with its stack and heap underneath, or the book's pseudocode)
+         title · item <text>  (the title card, then one line of "what you'll learn" on it per item, each on its word)
          goto <scene id | kicker | heading>  (a section card covers the switch to that scene; {scene} lifts it; each goto is a YouTube chapter)
+         goto <scene id>  (a quick dip to black instead: a second scene inside the same part, and no new chapter)
+   Every scene starts the same way: pseudocode, code panel and stats hidden, picture centred. The script reveals the rest.
          check <selector> ~ <text>  (fails the run if the page doesn't show what the narration claims)
-   Targets: svg:x,y,w,h (viewBox units of the machine) · css:<selector> · stat:<label> · btn:<label> · code:<a[-b]> · slider:<i>
-   or a name from the script's `targets:` block. */
+   Targets: svg:x,y,w,h (viewBox units of the machine) · css:<selector> · stat:<label> · btn:<label> · code:<a[-b]> (pseudocode lines)
+   · rs:<a[-b]> (Rust lines) · mem:x,y,w[,h] (viewBox units of the stack-and-heap strip) · slider:<i>
+   · panel, stats, memory, stack, heap (built in) · or a name from the script's `targets:` block. */
 const fs = require("fs"), path = require("path"), cp = require("child_process");
 const { chromium } = require("playwright-core");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ROOT = path.resolve(__dirname, "../..");
 const W = 1920, H = 1080, ZOOM = 1.34;
+// targets every scene has, so every chapter's script can use the same names
+const BUILTIN = { panel: "css:.is-full > .codepane", stats: "css:.is-full > .statrow", memory: "css:.is-full .memstrip", stack: "mem:6,0,322", heap: "mem:342,0,316" };
 
-// Page-only layout for the video: bigger machine, no zoom/exit/language controls, no Rust memory strip (this is for beginners).
+// Page-only layout for the video. The picture and the stats share the left column and the code panel fills the right, with nothing
+// else on screen. .vid-center slides the left column to the middle of the frame while the code panel is hidden.
 const CSS = `
-.wrap .stage.is-full { zoom: ${ZOOM}; inset: 0; width: calc(100vw / ${ZOOM}); height: calc(100vh / ${ZOOM}) !important; grid-template-columns: minmax(0, 1.16fr) minmax(0, 1fr); }
-.fs-btn, .fs-zoom, .cp-lang, .memstrip, [id$="-mem"], .cp-lens { display: none !important; }
-.stage.is-full .cp-body { overflow: hidden !important; }
+.wrap .stage.is-full { zoom: ${ZOOM}; inset: 0; width: calc(100vw / ${ZOOM}); height: calc(100vh / ${ZOOM}) !important;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; background-color: var(--bg); }
+.stage.is-full > .stage-head, .stage.is-full > .controls, .stage.is-full > .caption, .cp-lens { display: none !important; }
+html:not(.vid-rust) .memstrip, .stage:not(.is-full) [id$="-mem"] { display: none !important; }
+.stage.is-full .memstrip { background: none; border: 0; margin-top: 22px; animation: vid-in .45s ease both; }
+.stage.is-full .memstrip .mem-head { display: none; }
+@keyframes vid-in { from { opacity: 0; } to { opacity: 1; } }
+.wrap .stage.is-full { transition: grid-template-columns .5s ease; }
+.vid-rust .wrap .stage.is-full:not(.no-code) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.22fr); }
+.vid-rust .stage.is-full .codepane > .cp-body { max-height: 40vh; } /* the engine scrolls the running line into view */
+.vid-rust .stage.is-full .cp-body ol { font-size: 12.5px; line-height: 1.6; }
+.stage.is-full > .stage-scroll { overflow: hidden !important; padding: 44px 8px 0; transition: transform .6s cubic-bezier(.3, .7, .2, 1); }
+.stage.is-full > .statrow { justify-content: center; gap: 56px; padding: 0 0 44px; border: 0; background: none; transition: transform .6s cubic-bezier(.3, .7, .2, 1), opacity .4s ease; }
+.stage.is-full > .statrow .stat { background: none; border: 0; padding: 0; min-width: 0; align-items: center; }
+.stage.is-full > .statrow .stat .k { font-size: 12px; }
+.stage.is-full > .statrow .stat .v { font-size: 34px; }
+.vid-center .stage.is-full:not(.no-code) > .stage-scroll { transform: translateX(40%) scale(1.3); }
+.vid-center .stage.is-full:not(.no-code) > .statrow { transform: translateX(40%); }
+.stage.is-full .ac-i { transition: opacity .4s ease; } .vid-center .stage.is-full:not(.no-code) .ac-i { opacity: 0; } /* indices belong with the code */
+.stage.is-full > .codepane { grid-row: 1 / -1; background: none; border: 0; justify-content: center; padding: 0 28px 0 0; transition: opacity .4s ease; }
+.stage.is-full .codepane > .cp-head { display: none; }
+.stage.is-full .codepane > .cp-body { flex: none; background: none; border: 0; overflow: hidden !important; border-radius: 12px; }
+.stage.is-full .cp-body ol { font-size: 15px; line-height: 1.85; padding: 0; }
+.stage.is-full .cp-body li { transition: background-color .25s ease; }
 .stage.is-full .cp-note { white-space: nowrap; }
-.stage.is-full .cp-out { background: var(--surface-2) !important; color: var(--ink) !important; } /* this bar is white in dark mode: too bright on video */
-.stage.is-full > .stage-scroll { overflow: hidden !important; }
-.stage.is-full button { transition: background .15s, transform .1s; }
+.stage.is-full .cp-out { display: none !important; } /* the picture already shows the result */
+.vid-quiet .cp-body li.on { background: none; box-shadow: none; } .vid-quiet .cp-note { opacity: 0; } /* while the narration walks the listing */
+.stage.is-full .ac-v { font-size: 18px; }
+.vid-part { transition: opacity .4s ease; }
 html, body { cursor: none !important; } * { scrollbar-width: none !important; }
 `;
 
@@ -37,24 +74,23 @@ function overlayScript() {
   root.id = "vid-overlay";
   root.style.cssText = "position:fixed;inset:0;z-index:100000;pointer-events:none;";
   root.innerHTML = `
-    <svg id="vid-dim" width="100%" height="100%" style="position:absolute;inset:0"><path id="vid-dim-p" fill="#050811" fill-rule="evenodd" opacity="0"/></svg>
     <div id="vid-rings"></div>
-    <svg id="vid-cursor" width="44" height="44" viewBox="0 0 24 24" style="position:absolute;left:0;top:0;opacity:0;filter:drop-shadow(0 3px 6px rgba(0,0,0,.6));will-change:transform">
-      <path d="M5 2.5 L5 19.5 L9.6 15.4 L12.7 22 L15.6 20.7 L12.6 14.3 L18.8 14 Z" fill="#fff" stroke="#0b1020" stroke-width="1.2" stroke-linejoin="round"/></svg>
+    <div id="vid-label" style="position:absolute;left:0;right:0;top:46px;text-align:center;font:700 34px ${FONT};letter-spacing:-.005em;color:#a68eff;opacity:0;transition:opacity .35s ease,transform .35s ease;transform:translateY(8px)"></div>
     <div id="vid-title" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;text-align:center;
-      background:radial-gradient(1200px 700px at 50% 42%, #1b2442 0%, #0d1220 62%, #090d18 100%);transition:opacity .7s ease;padding:0 180px;">
+      background:#0d1220;transition:opacity .5s ease;padding:0 180px;">
       <div id="vid-kicker" style="font:500 26px 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:#8ea2ff"></div>
-      <div id="vid-head" style="font:800 92px/1.08 ${FONT};color:#f3f5ff;letter-spacing:-.015em;text-wrap:balance"></div>
+      <div id="vid-head" style="font:800 84px/1.08 ${FONT};color:#f3f5ff;letter-spacing:-.015em;text-wrap:balance"></div>
+      <ol id="vid-list" style="list-style:none;margin:18px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,560px));gap:16px 56px;text-align:left;font:500 31px/1.25 'Atkinson Hyperlegible',system-ui;color:#c9d2ee;counter-reset:n"></ol>
     </div>
     <div id="vid-card" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;text-align:center;
-      background:radial-gradient(1200px 700px at 50% 42%, #1b2442 0%, #0d1220 62%, #090d18 100%);opacity:0;transition:opacity .6s ease;padding:0 170px;">
+      background:#0d1220;opacity:0;transition:opacity .45s ease;padding:0 170px;">
       <div id="vid-card-a" style="font:800 80px/1.12 ${FONT};color:#f3f5ff;letter-spacing:-.01em;text-wrap:balance"></div>
       <div id="vid-card-b" style="font:400 38px/1.3 'Atkinson Hyperlegible',system-ui;color:#aeb9dc;text-wrap:balance"></div>
     </div>
     <div id="vid-black" style="position:absolute;inset:0;background:#000;opacity:0;transition:opacity .8s linear"></div>`;
   document.body.appendChild(root);
   const $ = (id) => document.getElementById(id);
-  const ACCENT = "#ffc857", PAD = 9, EASE = 0.16;
+  const ACCENT = "#ffc857", PAD = 9, EASE = 0.2;
 
   const stage = () => document.querySelector(".is-full");
   const main = () => stage().querySelector(".stage-scroll > svg");
@@ -69,6 +105,17 @@ function overlayScript() {
     if (kind === "btn") return [...s.querySelectorAll("button")].filter((b) => b.textContent.trim() === arg).map((e) => e.getBoundingClientRect());
     if (kind === "stat") return [...s.querySelectorAll(".statrow > *")].filter((e) => e.textContent.toLowerCase().includes(arg.toLowerCase())).map((e) => e.getBoundingClientRect());
     if (kind === "slider") { const inp = s.querySelectorAll("input[type=range]")[+arg]; return inp ? [(inp.closest("label") || inp.parentElement).getBoundingClientRect()] : []; }
+    if (kind === "mem") { // the stack-and-heap strip, in its own viewBox units; leave out h to run to the bottom
+      const m = s.querySelector(".memstrip svg"); if (!m) return [];
+      const [x, y, w, hh] = arg.split(",").map(Number), r = m.getBoundingClientRect(), vb = m.viewBox.baseVal, k = r.width / vb.width;
+      return [{ left: r.left + x * k, top: r.top + y * k, width: w * k, height: (hh || vb.height - y) * k }];
+    }
+    if (kind === "rs") { // Rust lines, counted from 1 as the listing shows them
+      const [a, b] = arg.split("-").map(Number), pick = [...s.querySelectorAll(".cp-body li")].slice(a - 1, b || a);
+      if (!pick.length) return [];
+      const rs = pick.map((e) => e.getBoundingClientRect()), l = Math.min(...rs.map((r) => r.left)), t2 = Math.min(...rs.map((r) => r.top));
+      return [{ left: l, top: t2, width: Math.max(...rs.map((r) => r.right)) - l, height: Math.max(...rs.map((r) => r.bottom)) - t2 }];
+    }
     if (kind === "code") { // line N is the Nth list item after the procedure's header line, as the page numbers them
       const [a, b] = arg.split("-").map(Number), pick = [...s.querySelectorAll(".cp-body li")].filter((li, n) => n >= a && n <= (b || a));
       if (!pick.length) return [];
@@ -77,8 +124,7 @@ function overlayScript() {
     }
     return [];
   }
-  const state = { targets: [], rects: [], alpha: 0, want: 0 };
-  function rrect(x, y, w, h, r) { return `M${x + r} ${y}h${w - 2 * r}a${r} ${r} 0 0 1 ${r} ${r}v${h - 2 * r}a${r} ${r} 0 0 1 -${r} ${r}h-${w - 2 * r}a${r} ${r} 0 0 1 -${r} -${r}v-${h - 2 * r}a${r} ${r} 0 0 1 ${r} -${r}z`; }
+  const state = { targets: [], rects: [] };
   function tick() {
     const goal = state.targets.flatMap((t) => { try { return resolve(t).filter((r) => r && r.width > 0 && r.height > 0); } catch (e) { return []; } })
       .map((r) => {
@@ -96,48 +142,59 @@ function overlayScript() {
       else r.a += (0 - r.a) * (EASE * 1.3);
     });
     state.rects = state.rects.filter((r) => { if (r.a < 0.01 && !goal[state.rects.indexOf(r)]) { if (r.el) r.el.remove(); return false; } return true; });
-    state.alpha += (state.want - state.alpha) * EASE;
-    const p = $("vid-dim-p");
-    p.setAttribute("opacity", (state.alpha * 0.56).toFixed(3));
-    p.setAttribute("d", `M0 0H${innerWidth}V${innerHeight}H0z ` + state.rects.map((r) => rrect(r.x, r.y, Math.max(r.w, 24), Math.max(r.h, 24), 12)).join(" "));
     state.rects.forEach((r) => {
-      if (!r.el) { r.el = document.createElement("div"); $("vid-rings").appendChild(r.el); r.el.style.cssText = `position:absolute;left:0;top:0;border:3px solid ${ACCENT};border-radius:12px;box-shadow:0 0 22px 2px rgba(255,200,87,.45);box-sizing:border-box;`; }
+      if (!r.el) { r.el = document.createElement("div"); $("vid-rings").appendChild(r.el); r.el.style.cssText = `position:absolute;left:0;top:0;border:2.5px solid ${ACCENT};border-radius:12px;box-sizing:border-box;`; }
       r.el.style.transform = `translate(${r.x}px,${r.y}px)`; r.el.style.width = r.w + "px"; r.el.style.height = r.h + "px"; r.el.style.opacity = r.a;
     });
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
 
-  const cur = { x: 1500, y: 1180, el: $("vid-cursor") };
-  function place(x, y) { cur.x = x; cur.y = y; cur.el.style.transform = `translate(${x}px,${y}px)`; }
-  place(cur.x, cur.y);
-  let hideT = 0;
   window.__vid = {
-    focus(list) { state.targets = list; state.want = list.length ? 1 : 0; },
-    title(a, b) { $("vid-kicker").textContent = b; $("vid-head").textContent = a; },
-    hideTitle() { $("vid-title").style.opacity = 0; },
-    section(kicker, head) { state.targets = []; state.want = 0; $("vid-kicker").textContent = kicker; $("vid-head").textContent = head; $("vid-title").style.opacity = 1; $("vid-card").style.opacity = 0; },
+    title(show, a, b) { if (a != null) { $("vid-kicker").textContent = b; $("vid-head").textContent = a; } $("vid-list").innerHTML = ""; $("vid-title").style.opacity = show ? 1 : 0; },
+    item(text) {
+      const li = document.createElement("li"), n = $("vid-list").children.length + 1;
+      li.innerHTML = `<span style="font:700 22px 'JetBrains Mono',monospace;color:#8ea2ff;margin-right:16px">${String(n).padStart(2, "0")}</span>`;
+      li.appendChild(document.createTextNode(text));
+      li.style.cssText = "opacity:0;transform:translateY(10px);transition:opacity .35s ease,transform .35s ease";
+      $("vid-list").appendChild(li); requestAnimationFrame(() => requestAnimationFrame(() => { li.style.opacity = 1; li.style.transform = "none"; }));
+    },
+    async lang(rust) {
+      const was = window.AL && AL.CODE_LANG.v;
+      document.documentElement.classList.toggle("vid-rust", rust);
+      if (window.AL) AL.CODE_LANG.set(rust ? "rust" : "pseudo");
+      return was;
+    },
+    fresh() { // how every scene starts: nothing that the narration hasn't named
+      this.label(""); state.targets = []; $("vid-card").style.opacity = 0;
+      document.documentElement.classList.remove("vid-rust", "vid-quiet");
+      if (window.AL) AL.CODE_LANG.set("pseudo");
+      this.show([".is-full > .codepane", ".is-full > .statrow"], false);
+      this.center(true);
+    },
+    dip(on) { const b = $("vid-black"); b.style.transition = "opacity .3s ease"; b.style.opacity = on ? 1 : 0; },
+    focus(list) { state.targets = list; document.documentElement.classList.toggle("vid-quiet", list.some((t) => /^(code|rs):/.test(t))); },
+    show(sels, on) {
+      const instant = $("vid-title").style.opacity !== "0" || $("vid-card").style.opacity === "1" || $("vid-black").style.opacity === "1"; // nothing below a card is visible yet
+      sels.forEach((sel) => document.querySelectorAll(sel).forEach((e) => {
+        e.classList.add("vid-part");
+        if (instant) e.style.transition = "none";
+        e.style.opacity = on ? 1 : 0;
+        if (instant) requestAnimationFrame(() => requestAnimationFrame(() => { e.style.transition = ""; }));
+      }));
+    },
+    center(on) { document.documentElement.classList.toggle("vid-center", on); },
+    label(text) { const l = $("vid-label"); if (text) l.textContent = text; l.style.opacity = text ? 1 : 0; l.style.transform = text ? "none" : "translateY(8px)"; },
+    hideTitle() { $("vid-title").style.opacity = 0; $("vid-card").style.opacity = 0; }, // {scene}: back to the picture
+    section(kicker, head) { state.targets = []; this.label(""); $("vid-list").innerHTML = ""; $("vid-kicker").textContent = kicker; $("vid-head").textContent = head; $("vid-title").style.opacity = 1; $("vid-card").style.opacity = 0; },
     card(a, b) { $("vid-card-a").textContent = a; $("vid-card-b").textContent = b || ""; $("vid-card").style.opacity = 1; },
     black() { $("vid-black").style.opacity = 1; },
-    async moveTo(x, y, ms = 520) {
-      clearTimeout(hideT); cur.el.style.opacity = 1;
-      const x0 = cur.x, y0 = cur.y, t0 = performance.now();
-      await new Promise((done) => { (function f() { const k = Math.min(1, (performance.now() - t0) / ms), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; place(x0 + (x - x0) * e, y0 + (y - y0) * e); k < 1 ? requestAnimationFrame(f) : done(); })(); });
-    },
-    ripple() {
-      const r = document.createElement("div");
-      r.style.cssText = `position:absolute;left:${cur.x + 4}px;top:${cur.y + 4}px;width:18px;height:18px;margin:-9px;border-radius:50%;border:3px solid ${ACCENT};transition:transform .45s ease-out,opacity .45s ease-out;`;
-      root.appendChild(r); requestAnimationFrame(() => { r.style.transform = "scale(3.6)"; r.style.opacity = 0; }); setTimeout(() => r.remove(), 520);
-      cur.el.style.transition = "scale .1s"; cur.el.style.scale = ".86"; setTimeout(() => { cur.el.style.scale = "1"; }, 110);
-    },
-    idle() { clearTimeout(hideT); hideT = setTimeout(() => { cur.el.style.transition = "opacity .5s"; cur.el.style.opacity = 0; setTimeout(() => (cur.el.style.transition = ""), 520); }, 1800); },
-    buttonAt(label) { const b = [...stage().querySelectorAll("button")].find((x) => x.textContent.trim() === label); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.left + r.width * .55, y: r.top + r.height * .55, disabled: b.disabled }; },
+    enabled(label) { const b = [...stage().querySelectorAll("button")].find((x) => x.textContent.trim() === label); return b ? !b.disabled : null; },
+    caption() { const c = stage().querySelector(".caption"); return c ? c.textContent.trim() : ""; },
     press(label) { const b = [...stage().querySelectorAll("button")].find((x) => x.textContent.trim() === label && !x.disabled); if (!b) return false; b.click(); window.__lastBtn = b; return true; },
-    sliderAt(i) { const r = stage().querySelectorAll("input[type=range]")[i].getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; },
     async slideTo(i, v, ms = 800) {
-      const inp = stage().querySelectorAll("input[type=range]")[i], lo = +inp.min, hi = +inp.max, a = +inp.value, st = +inp.step || 1, r = inp.getBoundingClientRect();
-      const t0 = performance.now();
-      await new Promise((done) => { (function f() { const k = Math.min(1, (performance.now() - t0) / ms), val = Math.round((a + (v - a) * k) / st) * st; if (+inp.value !== val) { inp.value = val; inp.dispatchEvent(new Event("input", { bubbles: true })); } place(r.left + r.width * (val - lo) / (hi - lo), r.top + r.height * .4); k < 1 ? requestAnimationFrame(f) : done(); })(); });
+      const inp = stage().querySelectorAll("input[type=range]")[i], a = +inp.value, st = +inp.step || 1, t0 = performance.now();
+      await new Promise((done) => { (function f() { const k = Math.min(1, (performance.now() - t0) / ms), val = Math.round((a + (v - a) * k) / st) * st; if (+inp.value !== val) { inp.value = val; inp.dispatchEvent(new Event("input", { bubbles: true })); } k < 1 ? requestAnimationFrame(f) : done(); })(); });
       inp.value = v; inp.dispatchEvent(new Event("input", { bubbles: true })); inp.dispatchEvent(new Event("change", { bubbles: true }));
     },
     busy() { const b = window.__lastBtn; return !!(b && b.isConnected && b.disabled); },
@@ -147,11 +204,14 @@ function overlayScript() {
 (async () => {
   const mf = path.resolve(process.argv[2]), M = JSON.parse(fs.readFileSync(mf, "utf8")), meta = M.meta;
   const dir = path.dirname(mf), frames = path.join(dir, "frames");
-  const out = path.resolve(process.argv[3] || path.join(dir, M.name + ".mp4"));
+  const out = path.resolve(process.argv[3] || M.out);
   fs.rmSync(frames, { recursive: true, force: true }); fs.mkdirSync(frames, { recursive: true });
-  const named = (t) => t.split("+").map((x) => { const k = x.trim(); if (meta.targets[k]) return meta.targets[k]; if (/^(svg|css|btn|stat|code|slider):/.test(k)) return k; throw new Error("unknown target " + k); });
+  const named = (t) => t.split("+").map((x) => { const k = x.trim(), v = meta.targets[k] || BUILTIN[k]; if (v) return v; if (/^(svg|css|btn|stat|code|rs|mem|slider):/.test(k)) return k; throw new Error("unknown target " + k); });
   // check every target name before spending minutes on a recording
-  M.segments.forEach((s) => s.cues.forEach((c) => { if (c.op === "focus" && c.arg !== "off") named(c.arg); }));
+  M.segments.forEach((s) => s.cues.forEach((c) => {
+    if (c.op === "focus" && c.arg !== "off") named(c.arg);
+    if (c.op === "show" || c.op === "hide") named(c.arg).forEach((x) => { if (!x.startsWith("css:")) throw new Error(`{${c.op}} takes css: targets, not ${x}`); });
+  }));
 
   const browser = await chromium.launch({ channel: "chrome", headless: true, args: ["--hide-scrollbars", "--allow-file-access-from-files", "--force-color-profile=srgb", "--disable-lcd-text", "--font-render-hinting=none"] });
   const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1, colorScheme: "dark" });
@@ -168,8 +228,8 @@ function overlayScript() {
   await page.evaluate(() => document.fonts.ready);
   await page.addStyleTag({ content: CSS });
   await page.evaluate(overlayScript);
-  await page.evaluate(([a, b]) => window.__vid.title(a, b), [meta.title, meta.kicker]);
-  await page.evaluate((id) => { const s = document.getElementById(id); s.scrollIntoView(); s.querySelector(".fs-btn").click(); if (window.K) K.speed.value = 1; }, meta.scene);
+  await page.evaluate(() => window.__vid.title(true, "", "")); // a cold open: the first {scene} fades straight into the picture
+  await page.evaluate((id) => { const s = document.getElementById(id); s.scrollIntoView(); s.querySelector(".fs-btn").click(); if (window.K) K.speed.value = 1; window.__vid.fresh(); }, meta.scene);
   await sleep(900);
 
   // capture
@@ -192,31 +252,36 @@ function overlayScript() {
     if (c.op === "scene") { await page.evaluate(() => window.__vid.hideTitle()); }
     else if (c.op === "goto") {
       const [id, kicker, head] = a.split("|").map((v) => v.trim());
-      chapters.push([now(), head]);
-      await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]);
-      await sleep(750); // the card has faded in: nothing below it is visible now
-      await page.evaluate((id) => { const s = document.getElementById(id); if (!s.querySelector(".is-full")) { s.scrollIntoView(); s.querySelector(".fs-btn").click(); } K.speed.value = 1; window.__lastBtn = null; }, id);
-      await sleep(500);
+      const card = head != null;
+      if (card) { chapters.push([now(), head]); await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]); await sleep(750); } // the card has faded in
+      else { await page.evaluate(() => window.__vid.dip(true)); await sleep(330); }
+      await page.evaluate((id) => { const s = document.getElementById(id); if (!s.querySelector(".is-full")) { s.scrollIntoView(); s.querySelector(".fs-btn").click(); } K.speed.value = 1; window.__lastBtn = null; window.__vid.fresh(); }, id);
+      await sleep(card ? 500 : 250);
+      if (!card) await page.evaluate(() => window.__vid.dip(false));
       log(`goto ${id}`);
     }
+    else if (c.op === "title") { await page.evaluate(([a, b]) => window.__vid.title(true, a, b), [meta.title, meta.kicker]); log("title"); }
+    else if (c.op === "item") { await page.evaluate((v) => window.__vid.item(v), a); log(`item ${a}`); }
+    else if (c.op === "rust" || c.op === "pseudo") { await page.evaluate((r) => window.__vid.lang(r), c.op === "rust"); await sleep(60); }
     else if (c.op === "focus") { await page.evaluate((l) => window.__vid.focus(l), a === "off" ? [] : named(a)); }
+    else if (c.op === "show" || c.op === "hide") { await page.evaluate(([l, on]) => window.__vid.show(l, on), [named(a).map((x) => x.slice(4)), c.op === "show"]); }
+    else if (c.op === "center" || c.op === "split") { await page.evaluate((on) => window.__vid.center(on), c.op === "center"); }
+    else if (c.op === "label") { await page.evaluate((v) => window.__vid.label(v), a); }
     else if (c.op === "speed") { await page.evaluate((v) => { K.speed.value = v; }, +a); }
     else if (c.op === "card") { const [x, y] = a.split("|").map((v) => v.trim()); await page.evaluate(([p, q]) => window.__vid.card(p, q), [x, y]); }
     else if (c.op === "click") {
-      let at = await page.evaluate((l) => window.__vid.buttonAt(l), a);
-      if (!at) { problems.push(`no button "${a}"`); return; }
-      await page.evaluate(([x, y]) => window.__vid.moveTo(x, y), [at.x, at.y]);
-      for (let i = 0; i < 200 && (await page.evaluate((l) => (window.__vid.buttonAt(l) || {}).disabled, a)); i++) await sleep(50); // still animating: wait
-      const ok = await page.evaluate((l) => { window.__vid.ripple(); return window.__vid.press(l); }, a);
-      if (!ok) problems.push(`could not press "${a}"`);
-      await page.evaluate(() => window.__vid.idle());
-      log(`click ${a}`);
+      const [, label, times] = a.match(/^(.*?)(?:\s+x(\d+))?$/);
+      for (let n = +times || 1; n > 0; n--) {
+        const ready = await page.evaluate((l) => window.__vid.enabled(l), label);
+        if (ready === null) { problems.push(`no button "${label}"`); return; }
+        for (let i = 0; i < 400 && !(await page.evaluate((l) => window.__vid.enabled(l), label)); i++) await sleep(25); // still animating: wait
+        if (!(await page.evaluate((l) => window.__vid.press(l), label))) problems.push(`could not press "${label}"`);
+        await sleep(30);
+      }
+      log(`click ${a}  → ${(await page.evaluate(() => window.__vid.caption())).slice(0, 90)}`);
     } else if (c.op === "slider") {
       const [i, v] = a.split(/\s+/).map(Number);
-      const r = await page.evaluate((i) => window.__vid.sliderAt(i), i);
-      await page.evaluate(([x, y]) => window.__vid.moveTo(x, y), [r.x + r.w / 2, r.y + r.h * .4]);
       await page.evaluate(([i, v]) => window.__vid.slideTo(i, v), [i, v]);
-      await page.evaluate(() => window.__vid.idle());
       log(`slider ${i} = ${v}`);
     } else if (c.op === "check") {
       const [sel, want] = a.split("~").map((v) => v.trim());
@@ -267,6 +332,7 @@ function overlayScript() {
   const VENC = ["-vf", "fps=60,scale=in_range=full:out_range=tv:out_color_matrix=bt709:flags=lanczos+accurate_rnd+full_chroma_int,format=yuv420p", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
     "-c:v", "libx264", "-preset", "slow", "-crf", "15", "-tune", "animation", "-g", "120", "-movflags", "+faststart"];
 
+  fs.mkdirSync(path.dirname(out), { recursive: true }); // minutes of recording must not be lost to a missing folder
   const clips = M.segments.map((s, i) => ({ s, i })).filter(({ s }) => s.wav);
   if (!clips.length) {
     cp.execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list, ...VENC, out]);
@@ -303,7 +369,7 @@ function overlayScript() {
   }
   if (chapters.length) { // paste into the YouTube description; the first chapter has to start at 0:00
     const clock = (t) => `${t / 60 | 0}:${String(t % 60 | 0).padStart(2, "0")}`;
-    fs.writeFileSync(out.replace(/\.mp4$/, ".chapters.txt"), [[0, "Intro"], ...chapters].map(([t, h]) => `${clock(t)} ${h}`).join("\n") + "\n");
+    fs.writeFileSync(out.replace(/\.mp4$/, ".chapters.txt"), (chapters[0][0] < 5 ? chapters : [[0, "Intro"], ...chapters]).map(([t, h]) => `${clock(t)} ${h}`).join("\n") + "\n");
   }
   fs.writeFileSync(path.join(dir, "timeline.json"), JSON.stringify({ offsets, total, fps }, null, 1));
   fs.rmSync(frames, { recursive: true, force: true }); fs.rmSync(list, { force: true });

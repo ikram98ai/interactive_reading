@@ -7,6 +7,7 @@
    mem()   a small stack-and-heap strip that shows where the Rust program keeps its data
    cells() a row of array cells inside a machine's SVG, indexed from 1 (the book) or 0 (Rust)
    box / txt / clickable / button / session — the SVG and run helpers the other books copy into each page.
+   pop / fade / drawOn / chip — the motion vocabulary: an object pops in, a label fades, a line draws itself, a chip is a cell that can fly.
    walk, plot, bars, legend, matrix, point, note, send, mix, rmap and .term — the step-through toolkit, documented where it is defined. */
 (function () {
   const { h, s } = K;
@@ -155,6 +156,8 @@
       st.btn.querySelector("path").setAttribute("d", on ? ICON_OUT : ICON_IN);
       st.btn.lastChild.textContent = on ? "Exit" : "Full screen";
       st.btn.title = on ? "Leave full screen (Esc)" : "Show this machine, its code and its memory on one screen";
+      st.stage.classList.toggle("no-code", on && st.codeOff);
+      st.code.setAttribute("aria-pressed", String(!st.codeOff));
     }
     function enter(st) {
       if (cur) exit();
@@ -229,9 +232,12 @@
         const btn = h("button", { type: "button", class: "fs-btn" },
           s("svg", { viewBox: "0 0 24 24", "aria-hidden": "true" }, s("path", { d: ICON_IN })), h("span", {}, ""));
         const { bar, pct } = zoomBar();
-        const st = { stage, cp, scroller, svg, btn, pct, mem: stage.querySelector(':scope > [id$="-mem"]') };
+        // data-code="off" on a stage opens its full-screen view with the picture alone; this button brings the listing back
+        const code = h("button", { type: "button", class: "fs-code", title: "Show or hide the code panel" }, "Code");
+        const st = { stage, cp, scroller, svg, btn, pct, code, codeOff: stage.dataset.code === "off", mem: stage.querySelector(':scope > [id$="-mem"]') };
         btn.addEventListener("click", () => (cur === st ? exit() : enter(st)));
-        head.append(bar, btn);
+        code.addEventListener("click", () => { st.codeOff = !st.codeOff; paint(st); });
+        head.append(code, bar, btn);
         stages.push(st); wire(st); paint(st);
       },
     };
@@ -642,21 +648,74 @@
     return { set, svg };
   }
 
+  /* ---------- redrawing in place ----------
+     sync(g, [[key, tag, attrs, text], …]) makes g hold exactly these nodes, reusing the ones it drew last time under the same key.
+     A machine redraws on every step, and a node that survives keeps its identity, so the colour transitions in algo.css can run.
+     The markup comes out the same as a fresh draw, which is what tools/browser/steps.js compares. */
+  function sync(g, specs) {
+    const had = g._kept || new Map(), now = new Map();
+    specs.forEach(([key, tag, attrs, text]) => {
+      const fresh = text == null ? s(tag, attrs) : s(tag, attrs, text), el = had.get(key);
+      if (!el || el.parentNode !== g) { now.set(key, fresh); return; }
+      [...el.attributes].forEach((a) => { if (!fresh.hasAttribute(a.name)) el.removeAttribute(a.name); });
+      [...fresh.attributes].forEach((a) => { if (el.getAttribute(a.name) !== a.value) el.setAttribute(a.name, a.value); });
+      if (text != null && el.textContent !== String(text)) el.textContent = String(text);
+      now.set(key, el);
+    });
+    const keep = new Set(now.values());
+    [...g.childNodes].forEach((n) => { if (!keep.has(n)) n.remove(); });
+    let at = g.firstChild;
+    keep.forEach((el) => { if (el === at) at = at.nextSibling; else g.insertBefore(el, at); });
+    g._kept = now;
+  }
+
+  /* ---------- the motion vocabulary ----------
+     Short, and one job each. All of them follow the page's speed and do nothing under reduced motion.
+     pop(el, { delay })     an object arriving: grows in with a slight overshoot
+     fade(el, { delay })    a label arriving
+     drawOn(path, { delay }) a line or an arrow drawing itself
+     chip(text, { w, h, cls }) a <g> shaped exactly like a cell, centred at 0,0: fly it and the landing doesn't change its look */
+  function play(el, frames, ms, easing, delay = 0) {
+    if (K.reduced || !el.animate) return null;
+    const v = K.speed.value || 1, a = el.animate(frames, { duration: ms / v, delay: delay / v, easing, fill: "backwards" });
+    return a;
+  }
+  function pop(el, o = {}) {
+    el.classList.add("al-moves");
+    const a = play(el, [{ transform: "scale(.72)", opacity: 0 }, { transform: "scale(1.05)", opacity: 1, offset: 0.65 }, { transform: "scale(1)", opacity: 1 }], o.ms || 420, "ease-out", o.delay);
+    if (a) a.onfinish = () => el.classList.remove("al-moves"); else el.classList.remove("al-moves");
+    return a;
+  }
+  const fade = (el, o = {}) => play(el, [{ opacity: 0 }, { opacity: 1 }], o.ms || 320, "ease-out", o.delay);
+  function drawOn(el, o = {}) {
+    const n = el.getTotalLength ? el.getTotalLength() : 0;
+    if (!n) return null;
+    return play(el, [{ strokeDasharray: `${n} ${n}`, strokeDashoffset: n }, { strokeDasharray: `${n} ${n}`, strokeDashoffset: 0 }], o.ms || 420, "ease-in-out", o.delay);
+  }
+  function chip(text, o = {}) {
+    const w = o.w || 46, ht = o.h || 40;
+    return s("g", { transform: "translate(-200,-200)" },
+      s("rect", { x: -w / 2, y: -ht / 2, width: w, height: ht, rx: 8, class: "ac-cell" + (o.cls ? " " + o.cls : "") }),
+      s("text", { x: 0, y: 5.5, class: "ac-v", "text-anchor": "middle" }, String(text)));
+  }
+
   /* ---------- array cells inside a machine ----------
      const pos = cells(g, { x, y, vals, cw: 46, ch: 40, gap: 6, marks: { 2: "on" }, base: "auto" });
      base: 1 or 0 prints indices under the cells; "auto" follows the code panel (book: 1, Rust: 0). */
   function cells(g, o) {
-    K.clear(g);
     const cw = o.cw || 46, ch = o.ch || 40, gap = o.gap == null ? 6 : o.gap;
     const base = o.base === "auto" ? (CODE_LANG.rust ? 0 : 1) : o.base;
-    return o.vals.map((v, i) => {
+    const specs = [];
+    const pos = o.vals.map((v, i) => {
       const x = o.x + i * (cw + gap), y = o.y;
       const cls = "ac-cell" + (o.marks && o.marks[i] ? " " + o.marks[i] : "");
-      g.appendChild(s("rect", { x, y, width: cw, height: ch, rx: 8, class: cls }));
-      if (v != null && v !== "") g.appendChild(s("text", { x: x + cw / 2, y: y + ch / 2 + 5.5, class: "ac-v", "text-anchor": "middle", style: o.size ? { fontSize: o.size + "px" } : {} }, String(v)));
-      if (base != null) g.appendChild(s("text", { x: x + cw / 2, y: y + ch + 14, class: "ac-i", "text-anchor": "middle" }, String(i + base)));
+      specs.push([`r${i}`, "rect", { x, y, width: cw, height: ch, rx: 8, class: cls }]);
+      if (v != null && v !== "") specs.push([`v${i}`, "text", { x: x + cw / 2, y: y + ch / 2 + 5.5, class: "ac-v", "text-anchor": "middle", style: o.size ? { fontSize: o.size + "px" } : {} }, String(v)]);
+      if (base != null) specs.push([`i${i}`, "text", { x: x + cw / 2, y: y + ch + 14, class: "ac-i", "text-anchor": "middle" }, String(i + base)]);
       return { x, y, w: cw, h: ch, cx: x + cw / 2, cy: y + ch / 2 };
     });
+    sync(g, specs);
+    return pos;
   }
 
   /* ---------- binary trees inside a machine ----------
@@ -715,20 +774,21 @@
        colLabels: [...] | (c) => …, size: 13 });          → pos(r, c) = { x, y, w, h, cx, cy }  (0-based r, c)
      Labels print above the columns / left of the rows; leave room: x ≥ 40 when rowLabels is set, y ≥ 22 for colLabels. */
   function grid(g, o) {
-    K.clear(g);
     const cw = o.cw || 40, ch = o.ch || 34, gap = o.gap == null ? 4 : o.gap;
     const pos = (r, c) => { const x = o.x + c * (cw + gap), y = o.y + r * (ch + gap); return { x, y, w: cw, h: ch, cx: x + cw / 2, cy: y + ch / 2 }; };
     const lab = (src, i) => (typeof src === "function" ? src(i) : src && src[i]);
-    for (let c = 0; c < o.cols; c++) { const l = lab(o.colLabels, c); if (l != null && l !== "") g.appendChild(s("text", { x: pos(0, c).cx, y: o.y - 7, class: "ac-i", "text-anchor": "middle" }, String(l))); }
+    const specs = [];
+    for (let c = 0; c < o.cols; c++) { const l = lab(o.colLabels, c); if (l != null && l !== "") specs.push([`c${c}`, "text", { x: pos(0, c).cx, y: o.y - 7, class: "ac-i", "text-anchor": "middle" }, String(l)]); }
     for (let r = 0; r < o.rows; r++) {
       const l = lab(o.rowLabels, r);
-      if (l != null && l !== "") g.appendChild(s("text", { x: o.x - 8, y: pos(r, 0).cy + 4, class: "ac-i", "text-anchor": "end" }, String(l)));
+      if (l != null && l !== "") specs.push([`l${r}`, "text", { x: o.x - 8, y: pos(r, 0).cy + 4, class: "ac-i", "text-anchor": "end" }, String(l)]);
       for (let c = 0; c < o.cols; c++) {
         const p = pos(r, c), v = o.val ? o.val(r, c) : null, m = o.mark && o.mark(r, c);
-        g.appendChild(s("rect", { x: p.x, y: p.y, width: cw, height: ch, rx: 7, class: "ac-cell" + (m ? " " + m : "") }));
-        if (v != null && v !== "") g.appendChild(s("text", { x: p.cx, y: p.cy + 4.5, class: "ac-v", "text-anchor": "middle", style: { fontSize: (o.size || 13) + "px" } }, String(v)));
+        specs.push([`r${r},${c}`, "rect", { x: p.x, y: p.y, width: cw, height: ch, rx: 7, class: "ac-cell" + (m ? " " + m : "") }]);
+        if (v != null && v !== "") specs.push([`v${r},${c}`, "text", { x: p.cx, y: p.cy + 4.5, class: "ac-v", "text-anchor": "middle", style: { fontSize: (o.size || 13) + "px" } }, String(v)]);
       }
     }
+    sync(g, specs);
     return pos;
   }
 
@@ -1133,6 +1193,6 @@
   }
   initTerms();
 
-  window.AL = { cap, esc, fmt, box, txt, clickable, button, session, src, code, mem, cells, grid, tree, graph, CODE_LANG, langToggle, highlight,
+  window.AL = { cap, esc, fmt, box, txt, clickable, button, session, src, code, mem, cells, grid, tree, graph, sync, pop, fade, drawOn, chip, CODE_LANG, langToggle, highlight,
     walk, mix, send, note, point, legend, bars, matrix, plot, rmap };
 })();

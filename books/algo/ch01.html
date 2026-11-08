@@ -2543,7 +2543,6 @@ fn main() {
         <h2>A race car with a slow recipe</h2>
         <p class="story">Two computers must sort the same ten million numbers. <b>Computer A</b> is a race car: ten billion instructions a second, a thousand times faster than <b>computer B</b>. A runs insertion sort, hand-written in machine language by the best programmer alive, and needs 2<i>n</i>² instructions. B runs merge sort, written by an average programmer with a sloppy compiler, and needs 50 <i>n</i> lg <i>n</i>.</p>
         <p class="story">A sounds unbeatable. But for <i>n</i> = 10 million, A has 2 × 10¹⁴ instructions to do and B only about 1.2 × 10¹⁰. A works for more than five and a half hours, B for under twenty minutes. A faster machine only divides the time by a constant. The algorithm decides how fast the time <b>grows</b> as <i>n</i> grows, and growth wins.</p>
-        <p class="story">The bars use a <b>logarithmic</b> time scale: equal steps along the axis multiply the time, so a millisecond and a century fit on one line.</p>
         <p class="imagine"><b>Try it:</b> press <b>Race</b> for the book's ten million numbers, then pick <b>100 million</b>. Drag <b>n</b> down until A wins again: that is the <b>crossover point</b>. Then give A an even faster processor and see how little the crossover moves.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -2555,9 +2554,9 @@ fn main() {
           </div>
         </details>
       </div>
-      <div class="stage">
+      <div class="stage" data-code="off">
         <div class="stage-head"><span class="stage-title">Computer A vs computer B</span><span id="s21-seg"></span></div>
-        <div class="stage-scroll"><svg id="s21-svg" viewBox="0 0 660 300" role="img" aria-label="Two computers race to sort n numbers; bars show each finishing time on a logarithmic time axis"></svg></div>
+        <div class="stage-scroll"><svg id="s21-svg" viewBox="0 0 660 300" role="img" aria-label="Two computers race to sort n numbers. Both bars run on one clock, so their lengths show the real ratio of the finishing times"></svg></div>
         <div class="controls" id="s21-controls"></div>
         <div class="statrow" id="s21-stats"></div>
         <div class="caption" id="s21-cap" aria-live="polite">The book's race: ten million numbers. Press <b>Race</b>.</div>
@@ -3107,9 +3106,11 @@ K.page(1);
 (function s1() {
   const svg = K.$("#s1-svg");
   const INST = [[31, 41, 59, 26, 41, 58], [26, 31, 41, 41, 58, 59], [59, 58, 41, 41, 31, 26]];
-  const CW = 64, CH = 52, GAP = 12, X0 = 108, AY = 116, N = 6;
+  const CW = 64, CH = 52, GAP = 12, X0 = 108, AY = 126, KY = AY - 44, N = 6;
   const cx = (k) => X0 + k * (CW + GAP) + CW / 2; // k counts from 0
-  const gHead = s("g"), gArr = s("g"), gKey = s("g"), gPtr = s("g"), gChk = s("g"), layer = s("g");
+  const card = (v, cls) => { const c = AL.chip(v, { w: CW, h: CH, cls }); layer.appendChild(c); return c; };
+  const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
+  const gHead = part("input"), gArr = part("array"), gKey = part("key"), gPtr = part("pointers"), gChk = part("checks"), layer = s("g");
   svg.append(gHead, gArr, gKey, gPtr, gChk, layer);
   const ctr = K.$("#s1-controls"), stats = K.$("#s1-stats");
   const stC = stat("comparisons", 0), stS = stat("shifts", 0), stL = stat("lines run", 0);
@@ -3163,10 +3164,10 @@ K.page(1);
     cells(gArr, { x: X0, y: AY, vals: st.a, cw: CW, ch: CH, gap: GAP, marks, base: "auto" });
     txt(gArr, 30, AY + CH + 14, CODE_LANG.rust ? "a[k]" : "A[k]", { anchor: "start", cls: "ac-i" });
     if (st.key != null) {
-      const x = cx(st.hole) - 32;
-      gKey.appendChild(s("rect", { x, y: AY - 58, width: 64, height: 40, rx: 8, class: "sv-data-soft" }));
-      txt(gKey, x + 32, AY - 32, String(st.key), { cls: "ac-v" });
-      txt(gKey, x + 32, AY - 64, "key", { cls: "sv-label" });
+      const c = AL.chip(st.key, { w: CW, h: CH, cls: "on" });
+      c.setAttribute("transform", `translate(${cx(st.hole)},${KY})`);
+      gKey.appendChild(c);
+      txt(gKey, cx(st.hole), KY - CH / 2 - 7, "key", { cls: "sv-label" });
     }
     const ptr = (k, label, cls) => {
       const x = k < 0 ? X0 - 26 : cx(k);
@@ -3175,13 +3176,19 @@ K.page(1);
     };
     if (st.i != null && !st.done) ptr(st.i - 1, CODE_LANG.rust ? `i=${st.i - 1}` : `i=${st.i}`, "sv-fill-sun");
     if (st.j != null && !st.done) ptr(st.j - 1, `j=${st.j}`, "sv-fill-blue");
-    const chk = (x, label, ok) => {
-      const w = 290;
-      gChk.appendChild(s("rect", { x, y: 248, width: w, height: 34, rx: 9, class: ok == null ? "sv-panel" : ok ? "sv-good" : "sv-bad" }));
-      txt(gChk, x + w / 2, 270, (ok == null ? "… " : ok ? "✓ " : "✗ ") + label, { size: 13, bold: ok != null });
+    // the two checks only exist once there is an output to check
+    const chk = (x, label, ok, delay) => {
+      const w = 290, g = s("g");
+      g.appendChild(s("rect", { x, y: 248, width: w, height: 34, rx: 9, class: ok ? "sv-good" : "sv-bad" }));
+      txt(g, x + w / 2, 270, (ok ? "✓ " : "✗ ") + label, { size: 13, bold: true });
+      gChk.appendChild(g);
+      if (!st.checked) AL.pop(g, { delay });
     };
-    chk(30, "output is a permutation of the input", st.done ? isPerm(st.a, input) : null);
-    chk(340, "each item ≤ the next one", st.done ? isSorted(st.a) : null);
+    if (st.done) {
+      chk(30, "output is a permutation of the input", isPerm(st.a, input), 0);
+      chk(340, "each item ≤ the next one", isSorted(st.a), 160);
+      st.checked = true;
+    }
     stC.set(st.cmp); stS.set(st.shifts); stL.set(st.lines, st.done ? "good" : undefined);
     renderCode(); renderMem();
   }
@@ -3238,9 +3245,9 @@ K.page(1);
     if (e.line === 1) { st.i = e.done ? null : e.i; st.j = null; st.cmpAt = null; st.done = !!e.done; if (!st.started) st.started = true; if (st.sorted === 0) st.sorted = 1; }
     if (e.line === 2) {
       st.cmpAt = null; st.stale = e.i - 1;
-      const tag = draw.tag(String(e.key), "sv-data-soft"); layer.appendChild(tag);
+      const tag = card(e.key, "on");
       render();
-      await w(fly(tag, [cx(e.i - 1), AY + CH / 2], [cx(e.i - 1), AY - 38], 380));
+      await w(fly(tag, [cx(e.i - 1), AY + CH / 2], [cx(e.i - 1), KY], 380));
       tag.remove();
       st.key = e.key; st.hole = e.i - 1;
     }
@@ -3248,24 +3255,25 @@ K.page(1);
     if (e.line === 5) { st.ok = e.ok; st.aj = e.aj; st.cmpAt = e.j > 0 ? e.j - 1 : null; if (e.j > 0) st.cmp++; }
     if (e.line === 6) {
       const from = e.j - 1, to = e.j, v = st.a[from];
-      const tag = draw.tag(String(v), "sv-server"); layer.appendChild(tag);
-      st.cmpAt = null; render();
+      const tag = card(v, "sorted");
+      st.cmpAt = null; st.stale = from; render(); // the cell it leaves goes quiet as it lifts off
       await w(fly(tag, [cx(from), AY + CH / 2], [cx(to), AY + CH / 2], 380));
       tag.remove();
-      st.a[to] = v; st.stale = from; st.shifts++;
+      st.a[to] = v; st.shifts++;
     }
     if (e.line === 7) {
       const kx0 = cx(st.hole), kx1 = cx(e.j);
       st.j = e.j; st.hole = e.j;
       const keep = st.key; st.key = null; render();
-      const tag = draw.tag(String(keep), "sv-data-soft"); layer.appendChild(tag);
-      await w(fly(tag, [kx0, AY - 38], [kx1, AY - 38], 300));
+      const tag = card(keep, "on");
+      txt(tag, 0, -CH / 2 - 7, "key", { cls: "sv-label" }); // the label travels with the card
+      await w(fly(tag, [kx0, KY], [kx1, KY], 300));
       tag.remove(); st.key = keep;
     }
     if (e.line === 8) {
       const keep = st.key, k = e.j; st.key = null; st.cmpAt = null; render();
-      const tag = draw.tag(String(keep), "sv-data-soft"); layer.appendChild(tag);
-      await w(fly(tag, [cx(k), AY - 38], [cx(k), AY + CH / 2], 380));
+      const tag = card(keep, "on");
+      await w(fly(tag, [cx(k), KY], [cx(k), AY + CH / 2], 380));
       tag.remove();
       st.a[k] = keep; st.stale = null; st.hole = null; st.sorted = e.i;
     }
@@ -7235,8 +7243,8 @@ K.page(1);
 (function s21() {
   const svg = K.$("#s21-svg");
   const ctr = K.$("#s21-controls"), stats = K.$("#s21-stats");
-  const stA = stat("A's time", "–"), stB = stat("B's time", "–"), stX = stat("A wins while n <", "–");
-  stats.append(stA, stB, stX);
+  const stX = stat("A wins while n <", "–");
+  stats.append(stX);
   const cv = code("#s21-code", { files: [{ name: "RACE (sketch)", src: src("ps-s21"), rs: { name: "race.rs", src: src("rs-s21"), out: src("rs-s21-out"), map: { RACE: 25, 1: 23, 2: 24, 3: 26, 4: 27, 5: 31 } } }] });
   const BOOK = { ne: 7, ra: 10, rb: 7 }; // powers of ten: n, A's and B's instructions per second
   let st = Object.assign({ raced: false, clock: null, line: null, done: false }, BOOK), tok = 0;
@@ -7260,7 +7268,6 @@ K.page(1);
     return (secs * 1e6).toFixed(1) + " μs";
   }
   const RATE = { 6: "1 million", 7: "10 million", 8: "100 million", 9: "1 billion", 10: "10 billion", 11: "100 billion" };
-  const bytes = (b) => (b >= 1e9 ? fmt(Math.round(b / 1e8) / 10) + " GB" : b >= 1e6 ? fmt(Math.round(b / 1e6)) + " MB" : fmt(Math.round(b / 1e3)) + " KB");
   /** where A and B take equal time: 2n/rA = 50 lg n / rB, found by bisection on lg n */
   function crossover() {
     const rA = Math.pow(10, st.ra), rB = Math.pow(10, st.rb);
@@ -7272,58 +7279,33 @@ K.page(1);
   }
   const round3 = (x) => { const e = Math.pow(10, Math.max(0, Math.floor(Math.log10(x)) - 2)); return Math.round(x / e) * e; };
 
-  // log time axis: 1 μs … 10⁴ years
-  const AX0 = 200, AX1 = 646, L0 = -6, L1 = 11.5;
-  const xOf = (secs) => AX0 + ((Math.min(L1, Math.max(L0, Math.log10(Math.max(secs, 1e-9)))) - L0) / (L1 - L0)) * (AX1 - AX0);
-  const TICKS = [[1e-3, "1 ms"], [1, "1 s"], [60, "1 min"], [3600, "1 h"], [86400, "1 day"], [31536000, "1 yr"], [3153600000, "100 yr"]];
+  // both bars run on one clock and the slower one fills its track, so the lengths show the real ratio
+  const AX0 = 134, AX1 = 646;
   const LANES = [
-    { key: "A", y: 40, algo: "insertion sort · 2n²", rate: () => st.ra, t: timeA, instr: () => instrA(N()) },
-    { key: "B", y: 128, algo: "merge sort · 50 n lg n", rate: () => st.rb, t: timeB, instr: () => instrB(N()) },
+    { key: "A", y: 52, algo: "insertion sort · grows like n²", rate: () => st.ra, t: timeA },
+    { key: "B", y: 144, algo: "merge sort · grows like n lg n", rate: () => st.rb, t: timeB },
   ];
 
   function render() {
     K.clear(svg);
-    txt(svg, 14, 24, `n = ${fmt(N())} numbers · ${bytes(8 * N())} of 8-byte integers`, { anchor: "start", mono: true, size: 12.5 });
-    const ta = timeA(), tb = timeB();
-    const order = ta <= tb ? ["A", "B"] : ["B", "A"];
+    txt(svg, 14, 28, `Sort ${fmt(N())} numbers`, { anchor: "start", bold: true, size: 16 });
+    const ta = timeA(), tb = timeB(), slowest = Math.max(ta, tb), winner = ta <= tb ? "A" : "B";
     LANES.forEach((ln) => {
-      box(svg, 14, ln.y, 172, 70, "sv-server", null);
-      txt(svg, 100, ln.y + 21, "Computer " + ln.key, { bold: true, size: 14 });
-      txt(svg, 100, ln.y + 41, `${RATE[ln.rate()]} instr/s`, { cls: "sv-label" });
-      txt(svg, 100, ln.y + 59, ln.algo, { cls: "sv-label" });
-      const ty = ln.y + 12;
-      svg.appendChild(s("rect", { x: AX0, y: ty, width: AX1 - AX0, height: 36, rx: 8, class: "sv-panel" }));
-      txt(svg, AX0, ty + 50, sci(ln.instr()) + " instructions", { anchor: "start", cls: "sv-label" });
-      if (!st.raced) { txt(svg, (AX0 + AX1) / 2, ty + 23, "?", { cls: "sv-label" }); return; }
+      txt(svg, 14, ln.y + 21, "Computer " + ln.key, { anchor: "start", bold: true, size: 15 });
+      txt(svg, 14, ln.y + 40, `${RATE[ln.rate()]}/s`, { anchor: "start", cls: "sv-label" });
+      svg.appendChild(s("rect", { x: AX0, y: ln.y, width: AX1 - AX0, height: 48, rx: 8, class: "sv-panel" }));
+      txt(svg, AX0, ln.y + 67, ln.algo, { anchor: "start", cls: "sv-label" });
+      if (!st.raced) return;
       const t = ln.t(), shown = st.clock == null ? t : Math.min(st.clock, t), fin = st.clock == null || st.clock >= t;
-      const xe = Math.max(AX0 + 10, xOf(shown));
-      const cls = !fin ? "sv-data-soft" : order[0] === ln.key ? "sv-good" : "sv-bad";
-      svg.appendChild(s("rect", { x: AX0, y: ty, width: xe - AX0, height: 36, rx: 8, class: cls }));
-      if (fin) {
-        const label = human(t), w = label.length * 7.6;
-        const inside = xe + 10 + w > AX1;
-        txt(svg, inside ? xe - 10 : xe + 10, ty + 23, label, { anchor: inside ? "end" : "start", bold: true, size: 13 });
-      }
+      const xe = Math.max(AX0 + 8, AX0 + (shown / slowest) * (AX1 - AX0));
+      svg.appendChild(s("rect", { x: AX0, y: ln.y, width: xe - AX0, height: 48, rx: 8, class: !fin ? "sv-data-soft" : winner === ln.key ? "sv-good" : "sv-bad" }));
+      const label = human(shown), inside = xe + 10 + label.length * 8.4 > AX1;
+      txt(svg, inside ? xe - 12 : xe + 10, ln.y + 29, label, { anchor: inside ? "end" : "start", bold: true, size: 15 });
     });
-    // axis
-    svg.appendChild(s("line", { x1: AX0, y1: 214, x2: AX1, y2: 214, class: "sv-wire-solid" }));
-    TICKS.forEach(([secs, label]) => {
-      const x = xOf(secs);
-      svg.appendChild(s("line", { x1: x, y1: 209, x2: x, y2: 219, class: "sv-wire-solid" }));
-      txt(svg, x, 234, label, { cls: "sv-label" });
-    });
-    txt(svg, 186, 234, "time →", { cls: "sv-label", anchor: "end" });
-    if (st.clock != null) svg.appendChild(s("line", { x1: xOf(st.clock), y1: 46, x2: xOf(st.clock), y2: 214, class: "sv-wire-live" }));
     if (st.raced && st.clock == null) {
-      const ratio = Math.max(ta, tb) / Math.min(ta, tb);
-      const win = ta <= tb ? "A" : "B";
-      txt(svg, 330, 266, ratio < 1.05 ? "About a tie" : `${win} finishes ${ratio.toFixed(1)}× sooner`, { bold: true, size: 15 });
-      const x = crossover();
-      txt(svg, 330, 288, x == null ? "B is faster at every size n ≥ 2" : `A wins only while n < ${fmt(round3(x))}`, { cls: "sv-label" });
+      const ratio = slowest / Math.min(ta, tb);
+      txt(svg, 330, 262, ratio < 1.05 ? "About a tie" : `${winner} finishes ${ratio.toFixed(1)}× sooner`, { bold: true, size: 20 });
     }
-    const shown = st.raced && st.clock == null;
-    stA.set(shown ? human(ta) : "–", shown ? (ta <= tb ? "good" : "bad") : undefined);
-    stB.set(shown ? human(tb) : "–", shown ? (tb < ta ? "good" : "bad") : undefined);
     const x = crossover();
     stX.set(x == null ? "never" : fmt(round3(x)));
     renderCode();
@@ -7344,25 +7326,24 @@ K.page(1);
   function caption() {
     const ta = timeA(), tb = timeB(), sp = st.ra - st.rb;
     const speed = sp > 0 ? `a computer ${fmt(Math.pow(10, sp))}× slower` : sp < 0 ? `a computer ${fmt(Math.pow(10, -sp))}× faster` : "an equally fast computer";
-    if (ta <= tb) return `A needs ${sci(instrA(N()))} instructions, ${human(ta)}; B needs ${sci(instrB(N()))}, ${human(tb)}. At this small <i>n</i> the race car still wins: n is not yet big enough for n² to outgrow n lg n by more than the speed gap.`;
-    return `A needs 2n² = ${sci(instrA(N()))} instructions: <b>${human(ta)}</b>. B needs 50 n lg n ≈ ${sci(instrB(N()))}: <b>${human(tb)}</b>. B wins by ${(ta / tb).toFixed(1)}× on ${speed}, because its work grows more slowly.`;
+    if (ta <= tb) return `At this small <i>n</i> the race car still wins: n² has not yet outgrown n lg n by more than the speed gap.`;
+    return `B wins by <b>${(ta / tb).toFixed(1)}×</b> on ${speed}, because its work grows more slowly.`;
   }
   const race = () => S.run(async (w) => {
     const my = ++tok;
-    st.raced = true; st.done = false; st.clock = 1e-6;
+    st.raced = true; st.done = false; st.clock = 0;
     st.line = 1; render(); cap("#s21-cap", "Line 1: count A's instructions, 2n².");
     await w(sleep(550));
     st.line = 2; render(); cap("#s21-cap", "Line 2: count B's instructions, 50 n lg n.");
     await w(sleep(550));
-    st.line = 3; render(); cap("#s21-cap", "Lines 3–4: divide each count by its computer's speed. The clock runs on a log scale: each tick is a much longer wait.");
+    st.line = 3; render(); cap("#s21-cap", "Lines 3–4: divide each count by its computer's speed. Both bars run on the same clock.");
     const end = Math.max(timeA(), timeB());
-    const l1 = Math.min(L1, Math.log10(end) + 0.25);
-    await w(tween(3400, (p) => { if (my !== tok) return; st.clock = Math.pow(10, lerp(L0, l1, p)); render(); }, ease.linear));
+    await w(tween(3400, (p) => { if (my !== tok) return; st.clock = end * p; render(); }, ease.linear));
     st.clock = null; st.line = 5; render();
     cap("#s21-cap", caption());
   });
   function syncSliders() {
-    [["#s21-n", st.ne], ["#s21-ra", st.ra], ["#s21-rb", st.rb]].forEach(([id, v]) => {
+    [["#s21-n", st.ne], ["#s21-ra", st.ra]].forEach(([id, v]) => {
       const inp = K.$(id); inp.value = String(v);
       inp.dispatchEvent(new Event("input"));
     });
@@ -7387,7 +7368,6 @@ K.page(1);
   button(ctr, "Reset", "", () => { preset(7); K.$$("#s21-seg button").forEach((b, i) => b.setAttribute("aria-pressed", String(i === 0))); });
   ctr.appendChild(slider({ id: "s21-n", label: "n", min: 3, max: 9, step: 0.1, value: st.ne, format: (v) => fmt(Math.round(Math.pow(10, v))), onInput: (v) => { st.ne = v; moved(); } }));
   ctr.appendChild(slider({ id: "s21-ra", label: "A", min: 7, max: 11, step: 1, value: st.ra, format: (v) => RATE[v] + "/s", onInput: (v) => { st.ra = v; moved(); } }));
-  ctr.appendChild(slider({ id: "s21-rb", label: "B", min: 6, max: 10, step: 1, value: st.rb, format: (v) => RATE[v] + "/s", onInput: (v) => { st.rb = v; moved(); } }));
   K.$("#s21-seg").appendChild(seg(["10 million", "100 million"], 0, (k) => preset(k === 0 ? 7 : 8)));
   render();
 })();

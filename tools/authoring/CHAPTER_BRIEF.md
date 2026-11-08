@@ -267,6 +267,12 @@ numbers. Rust stays standard-library only and deterministic: printed output must
 LCG where you need randomness; join threads before printing). Comments explain the idea in plain words. `AL.mem` is
 optional: use it only where ownership or memory really teaches something.
 
+**Ready for the chapter's video.** Each chapter also becomes a narrated video (`tools/video/BLUEPRINT.md`), recorded
+with the controls and captions hidden. So wrap each layer of a machine's picture in `s("g", { "data-part": "…" })`
+(input, pointers, checks …) so a script can hide what it doesn't explain. Draw cells with `AL.cells` / `AL.grid` (they
+update in place, so colours ease), fly values as `AL.chip` (the same shape as the cell they land in), and show a
+result only once it exists, with `AL.pop`, rather than as an empty box with "…".
+
 ## Technical constraints
 
 - No external libraries, no images, no build step. Plain ES2020 in one inline `<script>`.

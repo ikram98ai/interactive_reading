@@ -1,5 +1,5 @@
 #!/bin/zsh
-# make-all.sh — record every script in tools/video/scripts into videos/ (one after the other)
+# make-all.sh — record every JSON scene script in videos/scripts into videos/ (one after the other)
 cd "$(dirname "$0")"
 for f in ../../videos/scripts/algo-ch01-*.json; do
   out="../../videos/$(basename ${f%.json}).mp4"

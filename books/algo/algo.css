@@ -79,7 +79,10 @@
 .fs-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .fs-btn[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
 .stage.has-code > .stage-head > .stage-title { margin-right: auto; }
-.fs-zoom { display: none; }
+.fs-zoom, .fs-code { display: none; }
+.is-full .fs-code { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; appearance: none; cursor: pointer; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink-2); font: 700 12px/1 var(--f-body); }
+.fs-code:hover { border-color: var(--lilac); color: var(--lilac); }
+.fs-code[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
 .is-full .fs-zoom { display: inline-flex; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px; gap: 2px; }
 .fs-zoom button { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: 700 13px/1 var(--f-mono); min-width: 28px; height: 24px; padding: 0 7px; border-radius: 999px; cursor: pointer; }
 .fs-zoom button:hover { background: var(--surface-2); color: var(--lilac); }
@@ -92,6 +95,7 @@
 .stage.is-full > * { grid-column: 1; min-width: 0; }
 .stage.is-full > .stage-head { grid-column: 1 / -1; }
 .stage.is-full .sim-zoom { display: none; }
+.wrap .stage.is-full { background-image: none; } /* the dot grid is texture for a page; here it only competes with the picture */
 .stage.is-full > .stage-scroll { display: flex; overflow: auto; padding: 8px; overscroll-behavior: contain; }
 .stage.is-full > .stage-scroll > svg { flex: none; margin: auto; min-width: 0; max-width: none; }
 .stage.is-full > .stage-scroll.zoomed { cursor: grab; }
@@ -101,6 +105,8 @@
 .stage.is-full .codepane > .cp-body { flex: 1 1 0; min-height: 0; max-height: none; }
 .stage.is-full .codepane > .cp-out { max-height: 22vh; overflow: auto; }
 .stage.is-full .memstrip .stage-scroll > svg { min-width: 0; }
+.wrap .stage.is-full.no-code { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto auto; }
+.stage.is-full.no-code > .codepane { display: none; }
 /* a narrow portrait screen stacks it all: picture, buttons, stats, caption, then code and memory */
 @media (max-width: 899px) and (orientation: portrait) {
   .wrap .stage.is-full { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto auto minmax(0, 40%); }
@@ -169,14 +175,16 @@
 .mem-head2 { fill: var(--ink-3); font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .08em; }
 
 /* ---------- array cells inside a machine ---------- */
-.ac-cell { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; transition: fill .2s, stroke .2s; }
-.ac-cell.on { fill: var(--sun-soft); stroke: var(--sun); stroke-width: 2.5; }
-.ac-cell.on2 { fill: var(--blue-soft); stroke: var(--blue); stroke-width: 2.5; }
+.ac-cell { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.25; transition: fill .22s ease, stroke .22s ease, stroke-width .22s ease; }
+.ac-cell.on { fill: var(--sun-soft); stroke: var(--sun); stroke-width: 2; }
+.ac-cell.on2 { fill: var(--blue-soft); stroke: var(--blue); stroke-width: 2; }
 .ac-cell.good { fill: var(--mint-soft); stroke: var(--mint); stroke-width: 2; }
-.ac-cell.bad { fill: var(--coral-soft); stroke: var(--coral); stroke-width: 2.5; }
-.ac-cell.dim { fill: var(--surface-2); stroke: var(--line); }
-.ac-cell.sorted { fill: var(--lilac-soft); stroke: var(--lilac); stroke-width: 2; }
-.ac-v { fill: var(--ink); font-family: var(--f-mono); font-size: 15px; font-weight: 700; }
+.ac-cell.bad { fill: var(--coral-soft); stroke: var(--coral); stroke-width: 2; }
+.ac-cell.dim { fill: transparent; stroke: var(--line); }
+.ac-cell.sorted { fill: var(--lilac-soft); stroke: var(--lilac); stroke-width: 1.5; }
+.ac-v { fill: var(--ink); font-family: var(--f-mono); font-size: 15px; font-weight: 700; transition: fill .22s ease; }
+.ac-cell.dim + .ac-v { fill: var(--ink-3); font-weight: 400; } /* a dimmed cell isn't live, and its number says so */
+.al-moves { transform-box: fill-box; transform-origin: center; } /* pop() scales about the object's own centre */
 .ac-i { fill: var(--ink-3); font-family: var(--f-mono); font-size: 10.5px; }
 
 /* ---------- binary trees inside a machine (AL.tree) ---------- */
@@ -227,7 +235,7 @@
 .gr-node.red .gr-k, .gr-node.black .gr-k { fill: #fff; }
 .gr-node.dim .gr-k, .gr-node.ghost .gr-k { fill: var(--ink-3); }
 .gr-sub { fill: var(--ink-3); font-family: var(--f-mono); font-size: 10.5px; }
-@media (prefers-reduced-motion: reduce) { .fade, .cp-body li, .ac-cell, .tr-node circle, .gr-node circle, .gr-line, .cp-lens, .cp-lens.show { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .fade, .cp-body li, .ac-cell, .ac-v, .tr-node circle, .gr-node circle, .gr-line, .cp-lens, .cp-lens.show { transition: none; } }
 
 /* ==========================================================================================
    Step-through toolkit: explanation boxes, the step-through controls, and plots.
@@ -269,8 +277,6 @@
 .wk-why { font-size: 14.5px; line-height: 1.42; color: var(--ink-2); }
 .wk-why::before { content: "Why: "; font-weight: 700; color: var(--ink); }
 .stage.is-full .caption.wk-cap { min-height: 0; }
-/* a step-through machine fades the numbers of dimmed cells too, so the live ones stand out */
-.stage:has(.wk-scrub) .ac-cell.dim + .ac-v { fill: var(--ink-3); font-weight: 400; }
 /* small extra buttons stay easy to tap on a phone */
 @media (max-width: 600px) { .stage:has(.wk-scrub) .controls .btn.small { min-height: 36px; } }
 /* --- notes, arrows, brackets, bars and plots inside a machine --- */
