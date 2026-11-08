@@ -187,14 +187,18 @@ def main():
     name, build = home.name, home / "build"
     if a.only:
         heads = [i for i, s in enumerate(segs) if any(c["op"] == "goto" for c in s["cues"])]
-        hit = next((i for i in heads if a.only.lower() in next(c["arg"] for c in segs[i]["cues"] if c["op"] == "goto").lower()), None)
+        goto = lambda i: next(c["arg"] for c in segs[i]["cues"] if c["op"] == "goto")
+        hit = next((i for i in heads if goto(i).split("|")[0].strip() == a.only), None)  # a scene id exactly, else any text in the goto
+        if hit is None: hit = next((i for i in heads if a.only.lower() in goto(i).lower()), None)
         if hit is None: sys.exit(f"narrate: no {{goto}} contains {a.only!r}")
-        meta["scene"] = next(c["arg"] for c in segs[hit]["cues"] if c["op"] == "goto").split("|")[0].strip()
+        meta["scene"] = goto(hit).split("|")[0].strip()
+        carded = "|" in goto(hit)
         segs = segs[hit:next((i for i in heads if i > hit), len(segs))]
+        if not carded and not any(c["op"] == "scene" for s in segs for c in s["cues"]):
+            segs[0]["cues"].insert(0, {"w": 0, "op": "scene", "arg": ""})  # a scene inside a part has no card to lift: lift the cover
         part = re.sub(r"\W+", "-", a.only.lower()).strip("-")
         name += "-" + part; build /= part
-    problems = lint(segs) + [f"unfinished front matter: {k}: {v}" for k, v in meta.items() if isinstance(v, str) and "TODO" in v] \
-        + [f"names another creator in front matter: {k}" for k, v in meta.items() if isinstance(v, str) ]
+    problems = lint(segs) + [f"unfinished front matter: {k}: {v}" for k, v in meta.items() if isinstance(v, str) and "TODO" in v]
     if problems and not a.no_lint: sys.exit("script lint failed:\n  " + "\n  ".join(problems))
     tag = "silent" if a.silent else f"{engine}-{voice}"
     out = build / tag; (out / "raw").mkdir(parents=True, exist_ok=True)

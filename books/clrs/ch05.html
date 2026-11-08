@@ -1772,7 +1772,8 @@ K.page(5);
   const cx = (k) => X0 + k * (CW + GAP) + CW / 2; // k counts from 0
   const OFF = { x: 32, y: 182, w: 290, h: 58 }, TRAY = { x: 338, y: 182, w: 290, h: 58 };
   const BAR = { x: 80, y: 262, w: 480, h: 20 };
-  const gTop = s("g"), gPeople = s("g"), gCells = s("g"), gPtr = s("g"), gOffice = s("g"), gCost = s("g"), layer = s("g");
+  const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
+  const gTop = part("heading"), gPeople = part("people"), gCells = part("ranks"), gPtr = part("pointer"), gOffice = part("office"), gCost = part("cost"), layer = s("g");
   svg.append(gTop, gPeople, gCells, gPtr, gOffice, gCost, layer);
   const stI = stat("interviews", 0), stM = stat("hires m", 0), stC = stat("cost", 0);
   stats.append(stI, stM, stC);
@@ -1987,7 +1988,8 @@ K.page(5);
   const pr = (j) => DISTS[dist].w(ORDERS[j]) / DISTS[dist].den;
   const prTxt = (j) => `${DISTS[dist].w(ORDERS[j])}/${DISTS[dist].den}`;
 
-  const gHead = s("g"), gQueue = s("g"), gNow = s("g"), gHist = s("g"), layer = s("g");
+  const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
+  const gHead = part("heading"), gQueue = part("orders"), gNow = part("current"), gHist = part("histogram"), layer = s("g");
   svg.append(gHead, gQueue, gNow, gHist, layer);
   const stDone = stat("orders run", "0 / 24"), stE = stat("E so far", "–"), stW = stat("Pr{this order}", "–");
   stats.append(stDone, stE, stW);
@@ -2564,8 +2566,9 @@ K.page(5);
 (function s4() {
   const svg = K.$("#s4-svg");
   const ctr = K.$("#s4-controls"), stats = K.$("#s4-stats");
-  const gTop = s("g"), gRow = s("g"), gCells = s("g"), gHist = s("g"), layer = s("g");
-  svg.append(gTop, gRow, gCells, gHist, layer);
+  const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
+  const gTop = part("labels"), gLin = part("linearity"), gRow = part("coins"), gCells = part("indicators"), gHist = part("histogram"), layer = s("g");
+  svg.append(gTop, gLin, gRow, gCells, gHist, layer);
   const stT = stat("experiments", 0), stAvg = stat("average X", "–"), stE = stat("E[X] = n/2", 5), stHalf = stat("X = n/2 exactly", "–");
   stats.append(stT, stAvg, stE, stHalf);
 
@@ -2628,13 +2631,13 @@ K.page(5);
   const cxOf = (i) => { const g = geo(); return g.x0 + (i - 1) * g.P; }; // i counts from 1
   function render() { renderTop(); renderRow(); renderHist(hist); renderStats(); renderCode(); }
   function renderTop() {
-    K.clear(gTop);
+    K.clear(gTop); K.clear(gLin);
     txt(gTop, 14, 24, `one experiment · n = ${n} coins`, { anchor: "start", cls: "sv-label" });
     txt(gTop, 646, 24, MODES[mode].note, { anchor: "end", cls: "sv-label" });
     txt(gTop, 14, COIN_Y + 4, "coin", { anchor: "start", cls: "sv-label" });
     txt(gTop, 14, CELL_Y + CH / 2 + 4, "Xi", { anchor: "start", cls: "sv-label" });
     const terms = n === 2 ? "E[X1] + E[X2]" : `E[X1] + E[X2] + ⋯ + E[X${n}]`;
-    txt(gTop, 330, 164, `linearity:  E[X] = ${terms} = ${n} · 1/2 = ${n / 2}`, { mono: true, size: 12, cls: "sv-label" });
+    txt(gLin, 330, 164, `linearity:  E[X] = ${terms} = ${n} · 1/2 = ${n / 2}`, { mono: true, size: 12, cls: "sv-label" });
   }
   function renderRow() {
     K.clear(gRow);
@@ -2820,7 +2823,8 @@ K.page(5);
 (function s5() {
   const svg = K.$("#s5-svg");
   const ctr = K.$("#s5-controls"), stats = K.$("#s5-stats");
-  const gTop = s("g"), gRow = s("g"), gCells = s("g"), gBars = s("g"), gStack = s("g"), layer = s("g");
+  const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
+  const gTop = s("g"), gRow = part("order"), gCells = part("ranks"), gBars = part("bars"), gStack = part("stack"), layer = s("g");
   svg.append(gTop, gRow, gCells, gBars, gStack, layer);
   const stO = stat("orders", 0), stAvg = stat("average hires", "–"), stH = stat("E[X] = Hn", "–"), stLn = stat("ln n", "–");
   stats.append(stO, stAvg, stH, stLn);
@@ -3076,7 +3080,8 @@ K.page(5);
 (function s6() {
   const svg = K.$("#s6-svg");
   const ctr = K.$("#s6-controls"), stats = K.$("#s6-stats");
-  const gTop = s("g"), gIn = s("g"), gOut = s("g"), gHist = s("g"), layer = s("g");
+  const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
+  const gTop = part("labels"), gIn = part("input"), gOut = part("shuffled"), gHist = part("histogram"), layer = s("g");
   svg.append(gTop, gIn, gOut, gHist, layer);
   const stR = stat("runs", 0), stP = stat("plain hires", "–"), stAvg = stat("randomized avg", "–"), stH = stat("H10", "2.929");
   stats.append(stR, stP, stAvg, stH);
@@ -3313,8 +3318,9 @@ K.page(5);
 (function s7() {
   const svg = K.$("#s7-svg");
   const ctr = K.$("#s7-controls"), stats = K.$("#s7-stats");
-  const gArr = s("g"), gCells = s("g"), gSide = s("g"), gHist = s("g"), layer = s("g");
-  svg.append(gArr, gCells, gSide, gHist, layer);
+  const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
+  const gArr = part("array"), gCells = part("cells"), gSide = part("choices"), gInv = part("invariant"), gHist = part("histogram"), layer = s("g");
+  svg.append(gArr, gCells, gSide, gInv, gHist, layer);
   const stR = stat("runs", 0), stSeq = stat("choice sequences", "3·2·1 = 6"), stRatio = stat("tallest / shortest", "–");
   stats.append(stR, stSeq, stRatio);
   const RS = { name: "permute.rs", src: src("rs-s7"), out: src("rs-s7-out") };
@@ -3390,7 +3396,7 @@ K.page(5);
   }
   const fact = (k) => (k <= 1 ? 1 : k * fact(k - 1));
   function renderSide() {
-    K.clear(gSide);
+    K.clear(gSide); K.clear(gInv);
     const X = 322;
     txt(gSide, X, 22, `choices this run`, { anchor: "start", cls: "sv-label" });
     for (let i = 1; i <= N; i++) {
@@ -3410,8 +3416,8 @@ K.page(5);
       const frac = p === q ? "1" : `1/${q / p}`;
       inv = `i = ${i}: Pr{A[1 : ${i - 1}] = ⟨${pre.join(", ")}⟩} = ${N - i + 1}!/3! = ${frac}`;
     }
-    txt(gSide, X, 148, inv, { anchor: "start", mono: true, size: 11.5, cls: "sv-label" });
-    if (inv2) txt(gSide, X, 166, inv2, { anchor: "start", mono: true, size: 11.5, cls: "sv-label" });
+    txt(gInv, X, 148, inv, { anchor: "start", mono: true, size: 11.5, cls: "sv-label" });
+    if (inv2) txt(gInv, X, 166, inv2, { anchor: "start", mono: true, size: 11.5, cls: "sv-label" });
   }
   const HX0 = 60, HX1 = 620, HB = 292, HT = 206;
   function renderHist(mix) {
@@ -3576,7 +3582,8 @@ K.page(5);
 (function s8() {
   const svg = K.$("#s8-svg");
   const ctr = K.$("#s8-controls"), stats = K.$("#s8-stats");
-  const gHead = s("g"), gCal = s("g"), gList = s("g"), gPlot = s("g"), layer = s("g");
+  const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
+  const gHead = part("heading"), gCal = part("calendar"), gList = part("names"), gPlot = part("plot"), layer = s("g");
   svg.append(gHead, gCal, gList, gPlot, layer);
   const stK = stat("people k", 0), stX = stat("matching pairs", 0), stP = stat("Pr{shared}", "0"), stE = stat("E[pairs]", "0"), stSim = stat("simulated", "–");
   stats.append(stK, stX, stP, stE, stSim);
@@ -3813,7 +3820,8 @@ K.page(5);
   const ctr = K.$("#s9-controls"), stats = K.$("#s9-stats");
   const X0 = 24, X1 = 636, TOP = 58, CUPH = 84, BOT = TOP + CUPH;
   const GX0 = 64, GX1 = 636, GY0 = 300, GY1 = 200, SRC = [330, 24];
-  const gHead = s("g"), gBins = s("g"), gChart = s("g"), layer = s("g");
+  const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
+  const gHead = part("heading"), gBins = part("bins"), gChart = part("chart"), layer = s("g");
   svg.append(gHead, gBins, gChart, layer);
   const RS = { name: "balls_bins.rs", src: src("rs-s9"), out: src("rs-s9-out") };
   const MAPS = [
@@ -4431,7 +4439,8 @@ K.page(5);
   const svg = K.$("#s11-svg"), ctr = K.$("#s11-controls"), stats = K.$("#s11-stats");
   const X0 = 24, X1 = 636, BT = 54, BB = 162;
   const GX0 = 64, GX1 = 636, GY0 = 306, GY1 = 230;
-  const gBars = s("g"), gChart = s("g");
+  const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
+  const gBars = part("applicants"), gChart = part("chart");
   svg.append(gBars, gChart);
   const cv = code("#s11-code", { files: [{ name: "ONLINE-MAXIMUM", src: src("ps-s11"), rs: { name: "online_hiring.rs", src: src("rs-s11"), out: src("rs-s11-out"),
     map: { "ONLINE-MAXIMUM": 18, 1: 20, 2: 21, 3: 22, 4: 23, 5: 26, 6: 27, 7: 28, 8: 31 } } }] });

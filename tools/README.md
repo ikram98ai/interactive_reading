@@ -93,7 +93,7 @@ script with digits, symbols, a sentence reciting more than two numbers, or a sen
 {show code} {hide stats}   fade something in or out, css: targets only: keep it hidden until the narration names it
 {center} {split}           the picture alone in the middle, or on the left beside the code panel
 {label Insertion sort}     a small heading at the top of the frame · {label} clears it
-{click Race} {click Step x3}   press a button, unseen: no cursor and no controls on screen · {slider 1 11} · {speed 0.5} (the page's animation speed)
+{click Race} {click Step x3}   press a button (or a tappable SVG card, by its aria-label), unseen: no cursor and no controls on screen · {slider 1 11} · {speed 0.5} (the page's animation speed)
 {await}                    hold the narration until the animation ends · {pause 0.8}
 {check #s21-stats ~ 5.6 hours}   the run fails if the page does not show what the narration claims
 {card Big line | small line}     full-screen takeaway · {scene} leaves the title card

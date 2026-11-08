@@ -2142,7 +2142,8 @@ K.page(4);
   /* ---------- geometry ---------- */
   const CX = 24, CW = 262;                       // the call card
   const PX0 = 352, PX1 = 626, PY0 = 84, PY1 = 270; // the plot
-  const gTop = s("g"), gCard = s("g"), gPlot = s("g"), layer = s("g");
+  const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
+  const gTop = part("recurrence"), gCard = part("call"), gPlot = part("plot"), layer = s("g");
   svg.append(gTop, gCard, gPlot, layer);
   const X = (n) => PX0 + ((PX1 - PX0) * (n - 1)) / (N - 1);
   let ymax = 1;
@@ -2418,7 +2419,8 @@ K.page(4);
   stats.append(stMul, stDone);
   const cv = code("#s2-code", { files: [{ name: "MATRIX-MULTIPLY", src: src("ps-s2"), rs: { name: "matrix_multiply.rs", src: src("rs-s2"), out: src("rs-s2-out"), map: { "MATRIX-MULTIPLY": 3, 1: 4, 2: 5, 3: 6, 4: 8 } } }] });
   const m = mem("#s2-mem", { aria: "The Rust program's stack frames on the left and the three matrices' row-major heap buffers on the right" });
-  const gGrid = s("g"), gSide = s("g"), layer = s("g");
+  const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
+  const gGrid = part("matrices"), gSide = part("side"), layer = s("g");
   svg.append(gGrid, gSide, layer);
 
   const gw = () => n * CW + (n - 1) * GAP;
@@ -2627,7 +2629,8 @@ K.page(4);
   const TX = 160, CHW = 52, CSTEP = 62, RY = 166, KY = 214, LY = 262;
   const childX = (t) => TX + t * CSTEP;
   const leafX = (t, u) => childX(t) + u * 6.7;
-  const gGrid = s("g"), gTree = s("g"), gFoot = s("g"), layer = s("g");
+  const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
+  const gGrid = part("matrices"), gTree = part("tree"), gFoot = part("recurrence"), layer = s("g");
   svg.append(gGrid, gTree, gFoot, layer);
 
   const cur = () => (k > 0 ? evs[k - 1] : null);

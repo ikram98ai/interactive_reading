@@ -104,10 +104,15 @@ don't re-teach what an earlier chapter covered:
 1. Ownership: every value has one owner (ch01)
 2. Borrowing: `&mut` lends without giving away, and small values are copied (ch01)
 3. Moves and `Box`: ownership passes along a chain, and freeing is automatic (ch01)
-4. Shared `&` borrows, and many readers at once
-5. `Option` instead of NIL
-6. Slices and splitting a borrow, as in divide and conquer
-7. Lifetimes, only when a chapter's data structure needs them
+4. Shared `&` borrows: many readers at once, or one writer (ch02)
+5. `clone()` for data you change but also keep, then `Option` instead of NIL: `get` returns `None` instead of crashing (ch03)
+6. Slices and splitting a borrow, as in divide and conquer: `to_vec()` and `split_at_mut` (ch02)
+7. `#[derive(Clone, Copy)]` for small types of your own, and what a borrow costs: a slice is an address and a
+   length, the same size whatever it covers (ch04)
+8. A `Vec` grows by doubling its capacity, and a `Vec` of `Vec`s is many separate allocations, all freed when the outer
+   one drops; then generic functions over `T`, and `&mut` for state that changes on every call, such as a seeded
+   pseudorandom generator (ch05)
+9. Lifetimes, only when a chapter's data structure needs them
 
 The segment follows the same steps each time:
 

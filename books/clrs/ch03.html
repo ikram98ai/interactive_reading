@@ -5420,30 +5420,32 @@ K.page(3);
     txt(svg, CX, CY + 2, `q = ${neg(laps)}`, { mono: true, bold: true, size: 15 });
     txt(svg, CX, CY + 19, `laps of ${st.who}`, { cls: "sv-label" });
 
-    // the arithmetic
+    // the arithmetic, in layers a video can show one at a time
+    const part = (name) => svg.appendChild(s("g", { "data-part": name }));
+    const gWork = part("work"), gRust = part("rust"), gB = part("b"), gClass = part("class");
     const X0 = 316;
-    txt(svg, X0, 34, "(3.11)  a mod n = a − n·⌊a/n⌋", { anchor: "start", cls: "sv-label", size: 12 });
-    txt(svg, X0, 68, `${neg(a)} mod ${n} = ${ra}`, { anchor: "start", bold: true, size: 22 });
+    txt(gWork, X0, 34, "(3.11)  a mod n = a − n·⌊a/n⌋", { anchor: "start", cls: "sv-label", size: 12 });
+    txt(gWork, X0, 68, `${neg(a)} mod ${n} = ${ra}`, { anchor: "start", bold: true, size: 22 });
     const frac = +(a / n).toFixed(2);
-    txt(svg, X0, 94, `⌊${neg(a)}/${n}⌋ = ⌊${neg(frac)}⌋ = ${neg(q)}`, { anchor: "start", mono: true, size: 12.5 });
-    txt(svg, X0, 114, `${neg(a)} − ${n}·(${neg(q)}) = ${ra}`, { anchor: "start", mono: true, size: 12.5 });
+    txt(gWork, X0, 94, `⌊${neg(a)}/${n}⌋ = ⌊${neg(frac)}⌋ = ${neg(q)}`, { anchor: "start", mono: true, size: 12.5 });
+    txt(gWork, X0, 114, `${neg(a)} − ${n}·(${neg(q)}) = ${ra}`, { anchor: "start", mono: true, size: 12.5 });
     // Rust: % keeps the sign of a; rem_euclid is the book's mod
     const pr = rem(a), same = pr === ra;
-    svg.appendChild(s("rect", { x: X0, y: 130, width: 156, height: 30, rx: 9, class: same ? "sv-panel" : "sv-bad" }));
-    txt(svg, X0 + 78, 150, `a % n = ${neg(pr)}`, { mono: true, bold: true, size: 12.5 });
-    svg.appendChild(s("rect", { x: X0 + 166, y: 130, width: 164, height: 30, rx: 9, class: "sv-good" }));
-    txt(svg, X0 + 248, 150, `a.rem_euclid(n) = ${ra}`, { mono: true, bold: true, size: 12 });
+    gRust.appendChild(s("rect", { x: X0, y: 130, width: 156, height: 30, rx: 9, class: same ? "sv-panel" : "sv-bad" }));
+    txt(gRust, X0 + 78, 150, `a % n = ${neg(pr)}`, { mono: true, bold: true, size: 12.5 });
+    gRust.appendChild(s("rect", { x: X0 + 166, y: 130, width: 164, height: 30, rx: 9, class: "sv-good" }));
+    txt(gRust, X0 + 248, 150, `a.rem_euclid(n) = ${ra}`, { mono: true, bold: true, size: 12 });
     // b, and the equivalence
-    txt(svg, X0, 196, `${neg(b)} mod ${n} = ${rb}`, { anchor: "start", bold: true, size: 16, fill: "var(--lilac)" });
+    txt(gB, X0, 196, `${neg(b)} mod ${n} = ${rb}`, { anchor: "start", bold: true, size: 16, fill: "var(--lilac)" });
     const eq = ra === rb, diff = b - a;
-    svg.appendChild(s("rect", { x: X0, y: 208, width: 330, height: 30, rx: 15, class: eq ? "sv-good" : "sv-panel" }));
-    txt(svg, X0 + 165, 228, eq ? `${neg(a)} ≡ ${neg(b)} (mod ${n}):  ${n} divides ${neg(b)} − (${neg(a)}) = ${neg(diff)}` : `${neg(a)} ≢ ${neg(b)} (mod ${n}):  ${n} doesn't divide ${neg(diff)}`, { mono: true, bold: true, size: 11 });
+    gB.appendChild(s("rect", { x: X0, y: 208, width: 330, height: 30, rx: 15, class: eq ? "sv-good" : "sv-panel" }));
+    txt(gB, X0 + 165, 228, eq ? `${neg(a)} ≡ ${neg(b)} (mod ${n}):  ${n} divides ${neg(b)} − (${neg(a)}) = ${neg(diff)}` : `${neg(a)} ≢ ${neg(b)} (mod ${n}):  ${n} doesn't divide ${neg(diff)}`, { mono: true, bold: true, size: 11 });
     // a's whole class: every number that lands on the same slot
     const cls = [];
     for (let v = -30; v <= 30; v++) if (md(v) === ra) cls.push(v);
     const i0 = Math.max(0, Math.min(cls.length - 7, cls.indexOf(a) - 3)), shown = cls.slice(i0, i0 + 7);
-    txt(svg, X0, 266, `everything on slot ${ra}:`, { anchor: "start", cls: "sv-label" });
-    txt(svg, X0, 286, (i0 > 0 ? "… " : "") + shown.map(neg).join("  ") + (i0 + 7 < cls.length ? "  …" : ""), { anchor: "start", mono: true, size: 12.5 });
+    txt(gClass, X0, 266, `everything on slot ${ra}:`, { anchor: "start", cls: "sv-label" });
+    txt(gClass, X0, 286, (i0 > 0 ? "… " : "") + shown.map(neg).join("  ") + (i0 + 7 < cls.length ? "  …" : ""), { anchor: "start", mono: true, size: 12.5 });
 
     stR.set(String(ra), "good"); stP.set(neg(pr), same ? undefined : "bad"); stQ.set(neg(q)); stE.set(eq ? "yes" : "no", eq ? "good" : undefined);
     renderMem();
@@ -5862,9 +5864,10 @@ K.page(3);
     txt(svg, P.x1 + 8, Math.min(P.y0, Math.max(P.y1 + 4, e2 + 4)), `${short(a)}ⁿ`, { anchor: "start", mono: true, bold: true, size: 13, fill: "var(--lilac)" });
     const clampX = (x) => Math.max(P.x0 + 34, Math.min(P.x1 - 34, x));
     if (!flat && (cur == null || found)) {
-      line(svg, X(n0), P.y0, X(n0), P.y1, "sv-wire", { stroke: "var(--coral)", strokeWidth: 2 });
-      svg.appendChild(s("circle", { cx: X(n0), cy: Y(gy(n0)), r: 5, class: "sv-fill-coral" }));
-      txt(svg, clampX(X(n0)), P.y1 - 10, `n₀ = ${fmt(n0)}`, { mono: true, bold: true, size: 12 });
+      const gN0 = svg.appendChild(s("g", { "data-part": "n0" })); // the crossing, a layer of its own
+      line(gN0, X(n0), P.y0, X(n0), P.y1, "sv-wire", { stroke: "var(--coral)", strokeWidth: 2 });
+      gN0.appendChild(s("circle", { cx: X(n0), cy: Y(gy(n0)), r: 5, class: "sv-fill-coral" }));
+      txt(gN0, clampX(X(n0)), P.y1 - 10, `n₀ = ${fmt(n0)}`, { mono: true, bold: true, size: 12 });
     }
     if (cur != null && !found) {
       line(svg, X(cur), P.y0, X(cur), P.y1, "sv-wire-solid", { stroke: "var(--sun)", strokeWidth: 2 });

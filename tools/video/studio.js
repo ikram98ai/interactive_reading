@@ -11,7 +11,7 @@
    pause or {await}, which holds the narration until the animation has finished. So the narration can never talk over a
    machine that is still running, and the audio is laid down afterwards at the moments each clip really started.
 
-   Cues: scene · focus <target[+target]> | off · click <label> [xN] · slider <index> <value> · speed <x> · card <big | small>
+   Cues: scene · focus <target[+target]> | off · click <label> [xN] (a button's text, or a tappable SVG group's aria-label) · slider <index> <value> · speed <x> · card <big | small>
          show <target[+target]> · hide <target[+target]>  (fades; css: targets only, and instant while a card covers the screen)
          center · split  (the picture alone in the middle, or on the left with the code panel beside it)
          label <text>  (a small heading at the top of the frame; {label} alone clears it)
@@ -173,9 +173,25 @@ function overlayScript() {
       this.center(true);
     },
     dip(on) { const b = $("vid-black"); b.style.transition = "opacity .3s ease"; b.style.opacity = on ? 1 : 0; },
-    focus(list) { state.targets = list; document.documentElement.classList.toggle("vid-quiet", list.some((t) => /^(code|rs):/.test(t))); },
+    focus(list) {
+      state.targets = list; document.documentElement.classList.toggle("vid-quiet", list.some((t) => /^(code|rs):/.test(t)));
+      list.filter((t) => /^(code|rs):/.test(t)).forEach((t) => this.reveal(t));
+    },
+    reveal(t) { // scroll a focused line range into the code panel's view, as the page does for its running line
+      const body = stage().querySelector(".cp-body"); if (!body) return;
+      const [a, b] = t.slice(t.indexOf(":") + 1).split("-").map(Number), lis = [...body.querySelectorAll("li")], k = t.startsWith("rs:") ? 1 : 0;
+      const first = lis[a - k], last = lis[(b || a) - k] || first; if (!first) return;
+      const top = first.offsetTop, bottom = last.offsetTop + last.offsetHeight;
+      if (top < body.scrollTop + 6) body.scrollTop = Math.max(0, top - 24);
+      else if (bottom > body.scrollTop + body.clientHeight - 6) body.scrollTop = bottom - body.clientHeight + 24;
+    },
     show(sels, on) {
       const instant = $("vid-title").style.opacity !== "0" || $("vid-card").style.opacity === "1" || $("vid-black").style.opacity === "1"; // nothing below a card is visible yet
+      // a rule as well as the inline style, so a layer stays hidden when its machine redraws the whole picture
+      let sheet = $("vid-hidden"); if (!sheet) { sheet = document.createElement("style"); sheet.id = "vid-hidden"; document.head.appendChild(sheet); }
+      const rules = new Set(sheet.textContent.split("\n").filter(Boolean));
+      sels.forEach((sel) => rules[on ? "delete" : "add"](`${sel} { opacity: 0; }`));
+      sheet.textContent = [...rules].join("\n");
       sels.forEach((sel) => document.querySelectorAll(sel).forEach((e) => {
         e.classList.add("vid-part");
         if (instant) e.style.transition = "none";
@@ -189,9 +205,15 @@ function overlayScript() {
     section(kicker, head) { state.targets = []; this.label(""); $("vid-list").innerHTML = ""; $("vid-kicker").textContent = kicker; $("vid-head").textContent = head; $("vid-title").style.opacity = 1; $("vid-card").style.opacity = 0; },
     card(a, b) { $("vid-card-a").textContent = a; $("vid-card-b").textContent = b || ""; $("vid-card").style.opacity = 1; },
     black() { $("vid-black").style.opacity = 1; },
-    enabled(label) { const b = [...stage().querySelectorAll("button")].find((x) => x.textContent.trim() === label); return b ? !b.disabled : null; },
+    // a button by its text, or a tappable SVG group (AL.clickable: role=button) by its aria-label
+    find(label, live) { return [...stage().querySelectorAll("button, [role=button]")].find((x) => (x.tagName === "BUTTON" ? x.textContent.trim() : x.getAttribute("aria-label")) === label && !(live && x.disabled)); },
+    enabled(label) { const b = this.find(label); return b ? !b.disabled : null; },
     caption() { const c = stage().querySelector(".caption"); return c ? c.textContent.trim() : ""; },
-    press(label) { const b = [...stage().querySelectorAll("button")].find((x) => x.textContent.trim() === label && !x.disabled); if (!b) return false; b.click(); window.__lastBtn = b; return true; },
+    press(label) {
+      const b = this.find(label, true); if (!b) return false;
+      if (b.tagName === "BUTTON") { b.click(); window.__lastBtn = b; } else b.dispatchEvent(new MouseEvent("click", { bubbles: true })); // SVG has no .click()
+      return true;
+    },
     async slideTo(i, v, ms = 800) {
       const inp = stage().querySelectorAll("input[type=range]")[i], a = +inp.value, st = +inp.step || 1, t0 = performance.now();
       await new Promise((done) => { (function f() { const k = Math.min(1, (performance.now() - t0) / ms), val = Math.round((a + (v - a) * k) / st) * st; if (+inp.value !== val) { inp.value = val; inp.dispatchEvent(new Event("input", { bubbles: true })); } k < 1 ? requestAnimationFrame(f) : done(); })(); });
