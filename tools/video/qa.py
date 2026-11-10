@@ -14,6 +14,16 @@ import numpy as np
 
 W, H, FPS = 320, 180, 30
 #              target,           warn outside,    fail outside
+# A lesson (its script's `kind:`) has its own bar, from the same tutorials measured lesson by lesson: code lessons talk slower
+# and type while silent, exercises and boards talk slower still, and an editor full of code is meant to fill the frame.
+LESSON = {
+    "code": {"pace (wpm)": ((150, 175), (140, 185), (125, 200)), "moving (% of time)": ((0, 70), (0, 80), (0, 95)),
+             "changes a minute": ((0, 40), (0, 60), (0, 90)), "longest pause (s)": ((0, 3.5), (0, 4.5), (0, 6.0)),
+             "silent motion (s)": ((0, 3.0), (0, 5.0), (0, 8.0)), "clutter (% of frame)": ((0, 40), (0, 50), (0, 70))},
+    "board": {"pace (wpm)": ((140, 190), (130, 200), (115, 215)), "moving (% of time)": ((0, 12), (0, 16), (0, 25)),
+              "changes a minute": ((0, 14), (0, 18), (0, 25)), "longest pause (s)": ((0, 3.0), (0, 3.5), (0, 5.0)),
+              "silent motion (s)": ((0, 1.5), (0, 2.5), (0, 4.0)), "clutter (% of frame)": ((0, 15), (0, 20), (0, 30))},
+}
 BAR = {
     "pace (wpm)":            ((180, 195), (170, 205), (155, 215)),
     "moving (% of time)":    ((5, 11), (4, 12), (2, 15)),
@@ -57,6 +67,12 @@ def clock(t): return f"{int(t // 60)}:{int(t % 60):02d}"
 def main():
     if len(sys.argv) != 2: sys.exit(__doc__)
     path = sys.argv[1]
+    try: kind = re.search(r"^kind:\s*(\w+)", open(re.sub(r"[^/]+$", "script.md", path)).read(), re.M).group(1)
+    except (OSError, AttributeError): kind = "chapter"
+    bar = dict(BAR, **LESSON.get(kind, {}))
+    # a script can accept one measure for a written reason (front matter `qa-allow: clutter (why)`): it can warn, never fail
+    try: allow = re.search(r"^qa-allow:\s*(.+)$", open(re.sub(r"[^/]+$", "script.md", path)).read(), re.M).group(1)
+    except (OSError, AttributeError): allow = ""
     moving, dur, clutter = picture(path)
     # a change is a run of motion; gaps under a fifth of a second belong to the same change
     changes, i = 0, 0
@@ -83,12 +99,13 @@ def main():
         "clutter (% of frame)": clutter,
     }
     worst = 0
-    print(f"{path}  ·  {clock(dur)}")
+    print(f"{path}  ·  {clock(dur)}  ·  {kind}")
     for k, v in got.items():
-        (t0, t1), (w0, w1), (f0, f1) = BAR[k]
+        (t0, t1), (w0, w1), (f0, f1) = bar[k]
         grade = 0 if t0 <= v <= t1 else 1 if w0 <= v <= w1 else 2 if f0 <= v <= f1 else 3
+        if allow and k.startswith(allow.split()[0]): grade = min(grade, 2)
         worst = max(worst, grade)
-        print(f"  {['ok  ', 'near', 'WARN', 'FAIL'][grade]}  {k:<22} {v:7.1f}   target {t0:g}–{t1:g}")
+        print(f"  {['ok  ', 'near', 'WARN', 'FAIL'][grade]}  {k:<22} {v:7.1f}   target {t0:g}–{t1:g}" + (f"   allowed: {allow}" if allow and k.startswith(allow.split()[0]) and grade else ""))
     fix = [x for x in sorted(talkless, reverse=True) if x[0] >= 1.0][:8]
     if fix: print("  silent motion at: " + ", ".join(f"{clock(s)} ({m:.1f} s)" for m, s in fix) + "  → talk over it, or raise {speed}")
     long_ = sorted((p, s) for p, s in pauses if p > 3.0)

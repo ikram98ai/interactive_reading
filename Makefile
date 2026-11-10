@@ -67,7 +67,7 @@ interact: ## Use each machine as a reader would: PAGE=…
 	node tools/browser/interact.js $(PAGE) $(ARGS)
 
 # --- video
-narrate: ## Turn a video script into timed narration: SCRIPT=videos/clrs/ch01/script.md ARGS="--voice kokoro:am_liam"
+narrate: ## Turn a video script into timed narration: SCRIPT=videos/clrs/ch01/02-what-is-an-algorithm/script.md
 	$(call need,SCRIPT,videos/clrs/ch01/script.md)
 	$(PY) tools/video/narrate.py $(SCRIPT) $(ARGS)
 
@@ -82,7 +82,7 @@ record: ## Record one narrated scene: SCENE=videos/scripts/<scene>.json OUT=vide
 scenes: ## Record every chapter-1 scene into videos/
 	tools/video/make-all.sh
 
-series: ## Build the YouTube series: VOICE=kokoro:am_liam ONLY=clrs/ch01 (both optional, default voice kokoro:bm_fable)
+series: ## Build the YouTube series: ONLY=clrs/ch01 (a chapter, or one lesson like clrs/ch01/05-solution-insertion-sort)
 	tools/video/make-series.sh "$(VOICE)" "$(ONLY)"
 
 # --- chapter videos, in the order of tools/video/BLUEPRINT.md

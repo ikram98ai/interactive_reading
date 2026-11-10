@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""plan.py books/clrs/chNN.html [--scaffold videos/clrs/chNN] — step 1 of tools/video/BLUEPRINT.md.
+"""plan.py books/clrs/chNN.html [--scaffold videos/clrs/chNN] — steps 1 and 2 of tools/video/BLUEPRINT.md.
 
 Reads a chapter page and lists what a video can drive in each scene: the machine's modes, buttons, sliders and stats,
 whether it has a Rust listing and a stack-and-heap strip (a Rust segment), and which layers are tagged data-part (so the
-script can hide them). Use it to choose the six to eight parts.
+script can hide them). Use it to choose the lessons: a concept lesson per big idea, a code lesson where Rust teaches something.
 
---scaffold writes script.md in the series' fixed shape, with this inventory as a comment at the top and TODO wherever
+--scaffold writes one lesson folder per lesson, in the section's order, with this inventory as a comment at the top and TODO wherever
 words are needed. narrate.py refuses to speak a TODO, so an unfinished script can't be recorded by accident."""
 import argparse, html, pathlib, re, sys
 
@@ -73,32 +73,34 @@ def report(page, title, ch, scenes):
 
 
 def scaffold(out, page, title, ch, scenes, book):
+    """One folder per lesson, in the section's order (BLUEPRINT.md § The section). Each script starts with TODOs."""
     live = [s for s in scenes if s["machine"]]
-    first = live[0]["id"] if live else scenes[0]["id"]
+    if out.exists() and any(out.glob("[0-9][0-9]-*/script.md")): sys.exit(f"plan: {out} already has lessons; not overwriting them")
+    kicker = f"{book} · Chapter {ch}"
     inv = report(page, title, ch, scenes).replace("--", "—")
-    parts = live[:7]  # a starting point: the author keeps six to eight and folds the rest in as second scenes
-    n = len(parts)
-    body = [f"<!--\nINVENTORY (from tools/video/plan.py). Pick six to eight parts, one question each; a second machine in the same\npart is a {{goto scene}} with no card. Delete this comment when the plan is settled.\n\n{inv}\n-->",
-            f"{{scene}} TODO cold open on the most surprising machine ({first}): ask a question, run it, show the result, and say in one sentence what explains it.",
-            "{title} TODO the book and the chapter, and what the viewer will know by the end. Here's what we'll cover.",
-            " ".join(f"{{item TODO part {i + 1}}} TODO one clause naming part {i + 1}." for i in range(n)),
-            "TODO the Rust promise, what the viewer doesn't need to know already, and: So let's get started."]
-    for i, s in enumerate(parts):
-        body.append(f"{{goto {s['id']} | Part {i + 1} of {n} | TODO {s['heading'] or 'question'}?}}{{pause 0.6}}")
-        body.append(f"{{scene}} TODO problem, then demo, then name, then why it matters. Machine: {', '.join(s['buttons']) or 'no buttons'}"
-                    + (f"; modes {', '.join(s['modes'])}" if s["modes"] else "") + ".")
-        if s["memory"]:
-            body.append("{label In Rust}{hide stats}{split}{show panel}{rust} TODO Rust segment: one ownership idea, shown on the stack and heap.")
-        body.append("TODO end on the question the next part answers.")
-    body.append(f"{{goto {first} | Recap | What you learned}}{{pause 0.6}}")
-    body.append("{scene}" + "".join(f"{{card TODO takeaway {i + 1}}} TODO say takeaway {i + 1}.\n\n" for i in range(n)).rstrip())
-    body.append("{card Try every machine yourself. | The link is in the description.} TODO point to the page, then one sentence on what the next chapter's video answers. {pause 0.4}")
-    fm = [f"title: TODO {title}", f"kicker: {book} · Chapter {ch}", f"page: {page.relative_to(ROOT)}", f"scene: {first}", "seed: 1", "targets:"]
-    out.mkdir(parents=True, exist_ok=True)
-    dest = out / "script.md"
-    if dest.exists(): sys.exit(f"plan: {dest} already exists; not overwriting it")
-    dest.write_text("---\n" + "\n".join(fm) + "\n---\n" + "\n\n".join(body) + "\n")
-    return dest
+    lessons = [("introduction", "board", "Introduction", "{board TODO the chapter's subject} TODO In this section, we're going to talk about … {bullet TODO idea} … So let's get started.")]
+    exercise = 0
+    for s in live[:10]:  # a starting point: keep the machines that carry the chapter's big ideas, fold or drop the rest
+        lessons.append((re.sub(r"\W+", "-", s["heading"].lower()).strip("-")[:40] or s["id"], "concept", s["heading"] or s["id"],
+                        f"TODO the problem, then the animation, then the name, then why it matters. Machine: {', '.join(s['buttons']) or 'no buttons'}"
+                        + (f"; modes {', '.join(s['modes'])}" if s["modes"] else "") + ". TODO Next, we're going to …", s))
+        if s["rust"] and exercise < 2 and s["memory"]:
+            exercise += 1
+            lessons.append((f"exercise-todo-{exercise}", "code", "Exercise: TODO", "TODO the task in one sentence {code s1} TODO the example, typed as comments. TODO a hint. Spend TODO minutes on it, then see my solution."))
+            lessons.append((f"solution-todo-{exercise}", "code", "Solution: TODO", "TODO the algorithm, in comments on a small example. That is our algorithm. Now let's implement it. {code s1} TODO {run} TODO Next, …"))
+    lessons.append(("summary", "board", "Summary", "{board TODO} Let's quickly recap all the key points you learned in this section. {bullet TODO}"))
+    lessons.append(("wrap-up", "board", "Wrap Up", "{board TODO} Congratulations on completing this section. TODO where to try the machines, and what the next section covers."))
+    made = []
+    for n, (slug, kind, head, body, *rest) in enumerate(lessons, 1):
+        d = out / f"{n:02d}-{slug}"; d.mkdir(parents=True, exist_ok=True)
+        fm = [f"kind: {kind}", f"title: TODO {head}", f"kicker: {kicker}"]
+        if kind == "concept": fm += [f"page: {page.relative_to(ROOT)}", f"scene: {rest[0]['id']}", "seed: 1", "targets:"]
+        if kind == "code": fm += ["file: main.rs", "start: s0"]
+        code = "```rust @s0\nfn main() {\n}\n```\n\n```rust @s1\nfn main() {\n    // TODO\n}\n```\n\n" if kind == "code" else ""
+        note = f"<!--\n{inv}\n-->\n" if n == 1 else ""
+        (d / "script.md").write_text("---\n" + "\n".join(fm) + "\n---\n" + note + code + body + "\n")
+        made.append(d)
+    return out
 
 
 def main():
@@ -112,7 +114,7 @@ def main():
     if a.scaffold:
         book = re.search(r'book:\s*"([^"]+)"', (page.parent / "book.js").read_text()).group(1)
         dest = scaffold(ROOT / a.scaffold, page, title, ch, scenes, book)
-        print(f"\nwrote {dest}: fill in every TODO, then follow BLUEPRINT.md from step 3.")
+        print(f"\nwrote {len(list(dest.glob('[0-9][0-9]-*/script.md')))} lessons in {dest}: fill in every TODO, then follow BLUEPRINT.md from step 3.")
 
 
 if __name__ == "__main__":

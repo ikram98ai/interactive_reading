@@ -10,6 +10,10 @@ Everything a chapter's video needs stays in its folder: script.md, build/ (clips
   5. trim, level and write build/<voice>/manifest.json for studio.js
 
 --silent skips 3 and 4 and estimates timing at 150 words a minute: a fast way to check the highlights.
+A code lesson (kind: code) keeps the editor's text in fenced blocks, ```rust @name … ```, which are never spoken. {code name}
+types the editor into that snapshot, and {run} shows the program's real output: each snapshot that is run is compiled with
+rustc here, and the build fails if it doesn't compile, unless the cue is {run error}, which shows the compiler's error instead.
+
 --only "Part 1" narrates just the section whose {goto} contains that text, into its own build folder: a fast way to judge one part."""
 import argparse, difflib, hashlib, json, pathlib, random, re, subprocess, sys
 import numpy as np
@@ -21,6 +25,9 @@ MAX_WER = 0.10          # above this, the clip probably misread the script
 RETRIES = 0             # Kokoro says a text the same way every time, so a clip that differs is reported, not regenerated
 SR = 48000
 SPEED = 0.92            # Kokoro's rate: about 190 words a minute, the pace of the tutorials these videos are modelled on
+# Lessons talk at the pace the reference tutorials use for each kind: concepts at about 190 words a minute, code lessons at
+# about 160 (slower, with room between thoughts while the code is typed), exercises and boards in between.
+PACE = {"code": (0.85, 2.6), "board": (0.88, 1.6)}   # kind → (Kokoro speed, how much longer the gaps between blocks are)
 _whisper = None
 
 NUM_WORD = r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)"
@@ -38,6 +45,10 @@ def parse(path):
     meta["targets"] = targets
     segs = []
     body = re.sub(r"<!--.*?-->", "", m.group(2), flags=re.S)  # notes for the author: never spoken, never cued
+    code = {}
+    def keep(mm): code[mm.group(1)] = mm.group(2); return ""
+    body = re.sub(r"```rust @([\w-]+)[ \t]*\n(.*?)\n```", keep, body, flags=re.S)  # the editor's snapshots
+    meta["code"] = code
     for para in re.split(r"\n\s*\n", body.strip()):
         cur = {"text": [], "cues": [], "then": None}
         for tok in re.findall(r"\{[^}]*\}|[^\s{]+", para):
@@ -65,6 +76,26 @@ def parse(path):
         s["text"] = words
         out.append(s)
     return meta, out
+
+
+def rust(src, work, want_error):
+    """Compile and run one snapshot, as the run panel will show it. Cached by the source text."""
+    key = hashlib.md5(src.encode()).hexdigest()[:12]
+    d = work / "rust"; d.mkdir(parents=True, exist_ok=True)
+    rs, exe = d / f"{key}.rs", d / key
+    rs.write_text(src + "\n")
+    c = subprocess.run(["rustc", "--edition", "2021", "-A", "warnings", "-o", str(exe), str(rs)], capture_output=True, text=True)
+    if c.returncode:
+        err = c.stderr.replace(str(rs), "src/main.rs")
+        first = next((b for b in err.split("\n\n") if b.startswith("error")), err)  # the first error is the one the lesson talks about
+        out, ok = first.strip() + "\n\nerror: could not compile `main` due to a previous error", False
+    else:
+        r = subprocess.run([str(exe)], capture_output=True, text=True, timeout=20)
+        err = re.sub(r"thread '([^']*)' \(\d+\)", r"thread '\1'", r.stderr.replace(str(rs), "src/main.rs"))  # the same on every run
+        out, ok = (r.stdout + (err if r.returncode else "")).rstrip(), r.returncode == 0
+    if ok == want_error:
+        sys.exit(f"narrate: a {{run{' error' if want_error else ''}}} expected {'an error' if want_error else 'a clean run'}, but got:\n{out}\n--- source ---\n{src}")
+    return {"out": out, "ok": ok}
 
 
 def lint(segs):
@@ -169,11 +200,11 @@ def gap_after(seg, rng):
     return round(rng.uniform(*base), 3)
 
 
-def synth(engine, voice, items, work):
+def synth(engine, voice, items, work, speed=SPEED):
     if not items: return
     if engine != "kokoro": sys.exit(f"narrate: {len(items)} clips are not cached for {engine}:{voice}, and only kokoro: voices can make new ones.")
     jobs = work / f"jobs-{hashlib.md5(json.dumps(items).encode()).hexdigest()[:8]}.json"
-    jobs.write_text(json.dumps({"voice": voice, "speed": SPEED, "items": items}))
+    jobs.write_text(json.dumps({"voice": voice, "speed": speed, "items": items}))
     subprocess.run([sys.executable, str(HERE / "tts_kokoro.py"), str(jobs)], check=True)
     jobs.unlink()
 
@@ -199,18 +230,29 @@ def main():
         part = re.sub(r"\W+", "-", a.only.lower()).strip("-")
         name += "-" + part; build /= part
     problems = lint(segs) + [f"unfinished front matter: {k}: {v}" for k, v in meta.items() if isinstance(v, str) and "TODO" in v]
+    # a code lesson: every {code} names a snapshot, and every {run} gets its program's real output
+    runs, current = {}, meta.get("start")
+    if current and current not in meta["code"]: problems.append(f"start: @{current} is not a snapshot")
+    for s in segs:
+        for c in s["cues"]:
+            if c["op"] == "code":
+                current = c["arg"].split()[0]
+                if current not in meta["code"]: problems.append(f"{{code {current}}}: no ```rust @{current} block")
+            if c["op"] == "run" and current in meta["code"] and current not in runs:
+                runs[current] = rust(meta["code"][current], build, c["arg"].strip() == "error")
     if problems and not a.no_lint: sys.exit("script lint failed:\n  " + "\n  ".join(problems))
     tag = "silent" if a.silent else f"{engine}-{voice}"
     out = build / tag; (out / "raw").mkdir(parents=True, exist_ok=True)
+    speed, stretch = PACE.get(meta.get("kind"), (SPEED, 1.0))
     rng = random.Random(meta.get("seed", 1))
     base = int(meta.get("seed", 1))
     res = []
     for i, s in enumerate(segs):
         words = s["text"]; text = " ".join(words)
-        rec = {"i": i, "text": text, "words": words, "cues": s["cues"], "then": s["then"], "gap": gap_after(s, rng), "dur": 0.0, "wav": None}
+        rec = {"i": i, "text": text, "words": words, "cues": s["cues"], "then": s["then"], "gap": round(gap_after(s, rng) * stretch, 3), "dur": 0.0, "wav": None}
         res.append(rec)
         if not words: continue
-        rec["key"] = hashlib.md5(f"{tag}|{SPEED}|{text}".encode()).hexdigest()[:12]
+        rec["key"] = hashlib.md5(f"{tag}|{speed}|{text}".encode()).hexdigest()[:12]
     if a.silent:
         for r in res:
             r["dur"] = len(r["words"]) * 0.4
@@ -219,7 +261,7 @@ def main():
         todo = [r for r in res if r["words"]]
         for attempt in range(RETRIES + 1):
             need = [{"text": r["text"], "out": str(out / "raw" / f"{r['key']}.wav"), "seed": base + attempt * 101 + r["i"]} for r in todo if not (out / "raw" / f"{r['key']}.wav").exists()]
-            if need: print(f"{name}: synthesizing {len(need)} clips with {a.voice} (attempt {attempt + 1})", flush=True); synth(engine, voice, need, out)
+            if need: print(f"{name}: synthesizing {len(need)} clips with {a.voice} (attempt {attempt + 1})", flush=True); synth(engine, voice, need, out, speed)
             bad = []
             for r in todo:
                 raw = out / "raw" / f"{r['key']}.wav"; clean = out / f"seg{r['i']:03d}.wav"
@@ -240,7 +282,7 @@ def main():
     for r in res:
         for c in r["cues"]:
             c["t"] = 0.0 if c["w"] == 0 or not r["words"] else (r["start"][c["w"]] if c["w"] < len(r["words"]) else r["dur"])
-    (out / "manifest.json").write_text(json.dumps({"meta": meta, "name": name, "out": str(home / f"{name}-{'silent' if a.silent else voice}.mp4"), "voice": a.voice, "silent": a.silent, "segments": res}, indent=1, default=float))
+    (out / "manifest.json").write_text(json.dumps({"meta": meta, "code": meta["code"], "runs": runs, "name": name, "out": str(home / f"{name}-{'silent' if a.silent else voice}.mp4"), "voice": a.voice, "silent": a.silent, "segments": res}, indent=1, default=float))
     words = sum(len(r["words"]) for r in res); dur = sum(r["dur"] + r["gap"] for r in res)
     print(f"{name}: {len(res)} blocks, {words} words, about {dur / 60:.1f} min of speech. → {out}/manifest.json")
 

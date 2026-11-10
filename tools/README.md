@@ -103,6 +103,6 @@ script with digits, symbols, a sentence reciting more than two numbers, or a sen
 `make series VOICE=<voice> ONLY=clrs/ch01` builds into the chapter's folder, with a `.srt` beside each
 video for YouTube. To judge one section first, run `narrate.py videos/clrs/ch01/script.md --only "Part 1"` and then `studio.js` on the manifest it prints. `narrate.py` speaks every block with Kokoro, transcribes the clip with Whisper (`faster-whisper`, on the CPU, downloaded
 on first use), reports clips that don't say what the script says, and uses the word times to place the cues. Both are cached in
-the chapter's `build/`, so only changed blocks are redone. The voices for YouTube are `kokoro:bm_fable` (the default) and `kokoro:am_liam`; any other
+the chapter's `build/`, so only changed blocks are redone. The voice for YouTube is `kokoro:bm_fable` (the default; `kokoro:am_liam` was tried and rejected); any other
 Kokoro voice also works. `--silent` skips the speech (150 words a minute), for checking highlights fast.
 `make metrics WAV="a.wav b.wav"` reports pitch, pitch range and pause spread.

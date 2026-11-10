@@ -9,10 +9,7 @@ tools/.text/
 
 __pycache__/
 # rendered videos and everything made on the way to them (large, regenerated); each chapter's script stays tracked
-videos/**
-!videos/*/
-!videos/*/*/
-!videos/*/*/script.md
+videos/
 tools/video/models/
 tools/video/.logs/
 tools/video/node_modules/
