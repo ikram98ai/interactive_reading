@@ -1,8 +1,8 @@
 /* Book manifest. Loaded before assets/kit.js (and books/clrs/algo.js, this book's code-panel helpers).
    To add a chapter simulation: write chNN.html here and raise `built` to that number. */
 window.BOOK = {
-  slug: "algo",
-  title: "Algorithm Alley",
+  slug: "clrs", // the folder's name; saved progress is keyed by it
+  short: "CLRS", // the name readers know it by; the top bar shows it beside the chapter
   book: "Introduction to Algorithms",
   author:
     "Thomas H. Cormen, Charles E. Leiserson, Ronald L. Rivest & Clifford Stein",

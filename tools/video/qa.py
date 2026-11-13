@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""qa.py videos/<book>/<ch>/<ch>-<voice>.mp4 — the last step of tools/video/BLUEPRINT.md: measure a finished video against the
+"""qa.py videos/<book>/<ch>/<ch>-<voice>.mp4 — step 8 of the record-and-publish-video skill: measure a finished video against the
 series' quality bar, and exit 1 if any measure fails.
 
 The targets come from measuring the reference tutorials the series' style follows, and from CLRS chapter 1:

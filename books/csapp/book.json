@@ -1,0 +1,23 @@
+{
+  "slug": "csapp",
+  "title": "Computer Systems: A Programmer's Perspective",
+  "short": "CS:APP",
+  "edition": "3rd edition",
+  "authors": "Randal E. Bryant & David R. O'Hallaron",
+  "pdf": "books/csapp/CSAPP.pdf",
+  "text": "tools/.text/csapp/chNN.txt",
+  "guides": {},
+  "page": {
+    "helpers": [],
+    "reference": "the newest finished chapter of this book",
+    "extra_checks": []
+  },
+  "language": {
+    "name": "c",
+    "fence": "c",
+    "file": "main.c",
+    "compile": ["clang", "-target", "x86_64-linux-gnu"]
+  },
+  "chapters": {},
+  "videos": null
+}

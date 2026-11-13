@@ -66,10 +66,10 @@
   LIB.forEach((b) => {
     const done = Object.keys(progress(b.slug)).length;
     shelf.appendChild(h("a", { class: `bookcard ${b.accent || "blue"}`, href: b.path },
-      h("span", { class: "spine" }, h("span", {}, b.spine || b.book)),
+      h("span", { class: "spine" }, h("span", {}, b.spine || b.title)),
       h("span", {},
         h("h3", {}, b.title),
-        h("div", { class: "by" }, `${b.book} · ${b.author}`),
+        h("div", { class: "by" }, b.author),
         h("p", {}, b.blurb),
         h("div", { class: "meter" },
           h("span", { class: "bar", style: { width: "140px", height: "10px", borderRadius: "99px", background: "var(--line)", overflow: "hidden", display: "block" } },

@@ -1,4 +1,4 @@
-/* Algorithm Alley — styles every chapter of this book shares, on top of assets/style.css:
+/* Introduction to Algorithms (CLRS) — styles every chapter of this book shares, on top of assets/style.css:
    the code panel (book pseudocode | Rust), the stack-and-heap memory strip, and array cells.
    CSS variables only, so both themes work. */
 .eyebrow { color: var(--lilac); }

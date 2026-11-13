@@ -1,4 +1,4 @@
-/* Data Town kit — tiny helpers shared by every chapter page of every book.
+/* Interactive Reading kit — tiny helpers shared by every chapter page of every book.
    Usage: <script src="book.js"></script><script src="../../assets/kit.js"></script> then K.page(3) and build sims with K.h / K.s / K.tween. */
 (function () {
   const NS = "http://www.w3.org/2000/svg";
@@ -22,7 +22,7 @@
   const reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* The book manifest (books/<slug>/book.js) sets window.BOOK before this file loads. */
-  const BOOK = window.BOOK || { slug: "book", title: "Library", chapters: [], built: 0 };
+  const BOOK = window.BOOK || { slug: "book", short: "Library", chapters: [], built: 0 };
   const CHAPTERS = BOOK.chapters || [];
   /** Chapters 1..BUILT have pages; the rest are shown as "coming soon". */
   const BUILT = BOOK.built == null ? CHAPTERS.length : BOOK.built;
@@ -231,7 +231,18 @@
   }
 
   /* ---- progress (per-viewer convenience only) ---- */
-  const KEY = `datatown-progress-v1:${BOOK.slug}`;
+  const PROGRESS = "datatown-progress-v1:";
+  const KEY = PROGRESS + BOOK.slug;
+  /* Slugs a book used to have, so a rename doesn't wipe a reader's progress: new slug → old slug.
+     Copies the old record across once, if there is no new one yet, and leaves the old one alone.
+     Runs on every page (the shelf reads every book's progress too), before anything reads it. */
+  const RENAMED = { clrs: "algo" };
+  Object.keys(RENAMED).forEach((slug) => {
+    try {
+      const old = localStorage.getItem(PROGRESS + RENAMED[slug]);
+      if (old !== null && localStorage.getItem(PROGRESS + slug) === null) localStorage.setItem(PROGRESS + slug, old);
+    } catch (e) {}
+  });
   function getProgress() { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { return {}; } }
   function setDone(n) { try { const p = getProgress(); p[n] = true; localStorage.setItem(KEY, JSON.stringify(p)); } catch (e) {} }
 
@@ -346,7 +357,7 @@
       top.className = "topbar";
       top.appendChild(h("div", { class: "wrap" },
         h("a", { class: "navbtn wide", href: "../../index.html", title: "All books" }, "Books"),
-        h("a", { class: "brand", href: "index.html", "aria-label": BOOK.title }, brandSvg(), h("span", { class: "brand-name" }, BOOK.title)),
+        h("a", { class: "brand", href: "index.html", "aria-label": BOOK.book ? `${BOOK.short}, ${BOOK.book}` : BOOK.short }, brandSvg(), h("span", { class: "brand-name" }, BOOK.short)),
         h("span", { class: "where" }, `Ch ${n} · ${c.title}`),
         h("span", { class: "spacer" }),
         h("nav", { class: "dots", "aria-label": "Chapters" }),
@@ -374,7 +385,7 @@
                 h("div", { class: "s" }, upcoming ? "Not built yet — head back to the map for the chapters that are ready." : "Head back to the map to revisit any chapter.")),
               h("span", { class: "arrow", "aria-hidden": "true" }, "→"))));
     }
-    document.title = document.title || `Data Town ${n}`;
+    document.title = document.title || `Ch ${n} · ${c.title}`;
   }
 
   /* ---- drawing vocabulary: consistent pictures across chapters (all centred on cx, cy) ---- */

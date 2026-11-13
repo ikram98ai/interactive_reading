@@ -1,0 +1,57 @@
+{
+  "slug": "clrs",
+  "title": "Introduction to Algorithms",
+  "short": "CLRS",
+  "edition": "4th edition",
+  "authors": "Cormen, Leiserson, Rivest & Stein",
+  "pdf": "books/clrs/CLRS.pdf",
+  "printed_page_offset": 22,
+  "text": "tools/.text/clrs/chNN.txt",
+  "guides": {
+    "authoring": "books/clrs/authoring.md",
+    "curriculum": "books/clrs/curriculum.md"
+  },
+  "page": {
+    "helpers": ["books/clrs/algo.js", "books/clrs/algo.css"],
+    "reference": "books/clrs/ch27.html#elevator",
+    "extra_checks": [
+      "node tools/browser/steps.js    books/clrs/chNN.html --light",
+      "node tools/browser/steps.js    books/clrs/chNN.html --dark --shots=2",
+      "node tools/browser/rustview.js books/clrs/chNN.html",
+      "node tools/browser/interact.js books/clrs/chNN.html",
+      "python3 tools/static/rustcheck.py books/clrs/chNN.html"
+    ]
+  },
+  "language": {
+    "name": "rust",
+    "fence": "rust",
+    "file": "main.rs",
+    "compile": ["rustc", "--edition", "2021", "-A", "warnings"]
+  },
+  "chapters": {
+    "ch01": { "book": "The Role of Algorithms in Computing", "series": "What Algorithms Are, and Why They Matter" },
+    "ch02": { "book": "Getting Started", "series": "Proving and Measuring Algorithms" },
+    "ch03": { "book": "Characterizing Running Times", "series": "Big O, Omega, and Theta" },
+    "ch04": { "book": "Divide-and-Conquer", "series": "Divide and Conquer, and How Fast It Really Is" },
+    "ch05": { "book": "Probabilistic Analysis and Randomized Algorithms", "series": "Probability, and Algorithms That Roll Dice" }
+  },
+  "videos": {
+    "dir": "videos/clrs",
+    "voice": "kokoro:bm_fable",
+    "site": "https://ikram98ai.github.io/interactive_reading/books/clrs",
+    "schedule": { "timezone": "Asia/Karachi", "utc_offset_hours": 5, "first": "18:00", "gap_hours": 2, "last": "22:00" },
+    "long_form": {
+      "playlist": "Introduction to Algorithms",
+      "title": "Chapter {cn}: {book_chapter} | Introduction to Algorithms",
+      "intro": "Chapter {cn} of {book} ({short}), explained in depth with pseudocode. Every idea is shown on an interactive page.",
+      "publish": "the day after the chapter's last lesson, at the schedule's first time",
+      "language": false
+    },
+    "lessons": {
+      "playlist": "Introduction to Algorithms with Rust",
+      "title": "{cn}.{n} {title} | Introduction to Algorithms with Rust",
+      "tags": "#algorithms #rust #datastructures #dsa #computerscience",
+      "language": true
+    }
+  }
+}

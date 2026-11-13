@@ -1,4 +1,4 @@
-/* Algorithm Alley — helpers every chapter of this book shares. Load after assets/kit.js:
+/* Introduction to Algorithms (CLRS) — helpers every chapter of this book shares. Load after assets/kit.js:
      <script src="book.js"></script><script src="../../assets/kit.js"></script><script src="algo.js"></script>
    then  const { cap, esc, box, txt, clickable, button, session, code, mem, cells, src, fmt, CODE_LANG } = AL;
 

@@ -8,7 +8,7 @@ MODELS := tools/video/models
 need = $(if $($(1)),,$(error $(1) is required, e.g. make $@ $(1)=$(2)))
 
 .DEFAULT_GOAL := help
-.PHONY: help setup models extract site audit factcheck rustcheck smoke play steps rustview interact narrate metrics record scenes series video-plan video-silent video-part video-qa
+.PHONY: help setup models extract site audit factcheck rustcheck smoke play steps rustview interact narrate metrics record scenes series video-plan video-trace video-silent video-part video-qa
 
 help: ## List the commands
 	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  %-11s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -54,7 +54,7 @@ play: ## Press each simulation's main button and screenshot it: PAGE=… ARGS=--
 	$(call need,PAGE,books/ddia/ch11.html)
 	node tools/browser/play.js $(PAGE) $(ARGS)
 
-steps: ## Visit every step of every Algorithm Alley machine: PAGE=… ARGS=--light
+steps: ## Visit every step of every CLRS machine: PAGE=… ARGS=--light
 	$(call need,PAGE,books/clrs/ch27.html)
 	node tools/browser/steps.js $(PAGE) $(ARGS)
 
@@ -85,10 +85,15 @@ scenes: ## Record every chapter-1 scene into videos/
 series: ## Build the YouTube series: ONLY=clrs/ch01 (a chapter, or one lesson like clrs/ch01/05-solution-insertion-sort)
 	tools/video/make-series.sh "$(VOICE)" "$(ONLY)"
 
-# --- chapter videos, in the order of tools/video/BLUEPRINT.md
+# --- chapter videos, in the order of the write-video-script and record-and-publish-video skills (.claude/skills/)
 video-plan: ## Steps 1-2: list what a chapter page's machines offer; OUT=videos/clrs/ch02 also writes its script skeleton
 	$(call need,PAGE,books/clrs/ch02.html)
 	$(PY) tools/video/plan.py $(PAGE) $(if $(OUT),--scaffold $(OUT))
+
+video-trace: ## Step 4 (long form): print a machine's pseudocode and what each Step lights: PAGE=books/clrs/ch02.html SCENE=merge ARGS="Reset"
+	$(call need,PAGE,books/clrs/ch02.html)
+	$(call need,SCENE,merge)
+	node tools/video/trace.js $(PAGE) $(SCENE) $(ARGS)
 
 video-silent: ## Step 5: record the whole script without a voice, to check cues and claims fast: SCRIPT=videos/clrs/ch02/script.md
 	$(call need,SCRIPT,videos/clrs/ch02/script.md)

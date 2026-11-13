@@ -14,7 +14,7 @@ books/books.js          the list of books shown on the shelf
 books/<slug>/book.js    one book's chapter list + how many chapters are built
 books/<slug>/index.html that book's chapter route map
 books/<slug>/chNN.html  one interactive chapter
-books/clrs/algo.js|css Algorithm Alley's own helpers: pseudocode | Rust code panels, the stack-and-heap strip, array cells, 2-D tables, binary trees, graphs, and the step-through machines and plots
+books/clrs/algo.js|css Introduction to Algorithms' own helpers: pseudocode | Rust code panels, the stack-and-heap strip, array cells, 2-D tables, binary trees, graphs, and the step-through machines and plots
 tools/                  local checks for chapter pages (not published) — see tools/README.md
 ```
 
@@ -26,7 +26,8 @@ for any book. Chapters above `built` show as "coming soon" instead of broken lin
 1. Read the chapter.
 2. Ask for the interactive chapter page — it writes `books/<slug>/chNN.html`
    and bumps `built` in `books/<slug>/book.js` and `books/books.js`.
-   [`tools/authoring/CHAPTER_BRIEF.md`](tools/authoring/CHAPTER_BRIEF.md) is the brief to build from.
+   The [`build-chapter-page`](.claude/skills/build-chapter-page/SKILL.md) skill is the brief to build from, with the
+   book's own [`book.json`](books/clrs/book.json).
 3. Check it: [`tools/`](tools/README.md) clicks through every simulation in a headless browser,
    screenshots them, and checks the page's claims against the book's text.
 4. `git push` — the site redeploys itself.

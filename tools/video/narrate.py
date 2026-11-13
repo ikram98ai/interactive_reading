@@ -14,12 +14,19 @@ A code lesson (kind: code) keeps the editor's text in fenced blocks, ```rust @na
 types the editor into that snapshot, and {run} shows the program's real output: each snapshot that is run is compiled with
 rustc here, and the build fails if it doesn't compile, unless the cue is {run error}, which shows the compiler's error instead.
 
---only "Part 1" narrates just the section whose {goto} contains that text, into its own build folder: a fast way to judge one part."""
+--only "Part 1" narrates just the section whose {goto} contains that text, into its own build folder: a fast way to judge one part.
+
+A script is narrated only once it has been judged: judgement.py check must pass (a pass verdict whose hash matches the
+script's words now). --silent needs no verdict. --skip-judgement is for test renders, never for a video that gets published.
+The code language and its compiler come from books/<book>/book.json; only Rust is supported so far."""
 import argparse, difflib, hashlib, json, pathlib, random, re, subprocess, sys
 import numpy as np
 import soundfile as sf
+import judgement
 
 HERE = pathlib.Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+NEVER_SAY = ROOT / "videos" / "never-say.txt"   # names a video must never say, one per line; kept in the local videos/ repo, off GitHub
 MAX_WORDS = 48          # longer blocks drift; split at a sentence end
 MAX_WER = 0.10          # above this, the clip probably misread the script
 RETRIES = 0             # Kokoro says a text the same way every time, so a clip that differs is reported, not regenerated
@@ -46,9 +53,10 @@ def parse(path):
     segs = []
     body = re.sub(r"<!--.*?-->", "", m.group(2), flags=re.S)  # notes for the author: never spoken, never cued
     code = {}
-    def keep(mm): code[mm.group(1)] = mm.group(2); return ""
-    body = re.sub(r"```rust @([\w-]+)[ \t]*\n(.*?)\n```", keep, body, flags=re.S)  # the editor's snapshots
-    meta["code"] = code
+    langs = set()
+    def keep(mm): langs.add(mm.group(1)); code[mm.group(2)] = mm.group(3); return ""
+    body = re.sub(r"```(\w+) @([\w-]+)[ \t]*\n(.*?)\n```", keep, body, flags=re.S)  # the editor's snapshots
+    meta["code"], meta["code_langs"] = code, sorted(langs)
     for para in re.split(r"\n\s*\n", body.strip()):
         cur = {"text": [], "cues": [], "then": None}
         for tok in re.findall(r"\{[^}]*\}|[^\s{]+", para):
@@ -78,13 +86,21 @@ def parse(path):
     return meta, out
 
 
-def rust(src, work, want_error):
+def book_profile(script):
+    """books/<book>/book.json for a script under videos/<book>/…, or {} if there is none."""
+    try: rel = pathlib.Path(script).resolve().relative_to(ROOT / "videos")
+    except ValueError: return {}
+    p = ROOT / "books" / rel.parts[0] / "book.json"
+    return json.loads(p.read_text()) if p.exists() else {}
+
+
+def rust(src, work, want_error, compile_cmd=("rustc", "--edition", "2021", "-A", "warnings")):
     """Compile and run one snapshot, as the run panel will show it. Cached by the source text."""
     key = hashlib.md5(src.encode()).hexdigest()[:12]
     d = work / "rust"; d.mkdir(parents=True, exist_ok=True)
     rs, exe = d / f"{key}.rs", d / key
     rs.write_text(src + "\n")
-    c = subprocess.run(["rustc", "--edition", "2021", "-A", "warnings", "-o", str(exe), str(rs)], capture_output=True, text=True)
+    c = subprocess.run([*compile_cmd, "-o", str(exe), str(rs)], capture_output=True, text=True)
     if c.returncode:
         err = c.stderr.replace(str(rs), "src/main.rs")
         first = next((b for b in err.split("\n\n") if b.startswith("error")), err)  # the first error is the one the lesson talks about
@@ -100,9 +116,12 @@ def rust(src, work, want_error):
 
 def lint(segs):
     bad = []
+    never = [n.strip() for n in NEVER_SAY.read_text().splitlines() if n.strip() and not n.startswith("#")] if NEVER_SAY.exists() else []
     for s in segs:
         t = " ".join(s["text"])
         if "TODO" in t: bad.append(f"unfinished: {t!r}")
+        shown = t + " " + " ".join(c["arg"] for c in s["cues"])
+        bad += [f"names someone the series never names ({NEVER_SAY.name}): {shown!r}" for n in never if re.search(rf"\b{re.escape(n)}\b", shown, re.I)]
         bad += [f"unfinished cue: {{{c['op']} {c['arg']}}}" for c in s["cues"] if "TODO" in c["arg"]]
         if re.search(r"\d", t): bad.append(f"digit in speech: {t!r}")
         if re.search(r"[=×÷<>%&#@/\\_^]", t): bad.append(f"symbol in speech: {t!r}")
@@ -211,9 +230,21 @@ def synth(engine, voice, items, work, speed=SPEED):
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("script"); ap.add_argument("--voice", default="kokoro:bm_fable"); ap.add_argument("--silent", action="store_true"); ap.add_argument("--no-lint", action="store_true"); ap.add_argument("--only")
+    ap.add_argument("--skip-judgement", action="store_true", help="narrate an unjudged script: test renders only, never for publishing")
     a = ap.parse_args()
     engine, voice = a.voice.split(":", 1)
+    if not a.silent:
+        ok, why = judgement.check(a.script)
+        if not ok and not a.skip_judgement: sys.exit(f"narrate: {a.script}: {why}\n  (--skip-judgement for a test render that won't be published)")
+        if not ok: print(f"narrate: WARNING, unjudged test render: {why}", flush=True)
     meta, segs = parse(a.script)
+    book = book_profile(a.script)
+    lang = (book.get("language") or {})
+    if meta["code"]:
+        if lang.get("name", "rust") != "rust": sys.exit(f"narrate: {lang.get('name')} snapshots aren't supported yet; only Rust can be compiled and run")
+        wrong = [l for l in meta["code_langs"] if l != lang.get("fence", "rust")]
+        if wrong: sys.exit(f"narrate: snapshots are fenced as {wrong}, but book.json says the language is {lang.get('fence', 'rust')}")
+    compile_cmd = tuple(lang.get("compile") or ("rustc", "--edition", "2021", "-A", "warnings"))
     home = pathlib.Path(a.script).resolve().parent
     name, build = home.name, home / "build"
     if a.only:
@@ -239,7 +270,7 @@ def main():
                 current = c["arg"].split()[0]
                 if current not in meta["code"]: problems.append(f"{{code {current}}}: no ```rust @{current} block")
             if c["op"] == "run" and current in meta["code"] and current not in runs:
-                runs[current] = rust(meta["code"][current], build, c["arg"].strip() == "error")
+                runs[current] = rust(meta["code"][current], build, c["arg"].strip() == "error", compile_cmd)
     if problems and not a.no_lint: sys.exit("script lint failed:\n  " + "\n  ".join(problems))
     tag = "silent" if a.silent else f"{engine}-{voice}"
     out = build / tag; (out / "raw").mkdir(parents=True, exist_ok=True)

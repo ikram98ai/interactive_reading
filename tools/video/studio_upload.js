@@ -7,25 +7,25 @@
    (lessons on the same day go out GAP_HOURS apart from its "at", in Studio's channel time zone). The thumbnail is
    the video's first frame, its title card, saved beside it as <video>.thumb.jpg. --steps screenshots each dialog step.
    Progress is written to <lesson>/<video>.youtube.json, so a rerun skips what is already up.
-   --plan prints what would be uploaded and stops. --edit instead updates lessons already up (thumbnail, publish time). Chrome profile: ~/.config/interactive-reading/chrome-studio. */
+   --plan prints what would be uploaded and stops. --edit instead updates lessons already up (thumbnail, publish time).
+   --titles updates only the title and description of every video already up, lessons and long-form, and never moves a
+   publish time. Names, title formats, tags, site and schedule come from books/<book>/book.json (its "videos" block).
+   Chrome profile: ~/.config/interactive-reading/chrome-studio. */
 const fs = require("fs"), os = require("os"), path = require("path"), crypto = require("crypto"), cp = require("child_process");
 const { chromium } = require("playwright-core");
-
-const SERIES = "Intro to DSA with Rust";
-const TAGS = "#algorithms #rust #datastructures #dsa #computerscience";
-const SITE = "https://ikram98ai.github.io/interactive_reading/books";
-const GAP_HOURS = 2, LAST_HOUR = 22; // same-day lessons go out 2 h apart from "at" (18, 20, 22); a day with more
-                                     // starts earlier so the last is out at 22:00 (5 lessons: 14, 16, 18, 20, 22)
-const CHAPTERS = { // the chapter names used in every lesson's description
-  ch01: "What Algorithms Are, and Why They Matter", ch02: "Proving and Measuring Algorithms",
-  ch03: "Big O, Omega, and Theta", ch04: "Divide and Conquer, and How Fast It Really Is",
-  ch05: "Probability, and Algorithms That Roll Dice",
-};
 
 const args = process.argv.slice(2);
 const opt = (k) => { const i = args.indexOf(k); return i < 0 ? null : args[i + 1]; };
 const BOOK = path.resolve(args.find((a, i) => !a.startsWith("--") && !["--from", "--to", "--limit"].includes(args[i - 1])) || "videos/clrs");
-const FROM = opt("--from"), TO = opt("--to"), LIMIT = Number(opt("--limit") || 1e9), PLAN = args.includes("--plan");
+const PROFILE = JSON.parse(fs.readFileSync(path.join(__dirname, "../../books", path.basename(BOOK), "book.json"), "utf8"));
+const V = PROFILE.videos; // outputs, playlists, title formats, tags, site, schedule
+if (!V) throw new Error(`books/${path.basename(BOOK)}/book.json declares no videos`);
+const SERIES = V.lessons.playlist, TAGS = V.lessons.tags, SITE = V.site;
+const hm = (t) => t.split(":").map(Number);
+const GAP_HOURS = V.schedule.gap_hours, LAST_HOUR = hm(V.schedule.last)[0], UTC_OFFSET = V.schedule.utc_offset_hours;
+// same-day lessons go out GAP_HOURS apart from the first time; a day with more starts earlier so the last is out at LAST_HOUR
+const fill = (tpl, vals) => tpl.replace(/\{(\w+)\}/g, (_, k) => { if (!(k in vals)) throw new Error(`title format has no {${k}}`); return vals[k]; });
+const FROM = opt("--from"), TO = opt("--to"), LIMIT = Number(opt("--limit") || 1e9), PLAN = args.includes("--plan"), TITLES = args.includes("--titles");
 const SHOTS = BOOK;
 const STEPS = args.includes("--steps") ? path.join(BOOK, "studio-steps") : null; // a screenshot of each dialog step, to check a run
 if (STEPS) fs.mkdirSync(STEPS, { recursive: true });
@@ -34,7 +34,8 @@ const key = (ch, n) => `${ch}/${String(n).padStart(2, "0")}`;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function plan() {
-  const sched = JSON.parse(fs.readFileSync(path.join(BOOK, "schedule.json"), "utf8"));
+  const schedFile = path.join(BOOK, "schedule.json");
+  const sched = fs.existsSync(schedFile) ? JSON.parse(fs.readFileSync(schedFile, "utf8")) : { at: V.schedule.first, days: {} };
   const when = {}; // "ch04/18" -> { day, minute }
   for (const [day, ids] of Object.entries(sched.days)) ids.forEach((id, i) => (when[id] = { day, minute: i, count: ids.length }));
   const items = [];
@@ -49,30 +50,49 @@ function plan() {
       if (TO && id > TO) continue;
       const m = meta[dir];
       if (!m) throw new Error(`${ch}/youtube-meta.json has no entry for ${dir}`);
+      const stem = `${dir}-bm_fable`, folder = path.join(BOOK, ch, dir);
+      const record = path.join(folder, `${stem}.youtube.json`);
+      const rec = fs.existsSync(record) ? JSON.parse(fs.readFileSync(record, "utf8")) : null;
+      const ttl = fill(V.lessons.title, { cn, n, title: m.title });
+      const description = `${m.description}\n\nChapter ${cn} (${PROFILE.chapters[ch].series}), lesson ${n} of ${lessons.length} in ${SERIES}, ` +
+        `a course through ${PROFILE.title} with interactive pages and Rust code.\n\n` +
+        `Interactive page for this chapter: ${SITE}/${ch}.html\n` +
+        `The whole chapter as one video: https://youtu.be/${whole}\n\n${TAGS}`;
       const w = when[id];
-      if (!w) throw new Error(`schedule.json has no day for ${id}`);
+      if (!w && !(TITLES && rec)) throw new Error(`schedule.json has no day for ${id}`);
+      if (ttl.length > 100) throw new Error(`${id}: title is ${ttl.length} characters (Studio allows 100)`);
+      if (!w) { // --titles on a video already up: its time stays where it is
+        items.push({ id, kind: "lesson", folder, title: ttl, description, record, publish_at: rec.publish_at,
+          meta: crypto.createHash("sha1").update(ttl + "\n" + description).digest("hex").slice(0, 12) });
+        continue;
+      }
       const [hh, mm] = sched.at.split(":").map(Number);
       const startMin = Math.min(hh * 60 + mm, LAST_HOUR * 60 - (w.count - 1) * GAP_HOURS * 60);
       const total = startMin + w.minute * GAP_HOURS * 60, h = Math.floor(total / 60), mi = total % 60;
       if (h > 23) throw new Error(`${id}: ${w.day} has too many lessons to space ${GAP_HOURS} h apart from ${sched.at}`);
       const [y, mo, d] = w.day.split("-").map(Number);
-      const utc = new Date(Date.UTC(y, mo - 1, d, h - 5, mi)); // Asia/Karachi is UTC+5, no DST
-      const title = `${cn}.${n} ${m.title} | ${SERIES}`;
-      const description = `${m.description}\n\nChapter ${cn} (${CHAPTERS[ch]}), lesson ${n} of ${lessons.length} in ${SERIES}, ` +
-        `a course through Introduction to Algorithms with interactive pages and Rust code.\n\n` +
-        `Interactive page for this chapter: ${SITE}/${path.basename(BOOK)}/${ch}.html\n` +
-        `The whole chapter as one video: https://youtu.be/${whole}\n\n${TAGS}`;
+      const utc = new Date(Date.UTC(y, mo - 1, d, h - UTC_OFFSET, mi)); // the channel's time zone, no DST
+      const title = ttl;
       if (title.length > 100) throw new Error(`${id}: title is ${title.length} characters (Studio allows 100)`);
       if (description.length > 5000 || /[<>]/.test(description)) throw new Error(`${id}: description Studio would reject`);
-      const stem = `${dir}-bm_fable`, folder = path.join(BOOK, ch, dir);
       items.push({
-        id, folder, title, description, video: path.join(folder, `${stem}.mp4`), srt: path.join(folder, `${stem}.srt`),
+        id, kind: "lesson", folder, title, description, video: path.join(folder, `${stem}.mp4`), srt: path.join(folder, `${stem}.srt`),
         record: path.join(folder, `${stem}.youtube.json`), thumb: path.join(folder, `${stem}.thumb.jpg`),
         date: `${MONTHS[mo - 1]} ${d}, ${y}`, time: `${((h + 11) % 12) + 1}:${String(mi).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`,
         publish_at: utc.toISOString().replace(".000", ""),
         meta: crypto.createHash("sha1").update(title + "\n" + description).digest("hex").slice(0, 12),
       });
     }
+  }
+  if (TITLES) for (const ch of fs.readdirSync(BOOK).filter((d) => /^ch\d+$/.test(d)).sort()) { // the long-form videos
+    const record = path.join(BOOK, ch, `${ch}-bm_fable.youtube.json`), cn = Number(ch.slice(2));
+    if (!fs.existsSync(record) || !PROFILE.chapters[ch] || (FROM && ch < FROM.slice(0, 4)) || (TO && ch > TO.slice(0, 4))) continue;
+    const title = fill(V.long_form.title, { cn, book_chapter: PROFILE.chapters[ch].book });
+    if (title.length > 100) throw new Error(`${ch} long-form: title is ${title.length} characters (Studio allows 100)`);
+    // the long-form description is written in Studio; only its first line (what the video is) comes from book.json
+    const intro = V.long_form.intro && fill(V.long_form.intro, { cn, book: PROFILE.title, short: PROFILE.short });
+    items.push({ id: `${ch}/long-form`, kind: "long-form", title, record, intro,
+      meta: intro && crypto.createHash("sha1").update(title + "\n" + intro).digest("hex").slice(0, 12) });
   }
   return items;
 }
@@ -237,6 +257,40 @@ async function upload(page, it) {
   return rec.video_id;
 }
 
+// --titles: set the title (and, for a lesson, the description) of a video already up. Never touches its schedule.
+async function retitle(page, it, rec) {
+  await page.goto(`https://studio.youtube.com/video/${rec.video_id}/edit`, { waitUntil: "domcontentloaded" });
+  const titleBox = page.locator("#title-textarea #textbox").first();
+  await titleBox.waitFor({ timeout: 60000 });
+  await sleep(4000); // the edit page fills its boxes after it appears; reading earlier can see the previous video's text
+  const changed = [];
+  if ((await titleBox.innerText()).trim() !== it.title) { await setText(page, titleBox, it.title); changed.push("title"); }
+  if (it.description) {
+    const box = page.locator("#description-textarea #textbox").first();
+    if ((await box.innerText()).trim() !== it.description.trim()) { await setText(page, box, it.description); changed.push("description"); }
+  } else if (it.intro) { // long-form: replace the first line, keep the rest (links, chapters) as Studio has it
+    const box = page.locator("#description-textarea #textbox").first();
+    const now = (await box.innerText()).trim(), rest = now.includes("\n") ? now.slice(now.indexOf("\n")) : "";
+    const own = `${SITE}/${it.id.slice(0, 4)}.html`; // guards against reading the previous video's text
+    if (!now.includes(own)) throw new Error(`${it.id}: description doesn't link ${own}; not overwriting it`);
+    if (now.split("\n")[0].trim() !== it.intro) { await setText(page, box, it.intro + rest); changed.push("description"); }
+  }
+  if (changed.length) {
+    const save = page.locator("ytcp-button#save").first();
+    await save.click();
+    let saved = false;
+    for (let i = 0; i < 30 && !saved; i++) {
+      await sleep(1000);
+      saved = (await save.getAttribute("aria-disabled").catch(() => null)) === "true" || !(await save.isEnabled().catch(() => true));
+    }
+    if (!saved) throw new Error("Studio did not save the changes");
+  }
+  rec.title = it.title;
+  if (it.meta) rec.meta = it.meta;
+  fs.writeFileSync(it.record, JSON.stringify(rec, null, 2) + "\n");
+  return changed;
+}
+
 // --edit: for lessons already up, set the first-frame thumbnail and move the publish time to the plan's
 async function edit(page, it, rec) {
   await page.goto(`https://studio.youtube.com/video/${rec.video_id}/edit`, { waitUntil: "domcontentloaded" });
@@ -301,6 +355,30 @@ async function edit(page, it, rec) {
 }
 
 (async () => {
+  if (TITLES) {
+    const items = plan().filter((it) => fs.existsSync(it.record)).map((it) => [it, JSON.parse(fs.readFileSync(it.record, "utf8"))])
+      .filter(([it, rec]) => rec.title !== it.title || (it.meta && rec.meta !== it.meta));
+    console.log(`${items.length} videos to retitle`);
+    if (PLAN) { for (const [it, rec] of items) console.log(`${it.id}  ${rec.title || "(no title on record)"}\n   → ${it.title}${it.meta && rec.meta !== it.meta ? "  (+ description)" : ""}`); return; }
+    const ctx = await chromium.launchPersistentContext(path.join(os.homedir(), ".config/interactive-reading/chrome-studio"), {
+      channel: "chrome", headless: false, viewport: null,
+      ignoreDefaultArgs: ["--enable-automation"], args: ["--disable-blink-features=AutomationControlled", "--window-size=1400,1000"],
+    });
+    const page = ctx.pages()[0] || (await ctx.newPage());
+    let n = 0;
+    try {
+      for (const [it, rec] of items.slice(0, LIMIT)) {
+        const changed = await retitle(page, it, rec);
+        console.log(`  ${it.id} https://youtu.be/${rec.video_id}  ${changed.join("+") || "already right"}  (${++n}/${items.length})`);
+      }
+    } catch (e) {
+      const shotPath = path.join(SHOTS, "studio-titles-error.png");
+      await page.screenshot({ path: shotPath }).catch(() => {});
+      console.log(`STOPPED: ${e.message.split("\n")[0]}\n  screenshot: ${shotPath}`);
+      process.exitCode = 1;
+    } finally { await ctx.close(); }
+    return;
+  }
   if (args.includes("--edit")) {
     const items = plan().filter((it) => fs.existsSync(it.record)).map((it) => [it, JSON.parse(fs.readFileSync(it.record, "utf8"))])
       .filter(([it, rec]) => rec.thumbnail !== "first-frame" || rec.schedule_checked !== true ||

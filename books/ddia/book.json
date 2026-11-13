@@ -1,0 +1,18 @@
+{
+  "slug": "ddia",
+  "title": "Designing Data-Intensive Applications",
+  "short": "DDIA",
+  "edition": "2nd edition",
+  "authors": "Martin Kleppmann & Chris Riccomini",
+  "pdf": "books/ddia/DDIA.pdf",
+  "text": "tools/.text/ddia/chNN.txt",
+  "guides": {},
+  "page": {
+    "helpers": [],
+    "reference": "the newest finished chapter of this book",
+    "extra_checks": []
+  },
+  "language": null,
+  "chapters": {},
+  "videos": null
+}

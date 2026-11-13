@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plan.py books/clrs/chNN.html [--scaffold videos/clrs/chNN] — steps 1 and 2 of tools/video/BLUEPRINT.md.
+"""plan.py books/<slug>/chNN.html [--scaffold videos/<slug>/chNN] — steps 1 and 2 of the write-video-script skill.
 
 Reads a chapter page and lists what a video can drive in each scene: the machine's modes, buttons, sliders and stats,
 whether it has a Rust listing and a stack-and-heap strip (a Rust segment), and which layers are tagged data-part (so the
@@ -7,10 +7,9 @@ script can hide them). Use it to choose the lessons: a concept lesson per big id
 
 --scaffold writes one lesson folder per lesson, in the section's order, with this inventory as a comment at the top and TODO wherever
 words are needed. narrate.py refuses to speak a TODO, so an unfinished script can't be recorded by accident."""
-import argparse, html, pathlib, re, sys
+import argparse, html, json, pathlib, re, sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-VIDEO_BOOK = {"algo": "clrs"}  # site slug → the folder under videos/
 
 
 def text(s):
@@ -67,13 +66,13 @@ def report(page, title, ch, scenes):
         lines.append(f"  {s['id']:<14} s{s['n']:<3} {s['heading']}" + (f"   [{', '.join(tags)}]" if tags else ""))
         for k, label in (("modes", "modes"), ("buttons", "buttons"), ("sliders", "sliders"), ("stats", "stats"), ("parts", "data-part")):
             if s[k]: lines.append(f"  {'':<14}      {label}: " + " · ".join(x if x else "(unnamed)" for x in s[k]))
-    lines += ["", "RUST+MEMORY scenes can carry a Rust segment (BLUEPRINT.md § Rust segments). A machine with no data-part layers",
-              "shows everything it draws; tag the layers the video won't explain before recording (CHAPTER_BRIEF.md)."]
+    lines += ["", "RUST+MEMORY scenes can show ownership on the stack-and-heap strip in a code lesson. A machine with no data-part layers",
+              "shows everything it draws; tag the layers the video won't explain before recording (build-chapter-page skill, machines.md)."]
     return "\n".join(lines)
 
 
 def scaffold(out, page, title, ch, scenes, book):
-    """One folder per lesson, in the section's order (BLUEPRINT.md § The section). Each script starts with TODOs."""
+    """One folder per lesson, in the section's order (write-video-script skill, "The section"). Each script starts with TODOs."""
     live = [s for s in scenes if s["machine"]]
     if out.exists() and any(out.glob("[0-9][0-9]-*/script.md")): sys.exit(f"plan: {out} already has lessons; not overwriting them")
     kicker = f"{book} · Chapter {ch}"
@@ -110,11 +109,12 @@ def main():
     title, ch, scenes = inventory(page)
     print(report(page, title, ch, scenes))
     slug = page.parent.name
-    if not a.scaffold: print(f"\nnext: plan.py {a.page} --scaffold videos/{VIDEO_BOOK.get(slug, slug)}/ch{ch:02d}")
+    if not a.scaffold: print(f"\nnext: plan.py {a.page} --scaffold videos/{slug}/ch{ch:02d}")
     if a.scaffold:
-        book = re.search(r'book:\s*"([^"]+)"', (page.parent / "book.js").read_text()).group(1)
+        profile = page.parent / "book.json"   # the book's real title; book.js is the site's copy
+        book = json.loads(profile.read_text())["title"] if profile.exists() else re.search(r'book:\s*"([^"]+)"', (page.parent / "book.js").read_text()).group(1)
         dest = scaffold(ROOT / a.scaffold, page, title, ch, scenes, book)
-        print(f"\nwrote {len(list(dest.glob('[0-9][0-9]-*/script.md')))} lessons in {dest}: fill in every TODO, then follow BLUEPRINT.md from step 3.")
+        print(f"\nwrote {len(list(dest.glob('[0-9][0-9]-*/script.md')))} lessons in {dest}: fill in every TODO, then follow the write-video-script skill from step 3.")
 
 
 if __name__ == "__main__":

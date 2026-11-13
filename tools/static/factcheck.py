@@ -2,7 +2,7 @@
 """Flag names, numbers and quotations on a chapter page that don't appear in the book's own text.
 
   tools/static/factcheck.py ddia 11        books/ddia/ch11.html  against  tools/.text/ddia/ch11.txt (see extract.py)
-  tools/static/factcheck.py algo 2 --page=books/clrs/_wip_x.html     a preview page, against chapter 2's text
+  tools/static/factcheck.py clrs 2 --page=books/clrs/_wip_x.html     a preview page, against chapter 2's text
 
 Checks the epigraph and every "What the book says" box, because those speak for the book:
   - proper nouns / product names / acronyms

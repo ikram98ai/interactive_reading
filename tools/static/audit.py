@@ -45,7 +45,7 @@ def audit(path):
         problems.append("uses alert()")
 
     answers, whys = re.findall(r"\banswer:\s*(\d)", t), len(re.findall(r"\bwhy:\s*[\"'`]", t))
-    # books differ in quiz length (Data Town asks 6, Bitville 8); what matters is that there is one,
+    # books differ in quiz length (DDIA asks 6, CS:APP 8); what matters is that there is one,
     # every question explains its answer, and the right option isn't always in the same place
     if "K.quiz(" not in t or len(answers) < 4 or whys < len(answers):
         problems.append(f"quiz: K.quiz={'K.quiz(' in t}, {len(answers)} answers, {whys} explanations")

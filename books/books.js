@@ -1,10 +1,9 @@
-/* The shelf. Add one entry per book you read, pointing at its folder under books/. */
+/* The shelf. Add one entry per book you read, pointing at its folder under books/; the slug is that folder's name. */
 window.LIBRARY = [
   {
     slug: "csapp",
     path: "books/csapp/index.html",
-    title: "Bitville",
-    book: "Computer Systems: A Programmer's Perspective",
+    title: "Computer Systems: A Programmer's Perspective",
     author: "Randal E. Bryant & David R. O'Hallaron",
     spine: "CS:APP · 3rd ed.",
     accent: "mint",
@@ -14,10 +13,9 @@ window.LIBRARY = [
     built: 12,
   },
   {
-    slug: "algo",
+    slug: "clrs",
     path: "books/clrs/index.html",
-    title: "Algorithm Alley",
-    book: "Introduction to Algorithms",
+    title: "Introduction to Algorithms",
     author: "Cormen, Leiserson, Rivest & Stein",
     spine: "CLRS · 4th ed.",
     accent: "lilac",
@@ -29,8 +27,7 @@ window.LIBRARY = [
   {
     slug: "ddia",
     path: "books/ddia/index.html",
-    title: "Data Town",
-    book: "Designing Data-Intensive Applications",
+    title: "Designing Data-Intensive Applications",
     author: "Martin Kleppmann & Chris Riccomini",
     spine: "DDIA · 2nd ed.",
     accent: "blue",

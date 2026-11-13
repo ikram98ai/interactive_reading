@@ -20,7 +20,7 @@
 <main>
   <section class="wrap hero">
     <div>
-      <span class="ch-tag"><span class="num">2</span> Chapter two · Algorithm Alley</span>
+      <span class="ch-tag"><span class="num">2</span> Chapter two · CLRS</span>
       <h1>Getting Started</h1>
       <p class="lede">Insertion sort grows a sorted hand one card at a time; merge sort splits the cards in half, sorts each half and merges them. The chapter shows how to prove a procedure like this correct and how to count its steps, and the count picks the winner.</p>
       <p class="quote">“Compared with insertion sort, whose worst-case running time is Θ(<i>n</i>²), merge sort trades away a factor of <i>n</i> for a factor of lg <i>n</i>.” — Cormen, Leiserson, Rivest &amp; Stein</p>
@@ -3642,16 +3642,17 @@ K.page(2);
       k++;
       snap({ lines: [18], i, j, k });
     }
+    const i0 = i, j0 = j; // where each tail loop starts, so its last test can say whether it ran at all
     for (;;) {
       const ok = i < NL;
-      snap({ lines: [20], i, j, k, test: ok, tail: "L" });
+      snap({ lines: [20], i, j, k, test: ok, tail: "L", ran: i > i0 });
       if (!ok) break;
       A[k - P] = L[i]; snap({ lines: [21, 22], i: i + 1, j, k, put: k, fly: { from: ["L", i], to: ["A", k], v: L[i] } }); i++;
       k++; snap({ lines: [23], i, j, k });
     }
     for (;;) {
       const ok = j < NR;
-      snap({ lines: [24], i, j, k, test: ok, tail: "R" });
+      snap({ lines: [24], i, j, k, test: ok, tail: "R", ran: j > j0 });
       if (!ok) break;
       A[k - P] = Rr[j]; snap({ lines: [25, 26], i, j: j + 1, k, put: k, fly: { from: ["R", j], to: ["A", k], v: Rr[j] } }); j++;
       k++; snap({ lines: [27], i, j, k });
@@ -3793,9 +3794,9 @@ K.page(2);
     if (L0 === 13) return `Line 13: compare the two top cards, ${e.cmp.li} and ${e.cmp.rj}. ${e.cmp.takeL ? `${e.cmp.li} ≤ ${e.cmp.rj}, so L's card goes first (ties go to L).` : `${e.cmp.rj} is smaller, so R's card goes first.`}`;
     if (L0 === 14 || L0 === 16) return `Lines ${L0}–${L0 + 1}: A[${e.put}] = ${e.fly.v}, and ${L0 === 14 ? "i" : "j"} moves on, uncovering the next card.`;
     if (L0 === 18 || L0 === 23 || L0 === 27) return `Line ${L0}: k = ${e.k}.`;
-    if (L0 === 20) return e.test ? `Line 20: L still has cards (i = ${e.i}): copy them over as they are.` : `Line 20: i = n<sub>L</sub>, so this loop runs 0 times.`;
+    if (L0 === 20) return e.test ? `Line 20: L still has cards (i = ${e.i}): copy them over as they are.` : (e.ran ? `Line 20: i = n<sub>L</sub>: L is used up, so this loop ends.` : `Line 20: i = n<sub>L</sub>, so this loop runs 0 times.`);
     if (L0 === 21) return `Lines 21–22: A[${e.put}] = ${e.fly.v}. These are the largest values, so no comparison is needed.`;
-    if (L0 === 24) return e.test ? `Line 24: R still has cards (j = ${e.j}): copy them over as they are.` : `Line 24: j = n<sub>R</sub>, so this loop runs 0 times.`;
+    if (L0 === 24) return e.test ? `Line 24: R still has cards (j = ${e.j}): copy them over as they are.` : (e.ran ? `Line 24: j = n<sub>R</sub>: R is used up, so this loop ends.` : `Line 24: j = n<sub>R</sub>, so this loop runs 0 times.`);
     return `Lines 25–26: A[${e.put}] = ${e.fly.v}, no comparison needed.`;
   };
   const posOf = ([where, idx]) => (where === "A" ? [ax(idx), AY + CH / 2] : [px(where, idx), LY + CH / 2]);

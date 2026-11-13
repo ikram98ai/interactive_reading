@@ -1,4 +1,4 @@
-/* Use Algorithm Alley's step-through machines the way a person does, at normal speed, and fail on what breaks.
+/* Use the CLRS pages' step-through machines the way a person does, at normal speed, and fail on what breaks.
 
    node tools/browser/interact.js books/clrs/ch27.html [--only=<stage index>]
 

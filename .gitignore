@@ -8,7 +8,7 @@ tools/.shots/
 tools/.text/
 
 __pycache__/
-# rendered videos and everything made on the way to them (large, regenerated); each chapter's script stays tracked
+# videos and their scripts stay off GitHub; videos/ has its own local-only git repo for the scripts
 videos/
 tools/video/models/
 tools/video/.logs/

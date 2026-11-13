@@ -1,8 +1,8 @@
 /* Book manifest. One of these per book; loaded before assets/kit.js.
    To add a chapter simulation: add/flip its entry here and set `built` to the highest finished chapter. */
 window.BOOK = {
-  slug: "ddia",
-  title: "Data Town",
+  slug: "ddia", // the folder's name; saved progress is keyed by it
+  short: "DDIA", // the name readers know it by; the top bar shows it beside the chapter
   book: "Designing Data-Intensive Applications",
   author: "Martin Kleppmann & Chris Riccomini",
   edition: "2nd edition",

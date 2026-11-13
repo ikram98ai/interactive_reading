@@ -1,8 +1,8 @@
 /* Book manifest. Loaded before assets/kit.js.
    To add a chapter simulation: write chNN.html here and raise `built` to that number. */
 window.BOOK = {
-  slug: "csapp",
-  title: "Bitville",
+  slug: "csapp", // the folder's name; saved progress is keyed by it
+  short: "CS:APP", // the name readers know it by; the top bar shows it beside the chapter
   book: "Computer Systems: A Programmer's Perspective",
   author: "Randal E. Bryant & David R. O'Hallaron",
   edition: "3rd edition",
