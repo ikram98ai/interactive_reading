@@ -6253,7 +6253,7 @@ K.page(1);
     if (st.done) {
       cv.at([6], "good"); cv.at([], "on", false);
       cv.notes({ 6: [`${km(st.best)} km`, "good"] }, { 44: [`${km(st.best)} km`, "good"] });
-      cap("#s16-cap", `All ${st.total.toLocaleString("en-US")} tours checked. The best round trip is <b>${km(st.best)} km</b>: 0 → ${st.bestTour.slice(1).join(" → ")} → 0. With ${nStops + 1} stops there would be ${(fact(nStops + 1) / 2).toLocaleString("en-US")} tours; with 20, about 6 × 10¹⁶.`);
+      cap("#s16-cap", `All ${st.total.toLocaleString("en-US")} tours checked. The best round trip is <b>${km(st.best)} km</b>: 0 → ${st.bestTour.slice(1).join(" → ")} → 0. With ${nStops + 1} stops there would be ${(fact(nStops + 1) / 2).toLocaleString("en-US")} tours; with 20, about 1.2 × 10¹⁸.`);
     } else {
       cv.at(improved ? [4, 5] : [3]);
       cv.notes({ 2: `tour ${st.checked}`, 3: `${km(st.curLen)} km`, 4: `best = ${km(st.best)}` }, { 32: `tour ${st.checked}`, 34: `c = ${km(st.curLen)}`, 36: `best = ${km(st.best)}` });

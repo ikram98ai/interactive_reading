@@ -85,7 +85,7 @@ scenes: ## Record every chapter-1 scene into videos/
 series: ## Build the YouTube series: ONLY=clrs/ch01 (a chapter, or one lesson like clrs/ch01/05-solution-insertion-sort)
 	tools/video/make-series.sh "$(VOICE)" "$(ONLY)"
 
-# --- chapter videos, in the order of the write-video-script and record-and-publish-video skills (.claude/skills/)
+# --- chapter videos, in the order of the write-video-script, record-video and publish-video skills (.claude/skills/)
 video-plan: ## Steps 1-2: list what a chapter page's machines offer; OUT=videos/clrs/ch02 also writes its script skeleton
 	$(call need,PAGE,books/clrs/ch02.html)
 	$(PY) tools/video/plan.py $(PAGE) $(if $(OUT),--scaffold $(OUT))

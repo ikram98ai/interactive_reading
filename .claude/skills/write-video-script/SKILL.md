@@ -1,6 +1,6 @@
 ---
 name: write-video-script
-description: Plan, scaffold and write a chapter's video scripts — lesson scripts (videos/<book>/chNN/NN-name/script.md) and the chapter's long-form script (videos/<book>/chNN/script.md) — or edit an existing one. Use for any video script work, before narrating. Not for recording or uploading (record-and-publish-video) or chapter pages (build-chapter-page).
+description: Plan, scaffold and write a chapter's video scripts — lesson scripts (videos/<book>/chNN/NN-name/script.md) and the chapter's long-form script (videos/<book>/chNN/script.md) — or edit an existing one. Use for any video script work, before narrating. Not for recording (record-video) or uploading (publish-video) or chapter pages (build-chapter-page).
 ---
 
 # Write a chapter's video scripts
@@ -41,7 +41,7 @@ Each step has a gate. Don't start the next step until the gate passes.
 | 5   | **Judge**              | hand every script to the `script-judge` agent                    | Its verdict is **pass**, recorded by `tools/video/judgement.py` (see below)               |
 
 Step 3 follows "Ready for videos" in the `build-chapter-page` skill's `machines.md`, and the book's `authoring.md`.
-Steps 6–9 (silent pass, pilot, render and QA, publish) are the `record-and-publish-video` skill.
+Steps 6–8 (silent pass, pilot, render and QA) are the `record-video` skill, and step 9 (publish) is `publish-video`.
 
 **Step 5 is enforced.** `narrate.py` refuses to narrate a script unless `judgement.py check` passes: a verdict of pass
 whose hash matches what viewers read or hear in the script now (speech, `{label}`, `{card}`, `{board}`, `{bullet}`,

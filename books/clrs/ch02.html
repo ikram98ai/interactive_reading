@@ -2491,11 +2491,13 @@ K.page(2);
     ];
     lanes.forEach(([who, how, res], r) => {
       const y = 156 + r * 46;
-      g.appendChild(s("rect", { x: 24, y, width: 612, height: 38, rx: 9, class: res ? res[1] : "sv-panel" }));
-      txt(g, 40, y + 24, who, { anchor: "start", bold: true, size: 14 });
-      txt(g, 120, y + 24, how, { anchor: "start", mono: true, size: 12 });
+      const lane = s("g", { "data-part": ["book-lane", "python-lane", "rust-lane"][r] }); // the video tool shows and hides these by name
+      g.appendChild(lane);
+      lane.appendChild(s("rect", { x: 24, y, width: 612, height: 38, rx: 9, class: res ? res[1] : "sv-panel" }));
+      txt(lane, 40, y + 24, who, { anchor: "start", bold: true, size: 14 });
+      txt(lane, 120, y + 24, how, { anchor: "start", mono: true, size: 12 });
       const now = res ? res[0] : st.i != null ? `i = ${st.i}` : "–";
-      txt(g, 620, y + 24, now, { anchor: "end", mono: true, bold: !!res, size: 12.5 });
+      txt(lane, 620, y + 24, now, { anchor: "end", mono: true, bold: !!res, size: 12.5 });
     });
   }
   const OBJ = [{ x: 254, y: 56 }, { x: 254, y: 150 }], OW = 152, OH = 64;

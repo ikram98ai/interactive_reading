@@ -4682,7 +4682,7 @@ K.page(4);
     const why = M.kase === 1 ? `The depths grow toward the leaves, so the ${num(M.leaves)} leaves are most of the bill: case 1, T(n) = Θ(${M.ansName}).`
       : M.kase === 2 && !k ? `Every depth costs exactly n² = ${num(f(M.n))}, so the sum is one depth times ${M.rows.length} depths: case 2, T(n) = Θ(${M.ansName}).`
       : M.kase === 2 ? `Depth j costs n² lg(n/2<sup>j</sup>), sliding linearly from the root's ${num(f(M.n))} down to 0, so the sum is about half of ${M.rows.length} root-sized depths: case 2 with k = 1, T(n) = Θ(${M.ansName}).`
-      : `Each depth costs at most c = ${M.c.toFixed(2)} times the one above, so the root's f(n) = ${num(f(M.n))} is most of the bill: case 3, T(n) = Θ(${M.ansName}).`;
+      : `Each depth costs at most c = ${M.c.toFixed(2)} times the one above, so the root's f(n) = ${num(f(M.n))} is the biggest share of the bill: case 3, T(n) = Θ(${M.ansName}).`;
     const thr = M.n0 > 1 ? ` With n₀ = ${M.n0} this is T′(${M.n / M.n0}) for f′(x) = f(${M.n0}x): the same tree with its bottom ${e0} depth${e0 > 1 ? "s" : ""} cut off.` : "";
     return `T(${M.n}) = ${num(M.leaves)} + ${num(M.g)} = <b>${num(M.T)}</b>, ${same}. ${why}${thr}`;
   }
@@ -5480,7 +5480,7 @@ K.page(4);
     if (e.t === "empty") return `No pair agreed, so no candidate survived and FIND-GOOD has nothing left to return. With ${bad} of ${n} bad, the halving step has no good majority to keep.`;
     if (e.t === "id") return `IDENTIFY-ALL: ${name(e.g)} tests ${name(e.x)} and says ${word(e.v)}. Trusting ${name(e.g)}, mark ${name(e.x)} ${word(e.v)}.`;
     const wrong = wrongCount();
-    return wrong ? `Done in ${st.tests} tests, and ${wrong} of ${n} labels are wrong: ${name(e.g)} is bad and lied about everyone. The reports were exactly what a world with good and bad swapped would give, which is why part (a) says no strategy can win when at least half the chips are bad.`
+    return wrong ? `Done in ${st.tests} tests, and ${wrong} of ${n} labels are wrong: ${name(e.g)} is bad and lied about everyone. The reports were exactly what a world with good and bad swapped would give, which is why part (a) says that when at least half the chips are bad, no strategy can be sure of finding the good ones.`
       : `Done: ${st.find} tests found a good chip and ${st.ids} more identified the rest, ${st.tests} in all, within 2(n − 1) = ${2 * (n - 1)}. Θ(n) tests, every label right.`;
   };
   async function apply(e, w) {

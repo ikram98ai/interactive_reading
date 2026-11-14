@@ -7,7 +7,8 @@ The process lives in skills (`.claude/skills/`); each book's differences live in
 - **judge-video-script** — the truth check every script passes before narration. Run it as the `script-judge` agent
   (`.claude/agents/script-judge.md`), never in the context that wrote the script. `narrate.py` won't narrate a script
   without a passing, current verdict.
-- **record-and-publish-video** — narrate, record, QA and upload. Only when the user asks (`/record-and-publish-video`).
+- **record-video** — narrate, record and QA a judged script into a finished video. All local.
+- **publish-video** — upload to YouTube, or edit videos already up. Only when the user asks (`/publish-video`).
 
 Always call a book by its real title (`book.json` `title`), never a made-up site name.
 
