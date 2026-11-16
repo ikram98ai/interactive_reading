@@ -19,8 +19,16 @@
          title · item <text>  (the title card, then one line of "what you'll learn" on it per item, each on its word)
          goto <scene id | kicker | heading>  (a section card covers the switch to that scene; {scene} lifts it; each goto is a YouTube chapter)
          goto <scene id>  (a quick dip to black instead: a second scene inside the same part, and no new chapter)
+   A manifest with a `part` (assemble.js) records one part of a long form: it starts under its own card, with the layers
+   earlier parts hid still hidden, and ends on the next part's card instead of black, so the parts join without a seam.
    Every scene starts the same way: pseudocode, code panel and stats hidden, picture centred. The script reveals the rest.
          check <selector> ~ <text>  (fails the run if the page doesn't show what the narration claims)
+   A code video (kind: code) records tools/video/editor.html instead, starting from snapshot `start` if the script sets one:
+         code <name> [fast|paste]  (type into that snapshot while the voice goes on, paced to fill the narration until
+                              the next code, select or run cue; paste drops each new block in at once, for code brought
+                              back from an earlier video) · select <text> [#n] · unselect · run (the program's real output, or
+                              its compiler error, from narrate.py) · close  (hide the run panel) · and title, item, scene,
+                              label, card and check as above (the run panel is #out)
    Targets: svg:x,y,w,h (viewBox units of the machine) · css:<selector> · stat:<label> · btn:<label> · code:<a[-b]> (pseudocode lines)
    · rs:<a[-b]> (Rust lines) · mem:x,y,w[,h] (viewBox units of the stack-and-heap strip) · slider:<i>
    · panel, stats, memory, stack, heap (built in) · or a name from the script's `targets:` block. */
@@ -227,6 +235,7 @@ function overlayScript() {
   const mf = path.resolve(process.argv[2]), M = JSON.parse(fs.readFileSync(mf, "utf8")), meta = M.meta;
   const dir = path.dirname(mf), frames = path.join(dir, "frames");
   const out = path.resolve(process.argv[3] || M.out);
+  const EDITOR = meta.kind === "code"; // a code video records the editor, not a chapter page
   fs.rmSync(frames, { recursive: true, force: true }); fs.mkdirSync(frames, { recursive: true });
   const named = (t) => t.split("+").map((x) => { const k = x.trim(), v = meta.targets[k] || BUILTIN[k]; if (v) return v; if (/^(svg|css|btn|stat|code|rs|mem|slider):/.test(k)) return k; throw new Error("unknown target " + k); });
   // check every target name before spending minutes on a recording
@@ -246,12 +255,31 @@ function overlayScript() {
   const problems = [];
   page.on("pageerror", (e) => problems.push("page error: " + e.message));
   page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource|fonts\.g/.test(m.text())) problems.push("console: " + m.text()); });
+  if (EDITOR) { // a code video: the editor (tools/video/editor.html) instead of a chapter page, with the same title, label and cards
+    await page.goto("file://" + path.join(ROOT, "tools/video/editor.html"), { waitUntil: "load" });
+    await page.evaluate(() => window.__ed.ready());
+    await page.evaluate(overlayScript);
+    await page.addStyleTag({ content: "#vid-label { top: 14px !important; }" }); // inside the tab bar, clear of the code
+    await page.evaluate((n) => window.__ed.name(n), M.file || "main.rs");
+    const cols = Math.max(0, ...Object.values(M.code || {}).flatMap((t) => t.split("\n").map((l) => l.length)));
+    if (cols > 72) log(`widest line is ${cols} characters: font ${(await page.evaluate((c) => window.__ed.fit(c), cols)).toFixed(1)} px`);
+    if (meta.start) await page.evaluate((t) => window.__ed.set(t), M.code[meta.start]);
+    await page.evaluate(() => window.__vid.title(true, "", ""));
+  } else {
   await page.goto("file://" + path.join(ROOT, meta.page), { waitUntil: "load" });
   await page.evaluate(() => document.fonts.ready);
   await page.addStyleTag({ content: CSS });
   await page.evaluate(overlayScript);
   await page.evaluate(() => window.__vid.title(true, "", "")); // a cold open: the first {scene} fades straight into the picture
   await page.evaluate((id) => { const s = document.getElementById(id); s.scrollIntoView(); s.querySelector(".fs-btn").click(); if (window.K) K.speed.value = 1; window.__vid.fresh(); }, meta.scene);
+  }
+  // One part of a long form (assemble.js), on a page of its own: set it up off camera as the whole video would have it
+  // here. The layers earlier parts hid stay hidden, and the part's own card is already up (the part before it faded it in).
+  const P = M.part;
+  if (P) {
+    for (const [op, arg] of P.prelude) await page.evaluate(([l, on]) => window.__vid.show(l, on), [named(arg).map((x) => x.slice(4)), op === "show"]);
+    if (P.enter) await page.evaluate(([k, h]) => window.__vid.section(k, h), P.enter);
+  }
   await sleep(900);
 
   // capture
@@ -269,13 +297,61 @@ function overlayScript() {
   const log = (s) => console.log(`${now().toFixed(1).padStart(6)}s  ${s}`);
 
   const chapters = [];
+  let entered = !(P && P.enter); // a part's first card is already up: its goto only swaps the scene beneath it
+  // The editor types while the voice goes on. Each {code} gets the time until the next cue that needs the finished text
+  // ({code}, {select}, {run}) or the end of the narration, and types at the pace that fills it, so the typing neither
+  // runs silent nor lags the words that describe it. If it still runs over, the next such cue waits, and the log says so.
+  let snap = meta.start || null, typing = null, typedText = meta.start ? M.code[meta.start] : "";
+  const plan = []; { let clock = 0; M.segments.forEach((s) => { s.cues.forEach((c) => plan.push([clock + (c.t || 0), c])); clock += s.dur + (s.then && s.then.pause != null ? s.then.pause : s.gap || 0); }); plan.end = clock; }
+  const typed = (from, to) => { // characters to type going from one text to the next: the lines of the goal the old text doesn't have
+    const have = new Map(); from.split("\n").forEach((l) => have.set(l, (have.get(l) || 0) + 1));
+    let n = 0, hunks = 0, prev = true;
+    for (const l of to.replace(/\s+$/, "").split("\n")) { const k = have.get(l) || 0; if (k) { have.set(l, k - 1); prev = true; } else { n += l.trimStart().length + 1; if (prev) hunks++; prev = false; } }
+    return [n, hunks];
+  };
+  async function finishTyping(why) {
+    if (!typing) return;
+    const w0 = now(); await typing; typing = null;
+    const over = now() - w0; if (over > 0.4) log(`typing ran ${over.toFixed(1)} s past the narration, before ${why}`);
+  }
   async function run(c) {
     const a = c.arg;
+    if (EDITOR && c.op === "code") {
+      await finishTyping(`{code ${a}}`);
+      const [name, mode] = a.split(/\s+/), goal = M.code[name], fast = mode === "fast", paste = mode === "paste";
+      if (goal == null) { problems.push(`no snapshot @${name}`); return; }
+      const i = plan.findIndex(([, x]) => x === c), next = plan.slice(i + 1).find(([, x]) => ["code", "select", "run"].includes(x.op));
+      const [chars, hunks] = typed(typedText, goal), room = Math.max(1, (next ? next[0] : plan.end) - plan[i][0] - 0.5 - hunks * 0.6);
+      const cps = Math.min(90, Math.max(fast ? 40 : 14, (chars * 1.3) / room));
+      typing = page.evaluate(([t, cps, paste]) => window.__ed.to(t, { cps, paste }), [goal, cps, paste]);
+      snap = name; typedText = goal;
+      log(paste ? `code @${name}: ${chars} characters pasted in ${hunks} block(s)` : `code @${name}: ${chars} characters at ${cps.toFixed(0)} a second`);
+      return;
+    }
+    if (EDITOR && c.op === "select") {
+      await finishTyping(`{select ${a}}`);
+      const [, text, nth] = a.match(/^(.*?)(?:\s+#(\d+))?$/);
+      if (!(await page.evaluate(([t, n]) => window.__ed.select(t, n), [text, +nth || 1]))) problems.push(`{select ${a}}: not in @${snap}`);
+      return;
+    }
+    if (EDITOR && c.op === "unselect") { await page.evaluate(() => window.__ed.unselect()); return; }
+    if (EDITOR && c.op === "run") {
+      await finishTyping("{run}");
+      const r = M.runs[snap]; if (!r) { problems.push(`{run} on @${snap}, which narrate.py didn't run`); return; }
+      await page.evaluate(([cmd, out, ok]) => window.__ed.run(cmd, out, ok), [M.run_cmd || "rustc main.rs && ./main", r.out, r.ok]);
+      log(`run @${snap} → ${r.ok ? "ok" : "error"}: ${r.out.split("\n")[0].slice(0, 80)}`);
+      return;
+    }
+    if (EDITOR && c.op === "close") { await page.evaluate(() => window.__ed.close()); await sleep(200); return; }
     if (c.op === "scene") { await page.evaluate(() => window.__vid.hideTitle()); }
     else if (c.op === "goto") {
       const [id, kicker, head] = a.split("|").map((v) => v.trim());
       const card = head != null;
-      if (card) { chapters.push([now(), head]); await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]); await sleep(750); } // the card has faded in
+      if (card) {
+        chapters.push([now(), head]);
+        if (entered) { await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]); await sleep(750); } // the card has faded in
+        entered = true;
+      }
       else { await page.evaluate(() => window.__vid.dip(true)); await sleep(330); }
       await page.evaluate((id) => { const s = document.getElementById(id); if (!s.querySelector(".is-full")) { s.scrollIntoView(); s.querySelector(".fs-btn").click(); } K.speed.value = 1; window.__lastBtn = null; window.__vid.fresh(); }, id);
       await sleep(card ? 500 : 250);
@@ -334,17 +410,29 @@ function overlayScript() {
     } else if (s.then && s.then.pause != null) await sleep(s.then.pause * 1000);
     else if (s.gap) await sleep(s.gap * 1000);
   }
-  await sleep(700);
-  await page.evaluate(() => window.__vid.black());
-  await sleep(1100);
+  await finishTyping("the end");
+  if (P && P.exit) { // the next part's card fades in, as the next {goto} would: the next part starts on that same frame
+    await page.evaluate(([k, h]) => window.__vid.section(k, h), P.exit);
+    await sleep(750);
+  } else {
+    await sleep(700);
+    await page.evaluate(() => window.__vid.black());
+    await sleep(1100);
+  }
   const total = now();
   await cdp.send("Page.stopScreencast");
   await writing;
   await browser.close();
 
-  // build the picture: each frame lasts until the next one, on the same clock as the narration
+  // build the picture: each frame lasts until the next one, on the same clock as the narration.
+  // Chrome encodes PNG frames in parallel and delivers some out of order (by up to a quarter second, hundreds of times a
+  // minute while a machine animates). So place frames by their own timestamps, sorted. Summing the gaps in arrival order
+  // and clamping the negative ones added every backward step to the picture: 14% too long in a test, the picture
+  // drifting ~10 s behind the narration over a long form, with a hold-then-skip stutter at every out-of-order frame.
   const startTs = t0 / 1000;
-  const useful = stamps.filter(([, t]) => t >= startTs - 0.2);
+  const late = stamps.filter(([, t], i) => i && t < stamps[i - 1][1]).length;
+  const useful = stamps.filter(([, t]) => t >= startTs - 0.2 && t <= startTs + total).sort((p, q) => p[1] - q[1])
+    .filter(([, t], i, a) => i + 1 === a.length || a[i + 1][1] > t); // of frames sharing a timestamp, keep the last
   const list = path.join(dir, "frames.txt");
   let txt = "";
   useful.forEach(([f, t], i) => { const next = i + 1 < useful.length ? useful[i + 1][1] : startTs + total; const from = i === 0 ? startTs : t; txt += `file '${f}'\nduration ${Math.max(0.001, next - from).toFixed(5)}\n`; });
@@ -373,7 +461,7 @@ function overlayScript() {
     const lf = `loudnorm=I=-15:TP=-1.5:LRA=11:linear=true:measured_I=${m.input_i}:measured_TP=${m.input_tp}:measured_LRA=${m.input_lra}:measured_thresh=${m.input_thresh}:offset=${m.target_offset}:print_format=summary`;
     cp.execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", raw, "-af", lf, "-ar", "48000", "-c:a", "pcm_s24le", wav], { maxBuffer: 1e9 });
     cp.execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list, "-i", wav, "-map", "0:v", "-map", "1:a", ...VENC, "-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-shortest", out]);
-    fs.rmSync(raw, { force: true });
+    if (!P) fs.rmSync(raw, { force: true }); // assemble.js levels the joined parts' raw narration as one
 
     // captions for YouTube, from the same word times
     const srt = []; const stamp = (t) => { const ms = Math.round(t * 1000), z = (v, n = 2) => String(v).padStart(n, "0"); return `${z(ms / 3600000 | 0)}:${z((ms / 60000 | 0) % 60)}:${z((ms / 1000 | 0) % 60)},${z(ms % 1000, 3)}`; };
@@ -393,9 +481,9 @@ function overlayScript() {
     const clock = (t) => `${t / 60 | 0}:${String(t % 60 | 0).padStart(2, "0")}`;
     fs.writeFileSync(out.replace(/\.mp4$/, ".chapters.txt"), (chapters[0][0] < 5 ? chapters : [[0, "Intro"], ...chapters]).map(([t, h]) => `${clock(t)} ${h}`).join("\n") + "\n");
   }
-  fs.writeFileSync(path.join(dir, "timeline.json"), JSON.stringify({ offsets, total, fps }, null, 1));
+  fs.writeFileSync(path.join(dir, "timeline.json"), JSON.stringify({ offsets, total, fps, chapters }, null, 1));
   fs.rmSync(frames, { recursive: true, force: true }); fs.rmSync(list, { force: true });
   const probe = cp.execFileSync("ffprobe", ["-v", "error", "-select_streams", "v", "-show_entries", "stream=width,height", "-show_entries", "format=duration,size", "-of", "csv=p=0", out]).toString().trim().replace(/\n/g, " ");
-  console.log(`wrote ${out}  [${probe}]  captured at ${fps.toFixed(1)} fps`);
+  console.log(`wrote ${out}  [${probe}]  captured at ${fps.toFixed(1)} fps, ${late} frames out of order (placed by timestamp)`);
   if (problems.length) { console.error("PROBLEMS:\n  " + problems.join("\n  ")); process.exit(2); }
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -3,7 +3,9 @@
 The process lives in skills (`.claude/skills/`); each book's differences live in `books/<slug>/book.json`.
 
 - **build-chapter-page** — build or rebuild an interactive chapter page, `books/<slug>/chNN.html`.
-- **write-video-script** — plan, scaffold and write a chapter's lesson and long-form scripts.
+- **write-video-script** — plan and write a chapter's long-form script. Every book with videos (`book.json` `videos`
+  not null; today only CLRS) gets one long-form video per chapter. A book's own videos beyond that, if any, are
+  described by the guide its `book.json` names (`videos.lessons.guide`).
 - **judge-video-script** — the truth check every script passes before narration. Run it as the `script-judge` agent
   (`.claude/agents/script-judge.md`), never in the context that wrote the script. `narrate.py` won't narrate a script
   without a passing, current verdict.

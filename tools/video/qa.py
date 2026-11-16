@@ -14,8 +14,9 @@ import numpy as np
 
 W, H, FPS = 320, 180, 30
 #              target,           warn outside,    fail outside
-# A lesson (its script's `kind:`) has its own bar, from the same tutorials measured lesson by lesson: code lessons talk slower
-# and type while silent, exercises and boards talk slower still, and an editor full of code is meant to fill the frame.
+# Each kind of video (its script's `kind:`) has its own bar, from the same tutorials measured video by video: code videos talk
+# slower and type while silent, boards talk between the two (narrate.py's PACE) with less moving, and an editor full
+# of code is meant to fill the frame.
 LESSON = {
     "code": {"pace (wpm)": ((150, 175), (140, 185), (125, 200)), "moving (% of time)": ((0, 70), (0, 80), (0, 95)),
              "changes a minute": ((0, 40), (0, 60), (0, 90)), "longest pause (s)": ((0, 3.5), (0, 4.5), (0, 6.0)),

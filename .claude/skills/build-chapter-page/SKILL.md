@@ -5,8 +5,8 @@ description: Build or rebuild one interactive chapter page, books/<slug>/chNN.ht
 
 # Build one interactive chapter page
 
-You need four facts: the **book slug** (the folder under `books/`, such as `clrs`, `csapp`, `ddia`), the **chapter
-number**, the book's **outline of that chapter**, and the **reference chapter** to imitate.
+You need three facts: the **book slug** (the folder under `books/`, such as `clrs`, `csapp`, `ddia`), the **chapter
+number**, and the book's **outline of that chapter**. The **reference chapter** to imitate comes from `book.json` (Step 0).
 
 The goal of every page: **anyone who opens it for the first time can understand every section of the chapter**, by
 reading a tiny story and operating a small machine (an interactive SVG simulation). Each machine should model the real
@@ -18,8 +18,7 @@ highlighted. Many ideas need no code at all ([code-panel.md](code-panel.md)).
 ## Step 0 — the book's profile
 
 Read `books/<slug>/book.json`. It names the book's real title, its PDF and extracted text, its code language (or none),
-its page helpers, its reference page, and any extra checks. If it lists `guides.authoring`, read that file now: it adds
-book-specific rules that take precedence over the general ones here wherever they're more specific. The reference
+its page helpers, its reference page, and any extra checks. The reference
 chapter is `page.reference` when it names a page, otherwise the newest finished page of the same book. Older pages were
 built before some of these rules and don't all meet them: where a page and these rules differ, follow the rules.
 

@@ -1,7 +1,6 @@
 # The judgements
 
-Ask each question that applies to a sentence. The book's `curriculum.md` adds the checks for its code language (for
-CLRS: Rust's docs, compiler errors, ownership wording, stable APIs).
+Ask each question that applies to a sentence.
 
 ## 1. Does it say what the book says?
 
@@ -25,15 +24,14 @@ Rounded words must round the right way: "more than", "under", "about".
 ## 3. Is every claim from outside the book backed by a primary source?
 
 The language, its standard library, later chapters and real-world facts all need a source you have actually opened: the
-language's docs, the later chapter's text, or the compiler's output. Don't rely on what used to be true. (For CLRS, see
-the driftsort example in `books/clrs/curriculum.md`.)
+language's docs, the later chapter's text, or the compiler's output. Don't rely on what used to be true.
 
 ## 4. Is every absolute literally true?
 
 Stop at every "no", "never", "always", "every", "nothing", "only", "one step" and "can't". An expert will look for the
 exception.
 
-> ✗ "Nothing was copied." The same lesson said earlier that `key` gets a copy.
+> ✗ "Nothing was copied." The same video said earlier that `key` gets a copy.
 > ✓ "The vector was never copied."
 
 ## 5. Does it match the screen, now and earlier?
@@ -57,8 +55,8 @@ Analogies count here too. Say where an analogy stops working before the viewer r
 
 ## 7. Is it consistent?
 
-The same name, number and advice must hold within a lesson, across a chapter's lessons, and between the lessons and the
-chapter's long-form `script.md`.
+The same name, number and advice must hold within a video, across the videos that build on it, and between a book's
+own videos (such as CLRS's 100-day course) and the chapter's long-form `script.md`.
 
 > ✗ "…even if it takes half an hour… Spend fifteen minutes on it." Pick one.
 
@@ -78,14 +76,12 @@ The compiler proves that the code compiles. It doesn't prove what the voice says
 - Every API used must exist in the stable language. Note any API that is recent.
 - An explanation of the output must match the output: ordering, stability, and trailing spaces.
 
-The book's `curriculum.md` has this language's specifics and examples.
+## 10. Are references to other videos and the book true?
 
-## 10. Are references to other parts of the series and the book true?
-
-These include "In the next section…", "We'll see this later in the course", "The book has a whole chapter on…" and "as
-in Chapter 22". Check each one against the next chapter's text, or against the book's table of contents.
+These include "Next, we're going to…", "We'll see this later", "The book has a whole chapter on…" and "as in Chapter
+22". Check each one against what the video it points to really covers, the next chapter's text, or the book's table of
+contents.
 
 ## 11. Does the recap claim only what was taught?
 
-Skipping parts of a chapter is fine. A summary or wrap-up that mentions a topic the lessons never covered is not. List
-what was skipped in the report, so the skipping is a choice and not an accident.
+Skipping parts of a chapter is fine. A recap or closing line that mentions a topic the video never covered is not. List what was skipped in the report, so the skipping is a choice and not an accident.

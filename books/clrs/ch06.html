@@ -1968,7 +1968,7 @@ K.page(6);
   }
   const CAP = (e) => {
     const rs = CODE_LANG.rust, I = (x) => (rs ? x - 1 : x);
-    if (e.done) return `Done: ⟨${st.A.join(", ")}⟩, Figure 6.4(k). ${e.ex} exchanges and ${e.cmp} comparisons for n = ${N}; n lg n ≈ ${Math.round(N * Math.log2(N))}. Everything happened inside the one array.`;
+    if (e.done) return `Done: ⟨${st.A.join(", ")}⟩${input.join() === INPUTS[0].join() ? ", Figure 6.4(k)" : ""}. ${e.ex} exchanges and ${e.cmp} comparisons for n = ${N}; n lg n ≈ ${Math.round(N * Math.log2(N))}. Everything happened inside the one array.`;
     if (e.lines[0] === 1) return `Line 1: BUILD-MAX-HEAP turns the input into a max-heap with ${e.sw.length} exchange${e.sw.length === 1 ? "" : "s"}${input.join() === INPUTS[0].join() ? ": Figure 6.4(a)" : ""}. The largest value, ${st.A[0]}, is at the root.`;
     if (e.lines[0] === 2) return `Lines 2–3: i = ${I(e.i)}. The root ${st.A[e.i - 1]} is the largest of the ${e.i} values left in the heap, so it is exchanged into cell ${I(e.i)}, its final place.`;
     return `Lines 4–5: heap-size drops to ${e.hs}, so cell ${I(e.i)} leaves the heap. The new root ${e.sw.length ? `sank ${e.sw.length} level${e.sw.length > 1 ? "s" : ""}` : "already beats its children"}; A[1 : ${e.hs}] is a max-heap again.`;
@@ -2000,7 +2000,7 @@ K.page(6);
   function redraw() {
     K.clear(layer); fresh(); render();
     const same = input.join() === INPUTS[0].join();
-    cap("#s4-cap", `${same ? "The input of Figure 6.3, " : "The input "}⟨${input.join(", ")}⟩, not yet a heap. HEAPSORT first builds a max-heap, then takes the root ${N - 1} times.`);
+    cap("#s4-cap", `${same ? "The input of Figure 6.3, " : "The input "}⟨${input.join(", ")}⟩, ${input.every((v, k) => !k || input[(k - 1) >> 1] >= v) ? "already a max-heap. HEAPSORT still runs BUILD-MAX-HEAP first" : "not yet a heap. HEAPSORT first builds a max-heap"}, then takes the root ${N - 1} times.`);
   }
   function reset() { S.cancel(); redraw(); }
   busy = [button(ctr, "Step", "", step), button(ctr, "Play", "primary", play)];

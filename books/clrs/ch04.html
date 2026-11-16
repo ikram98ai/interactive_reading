@@ -5051,7 +5051,8 @@ K.page(4);
 (function s14() {
   const svg = K.$("#s14-svg");
   const ctr = K.$("#s14-controls"), stats = K.$("#s14-stats");
-  const gHead = s("g"), gArr = s("g"), gMark = s("g"), gLanes = s("g"), layer = s("g");
+  // the video tool shows and hides these by name
+  const gHead = s("g", { "data-part": "head" }), gArr = s("g", { "data-part": "array" }), gMark = s("g", { "data-part": "pointers" }), gLanes = s("g", { "data-part": "lanes" }), layer = s("g");
   svg.append(gHead, gArr, gMark, gLanes, layer);
   const m = mem("#s14-mem");
   const BS_A = [3, 8, 11, 15, 19, 24, 27, 31, 36, 40, 44, 49, 53, 58, 62, 67], BS_X = 60;

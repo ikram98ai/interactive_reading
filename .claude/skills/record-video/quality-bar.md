@@ -1,7 +1,7 @@
 # The quality bar
 
-`make video-qa VIDEO=…` measures a lesson against the bar for its kind (read from the script beside it) and exits 1 on a
-FAIL. The numbers come from measuring the reference courses lesson by lesson.
+`make video-qa VIDEO=…` measures a video against the bar for its kind (read from the script beside it) and exits 1 on a
+FAIL. The numbers come from measuring the reference course video by video.
 
 | Measure                                               | Concept     | Code            | Board       |
 | ----------------------------------------------------- | ----------- | --------------- | ----------- |

@@ -1,54 +1,66 @@
 ---
 name: publish-video
-description: Upload a chapter's recorded videos (lessons and long-form) to YouTube through Studio's web UI, or edit ones already uploaded (titles, descriptions, thumbnails, schedule, playlists). Run only when the user asks for it.
+description: Upload recorded videos (a chapter's long form) to YouTube through Studio's web UI, or edit ones already uploaded (titles, descriptions, thumbnails, schedule, playlists). Run only when the user asks for it.
 disable-model-invocation: true
 ---
 
-# Publish a chapter's videos
+# Publish videos
 
-This is step 9 of a chapter's videos. A video reaches this skill recorded and passing QA (the `record-video` skill).
+This is step 9 of a video. A video reaches this skill recorded and passing QA (the `record-video` skill).
 Uploading is public and hard to undo, so only the user starts it. Read `books/<slug>/book.json` first: its `videos`
 block names the outputs, their playlists and title formats, the schedule and the site.
 
-| #   | Step        | Command                                                                         | Gate                                                                           |
-| --- | ----------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| 9   | **Publish** | `node tools/video/studio_upload.js videos/<book> --plan`, then without `--plan` | Every video is up, titled, described, captioned, scheduled and in its playlist |
+| #   | Step        | How                                                                                                   | Gate                                                                           |
+| --- | ----------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 9   | **Publish** | `node tools/video/studio_upload.js videos/<book> --long-form chNN --day YYYY-MM-DD --plan`, then without `--plan` | Every video is up, titled, described, captioned, scheduled and in its playlist |
+
+One chapter per run. `--plan` uploads nothing: it prints the title, playlist, publish time, description, judgement, QA
+and every problem, and exits 1 if there is one. The real run refuses on any problem too.
 
 **Judged and checked only.** Publish only a video narrated from a script that passes `judgement.py check`, never one
-narrated with `--skip-judgement`, and only once its QA has no FAIL.
+narrated with `--skip-judgement`, and only once its QA has no FAIL. `--long-form` enforces both: it runs
+`judgement.py check`, and runs `qa.py` before uploading (about 5 minutes; the result is cached in `<video>.qa.json` until
+the MP4 changes). Its WARN lines are in the plan: fix each, or write down why it stays.
 
 ## Before uploading
 
 - **Check what's already up.** Each uploaded video has a `<video>.youtube.json` record beside it, and the `videos/` git
-  history keeps the records of everything ever uploaded. If a video for the same lesson or chapter is already up, ask
-  the user whether to replace it (only safe while it's still scheduled, not public) or leave it, before uploading.
-- **Run `--plan` first** and show the user what it would upload, with titles and publish times.
+  history keeps the records of everything ever uploaded. `--long-form` checks both, so a record deleted from disk
+  still counts, and the plan says how to restore it. If a video for the same chapter is already up, ask the user
+  whether to replace it (only safe while it's still scheduled, not public) or leave it. To replace it, pass
+  `--replaces <old video id>`. The old record moves to `<video>.retired.youtube.json`, and unlisting the old video and
+  taking it out of the playlist are done by hand in Studio.
+- **Ask the user which day**, then show them the `--plan` output before the real run.
 
 ## Publishing on YouTube
 
 - **YouTube Studio's web UI only, never the API.** `tools/video/studio_upload.js` drives Studio with Playwright in a
-  persistent, signed-in Chrome profile, and uploads, titles, describes, captions and schedules each lesson in one pass.
-  `--plan` prints what it would do and stops. `--edit` updates lessons already up instead (thumbnail, publish time).
-  `--titles` updates the title and description of every video already up, lessons and long-form. Progress is written
-  to each video's `<video>.youtube.json`, so a rerun resumes. It reads every chapter's `youtube-meta.json` and the
-  long-form records, so those files must be present.
-- **Long-form videos aren't uploaded by `studio_upload.js`**: it uploads lessons, and only retitles a long-form video
-  that's already up. A long-form upload is done in Studio by hand, or with a new uploader path; ask the user which.
-- **Two outputs, two playlists** (CLRS): each chapter's long-form video goes to `videos.long_form.playlist`
-  ("Introduction to Algorithms"), titled by `videos.long_form.title` ("Chapter 1: The Role of Algorithms in Computing |
-  Introduction to Algorithms"). Lessons go to `videos.lessons.playlist` ("Introduction to Algorithms with Rust"), titled
-  by `videos.lessons.title` ("1.3 How to Sort a Vec in Rust: … | Introduction to Algorithms with Rust"). Other books
-  declare their own, or none. Studio allows 100 characters in a title.
-- **Titles and descriptions** for lessons are written per lesson in `videos/<book>/chNN/youtube-meta.json`. Each
-  description links the chapter's page (`videos.site`) and the chapter's long-form video. A long-form description opens
-  with `videos.long_form.intro`; `studio_upload.js --titles` rewrites only that first line, keeping the page link and
-  chapter timestamps below it, and refuses if the text it reads doesn't link that chapter's page. Every video gets its `.srt`
-  captions, "not made for kids", and its first frame (the title card) as its thumbnail.
-- **The schedule** (`videos.schedule`, in the channel's time zone, Asia/Karachi): each chapter goes out within one week,
-  with related lessons grouped on the same day; the groups live in `videos/<book>/schedule.json`. A day's lessons go out
-  `gap_hours` apart from `first` (18:00, 20:00, 22:00); a day with more lessons starts earlier, so the last is out at
-  `last` (22:00). The long-form video goes out the day after the chapter's last lesson, at `first`. Scheduling is done on
-  YouTube, not by holding files back locally.
+  persistent, signed-in Chrome profile. Progress is written to each video's `<video>.youtube.json`, so a rerun resumes.
+- **What `studio_upload.js` can do today:**
+  - `--long-form chNN` uploads `chNN/chNN-<chapter>.mp4` (the book's chapter title as a file name, such as `ch06-heapsort.mp4`) with all of the below, playlist included, and resumes an
+    unfinished upload when rerun. It can't create a playlist: one missing from Studio's list stops the run.
+  - `--titles` updates the title and description of a long-form video that's already up (it needs the video's record
+    on disk).
+  - Its lesson upload and `--edit` paths were written for retired per-chapter lessons (`videos/<book>/chNN/NN-name/`),
+    so they find nothing to upload now.
+- **What it can't do yet:** **a book's own videos** (`videos.lessons`). Their guide (`videos.lessons.guide`) says what
+  uploading them needs.
+- **Every book: one long form per chapter**, in `videos.long_form.playlist` and titled by `videos.long_form.title`. For
+  CLRS that's "Introduction to Algorithms", and a title like "Chapter 1: The Role of Algorithms in Computing |
+  Introduction to Algorithms".
+- **A book's own videos**, if `book.json` declares them, go to `videos.lessons.playlist`, titled by
+  `videos.lessons.title`.
+- Studio allows 100 characters in a title.
+- **Descriptions:**
+  - A long-form description opens with `videos.long_form.intro`, then the chapter's page link (`videos.site`) and the
+    chapter timestamps from `<video>.chapters.txt`. YouTube only makes chapters when the first is 0:00, there are
+    at least three, and each lasts 10 seconds, so `--long-form` refuses a file that breaks those rules.
+  - `studio_upload.js --titles` rewrites only that first line, and refuses if the text it reads doesn't link that
+    chapter's page.
+  - Every video gets its `.srt` captions, "not made for kids", and a thumbnail made by `tools/video/thumb.js`: the chapter and title in large type, readable at a phone feed's size.
+- **The schedule** (`videos.schedule`) is in the channel's time zone, Asia/Karachi. Videos go out at `first`, then
+  `gap_hours` apart, the last by `last`. Ask the user which day a video goes out. Scheduling is done
+  on YouTube, not by holding files back locally.
 - **Limits:** Studio allows about 70 uploads in a rolling 24 hours ("Daily upload limit reached" in the dialog). Stop
   and resume later; the records make it safe.
 - **Records:** commit each new or changed `<video>.youtube.json` in the `videos/` repo (`git -C videos commit`).

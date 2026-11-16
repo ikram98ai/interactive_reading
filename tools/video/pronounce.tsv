@@ -1,0 +1,12 @@
+# How Kokoro should say words it gets wrong. narrate.py applies these to the text sent to the voice only: the script,
+# the captions and the judged words keep the written form. One rule a line: a Python regex, a tab, what to say instead,
+# a tab, why. Check a respelling with Kokoro's own phonemizer before adding it:
+#   Kokoro("tools/video/models/kokoro-v1.0.onnx", "tools/video/models/voices-v1.0.bin").tokenizer.phonemize("text", "en-gb")
+# A word only some uses of need, like the variable a (the article a is spoken right), gets a {say Eh} cue in the script.
+\blg\b	log	the book's lg is said "log"; Kokoro spells it "el-jee"
+(?<=[a-z,;] )A\b(?![’'])	Eh	a capital A inside a sentence is a letter (array A, computer A): Kokoro says the article "uh"; "Eh" is /eɪ/
+(?:^|(?<=[.?!] ))A(?= (?:of|is|sub|counts|has|runs|now|still|gets|was|can|holds|doesn't)\b)	Eh	a sentence that opens "A of", "A is", … is about the letter A, not the article
+(?<=letter )a\b	Eh	"the letter a"
+\bNeumann\b	Noyman	von Neumann is "NOY-man" (Wikipedia: /vɒn ˈnɔɪmən/); Kokoro says "NEW-man"
+\bDijkstra\b	Dikestra	Dijkstra is "DIKE-struh" in English (Dutch [ˈdɛikstra]); Kokoro says "DAYK-struh"
+\bRabin\b	Ra-bean	Michael Rabin, Hebrew רַבִּין, is "rah-BEEN"; Kokoro says "RAB-in"

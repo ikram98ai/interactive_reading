@@ -12,8 +12,8 @@ each animation to a line. **It is optional.** Decide scene by scene:
   scalability, data models, what "latency" means. Made-up code there only adds noise.
 
 The test: would the viewer understand the machine better by following a highlighted line step by step? If not, leave
-the panel out. A page can mix all three kinds. A book's `authoring.md` can require a panel on every scene (CLRS pairs
-the book's pseudocode with a Rust program everywhere).
+the panel out. A page can mix all three kinds. CLRS pages put a panel on every scene, pairing the
+book's pseudocode with a Rust program.
 
 ## Pick the code
 

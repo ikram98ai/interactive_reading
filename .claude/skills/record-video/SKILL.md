@@ -1,6 +1,6 @@
 ---
 name: record-video
-description: Narrate, record and QA a chapter's judged video scripts (lessons and long-form) into finished MP4s with captions, all local — silent pass, pilot, full render, quality bar. Use when the user asks to record, render, narrate or finish a video. Not for uploading (publish-video) or writing and judging scripts (write-video-script, judge-video-script).
+description: Narrate, record and QA judged video scripts (a chapter's long form) into finished MP4s with captions, all local — silent pass, pilot, full render, quality bar. Use when the user asks to record, render, narrate or finish a video. Not for uploading (publish-video) or writing and judging scripts (write-video-script, judge-video-script).
 ---
 
 # Record a chapter's videos
@@ -18,13 +18,25 @@ Each step has a gate. Don't start the next step until the gate passes.
 
 | #   | Step                 | Command                                                                      | Gate                                                                                   |
 | --- | -------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| 6   | **Silent pass**      | `make video-silent SCRIPT=videos/<book>/chNN/02-…/script.md`                 | No `CHECK FAILED`, `no button`, unknown target, or "typing ran past the voice"         |
-| 7   | **Pilot**            | `make series ONLY=<book>/chNN/05-…`, or `make video-part` for a long form    | You've looked at one code lesson and one concept lesson (or one long-form part) at full size |
-| 8   | **Render and QA**    | `make series ONLY=<book>/chNN`, then `make video-qa VIDEO=…` for each video  | No FAIL. Fix every WARN, or write down why it stays ([quality-bar.md](quality-bar.md))  |
+| 6   | **Silent pass**      | `make video-silent SCRIPT=videos/<book>/chNN/script.md`                      | No `CHECK FAILED`, `no button`, `could not press` or unknown target                    |
+| 7   | **Pilot**            | `make video-part SCRIPT=… ONLY="Part 4 of"`                                  | You've looked at one part at full size                                                 |
+| 8   | **Render and QA**    | `make video-long SCRIPT=…`, then `make video-qa VIDEO=…`                     | No FAIL. Fix every WARN, or write down why it stays ([quality-bar.md](quality-bar.md))  |
 
-**Lessons** are recorded with `make series` (`tools/video/make-series.sh`). **The long-form video** is recorded with
-`narrate.py videos/<book>/chNN/script.md --voice <voice>`, then `studio.js` on the manifest it prints. Its pilot is one
+**The long-form video** is recorded with `make video-long SCRIPT=videos/<book>/chNN/script.md`: `narrate.py`, then
+`assemble.js` on the manifest it prints. That records each part (the intro, and each section card on) on its own, caches
+it under `build/<voice>/parts/`, and joins the parts without a seam: a part ends on the next part's card, and the next
+starts under it.
+
+**Fixing part of a recorded video.** Edit the script, judge it again, and run `make video-long` again: only the parts
+whose words or cues changed are re-recorded (a few minutes, not the whole video), and the join takes about a minute.
+`ARGS=--dry-run` lists which parts would be recorded and why. A change to the chapter page, or to `studio.js`, re-records
+every part. If a page edit only touched some scenes, say which: `ARGS="--page-scenes=big-o,omega"` (scene ids) keeps the
+parts that don't show them. Run QA on the joined video as always, and look at the re-recorded parts.
+
+Its pilot is one
 part: `make video-part SCRIPT=videos/<book>/chNN/script.md ONLY="Part 4 of"` narrates and records just that part.
+`ONLY` picks the first `{goto}` whose text contains it (here, the card "Part 4 of 15"), and names the output after it
+(`chNN-part-4-of-…mp4`).
 
 A silent pass (`--silent`) needs no verdict and estimates timing at 150 words a minute. Real narration runs faster, so
 a cue that only just made it in the silent pass can still fail in the pilot.
@@ -51,12 +63,12 @@ the `script-judge` agent before it's recorded.
 
 ## Voice and narration
 
-- The voice is `book.json` `videos.voice` — `kokoro:bm_fable` for CLRS, for every lesson and long-form video.
-  (`kokoro:am_liam` was compared on three lessons and rejected; don't render or offer it unless the user asks.)
+- The voice is `book.json` `videos.voice` — `kokoro:bm_fable` for CLRS, for every video.
+  (`kokoro:am_liam` was compared and rejected; don't render or offer it unless the user asks.)
 - Narration is cached per block, so re-running after an edit only redoes what changed.
-- Everything a render makes, test renders included, stays in the chapter's folder under `videos/`.
+- Everything a render makes, test renders included, stays in the video's folder under `videos/`.
 
 ## Done
 
-A recorded video is its MP4 and `.srt` in the chapter's folder, passing QA. Tell the user where they are and what QA
+A recorded video is its MP4, `.srt` and `.chapters.txt` in its folder, passing QA. Tell the user where they are and what QA
 said. Uploading is a separate step: the user starts it with `/publish-video`.

@@ -19,7 +19,7 @@ Keep two functions: `reset()` = `S.cancel()` + redraw, and a plain redraw. **Nev
 inside `S.run`** — the run cancels itself and silently does nothing. `smoke.js` can't catch this, because a cancelled run
 throws no error; only the screenshots show it.
 
-A book's `authoring.md` may name a step-through toolkit to use instead (CLRS: `AL.walk`).
+A book's page helpers (`book.json` `page.helpers`) may have a step-through toolkit to use instead (CLRS: `AL.walk`).
 
 ## Keep it clean
 
@@ -57,13 +57,13 @@ A book's `authoring.md` may name a step-through toolkit to use instead (CLRS: `A
 
 ## Ready for videos
 
-If the book has videos (`book.json` `videos` is not null), its concept lessons drive the page's own machines with their
+If the book has videos (`book.json` `videos` is not null), its videos drive the page's own machines with their
 controls and captions hidden, so a machine has to explain itself. Build every machine so:
 
 - Each layer of the picture is wrapped in `s("g", { "data-part": "name" })`, such as `input`, `pointers`, `checks` or
   `key`, so a script can hide what it doesn't explain.
 - Cells update in place, so colours ease between steps, and a value that flies has the shape of the cell it lands in.
-  (The book's `authoring.md` names the helpers that do this; CLRS: `AL.cells`, `AL.grid`, `AL.chip`, `AL.pop`, `AL.fade`.)
+  (The book's page helpers may do this; CLRS: `AL.cells`, `AL.grid`, `AL.chip`, `AL.pop`, `AL.fade`.)
 - A result shows only once it exists: a check or a verdict pops in at the end, instead of sitting empty with "…".
 - Captions carry the real numbers, so a script's `{check}` has something to read.
 

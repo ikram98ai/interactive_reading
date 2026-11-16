@@ -8,7 +8,7 @@
 <!--
   The code editor that tools/video/studio.js records for code, exercise and solution lessons: one Rust file, typed live,
   zoomed in so about fifteen lines fill the frame, with a run panel that shows the program's real output.
-  studio.js drives it through window.__ed: set(text) · to(text, { cps }) · select(text, nth) · unselect() · run(cmd, out, ok) · close().
+  studio.js drives it through window.__ed: fit(cols) · set(text) · to(text, { cps, paste }) · select(text, nth) · unselect() · run(cmd, out, ok) · close().
   ?board opens it empty, as the backdrop for board lessons.
 -->
 <style>
@@ -19,7 +19,7 @@
   --font: 40px; --lh: 64px; --cw: 24px;
 }
 html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; cursor: none; }
-body { font-family: 'JetBrains Mono', Menlo, monospace; color: var(--text); display: flex; flex-direction: column; }
+body { font-family: 'JetBrains Mono', Menlo, monospace; color: var(--text); display: flex; flex-direction: column; font-variant-ligatures: none; } /* <= stays <=: beginners type what they see */
 #tabs { height: 66px; flex: none; background: var(--tab); display: flex; align-items: stretch; border-bottom: 1px solid #2b2b2b; }
 .tab { display: flex; align-items: center; gap: 14px; padding: 0 30px 0 24px; font: 400 27px 'JetBrains Mono', Menlo, monospace; color: #bbbbbb; background: var(--tab-on); border-bottom: 4px solid var(--accent); }
 .tab .ic { width: 30px; height: 30px; border-radius: 50%; background: #b7410e; color: #fff; font: 700 18px/30px system-ui; text-align: center; }
@@ -43,7 +43,7 @@ body { font-family: 'JetBrains Mono', Menlo, monospace; color: var(--text); disp
 #run.open { height: 330px; } #run.open.tall { height: 600px; } #run.tall pre { font-size: 26px; }
 #run .head { height: 52px; display: flex; align-items: center; gap: 14px; padding: 0 22px; background: var(--tab); font-size: 24px; color: #bbbbbb; }
 #run .head .play { color: #59a869; font-size: 22px; }
-#run pre { margin: 0; padding: 14px 30px; font: 400 32px/1.45 'JetBrains Mono', Menlo, monospace; color: var(--text); white-space: pre-wrap; }
+#run pre { height: calc(100% - 52px); box-sizing: border-box; overflow: hidden; margin: 0; padding: 14px 30px; font: 400 32px/1.45 'JetBrains Mono', Menlo, monospace; color: var(--text); white-space: pre-wrap; }
 #run .dim { color: var(--cm); } #run .err { color: #ff6b68; }
 body.board #tabs, body.board #main, body.board #run { visibility: hidden; }
 body.board { background: #0d1220; }
@@ -58,8 +58,8 @@ body.board { background: #0d1220; }
   if (/[?&]board/.test(location.search)) document.body.classList.add("board");
   const $ = (id) => document.getElementById(id);
   const content = $("content"), view = $("view"), caretEl = $("caret");
-  const LH = 64, LEFT = 160;
-  let CW = 24;
+  const LEFT = 160, WIDTH = 1740; // the text column's left edge, and how far the text may reach in a 1920-wide frame
+  let CW = 24, LH = 64, FONT = 40;
   let lines = [""], caret = { l: 0, c: 0 }, sel = null, scroll = 0, scrollGoal = 0, typing = false;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -89,7 +89,7 @@ body.board { background: #0d1220; }
   }
 
   // ---- drawing ----
-  function measure() { const s = document.createElement("span"); s.style.cssText = "position:absolute;visibility:hidden;font:400 40px 'JetBrains Mono',Menlo,monospace"; s.textContent = "M".repeat(40); document.body.appendChild(s); CW = s.getBoundingClientRect().width / 40; s.remove(); }
+  function measure() { const s = document.createElement("span"); s.style.cssText = `position:absolute;visibility:hidden;font:400 ${FONT}px 'JetBrains Mono',Menlo,monospace`; s.textContent = "M".repeat(40); document.body.appendChild(s); CW = s.getBoundingClientRect().width / 40; s.remove(); }
   function render() {
     content.innerHTML = lines.map((t, i) => `<div class="ln${i === caret.l && !sel ? " on" : ""}"><span class="no">${i + 1}</span><span class="tx">${paint(t) || " "}</span></div>`).join("");
     if (sel) {
@@ -146,6 +146,10 @@ body.board { background: #0d1220; }
     }
     typing = false; caretEl.classList.add("blink");
   }
+  async function put(text, cps, paste) { // type it, or with { paste: true } drop it in at once, like code pasted back in
+    if (!paste) return type(text, cps);
+    insert(text); render(); await sleep(700);
+  }
   async function moveTo(l, c) { caret = { l, c }; sel = null; render(); await sleep(140); }
 
   // the line-level difference between two texts: equal / delete / insert runs, in order
@@ -178,7 +182,7 @@ body.board { background: #0d1220; }
         let s = 0; while (s < o0.length - p && s < n0.length - p && o0[o0.length - 1 - s] === n0[n0.length - 1 - s]) s++;
         if (o0.length - p - s > 0) { sel = { a: { l: at, c: p }, b: { l: at, c: o0.length - s } }; render(); await sleep(420); sel = null; removeRange({ l: at, c: p }, { l: at, c: o0.length - s }); render(); await sleep(120); }
         else await moveTo(at, p);
-        await type(n0.slice(p, n0.length - s), cps);
+        await put(n0.slice(p, n0.length - s), cps, o.paste);
         continue;
       }
       if (h.del.length) { // select the lines that go, then delete them
@@ -199,7 +203,7 @@ body.board { background: #0d1220; }
         } else if (!(lines.length === 1 && lines[0] === "")) { await moveTo(lines.length - 1, lines[lines.length - 1].length); insert("\n"); }
         const ind = (h.add[0].match(/^[ \t]*/) || [""])[0];
         lines[caret.l] = ind + lines[caret.l].replace(/^[ \t]*/, ""); caret.c = ind.length; render(); await sleep(160);
-        await type(h.add.join("\n").slice(ind.length), cps);
+        await put(h.add.join("\n").slice(ind.length), cps, o.paste);
         shift += h.add.length;
       }
     }
@@ -218,6 +222,12 @@ body.board { background: #0d1220; }
   window.__ed = {
     ready: () => document.fonts.ready.then(() => { measure(); render(); }),
     name(n) { $("fname").textContent = n; },
+    fit(cols) { // no sideways scrolling: if a line of this video is wider than the frame, shrink the font for the whole video
+      const k = Math.min(1, WIDTH / (cols * 0.6 * 40)); FONT = 40 * k; LH = Math.round(64 * k);
+      const r = document.documentElement.style; r.setProperty("--font", FONT + "px"); r.setProperty("--lh", LH + "px");
+      caretEl.style.height = Math.round(50 * k) + "px"; caretEl.style.marginTop = Math.round(7 * k) + "px";
+      measure(); render(); return FONT;
+    },
     set(text) { lines = text.replace(/\s+$/, "").split("\n"); caret = { l: lines.length - 1, c: lines[lines.length - 1].length }; sel = null; scroll = scrollGoal = 0; render(); },
     to,
     get typing() { return typing; },
@@ -227,10 +237,10 @@ body.board { background: #0d1220; }
     unselect() { sel = null; render(); },
     async run(cmd, out, ok) {
       $("runname").textContent = cmd || "cargo run";
-      const pre = $("out"); pre.innerHTML = `<span class="dim">$ ${esc(cmd || "cargo run")}</span>\n`;
-      $("run").classList.toggle("tall", !ok); $("run").classList.add("open"); await sleep(380); follow();
-      for (const line of out.replace(/\s+$/, "").split("\n")) { pre.innerHTML += `<span class="${ok ? "" : "err"}">${esc(line)}</span>\n`; await sleep(60); }
-      if (ok) pre.innerHTML += `\n<span class="dim">Process finished with exit code 0</span>`;
+      const compileError = /^error/.test(out); const pre = $("out"); pre.innerHTML = `<span class="dim">$ ${esc(cmd || "cargo run")}</span>\n`;
+      $("run").classList.toggle("tall", !ok || out.trim().split("\n").length > 5); // a long output gets the room an error gets
+      $("run").classList.add("open"); await sleep(380); follow();
+      for (const line of out.replace(/\s+$/, "").split("\n")) { pre.innerHTML += `<span class="${ok ? "" : "err"}">${esc(line)}</span>\n`; if (!compileError) pre.scrollTop = pre.scrollHeight; await sleep(60); } // a program's output follows its newest line, like a terminal; a compiler error keeps its first line, the one that names it
     },
     close() { $("run").classList.remove("open"); setTimeout(follow, 350); },
   };

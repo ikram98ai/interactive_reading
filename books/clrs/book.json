@@ -7,10 +7,6 @@
   "pdf": "books/clrs/CLRS.pdf",
   "printed_page_offset": 22,
   "text": "tools/.text/clrs/chNN.txt",
-  "guides": {
-    "authoring": "books/clrs/authoring.md",
-    "curriculum": "books/clrs/curriculum.md"
-  },
   "page": {
     "helpers": ["books/clrs/algo.js", "books/clrs/algo.css"],
     "reference": "books/clrs/ch27.html#elevator",
@@ -29,11 +25,12 @@
     "compile": ["rustc", "--edition", "2021", "-A", "warnings"]
   },
   "chapters": {
-    "ch01": { "book": "The Role of Algorithms in Computing", "series": "What Algorithms Are, and Why They Matter" },
-    "ch02": { "book": "Getting Started", "series": "Proving and Measuring Algorithms" },
-    "ch03": { "book": "Characterizing Running Times", "series": "Big O, Omega, and Theta" },
-    "ch04": { "book": "Divide-and-Conquer", "series": "Divide and Conquer, and How Fast It Really Is" },
-    "ch05": { "book": "Probabilistic Analysis and Randomized Algorithms", "series": "Probability, and Algorithms That Roll Dice" }
+    "ch01": { "book": "The Role of Algorithms in Computing" },
+    "ch02": { "book": "Getting Started" },
+    "ch03": { "book": "Characterizing Running Times" },
+    "ch04": { "book": "Divide-and-Conquer" },
+    "ch05": { "book": "Probabilistic Analysis and Randomized Algorithms" },
+    "ch06": { "book": "Heapsort" }
   },
   "videos": {
     "dir": "videos/clrs",
@@ -44,12 +41,16 @@
       "playlist": "Introduction to Algorithms",
       "title": "Chapter {cn}: {book_chapter} | Introduction to Algorithms",
       "intro": "Chapter {cn} of {book} ({short}), explained in depth with pseudocode. Every idea is shown on an interactive page.",
-      "publish": "the day after the chapter's last lesson, at the schedule's first time",
+      "publish": "one chapter a week, on weekday at time, starting on the day the user picks",
+      "time": "08:00",
+      "weekday": "Saturday",
       "language": false
     },
     "lessons": {
+      "dir": "videos/clrs/100days",
+      "guide": "videos/clrs/100days/README.md",
       "playlist": "Introduction to Algorithms with Rust",
-      "title": "{cn}.{n} {title} | Introduction to Algorithms with Rust",
+      "title": "Day {d}.{n}: {title} | Introduction to Algorithms with Rust",
       "tags": "#algorithms #rust #datastructures #dsa #computerscience",
       "language": true
     }

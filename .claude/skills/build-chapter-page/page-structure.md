@@ -8,7 +8,8 @@
   link starts with its section number, `<span class="n">1.4.1</span>`), and a `.stage.hero-stage` with a live,
   auto-playing, tappable SVG that shows the whole chapter in one picture.
 - One `<section class="scene" id="…">` per section, alternating `scene-grid` and `scene-grid flip`.
-  Left: `.copy` with `.eyebrow` ("1.4.1 · section title in lower case"), `<h2>`, 2–3 `.story` paragraphs, an `.imagine`
+  Left: `.copy` with `.eyebrow` ("1.4.1 · section title in lower case"), `<h2>`, a one-line gist (writing.md, "Explain
+  it simply"), 2–3 `.story` paragraphs, an `.imagine`
   box starting `<b>Try it:</b>` that says exactly what to press, and `<details class="book"><summary>What the book
   says</summary>`, ending with a `<p class="cite">` that gives the book's printed page numbers and then the section title,
   e.g. `pp.&nbsp;198–208 · Single-Leader Replication` — no author, book title or edition. `kit.js` turns the page numbers
@@ -27,5 +28,5 @@
   with the reference chapter's destructuring line and `K.page(N);`. Each sim is its own IIFE so a bug in one can't break
   the rest.
 
-A book's `authoring.md` may add to this skeleton (CLRS adds a journey section, a `.gist` per scene, and a fixed stage
-order).
+A book's reference chapter may add to this skeleton; follow it (CLRS adds a journey section, a fixed copy-column order with its
+`.gist` / `.decode` / `.whyworks` / `.mixup` classes, and a fixed stage order).

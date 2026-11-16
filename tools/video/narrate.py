@@ -26,14 +26,15 @@ import judgement
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+PRONOUNCE = HERE / "pronounce.tsv"   # how the voice says words Kokoro gets wrong (the written words stay as they are)
 NEVER_SAY = ROOT / "videos" / "never-say.txt"   # names a video must never say, one per line; kept in the local videos/ repo, off GitHub
 MAX_WORDS = 48          # longer blocks drift; split at a sentence end
 MAX_WER = 0.10          # above this, the clip probably misread the script
 RETRIES = 0             # Kokoro says a text the same way every time, so a clip that differs is reported, not regenerated
 SR = 48000
 SPEED = 0.92            # Kokoro's rate: about 190 words a minute, the pace of the tutorials these videos are modelled on
-# Lessons talk at the pace the reference tutorials use for each kind: concepts at about 190 words a minute, code lessons at
-# about 160 (slower, with room between thoughts while the code is typed), exercises and boards in between.
+# Each kind of video talks at the pace the reference tutorials use: concepts at about 190 words a minute, code videos at
+# about 160 (slower, with room between thoughts while the code is typed), boards in between.
 PACE = {"code": (0.85, 2.6), "board": (0.88, 1.6)}   # kind → (Kokoro speed, how much longer the gaps between blocks are)
 _whisper = None
 
@@ -86,6 +87,28 @@ def parse(path):
     return meta, out
 
 
+def long_form_name(chapter):
+    """The book's chapter title as a file name: "Divide-and-Conquer" → divide-and-conquer (studio_upload.js names it the same)."""
+    return re.sub(r"[^a-z0-9]+", "-", chapter.lower()).strip("-")
+
+
+def spoken(words, cues):
+    """The text the voice reads: a {say X} cue speaks its next word as X (the variable a as "Eh", where the article a stays
+    "a"), then pronounce.tsv's rules. Captions, the judgement and the Whisper check all keep the written words."""
+    words = list(words)
+    for c in cues:
+        if c["op"] == "say" and c["w"] < len(words):
+            w = words[c["w"]]; m = re.match(r"^(\W*)(.*?)(\W*)$", w)
+            words[c["w"]] = m.group(1) + c["arg"].strip() + m.group(3)
+    text = " ".join(words)
+    if PRONOUNCE.exists():
+        for line in PRONOUNCE.read_text().splitlines():
+            if line.strip() and not line.startswith("#"):
+                pat, say = line.split("\t")[:2]
+                text = re.sub(pat, say, text)
+    return text
+
+
 def book_profile(script):
     """books/<book>/book.json for a script under videos/<book>/…, or {} if there is none."""
     try: rel = pathlib.Path(script).resolve().relative_to(ROOT / "videos")
@@ -102,12 +125,14 @@ def rust(src, work, want_error, compile_cmd=("rustc", "--edition", "2021", "-A",
     rs.write_text(src + "\n")
     c = subprocess.run([*compile_cmd, "-o", str(exe), str(rs)], capture_output=True, text=True)
     if c.returncode:
-        err = c.stderr.replace(str(rs), "src/main.rs")
-        first = next((b for b in err.split("\n\n") if b.startswith("error")), err)  # the first error is the one the lesson talks about
-        out, ok = first.strip() + "\n\nerror: could not compile `main` due to a previous error", False
+        err = c.stderr.replace(str(rs), "main.rs").replace(str(pathlib.Path.home()), "~")  # no user name on screen
+        blocks = err.split("\n\n")
+        first = next((b for b in blocks if b.startswith("error")), err)  # the first error is the one the lesson talks about
+        abort = next((b.splitlines()[0] for b in blocks if b.startswith("error: aborting")), "")  # rustc's own last line
+        out, ok = first.strip() + ("\n\n" + abort if abort else ""), False
     else:
         r = subprocess.run([str(exe)], capture_output=True, text=True, timeout=20)
-        err = re.sub(r"thread '([^']*)' \(\d+\)", r"thread '\1'", r.stderr.replace(str(rs), "src/main.rs"))  # the same on every run
+        err = re.sub(r"thread '([^']*)' \(\d+\)", r"thread '\1'", r.stderr.replace(str(rs), "main.rs").replace(str(pathlib.Path.home()), "~"))  # the same on every run, and no user name on screen
         out, ok = (r.stdout + (err if r.returncode else "")).rstrip(), r.returncode == 0
     if ok == want_error:
         sys.exit(f"narrate: a {{run{' error' if want_error else ''}}} expected {'an error' if want_error else 'a clean run'}, but got:\n{out}\n--- source ---\n{src}")
@@ -275,15 +300,19 @@ def main():
     tag = "silent" if a.silent else f"{engine}-{voice}"
     out = build / tag; (out / "raw").mkdir(parents=True, exist_ok=True)
     speed, stretch = PACE.get(meta.get("kind"), (SPEED, 1.0))
-    rng = random.Random(meta.get("seed", 1))
     base = int(meta.get("seed", 1))
     res = []
     for i, s in enumerate(segs):
         words = s["text"]; text = " ".join(words)
-        rec = {"i": i, "text": text, "words": words, "cues": s["cues"], "then": s["then"], "gap": round(gap_after(s, rng) * stretch, 3), "dur": 0.0, "wav": None}
+        # each block's breath comes from its own words, so an edit in one part leaves every other part's timing alone
+        # (assemble.js re-records only the parts whose timing changed)
+        rng = random.Random(f"{base}|{text}")
+        rec = {"i": i, "text": text, "words": words, "cues": [c for c in s["cues"] if c["op"] != "say"], "then": s["then"], "gap": round(gap_after(s, rng) * stretch, 3), "dur": 0.0, "wav": None}
         res.append(rec)
         if not words: continue
-        rec["key"] = hashlib.md5(f"{tag}|{speed}|{text}".encode()).hexdigest()[:12]
+        rec["say"] = spoken(words, s["cues"])
+        # a clip spoken as written keeps its old cache key; one with a respelling gets its own
+        rec["key"] = hashlib.md5((f"{tag}|{speed}|{text}" + ("" if rec["say"] == text else f"|say:{rec['say']}")).encode()).hexdigest()[:12]
     if a.silent:
         for r in res:
             r["dur"] = len(r["words"]) * 0.4
@@ -291,7 +320,7 @@ def main():
     else:
         todo = [r for r in res if r["words"]]
         for attempt in range(RETRIES + 1):
-            need = [{"text": r["text"], "out": str(out / "raw" / f"{r['key']}.wav"), "seed": base + attempt * 101 + r["i"]} for r in todo if not (out / "raw" / f"{r['key']}.wav").exists()]
+            need = [{"text": r["say"], "out": str(out / "raw" / f"{r['key']}.wav"), "seed": base + attempt * 101 + r["i"]} for r in todo if not (out / "raw" / f"{r['key']}.wav").exists()]
             if need: print(f"{name}: synthesizing {len(need)} clips with {a.voice} (attempt {attempt + 1})", flush=True); synth(engine, voice, need, out, speed)
             bad = []
             for r in todo:
@@ -313,7 +342,11 @@ def main():
     for r in res:
         for c in r["cues"]:
             c["t"] = 0.0 if c["w"] == 0 or not r["words"] else (r["start"][c["w"]] if c["w"] < len(r["words"]) else r["dur"])
-    (out / "manifest.json").write_text(json.dumps({"meta": meta, "code": meta["code"], "runs": runs, "name": name, "out": str(home / f"{name}-{'silent' if a.silent else voice}.mp4"), "voice": a.voice, "silent": a.silent, "segments": res}, indent=1, default=float))
+    # a chapter's long form is named after the book's chapter (ch06-heapsort.mp4); silent passes and parts after the voice
+    chapter = (book.get("chapters") or {}).get(home.name, {}).get("book")
+    stem = f"{name}-{'silent' if a.silent else long_form_name(chapter) if chapter and not a.only else voice}"
+    src = lang.get("file", "main.rs")   # the editor's tab, and the command its run panel shows
+    (out / "manifest.json").write_text(json.dumps({"meta": meta, "code": meta["code"], "runs": runs, "file": src, "run_cmd": f"rustc {src} && ./{pathlib.Path(src).stem}","name": name, "out": str(home / f"{stem}.mp4"), "voice": a.voice, "silent": a.silent, "segments": res}, indent=1, default=float))
     words = sum(len(r["words"]) for r in res); dur = sum(r["dur"] + r["gap"] for r in res)
     print(f"{name}: {len(res)} blocks, {words} words, about {dur / 60:.1f} min of speech. → {out}/manifest.json")
 

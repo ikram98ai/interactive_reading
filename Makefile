@@ -8,7 +8,7 @@ MODELS := tools/video/models
 need = $(if $($(1)),,$(error $(1) is required, e.g. make $@ $(1)=$(2)))
 
 .DEFAULT_GOAL := help
-.PHONY: help setup models extract site audit factcheck rustcheck smoke play steps rustview interact narrate metrics record scenes series video-plan video-trace video-silent video-part video-qa
+.PHONY: help setup models extract site audit factcheck rustcheck smoke play steps rustview interact narrate metrics record scenes series video-plan video-trace video-silent video-part video-long video-qa
 
 help: ## List the commands
 	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  %-11s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -67,7 +67,7 @@ interact: ## Use each machine as a reader would: PAGE=…
 	node tools/browser/interact.js $(PAGE) $(ARGS)
 
 # --- video
-narrate: ## Turn a video script into timed narration: SCRIPT=videos/clrs/ch01/02-what-is-an-algorithm/script.md
+narrate: ## Turn a video script into timed narration: SCRIPT=videos/clrs/ch01/script.md
 	$(call need,SCRIPT,videos/clrs/ch01/script.md)
 	$(PY) tools/video/narrate.py $(SCRIPT) $(ARGS)
 
@@ -82,28 +82,32 @@ record: ## Record one narrated scene: SCENE=videos/scripts/<scene>.json OUT=vide
 scenes: ## Record every chapter-1 scene into videos/
 	tools/video/make-all.sh
 
-series: ## Build the YouTube series: ONLY=clrs/ch01 (a chapter, or one lesson like clrs/ch01/05-solution-insertion-sort)
+series: ## Record each numbered video in a folder (N-name/script.md), in order: ONLY=<book>/<folder> (or one video)
 	tools/video/make-series.sh "$(VOICE)" "$(ONLY)"
 
 # --- chapter videos, in the order of the write-video-script, record-video and publish-video skills (.claude/skills/)
-video-plan: ## Steps 1-2: list what a chapter page's machines offer; OUT=videos/clrs/ch02 also writes its script skeleton
+video-plan: ## Step 1: list what a chapter page's machines offer: PAGE=books/clrs/ch02.html
 	$(call need,PAGE,books/clrs/ch02.html)
-	$(PY) tools/video/plan.py $(PAGE) $(if $(OUT),--scaffold $(OUT))
+	$(PY) tools/video/plan.py $(PAGE)
 
-video-trace: ## Step 4 (long form): print a machine's pseudocode and what each Step lights: PAGE=books/clrs/ch02.html SCENE=merge ARGS="Reset"
+video-trace: ## Steps 1 and 4: print a machine's pseudocode and what each Step lights: PAGE=books/clrs/ch02.html SCENE=merge ARGS="Reset"
 	$(call need,PAGE,books/clrs/ch02.html)
 	$(call need,SCENE,merge)
 	node tools/video/trace.js $(PAGE) $(SCENE) $(ARGS)
 
-video-silent: ## Step 5: record the whole script without a voice, to check cues and claims fast: SCRIPT=videos/clrs/ch02/script.md
+video-silent: ## Step 6: record the whole script without a voice, to check cues and claims fast: SCRIPT=videos/clrs/ch02/script.md
 	$(call need,SCRIPT,videos/clrs/ch02/script.md)
 	node tools/video/studio.js $$($(PY) tools/video/narrate.py $(SCRIPT) --silent | sed -n 's/.*→ //p')
 
-video-part: ## Step 6: narrate and record one part: SCRIPT=videos/clrs/ch02/script.md ONLY="Part 1" (VOICE optional)
+video-part: ## Step 7: narrate and record one part: SCRIPT=videos/clrs/ch02/script.md ONLY="Part 1" (VOICE optional)
 	$(call need,SCRIPT,videos/clrs/ch02/script.md)
 	$(call need,ONLY,Part 1)
 	node tools/video/studio.js $$($(PY) tools/video/narrate.py $(SCRIPT) --only "$(ONLY)" --voice $(or $(VOICE),kokoro:bm_fable) | sed -n 's/.*→ //p')
 
-video-qa: ## Step 7: measure a finished video against the series' quality bar: VIDEO=videos/clrs/ch01/ch01-bm_fable.mp4
-	$(call need,VIDEO,videos/clrs/ch01/ch01-bm_fable.mp4)
+video-long: ## Step 8: narrate a long form, record only the parts that changed, join them: SCRIPT=… (VOICE, ARGS="--page-scenes=big-o" optional)
+	$(call need,SCRIPT,videos/clrs/ch03/script.md)
+	node tools/video/assemble.js $$($(PY) tools/video/narrate.py $(SCRIPT) --voice $(or $(VOICE),kokoro:bm_fable) | sed -n 's/.*→ //p') $(ARGS)
+
+video-qa: ## Step 8: measure a finished video against the quality bar for its kind: VIDEO=videos/clrs/ch01/ch01-the-role-of-algorithms-in-computing.mp4
+	$(call need,VIDEO,videos/clrs/ch01/ch01-the-role-of-algorithms-in-computing.mp4)
 	$(PY) tools/video/qa.py $(VIDEO)
