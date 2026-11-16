@@ -10,7 +10,8 @@ Everything a chapter's video needs stays in its folder: script.md, build/ (clips
   5. trim, level and write build/<voice>/manifest.json for studio.js
 
 --silent skips 3 and 4 and estimates timing at 150 words a minute: a fast way to check the highlights.
-A code lesson (kind: code) keeps the editor's text in fenced blocks, ```rust @name … ```, which are never spoken. {code name}
+A page video can switch to the editor once, at {goto editor | kicker | heading}: from there on it talks at code pace, and
+its code cues work as in a code lesson. A code lesson (kind: code) keeps the editor's text in fenced blocks, ```rust @name … ```, which are never spoken. {code name}
 types the editor into that snapshot, and {run} shows the program's real output: each snapshot that is run is compiled with
 rustc here, and the build fails if it doesn't compile, unless the cue is {run error}, which shows the compiler's error instead.
 
@@ -302,17 +303,21 @@ def main():
     speed, stretch = PACE.get(meta.get("kind"), (SPEED, 1.0))
     base = int(meta.get("seed", 1))
     res = []
+    in_editor, pace = False, {}   # a page video that switches to the editor ({goto editor | …}) talks at code pace from there on
     for i, s in enumerate(segs):
         words = s["text"]; text = " ".join(words)
+        if any(c["op"] == "goto" and c["arg"].split("|")[0].strip() == "editor" for c in s["cues"]): in_editor = True
+        sp, st = PACE["code"] if in_editor else (speed, stretch)
         # each block's breath comes from its own words, so an edit in one part leaves every other part's timing alone
         # (assemble.js re-records only the parts whose timing changed)
         rng = random.Random(f"{base}|{text}")
-        rec = {"i": i, "text": text, "words": words, "cues": [c for c in s["cues"] if c["op"] != "say"], "then": s["then"], "gap": round(gap_after(s, rng) * stretch, 3), "dur": 0.0, "wav": None}
+        rec = {"i": i, "text": text, "words": words, "cues": [c for c in s["cues"] if c["op"] != "say"], "then": s["then"], "gap": round(gap_after(s, rng) * st, 3), "dur": 0.0, "wav": None}
+        pace[i] = sp   # kept out of the manifest, so the parts assemble.js caches keep their hashes
         res.append(rec)
         if not words: continue
         rec["say"] = spoken(words, s["cues"])
         # a clip spoken as written keeps its old cache key; one with a respelling gets its own
-        rec["key"] = hashlib.md5((f"{tag}|{speed}|{text}" + ("" if rec["say"] == text else f"|say:{rec['say']}")).encode()).hexdigest()[:12]
+        rec["key"] = hashlib.md5((f"{tag}|{sp}|{text}" + ("" if rec["say"] == text else f"|say:{rec['say']}")).encode()).hexdigest()[:12]
     if a.silent:
         for r in res:
             r["dur"] = len(r["words"]) * 0.4
@@ -320,8 +325,9 @@ def main():
     else:
         todo = [r for r in res if r["words"]]
         for attempt in range(RETRIES + 1):
-            need = [{"text": r["say"], "out": str(out / "raw" / f"{r['key']}.wav"), "seed": base + attempt * 101 + r["i"]} for r in todo if not (out / "raw" / f"{r['key']}.wav").exists()]
-            if need: print(f"{name}: synthesizing {len(need)} clips with {a.voice} (attempt {attempt + 1})", flush=True); synth(engine, voice, need, out, speed)
+            need = [({"text": r["say"], "out": str(out / "raw" / f"{r['key']}.wav"), "seed": base + attempt * 101 + r["i"]}, pace[r["i"]]) for r in todo if not (out / "raw" / f"{r['key']}.wav").exists()]
+            if need: print(f"{name}: synthesizing {len(need)} clips with {a.voice} (attempt {attempt + 1})", flush=True)
+            for sp in sorted({v for _, v in need}): synth(engine, voice, [x for x, v in need if v == sp], out, sp)
             bad = []
             for r in todo:
                 raw = out / "raw" / f"{r['key']}.wav"; clean = out / f"seg{r['i']:03d}.wav"

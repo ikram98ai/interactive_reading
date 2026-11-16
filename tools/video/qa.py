@@ -21,6 +21,10 @@ LESSON = {
     "code": {"pace (wpm)": ((150, 175), (140, 185), (125, 200)), "moving (% of time)": ((0, 70), (0, 80), (0, 95)),
              "changes a minute": ((0, 40), (0, 60), (0, 90)), "longest pause (s)": ((0, 3.5), (0, 4.5), (0, 6.0)),
              "silent motion (s)": ((0, 3.0), (0, 5.0), (0, 8.0)), "clutter (% of frame)": ((0, 40), (0, 50), (0, 70))},
+    # a course day (kind: day): a concept on the chapter page, then the Rust in the editor, so its bar spans the two
+    "day": {"pace (wpm)": ((155, 190), (145, 200), (125, 210)), "moving (% of time)": ((4, 55), (3, 70), (1, 90)),
+            "changes a minute": ((4, 35), (2, 50), (1, 80)), "longest pause (s)": ((0, 3.5), (0, 4.5), (0, 6.0)),
+            "silent motion (s)": ((0, 3.0), (0, 5.0), (0, 8.0)), "clutter (% of frame)": ((0, 35), (0, 45), (0, 65))},
     "board": {"pace (wpm)": ((140, 190), (130, 200), (115, 215)), "moving (% of time)": ((0, 12), (0, 16), (0, 25)),
               "changes a minute": ((0, 14), (0, 18), (0, 25)), "longest pause (s)": ((0, 3.0), (0, 3.5), (0, 5.0)),
               "silent motion (s)": ((0, 1.5), (0, 2.5), (0, 4.0)), "clutter (% of frame)": ((0, 15), (0, 20), (0, 30))},

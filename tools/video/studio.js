@@ -23,6 +23,8 @@
    earlier parts hid still hidden, and ends on the next part's card instead of black, so the parts join without a seam.
    Every scene starts the same way: pseudocode, code panel and stats hidden, picture centred. The script reveals the rest.
          check <selector> ~ <text>  (fails the run if the page doesn't show what the narration claims)
+   A page video can switch to the editor once, mid-video: {goto editor | kicker | heading} fades in that section card, loads
+   the editor beneath it, and the card holds until {scene}. From there on the code cues below work as in a code video.
    A code video (kind: code) records tools/video/editor.html instead, starting from snapshot `start` if the script sets one:
          code <name> [fast|paste]  (type into that snapshot while the voice goes on, paced to fill the narration until
                               the next code, select or run cue; paste drops each new block in at once, for code brought
@@ -235,7 +237,7 @@ function overlayScript() {
   const mf = path.resolve(process.argv[2]), M = JSON.parse(fs.readFileSync(mf, "utf8")), meta = M.meta;
   const dir = path.dirname(mf), frames = path.join(dir, "frames");
   const out = path.resolve(process.argv[3] || M.out);
-  const EDITOR = meta.kind === "code"; // a code video records the editor, not a chapter page
+  let EDITOR = meta.kind === "code"; // a code video records the editor, not a chapter page; a page video can switch to it once
   fs.rmSync(frames, { recursive: true, force: true }); fs.mkdirSync(frames, { recursive: true });
   const named = (t) => t.split("+").map((x) => { const k = x.trim(), v = meta.targets[k] || BUILTIN[k]; if (v) return v; if (/^(svg|css|btn|stat|code|rs|mem|slider):/.test(k)) return k; throw new Error("unknown target " + k); });
   // check every target name before spending minutes on a recording
@@ -255,7 +257,7 @@ function overlayScript() {
   const problems = [];
   page.on("pageerror", (e) => problems.push("page error: " + e.message));
   page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource|fonts\.g/.test(m.text())) problems.push("console: " + m.text()); });
-  if (EDITOR) { // a code video: the editor (tools/video/editor.html) instead of a chapter page, with the same title, label and cards
+  async function openEditor() { // the editor (tools/video/editor.html), with the same title, label and cards as a page
     await page.goto("file://" + path.join(ROOT, "tools/video/editor.html"), { waitUntil: "load" });
     await page.evaluate(() => window.__ed.ready());
     await page.evaluate(overlayScript);
@@ -264,6 +266,13 @@ function overlayScript() {
     const cols = Math.max(0, ...Object.values(M.code || {}).flatMap((t) => t.split("\n").map((l) => l.length)));
     if (cols > 72) console.log(`widest line is ${cols} characters: font ${(await page.evaluate((c) => window.__ed.fit(c), cols)).toFixed(1)} px`);
     if (meta.start) await page.evaluate((t) => window.__ed.set(t), M.code[meta.start]);
+  }
+  const switches = M.segments.flatMap((s) => s.cues).filter((c) => c.op === "goto" && c.arg.split("|")[0].trim() === "editor");
+  if (switches.length && (EDITOR || switches.length > 1 || switches[0].arg.split("|").length < 3))
+    throw new Error("a page video switches to the editor once, with a card: {goto editor | kicker | heading}");
+  const hidden = []; // [from, to] on the frames' clock: frames to drop while the editor loads under a card, which holds instead
+  if (EDITOR) { // a code video: the editor instead of a chapter page
+    await openEditor();
     await page.evaluate(() => window.__vid.title(true, "", ""));
   } else {
   await page.goto("file://" + path.join(ROOT, meta.page), { waitUntil: "load" });
@@ -347,6 +356,18 @@ function overlayScript() {
     else if (c.op === "goto") {
       const [id, kicker, head] = a.split("|").map((v) => v.trim());
       const card = head != null;
+      if (id === "editor") { // the switch: the card fades in on the page, the editor loads beneath it unseen, and the card holds
+        chapters.push([now(), head]);
+        await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]); await sleep(750);
+        const from = Date.now() / 1000;
+        await openEditor();
+        await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]);
+        await cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1, maxWidth: W, maxHeight: H }).catch(() => {});
+        await sleep(900); // the card's fade on the new page, and the editor's first paint
+        hidden.push([from, Date.now() / 1000]); EDITOR = true; entered = true;
+        log("goto editor");
+        return;
+      }
       if (card) {
         chapters.push([now(), head]);
         if (entered) { await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]); await sleep(750); } // the card has faded in
@@ -434,7 +455,7 @@ function overlayScript() {
   // drifting ~10 s behind the narration over a long form, with a hold-then-skip stutter at every out-of-order frame.
   const startTs = t0 / 1000;
   const late = stamps.filter(([, t], i) => i && t < stamps[i - 1][1]).length;
-  const useful = stamps.filter(([, t]) => t >= startTs - 0.2 && t <= startTs + total).sort((p, q) => p[1] - q[1])
+  const useful = stamps.filter(([, t]) => t >= startTs - 0.2 && t <= startTs + total && !hidden.some(([a, b]) => t > a && t < b)).sort((p, q) => p[1] - q[1])
     .filter(([, t], i, a) => i + 1 === a.length || a[i + 1][1] > t); // of frames sharing a timestamp, keep the last
   const list = path.join(dir, "frames.txt");
   let txt = "";
