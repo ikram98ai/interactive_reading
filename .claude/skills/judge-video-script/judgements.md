@@ -55,8 +55,7 @@ Analogies count here too. Say where an analogy stops working before the viewer r
 
 ## 7. Is it consistent?
 
-The same name, number and advice must hold within a video, across the videos that build on it, and between a book's
-own videos (such as CLRS's 100-day course) and the chapter's long-form `script.md`.
+The same name, number and advice must hold within a video, and across the videos that build on it.
 
 > ✗ "…even if it takes half an hour… Spend fifteen minutes on it." Pick one.
 

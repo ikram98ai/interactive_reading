@@ -10,10 +10,6 @@ Every book with videos (`books/<slug>/book.json` `videos` is not null) gets **on
 the book's pseudocode, with its own rules in [long-form.md](long-form.md). A chapter gets no other videos: no lesson
 series, and no intro, summary or wrap-up videos.
 
-A book may also have videos of its own beyond the chapters. If so, its `book.json` names their guide
-(`videos.lessons.guide`), and that guide says how they're made. This skill's voice, picture and lint rules still apply
-to them.
-
 The format comes from measuring a well-regarded programming course video by video (`videos/demo`). Today the recorder
 can drive only CLRS pages (`books/clrs`).
 

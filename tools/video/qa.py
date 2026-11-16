@@ -17,14 +17,10 @@ W, H, FPS = 320, 180, 30
 # Each kind of video (its script's `kind:`) has its own bar, from the same tutorials measured video by video: code videos talk
 # slower and type while silent, boards talk between the two (narrate.py's PACE) with less moving, and an editor full
 # of code is meant to fill the frame.
-LESSON = {
+BY_KIND = {
     "code": {"pace (wpm)": ((140, 164), (131, 173), (117, 187)), "moving (% of time)": ((0, 70), (0, 80), (0, 95)),
              "changes a minute": ((0, 40), (0, 60), (0, 90)), "longest pause (s)": ((0, 3.5), (0, 4.5), (0, 6.0)),
              "silent motion (s)": ((0, 3.0), (0, 5.0), (0, 8.0)), "clutter (% of frame)": ((0, 40), (0, 50), (0, 70))},
-    # a course day (kind: day): a concept on the chapter page, then the Rust in the editor, so its bar spans the two
-    "day": {"pace (wpm)": ((145, 178), (136, 187), (117, 196)), "moving (% of time)": ((4, 55), (3, 70), (1, 90)),
-            "changes a minute": ((4, 35), (2, 50), (1, 80)), "longest pause (s)": ((0, 3.5), (0, 4.5), (0, 6.0)),
-            "silent motion (s)": ((0, 3.0), (0, 5.0), (0, 8.0)), "clutter (% of frame)": ((0, 35), (0, 45), (0, 65))},
     "board": {"pace (wpm)": ((131, 178), (122, 187), (108, 201)), "moving (% of time)": ((0, 12), (0, 16), (0, 25)),
               "changes a minute": ((0, 14), (0, 18), (0, 25)), "longest pause (s)": ((0, 3.0), (0, 3.5), (0, 5.0)),
               "silent motion (s)": ((0, 1.5), (0, 2.5), (0, 4.0)), "clutter (% of frame)": ((0, 15), (0, 20), (0, 30))},
@@ -75,7 +71,7 @@ def main():
     path = sys.argv[1]
     try: kind = re.search(r"^kind:\s*(\w+)", open(re.sub(r"[^/]+$", "script.md", path)).read(), re.M).group(1)
     except (OSError, AttributeError): kind = "chapter"
-    bar = dict(BAR, **LESSON.get(kind, {}))
+    bar = dict(BAR, **BY_KIND.get(kind, {}))
     # a script can accept one measure for a written reason (front matter `qa-allow: clutter (why)`): it can warn, never fail
     try: allow = re.search(r"^qa-allow:\s*(.+)$", open(re.sub(r"[^/]+$", "script.md", path)).read(), re.M).group(1)
     except (OSError, AttributeError): allow = ""

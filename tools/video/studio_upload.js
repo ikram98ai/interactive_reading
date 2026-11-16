@@ -9,18 +9,14 @@
    place of that one (its record moves to <video>.retired.youtube.json; unlisting the old video is done by hand).
    --plan prints all of it, problems included, and uploads nothing.
 
-   studio_upload.js <book dir> [--from ch04/18] [--to ch05/18] [--plan] [--limit N]
-   Uploads lessons through YouTube Studio's web UI (no API), in course order, and for each one sets
-   the title, the description, "not made for kids", the .srt captions, and a scheduled publish time.
+   studio_upload.js <book dir> --titles [--from ch04] [--to ch05] [--plan] [--limit N]
+   Updates the title and the description's first line (videos.long_form.intro) of every long form already up, and never
+   moves a publish time. --plan lists what would change.
 
-   Titles and descriptions come from <ch>/youtube-meta.json; the publish day from <book>/schedule.json
-   (lessons on the same day go out GAP_HOURS apart from its "at", in Studio's channel time zone). The thumbnail is
-   the chapter and title in large type (thumb.js), saved beside it as <video>.thumb.jpg. --steps screenshots each dialog step.
-   Progress is written to <lesson>/<video>.youtube.json, so a rerun skips what is already up.
-   --plan prints what would be uploaded and stops. --edit instead updates lessons already up (thumbnail, publish time).
-   --titles updates only the title and description of every video already up, lessons and long-form, and never moves a
-   publish time. Names, title formats, tags, site and schedule come from books/<book>/book.json (its "videos" block).
-   Chrome profile: ~/.config/interactive-reading/chrome-studio. */
+   Everything goes through YouTube Studio's web UI (no API). The thumbnail is the chapter and title in large type
+   (thumb.js), saved beside the video as <video>.thumb.jpg. --steps screenshots each dialog step. Progress is written to
+   <video>.youtube.json, so a rerun resumes. Names, title formats, site and schedule come from books/<book>/book.json
+   (its "videos" block). Chrome profile: ~/.config/interactive-reading/chrome-studio. */
 const fs = require("fs"), os = require("os"), path = require("path"), crypto = require("crypto"), cp = require("child_process");
 const { chromium } = require("playwright-core");
 
@@ -30,82 +26,29 @@ const VALUED = ["--from", "--to", "--limit", "--long-form", "--day", "--replaces
 const BOOK = path.resolve(args.find((a, i) => !a.startsWith("--") && !VALUED.includes(args[i - 1])) || "videos/clrs");
 const ROOT = path.join(__dirname, "../..");
 const PROFILE = JSON.parse(fs.readFileSync(path.join(ROOT, "books", path.basename(BOOK), "book.json"), "utf8"));
-const V = PROFILE.videos; // outputs, playlists, title formats, tags, site, schedule
+const V = PROFILE.videos; // the long form's playlist, title format and intro, site, schedule
 if (!V) throw new Error(`books/${path.basename(BOOK)}/book.json declares no videos`);
-const LESSONS = V.lessons || {};
-const SERIES = LESSONS.playlist, TAGS = LESSONS.tags, SITE = V.site;
+const SITE = V.site;
 const LONG = opt("--long-form"), DAY = opt("--day"), REPLACES = opt("--replaces"), NOW = args.includes("--now");
-const VOICE_TAG = V.voice.split(":").pop(); // kokoro:bm_fable → bm_fable, as narrate.py names a lesson
+const VOICE_TAG = V.voice.split(":").pop(); // kokoro:bm_fable → bm_fable, narrate.py's name for a video with no chapter title
 // a chapter's long form is named after the book's chapter, as narrate.py names it: "Divide-and-Conquer" → divide-and-conquer
 const longFormName = (chapter) => chapter.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+const longFormStem = (ch) => `${ch}-${PROFILE.chapters[ch] ? longFormName(PROFILE.chapters[ch].book) : VOICE_TAG}`;
 const hm = (t) => t.split(":").map(Number);
-const GAP_HOURS = V.schedule.gap_hours, LAST_HOUR = hm(V.schedule.last)[0], UTC_OFFSET = V.schedule.utc_offset_hours;
-// same-day lessons go out GAP_HOURS apart from the first time; a day with more starts earlier so the last is out at LAST_HOUR
+const UTC_OFFSET = V.schedule.utc_offset_hours;
 const fill = (tpl, vals) => tpl.replace(/\{(\w+)\}/g, (_, k) => { if (!(k in vals)) throw new Error(`title format has no {${k}}`); return vals[k]; });
 const FROM = opt("--from"), TO = opt("--to"), LIMIT = Number(opt("--limit") || 1e9), PLAN = args.includes("--plan"), TITLES = args.includes("--titles");
 const SHOTS = BOOK;
 const STEPS = args.includes("--steps") ? path.join(BOOK, "studio-steps") : null; // a screenshot of each dialog step, to check a run
 if (STEPS) fs.mkdirSync(STEPS, { recursive: true });
 
-const key = (ch, n) => `${ch}/${String(n).padStart(2, "0")}`;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function plan() {
-  const schedFile = path.join(BOOK, "schedule.json");
-  const sched = fs.existsSync(schedFile) ? JSON.parse(fs.readFileSync(schedFile, "utf8")) : { at: V.schedule.first, days: {} };
-  const when = {}; // "ch04/18" -> { day, minute }
-  for (const [day, ids] of Object.entries(sched.days)) ids.forEach((id, i) => (when[id] = { day, minute: i, count: ids.length }));
+// --titles: every long form already up, with the title and intro line book.json gives it now
+function titlesPlan() {
   const items = [];
   for (const ch of fs.readdirSync(BOOK).filter((d) => /^ch\d+$/.test(d)).sort()) {
-    const metaFile = path.join(BOOK, ch, "youtube-meta.json"); // only chapters that still have lessons
-    if (!fs.existsSync(metaFile)) continue;
-    const meta = JSON.parse(fs.readFileSync(metaFile, "utf8"));
-    const lessons = fs.readdirSync(path.join(BOOK, ch)).filter((d) => /^\d\d-/.test(d)).sort();
-    const wholeRec = path.join(BOOK, ch, `${ch}-bm_fable.youtube.json`);
-    const whole = fs.existsSync(wholeRec) ? JSON.parse(fs.readFileSync(wholeRec, "utf8")).video_id : "(not up yet)";
-    const cn = Number(ch.slice(2));
-    for (const dir of lessons) {
-      const n = Number(dir.slice(0, 2)), id = key(ch, n);
-      if (FROM && id < FROM) continue;
-      if (TO && id > TO) continue;
-      const m = meta[dir];
-      if (!m) throw new Error(`${ch}/youtube-meta.json has no entry for ${dir}`);
-      const stem = `${dir}-bm_fable`, folder = path.join(BOOK, ch, dir);
-      const record = path.join(folder, `${stem}.youtube.json`);
-      const rec = fs.existsSync(record) ? JSON.parse(fs.readFileSync(record, "utf8")) : null;
-      const ttl = fill(V.lessons.title, { cn, n, title: m.title });
-      const description = `${m.description}\n\nChapter ${cn} (${PROFILE.chapters[ch].series}), lesson ${n} of ${lessons.length} in ${SERIES}, ` +
-        `a course through ${PROFILE.title} with interactive pages and Rust code.\n\n` +
-        `Interactive page for this chapter: ${SITE}/${ch}.html\n` +
-        `The whole chapter as one video: https://youtu.be/${whole}\n\n${TAGS}`;
-      const w = when[id];
-      if (!w && !(TITLES && rec)) throw new Error(`schedule.json has no day for ${id}`);
-      if (ttl.length > 100) throw new Error(`${id}: title is ${ttl.length} characters (Studio allows 100)`);
-      if (!w) { // --titles on a video already up: its time stays where it is
-        items.push({ id, kind: "lesson", folder, title: ttl, description, record, publish_at: rec.publish_at,
-          meta: crypto.createHash("sha1").update(ttl + "\n" + description).digest("hex").slice(0, 12) });
-        continue;
-      }
-      const [hh, mm] = sched.at.split(":").map(Number);
-      const startMin = Math.min(hh * 60 + mm, LAST_HOUR * 60 - (w.count - 1) * GAP_HOURS * 60);
-      const total = startMin + w.minute * GAP_HOURS * 60, h = Math.floor(total / 60), mi = total % 60;
-      if (h > 23) throw new Error(`${id}: ${w.day} has too many lessons to space ${GAP_HOURS} h apart from ${sched.at}`);
-      const [y, mo, d] = w.day.split("-").map(Number);
-      const utc = new Date(Date.UTC(y, mo - 1, d, h - UTC_OFFSET, mi)); // the channel's time zone, no DST
-      const title = ttl;
-      if (title.length > 100) throw new Error(`${id}: title is ${title.length} characters (Studio allows 100)`);
-      if (description.length > 5000 || /[<>]/.test(description)) throw new Error(`${id}: description Studio would reject`);
-      items.push({
-        id, kind: "lesson", folder, title, description, video: path.join(folder, `${stem}.mp4`), srt: path.join(folder, `${stem}.srt`),
-        record: path.join(folder, `${stem}.youtube.json`), thumb: path.join(folder, `${stem}.thumb.jpg`),
-        date: `${MONTHS[mo - 1]} ${d}, ${y}`, time: `${((h + 11) % 12) + 1}:${String(mi).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`,
-        publish_at: utc.toISOString().replace(".000", ""),
-        meta: crypto.createHash("sha1").update(title + "\n" + description).digest("hex").slice(0, 12),
-      });
-    }
-  }
-  if (TITLES) for (const ch of fs.readdirSync(BOOK).filter((d) => /^ch\d+$/.test(d)).sort()) { // the long-form videos
-    const record = path.join(BOOK, ch, `${ch}-bm_fable.youtube.json`), cn = Number(ch.slice(2));
+    const record = path.join(BOOK, ch, `${longFormStem(ch)}.youtube.json`), cn = Number(ch.slice(2));
     if (!fs.existsSync(record) || !PROFILE.chapters[ch] || (FROM && ch < FROM.slice(0, 4)) || (TO && ch > TO.slice(0, 4))) continue;
     const title = fill(V.long_form.title, { cn, book_chapter: PROFILE.chapters[ch].book });
     if (title.length > 100) throw new Error(`${ch} long-form: title is ${title.length} characters (Studio allows 100)`);
@@ -123,9 +66,8 @@ const git = (...a) => cp.execFileSync("git", ["-C", BOOK, ...a], { encoding: "ut
 const secs = (t) => t.split(":").reduce((s, x) => s * 60 + Number(x), 0);
 const fresh = (file, cache) => { const s = fs.statSync(file); return cache && cache.size === s.size && cache.mtimeMs === s.mtimeMs; };
 
-// The publish time: `day` at the long form's time (else the schedule's first), in the channel's time zone (no DST), as
-// Studio's dialog wants it.
-const LONG_TIME = (V.long_form && V.long_form.time) || V.schedule.first;
+// The publish time: `day` at the long form's time, in the channel's time zone (no DST), as Studio's dialog wants it.
+const LONG_TIME = V.long_form.time;
 function slot(day) {
   const [y, mo, d] = day.split("-").map(Number), [h, mi] = hm(LONG_TIME);
   const utc = new Date(Date.UTC(y, mo - 1, d, h - UTC_OFFSET, mi));
@@ -145,8 +87,7 @@ function chapterLines(file) {
 
 function longFormPlan(ch) {
   if (!/^ch\d\d$/.test(ch || "")) throw new Error(`--long-form takes a chapter folder such as ch06, not ${ch}`);
-  const chapter = PROFILE.chapters[ch] && PROFILE.chapters[ch].book;
-  const folder = path.join(BOOK, ch), stem = `${ch}-${chapter ? longFormName(chapter) : VOICE_TAG}`, f = (ext) => path.join(folder, stem + ext);
+  const folder = path.join(BOOK, ch), stem = longFormStem(ch), f = (ext) => path.join(folder, stem + ext);
   const it = { id: `${ch}/long-form`, kind: "long-form", ch, folder, stem, video: f(".mp4"), srt: f(".srt"), chapters: f(".chapters.txt"),
     thumb: f(".thumb.jpg"), record: f(".youtube.json"), qaFile: f(".qa.json"), script: path.join(folder, "script.md"),
     playlist: V.long_form.playlist, problems: [], notes: [] };
@@ -241,7 +182,7 @@ function printLong(it) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // The thumbnail: the video's chapter and title in large type, from its script's front matter (thumb.js). THUMB names this
-// design in each upload record, so --edit replaces thumbnails made before it (the old first-frame ones).
+// design in each upload record.
 const THUMB = "large-title";
 const makeThumb = (it) => cp.execFileSync("node", [path.join(__dirname, "thumb.js"), path.join(path.dirname(it.video), "script.md"), it.thumb], { stdio: "ignore" });
 
@@ -301,8 +242,8 @@ async function addCaptions(page, dlg, it) {
   if (!/edit/i.test(row)) throw new Error(`subtitles did not save (button reads "${row}")`);
 }
 
-// The playlist box reads back its playlists as "A, B"; a name must match one exactly ("Introduction to Algorithms" is
-// a prefix of the Rust course's playlist). It never creates a playlist.
+// The playlist box reads back its playlists as "A, B"; a name must match one exactly, never by prefix. It never creates
+// a playlist.
 const picked = async (box) => (await box.innerText().catch(() => "")).split(/\n|,/).map((s) => s.trim());
 async function setPlaylist(page, dlg, name) {
   const box = dlg.locator("ytcp-video-metadata-playlists").first();
@@ -449,14 +390,14 @@ async function upload(page, it) {
     .catch(() => { throw new Error(`Studio did not confirm the ${it.now ? "publish" : "schedule"}`); });
   Object.assign(rec, { title: it.title, meta: it.meta, captions: "studio", thumbnail: THUMB },
     it.now ? { visibility: "public", published: new Date().toISOString().replace(/\.\d+Z$/, "Z") } : { publish_at: it.publish_at });
-  if (it.kind === "long-form") Object.assign(rec, { playlist: it.playlist, status: it.now ? "public" : "scheduled", done: true }, it.replaces ? { replaces: it.replaces } : {});
+  Object.assign(rec, { playlist: it.playlist, status: it.now ? "public" : "scheduled", done: true }, it.replaces ? { replaces: it.replaces } : {});
   delete rec.incomplete;
   fs.writeFileSync(it.record, JSON.stringify(rec, null, 2) + "\n");
   await page.keyboard.press("Escape").catch(() => {});
   return rec.video_id;
 }
 
-// --titles: set the title (and, for a lesson, the description) of a video already up. Never touches its schedule.
+// --titles: set the title and the description's first line of a long form already up. Never touches its schedule.
 async function retitle(page, it, rec) {
   await page.goto(`https://studio.youtube.com/video/${rec.video_id}/edit`, { waitUntil: "domcontentloaded" });
   const titleBox = page.locator("#title-textarea #textbox").first();
@@ -464,10 +405,7 @@ async function retitle(page, it, rec) {
   await sleep(4000); // the edit page fills its boxes after it appears; reading earlier can see the previous video's text
   const changed = [];
   if ((await titleBox.innerText()).trim() !== it.title) { await setText(page, titleBox, it.title); changed.push("title"); }
-  if (it.description) {
-    const box = page.locator("#description-textarea #textbox").first();
-    if ((await box.innerText()).trim() !== it.description.trim()) { await setText(page, box, it.description); changed.push("description"); }
-  } else if (it.intro) { // long-form: replace the first line, keep the rest (links, chapters) as Studio has it
+  if (it.intro) { // replace the first line, keep the rest (links, chapters) as Studio has it
     const box = page.locator("#description-textarea #textbox").first();
     const now = (await box.innerText()).trim(), rest = now.includes("\n") ? now.slice(now.indexOf("\n")) : "";
     const own = `${SITE}/${it.id.slice(0, 4)}.html`; // guards against reading the previous video's text
@@ -488,69 +426,6 @@ async function retitle(page, it, rec) {
   if (it.meta) rec.meta = it.meta;
   fs.writeFileSync(it.record, JSON.stringify(rec, null, 2) + "\n");
   return changed;
-}
-
-// --edit: for lessons already up, set the large-title thumbnail and move the publish time to the plan's
-async function edit(page, it, rec) {
-  await page.goto(`https://studio.youtube.com/video/${rec.video_id}/edit`, { waitUntil: "domcontentloaded" });
-  await page.locator("#title-textarea #textbox").first().waitFor({ timeout: 60000 });
-  await sleep(3000);
-  const changed = [];
-  if (rec.thumbnail !== THUMB) {
-    makeThumb(it);
-    await page.locator("input#file-loader").first().setInputFiles(it.thumb);
-    await sleep(4000);
-    changed.push("thumbnail");
-  }
-  let status = "scheduled";
-  if (rec.publish_at !== it.publish_at || rec.schedule_checked !== true) {
-    await page.locator("ytcp-video-metadata-visibility").first().click();
-    await sleep(2500);
-    const trigger = page.locator("#datepicker-trigger").first();
-    if (!(await trigger.isVisible().catch(() => false))) { // already public: its time can't move
-      status = "public";
-      await page.keyboard.press("Escape"); await sleep(1000);
-    } else if (new Date(it.publish_at) <= new Date(Date.now() + 15 * 60000)) {
-      status = "too-soon"; // Studio won't schedule into the past, and a time this close isn't worth moving
-      await page.keyboard.press("Escape"); await sleep(1000);
-    } else {
-      await trigger.click(); await sleep(1000);
-      const dateInput = page.locator("ytcp-date-picker tp-yt-paper-input input, ytcp-date-picker input").last();
-      await dateInput.waitFor({ state: "visible", timeout: 15000 });
-      await dateInput.fill(it.date); await dateInput.press("Enter"); await sleep(1000);
-      const timeInput = page.locator("#time-of-day-container input").first();
-      await timeInput.click(); await timeInput.fill(it.time); await timeInput.press("Enter"); await sleep(1000);
-      const shownDate = (await trigger.innerText()).trim(), shownTime = await timeInput.inputValue();
-      await shot(page, it, "edit-schedule");
-      if (!shownDate.includes(it.date) || shownTime.replace(/\s/g, "") !== it.time.replace(/\s/g, ""))
-        throw new Error(`schedule reads back as ${shownDate} ${shownTime}, wanted ${it.date} ${it.time}`);
-      const doneBtn = page.locator("ytcp-button#save-button").first();
-      if (await doneBtn.isEnabled() && (await doneBtn.getAttribute("aria-disabled")) !== "true") {
-        await doneBtn.click(); await sleep(1500);
-        changed.push("schedule");
-      } else { // already at that time: Studio greys out Done when nothing changed
-        await page.keyboard.press("Escape"); await sleep(1000);
-        rec.publish_at = it.publish_at;
-      }
-    }
-  }
-  if (changed.length) {
-    const save = page.locator("ytcp-button#save").first();
-    await save.click();
-    let saved = false;
-    for (let i = 0; i < 30 && !saved; i++) {
-      await sleep(1000);
-      saved = (await save.getAttribute("aria-disabled").catch(() => null)) === "true" || !(await save.isEnabled().catch(() => true));
-    }
-    if (!saved) throw new Error("Studio did not save the changes");
-    await shot(page, it, "edit-saved");
-  }
-  if (changed.includes("thumbnail")) rec.thumbnail = THUMB;
-  if (changed.includes("schedule")) rec.publish_at = it.publish_at;
-  rec.schedule_checked = true;
-  rec.status = status;
-  fs.writeFileSync(it.record, JSON.stringify(rec, null, 2) + "\n");
-  return { changed, status };
 }
 
 (async () => {
@@ -585,7 +460,7 @@ async function edit(page, it, rec) {
     return;
   }
   if (TITLES) {
-    const items = plan().filter((it) => fs.existsSync(it.record)).map((it) => [it, JSON.parse(fs.readFileSync(it.record, "utf8"))])
+    const items = titlesPlan().map((it) => [it, JSON.parse(fs.readFileSync(it.record, "utf8"))])
       .filter(([it, rec]) => rec.title !== it.title || (it.meta && rec.meta !== it.meta));
     console.log(`${items.length} videos to retitle`);
     if (PLAN) { for (const [it, rec] of items) console.log(`${it.id}  ${rec.title || "(no title on record)"}\n   → ${it.title}${it.meta && rec.meta !== it.meta ? "  (+ description)" : ""}`); return; }
@@ -605,54 +480,6 @@ async function edit(page, it, rec) {
     } finally { await ctx.close(); }
     return;
   }
-  if (args.includes("--edit")) {
-    const items = plan().filter((it) => fs.existsSync(it.record)).map((it) => [it, JSON.parse(fs.readFileSync(it.record, "utf8"))])
-      .filter(([it, rec]) => rec.thumbnail !== THUMB || rec.schedule_checked !== true ||
-        (rec.status !== "public" && rec.publish_at !== it.publish_at)); // a public lesson's time can't move
-    console.log(`${items.length} lessons to update`);
-    if (PLAN) { for (const [it] of items) console.log(`${it.id}  → ${it.date} ${it.time} PKT  ${it.title}`); return; }
-    const ctx = await launch();
-    const page = ctx.pages()[0] || (await ctx.newPage());
-    let n = 0;
-    try {
-      for (const [it, rec] of items.slice(0, LIMIT)) {
-        const r = await edit(page, it, rec);
-        n++;
-        console.log(`  updated ${it.id} https://youtu.be/${rec.video_id}  ${r.changed.join("+") || "nothing"}` +
-          `${r.status === "scheduled" ? `  → ${it.date} ${it.time}` : `  (${r.status}, time kept)`}  (${n}/${items.length})`);
-      }
-    } catch (e) {
-      const shotPath = path.join(SHOTS, "studio-edit-error.png");
-      await page.screenshot({ path: shotPath }).catch(() => {});
-      console.log(`STOPPED: ${e.message.split("\n")[0]}\n  screenshot: ${shotPath}`);
-      process.exitCode = 1;
-    } finally { await ctx.close(); }
-    return;
-  }
-  const finished = (it) => fs.existsSync(it.record) && JSON.parse(fs.readFileSync(it.record, "utf8")).publish_at;
-  const todo = plan().filter((it) => !finished(it));
-  console.log(`${todo.length} lessons to upload`);
-  if (PLAN) {
-    for (const it of todo) console.log(`${it.id}  ${it.date} ${it.time} PKT (${it.publish_at})  ${it.title}`);
-    return;
-  }
-  const ctx = await launch();
-  const page = ctx.pages()[0] || (await ctx.newPage());
-  let done = 0;
-  try {
-    for (const it of todo.slice(0, LIMIT)) {
-      console.log(it.id);
-      const r = await upload(page, it);
-      if (r === "limit") { console.log("STOPPED: Studio's daily upload limit is reached"); break; }
-      done++;
-      console.log(`  uploaded https://youtu.be/${r}  ${it.title}  → ${it.date} ${it.time}  (${done}/${todo.length})`);
-    }
-  } catch (e) {
-    const shot = path.join(SHOTS, "studio-upload-error.png");
-    await page.screenshot({ path: shot }).catch(() => {});
-    console.log(`STOPPED: ${e.message.split("\n")[0]}\n  screenshot: ${shot}`);
-    process.exitCode = 1;
-  } finally {
-    await ctx.close();
-  }
+  console.error("studio_upload: pass --long-form chNN to upload a chapter's long form, or --titles to retitle the ones already up");
+  process.exitCode = 2;
 })();

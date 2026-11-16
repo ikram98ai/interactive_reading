@@ -8,7 +8,7 @@ MODELS := tools/video/models
 need = $(if $($(1)),,$(error $(1) is required, e.g. make $@ $(1)=$(2)))
 
 .DEFAULT_GOAL := help
-.PHONY: help setup models extract site audit factcheck rustcheck smoke play steps rustview interact narrate metrics record scenes series video-plan video-trace video-silent video-part video-long video-qa
+.PHONY: help setup models extract site audit factcheck rustcheck smoke play steps rustview interact narrate metrics record scenes video-plan video-trace video-silent video-part video-long video-qa
 
 help: ## List the commands
 	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  %-11s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -81,9 +81,6 @@ record: ## Record one narrated scene: SCENE=videos/scripts/<scene>.json OUT=vide
 
 scenes: ## Record every chapter-1 scene into videos/
 	tools/video/make-all.sh
-
-series: ## Record each numbered video in a folder (N-name/script.md), in order: ONLY=<book>/<folder> (or one video)
-	tools/video/make-series.sh "$(VOICE)" "$(ONLY)"
 
 # --- chapter videos, in the order of the write-video-script, record-video and publish-video skills (.claude/skills/)
 video-plan: ## Step 1: list what a chapter page's machines offer: PAGE=books/clrs/ch02.html

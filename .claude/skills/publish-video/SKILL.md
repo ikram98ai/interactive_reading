@@ -41,15 +41,9 @@ the MP4 changes). Its WARN lines are in the plan: fix each, or write down why it
     unfinished upload when rerun. It can't create a playlist: one missing from Studio's list stops the run.
   - `--titles` updates the title and description of a long-form video that's already up (it needs the video's record
     on disk).
-  - Its lesson upload and `--edit` paths were written for retired per-chapter lessons (`videos/<book>/chNN/NN-name/`),
-    so they find nothing to upload now.
-- **What it can't do yet:** **a book's own videos** (`videos.lessons`). Their guide (`videos.lessons.guide`) says what
-  uploading them needs.
 - **Every book: one long form per chapter**, in `videos.long_form.playlist` and titled by `videos.long_form.title`. For
   CLRS that's "Introduction to Algorithms", and a title like "Chapter 1: The Role of Algorithms in Computing |
   Introduction to Algorithms".
-- **A book's own videos**, if `book.json` declares them, go to `videos.lessons.playlist`, titled by
-  `videos.lessons.title`.
 - Studio allows 100 characters in a title.
 - **Descriptions:**
   - A long-form description opens with `videos.long_form.intro`, then the chapter's page link (`videos.site`) and the
@@ -58,8 +52,8 @@ the MP4 changes). Its WARN lines are in the plan: fix each, or write down why it
   - `studio_upload.js --titles` rewrites only that first line, and refuses if the text it reads doesn't link that
     chapter's page.
   - Every video gets its `.srt` captions, "not made for kids", and a thumbnail made by `tools/video/thumb.js`: the chapter and title in large type, readable at a phone feed's size.
-- **The schedule** (`videos.schedule`) is in the channel's time zone, Asia/Karachi. Videos go out at `first`, then
-  `gap_hours` apart, the last by `last`. Ask the user which day a video goes out. Scheduling is done
+- **The schedule** (`videos.schedule`) is in the channel's time zone, Asia/Karachi. A long form goes out at
+  `videos.long_form.time` on a `videos.long_form.weekday`. Ask the user which day a video goes out. Scheduling is done
   on YouTube, not by holding files back locally.
 - **Limits:** Studio allows about 70 uploads in a rolling 24 hours ("Daily upload limit reached" in the dialog). Stop
   and resume later; the records make it safe.

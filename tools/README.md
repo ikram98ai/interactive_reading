@@ -109,8 +109,7 @@ A long form is recorded with `make video-long SCRIPT=…` (the record-video skil
 records each part (the intro, and each section card on) with `studio.js` on its own, caches it, and joins the parts
 into one video with a `.srt` and `.chapters.txt` for YouTube. After an edit, only the parts whose words or cues changed
 are recorded again. A change to the chapter page, or to `studio.js`, re-records every part, unless
-`ARGS="--page-scenes=<ids>"` names the scenes the page edit touched; `ARGS=--dry-run` lists what would be recorded. `make series VOICE=<voice> ONLY=<book>/<folder>` records a folder of numbered videos, such as a day of the
-100-day course. To try one part first, `make video-part SCRIPT=videos/clrs/ch01/script.md ONLY="Part 1 of"` narrates
+`ARGS="--page-scenes=<ids>"` names the scenes the page edit touched; `ARGS=--dry-run` lists what would be recorded. To try one part first, `make video-part SCRIPT=videos/clrs/ch01/script.md ONLY="Part 1 of"` narrates
 that part (the `{goto}` whose text contains it) and records it. `narrate.py` speaks every block with Kokoro, transcribes the clip with Whisper (`faster-whisper`, on the CPU, downloaded
 on first use), reports clips that don't say what the script says, and uses the word times to place the cues. Both are cached in
 the chapter's `build/`, so only changed blocks are redone. The voice for YouTube is `kokoro:bm_fable` (the default; `kokoro:am_liam` was tried and rejected); any other

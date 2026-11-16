@@ -36,7 +36,7 @@
     "dir": "videos/clrs",
     "voice": "kokoro:bm_fable",
     "site": "https://ikram98ai.github.io/interactive_reading/books/clrs",
-    "schedule": { "timezone": "Asia/Karachi", "utc_offset_hours": 5, "first": "18:00", "gap_hours": 2, "last": "22:00" },
+    "schedule": { "timezone": "Asia/Karachi", "utc_offset_hours": 5 },
     "long_form": {
       "playlist": "Introduction to Algorithms",
       "title": "Chapter {cn}: {book_chapter} | Introduction to Algorithms",
@@ -45,14 +45,6 @@
       "time": "08:00",
       "weekday": "Saturday",
       "language": false
-    },
-    "lessons": {
-      "dir": "videos/clrs/100days",
-      "guide": "videos/clrs/100days/README.md",
-      "playlist": "Introduction to Algorithms with Rust",
-      "title": "Day {d}.{n}: {title} | Introduction to Algorithms with Rust",
-      "tags": "#algorithms #rust #datastructures #dsa #computerscience",
-      "language": true
     }
   }
 }

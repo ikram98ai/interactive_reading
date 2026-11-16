@@ -52,7 +52,7 @@ One table per chapter. Quote the sentence exactly, and give its file and line.
 ```
 | File:line                          | Sentence (quoted)                | # | Severity   | Source / evidence                 | Fix                                  |
 | ---------------------------------- | -------------------------------- | - | ---------- | --------------------------------- | ------------------------------------ |
-| 100days/…/2-rust/script.md:81      | "it's based on merge sort"       | 3 | Imprecise  | slice.rs docs: driftsort          | "a hybrid built on merge sort and…"  |
+| clrs/ch02/script.md:81             | "it's based on merge sort"       | 3 | Imprecise  | slice.rs docs: driftsort          | "a hybrid built on merge sort and…"  |
 ```
 
 Then list what you checked and found right: the numbers you recomputed, and the claims you matched to a page of the
