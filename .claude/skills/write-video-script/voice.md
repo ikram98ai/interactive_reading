@@ -1,6 +1,7 @@
 # The voice
 
-- **Pace by video kind:** concepts at about 190 words a minute, code videos at about 160, boards in between. `narrate.py` sets Kokoro's speed and the gaps for each `kind`; don't add `{pause}` to slow it down.
+- **Pace by video kind:** concepts at about 175 words a minute, code videos at about 150, boards in between (the
+  reference course's pace, slowed about 7% by choice). `narrate.py` sets Kokoro's speed and the gaps for each `kind`; don't add `{pause}` to slow it down.
 - **Person:** say "we" for the work you're doing together, and keep "you" for the viewer's own code.
 - **Sentences:** short and declarative, with the occasional longer one that carries a "because" or a "so".
 - **Show, then name:** "That's called the sorting problem." Then give the definition, in the book's words when it has

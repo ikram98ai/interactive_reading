@@ -5,7 +5,7 @@ FAIL. The numbers come from measuring the reference course video by video.
 
 | Measure                                               | Concept     | Code            | Board       |
 | ----------------------------------------------------- | ----------- | --------------- | ----------- |
-| Pace, words over the whole running time               | 180–195 wpm | 150–175 wpm     | 140–190 wpm |
+| Pace, words over the whole running time               | 168–182 wpm | 140–164 wpm     | 131–178 wpm |
 | Picture moving                                        | 5–11%       | (typing)        | under 12%   |
 | Visual changes                                        | 6–10 a min  | (typing)        | under 14    |
 | Longest pause, excluding the title card and the end   | under 3 s   | under 3.5 s     | under 3 s   |

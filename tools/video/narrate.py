@@ -33,10 +33,10 @@ MAX_WORDS = 48          # longer blocks drift; split at a sentence end
 MAX_WER = 0.10          # above this, the clip probably misread the script
 RETRIES = 0             # Kokoro says a text the same way every time, so a clip that differs is reported, not regenerated
 SR = 48000
-SPEED = 0.92            # Kokoro's rate: about 190 words a minute, the pace of the tutorials these videos are modelled on
-# Each kind of video talks at the pace the reference tutorials use: concepts at about 190 words a minute, code videos at
-# about 160 (slower, with room between thoughts while the code is typed), boards in between.
-PACE = {"code": (0.85, 2.6), "board": (0.88, 1.6)}   # kind → (Kokoro speed, how much longer the gaps between blocks are)
+SPEED = 0.86            # Kokoro's rate: about 175 words a minute (was 0.92, about 190; slowed by the author's choice, 2026-11-16)
+# Each kind of video keeps the reference tutorials' relative pace, all about 7% slower than they measured: concepts at
+# about 175 words a minute, code videos at about 150 (room between thoughts while the code is typed), boards in between.
+PACE = {"code": (0.79, 2.6), "board": (0.82, 1.6)}   # kind → (Kokoro speed, how much longer the gaps between blocks are)
 _whisper = None
 
 NUM_WORD = r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)"

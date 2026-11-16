@@ -18,19 +18,20 @@ W, H, FPS = 320, 180, 30
 # slower and type while silent, boards talk between the two (narrate.py's PACE) with less moving, and an editor full
 # of code is meant to fill the frame.
 LESSON = {
-    "code": {"pace (wpm)": ((150, 175), (140, 185), (125, 200)), "moving (% of time)": ((0, 70), (0, 80), (0, 95)),
+    "code": {"pace (wpm)": ((140, 164), (131, 173), (117, 187)), "moving (% of time)": ((0, 70), (0, 80), (0, 95)),
              "changes a minute": ((0, 40), (0, 60), (0, 90)), "longest pause (s)": ((0, 3.5), (0, 4.5), (0, 6.0)),
              "silent motion (s)": ((0, 3.0), (0, 5.0), (0, 8.0)), "clutter (% of frame)": ((0, 40), (0, 50), (0, 70))},
     # a course day (kind: day): a concept on the chapter page, then the Rust in the editor, so its bar spans the two
-    "day": {"pace (wpm)": ((155, 190), (145, 200), (125, 210)), "moving (% of time)": ((4, 55), (3, 70), (1, 90)),
+    "day": {"pace (wpm)": ((145, 178), (136, 187), (117, 196)), "moving (% of time)": ((4, 55), (3, 70), (1, 90)),
             "changes a minute": ((4, 35), (2, 50), (1, 80)), "longest pause (s)": ((0, 3.5), (0, 4.5), (0, 6.0)),
             "silent motion (s)": ((0, 3.0), (0, 5.0), (0, 8.0)), "clutter (% of frame)": ((0, 35), (0, 45), (0, 65))},
-    "board": {"pace (wpm)": ((140, 190), (130, 200), (115, 215)), "moving (% of time)": ((0, 12), (0, 16), (0, 25)),
+    "board": {"pace (wpm)": ((131, 178), (122, 187), (108, 201)), "moving (% of time)": ((0, 12), (0, 16), (0, 25)),
               "changes a minute": ((0, 14), (0, 18), (0, 25)), "longest pause (s)": ((0, 3.0), (0, 3.5), (0, 5.0)),
               "silent motion (s)": ((0, 1.5), (0, 2.5), (0, 4.0)), "clutter (% of frame)": ((0, 15), (0, 20), (0, 30))},
 }
 BAR = {
-    "pace (wpm)":            ((180, 195), (170, 205), (155, 215)),
+    # every pace target ×0.935 since narrate.py's voice slowed from 0.92 to 0.86 (the author's choice, 2026-11-16)
+    "pace (wpm)":            ((168, 182), (159, 192), (145, 201)),
     "moving (% of time)":    ((5, 11), (4, 12), (2, 15)),
     "changes a minute":      ((6, 10), (4, 13), (2, 16)),
     "longest pause (s)":     ((0, 3.0), (0, 3.5), (0, 5.0)),
