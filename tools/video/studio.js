@@ -373,8 +373,11 @@ function overlayScript() {
         const ready = await page.evaluate((l) => window.__vid.enabled(l), label);
         if (ready === null) { problems.push(`no button "${label}"`); return; }
         for (let i = 0; i < 400 && !(await page.evaluate((l) => window.__vid.enabled(l), label)); i++) await sleep(25); // still animating: wait
+        const before = +times > 1 ? await page.evaluate(() => window.__vid.caption()) : null;
         if (!(await page.evaluate((l) => window.__vid.press(l), label))) problems.push(`could not press "${label}"`);
         await sleep(30);
+        // a burst (xN): let each step land before the next press, or a press can fall between the steps
+        for (let i = 0; before !== null && i < 60 && (await page.evaluate(() => window.__vid.caption())) === before; i++) await sleep(25);
       }
       log(`click ${a}  → ${(await page.evaluate(() => window.__vid.caption())).slice(0, 90)}`);
     } else if (c.op === "slider") {
