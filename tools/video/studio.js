@@ -23,8 +23,9 @@
    earlier parts hid still hidden, and ends on the next part's card instead of black, so the parts join without a seam.
    Every scene starts the same way: pseudocode, code panel and stats hidden, picture centred. The script reveals the rest.
          check <selector> ~ <text>  (fails the run if the page doesn't show what the narration claims)
-   A page video can switch to the editor once, mid-video: {goto editor | kicker | heading} fades in that section card, loads
-   the editor beneath it, and the card holds until {scene}. From there on the code cues below work as in a code video.
+   A page video can switch to the editor once, mid-video: {goto editor} crossfades from the page into the editor while the
+   voice goes on ({goto editor | kicker | heading} puts up a section card instead, held until {scene}). From there on the
+   code cues below work as in a code video.
    A code video (kind: code) records tools/video/editor.html instead, starting from snapshot `start` if the script sets one:
          code <name> [fast|paste]  (type into that snapshot while the voice goes on, paced to fill the narration until
                               the next code, select or run cue; paste drops each new block in at once, for code brought
@@ -268,8 +269,8 @@ function overlayScript() {
     if (meta.start) await page.evaluate((t) => window.__ed.set(t), M.code[meta.start]);
   }
   const switches = M.segments.flatMap((s) => s.cues).filter((c) => c.op === "goto" && c.arg.split("|")[0].trim() === "editor");
-  if (switches.length && (EDITOR || switches.length > 1 || switches[0].arg.split("|").length < 3))
-    throw new Error("a page video switches to the editor once, with a card: {goto editor | kicker | heading}");
+  if (switches.length && (EDITOR || switches.length > 1))
+    throw new Error("a page video switches to the editor once: {goto editor} (a crossfade) or {goto editor | kicker | heading}");
   const hidden = []; // [from, to] on the frames' clock: frames to drop while the editor loads under a card, which holds instead
   if (EDITOR) { // a code video: the editor instead of a chapter page
     await openEditor();
@@ -356,16 +357,27 @@ function overlayScript() {
     else if (c.op === "goto") {
       const [id, kicker, head] = a.split("|").map((v) => v.trim());
       const card = head != null;
-      if (id === "editor") { // the switch: the card fades in on the page, the editor loads beneath it unseen, and the card holds
-        chapters.push([now(), head]);
-        await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]); await sleep(750);
-        const from = Date.now() / 1000;
+      if (id === "editor") { // the switch to the editor: the page's last frame holds while the editor loads unseen beneath it
+        // With a card ({goto editor | kicker | heading}) the card fades in first and holds until {scene}, a new chapter.
+        // Without one ({goto editor}) the page crossfades straight into the editor while the voice goes on: one video.
+        if (card) { chapters.push([now(), head]); await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]); await sleep(750); }
+        const last = (await page.screenshot({ type: "png" })).toString("base64"), from = Date.now() / 1000;
         await openEditor();
-        await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]);
+        if (card) await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]);
+        else await page.evaluate((src) => new Promise((done) => { // the page's last frame on top, to fade away
+          const t = document.getElementById("vid-title"); t.style.transition = "none"; t.style.opacity = 0;
+          const img = document.createElement("img"); img.id = "vid-xfade"; img.src = "data:image/png;base64," + src;
+          img.style.cssText = "position:fixed;inset:0;width:100vw;height:100vh;z-index:2147483647;opacity:1;transition:opacity 1s ease";
+          document.body.appendChild(img); img.decode().then(() => requestAnimationFrame(() => requestAnimationFrame(done)));
+        }), last);
         await cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1, maxWidth: W, maxHeight: H }).catch(() => {});
-        await sleep(900); // the card's fade on the new page, and the editor's first paint
+        await sleep(card ? 900 : 300); // the card's fade on the new page, or the old frame's first paint, and the editor's
         hidden.push([from, Date.now() / 1000]); EDITOR = true; entered = true;
-        log("goto editor");
+        if (!card) {
+          await page.evaluate(() => { const img = document.getElementById("vid-xfade"); img.style.opacity = 0; setTimeout(() => img.remove(), 1100); });
+          await sleep(1000);
+        }
+        log(`goto editor${card ? "" : " (crossfade)"}`);
         return;
       }
       if (card) {

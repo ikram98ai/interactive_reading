@@ -10,3 +10,5 @@
 \bNeumann\b	Noyman	von Neumann is "NOY-man" (Wikipedia: /vɒn ˈnɔɪmən/); Kokoro says "NEW-man"
 \bDijkstra\b	Dikestra	Dijkstra is "DIKE-struh" in English (Dutch [ˈdɛikstra]); Kokoro says "DAYK-struh"
 \bRabin\b	Ra-bean	Michael Rabin, Hebrew רַבִּין, is "rah-BEEN"; Kokoro says "RAB-in"
+\brustc\b	rust see	the Rust compiler is "rust-see"; Kokoro says "rustk" (phonemized ɹˈʌstk)
+\busize\b	you size	Rust's usize is "you-size"; Kokoro says "yoozize"
