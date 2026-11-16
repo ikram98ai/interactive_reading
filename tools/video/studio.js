@@ -262,7 +262,7 @@ function overlayScript() {
     await page.addStyleTag({ content: "#vid-label { top: 14px !important; }" }); // inside the tab bar, clear of the code
     await page.evaluate((n) => window.__ed.name(n), M.file || "main.rs");
     const cols = Math.max(0, ...Object.values(M.code || {}).flatMap((t) => t.split("\n").map((l) => l.length)));
-    if (cols > 72) log(`widest line is ${cols} characters: font ${(await page.evaluate((c) => window.__ed.fit(c), cols)).toFixed(1)} px`);
+    if (cols > 72) console.log(`widest line is ${cols} characters: font ${(await page.evaluate((c) => window.__ed.fit(c), cols)).toFixed(1)} px`);
     if (meta.start) await page.evaluate((t) => window.__ed.set(t), M.code[meta.start]);
     await page.evaluate(() => window.__vid.title(true, "", ""));
   } else {
