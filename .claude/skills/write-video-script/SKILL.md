@@ -1,14 +1,27 @@
 ---
 name: write-video-script
-description: Plan and write a chapter's long-form video script (videos/<book>/chNN/script.md), or edit an existing one. Use for any video script work, before narrating. Not for recording (record-video) or uploading (publish-video) or chapter pages (build-chapter-page).
+description: Plan and write a video script, a CLRS section video (videos/clrs/chNN/sMM/script.md) or a chapter's long form (videos/<book>/chNN/script.md), or edit an existing one. Use for any video script work, before narrating. Not for recording (record-video) or uploading (publish-video) or chapter pages (build-chapter-page).
 ---
 
-# Write a chapter's video script
+# Write a video script
 
-Every book with videos (`books/<slug>/book.json` `videos` is not null) gets **one long-form video per chapter**
-(`videos.long_form`). Its script is `videos/<book>/chNN/script.md`. It covers the whole chapter in one sitting, read in
-the book's pseudocode, with its own rules in [long-form.md](long-form.md). A chapter gets no other videos: no lesson
+Every book with videos (`books/<slug>/book.json` `videos` is not null) gets one of two kinds of video, and no other:
+
+- **CLRS: one video per numbered section** for Chapters 2–35, starred sections included. Section 6.2's script is
+  `videos/clrs/ch06/s02/script.md`. It teaches that one section in depth, in the book's pseudocode, and ends each algorithm with a RUST part:
+  an efficient Rust program for it, run in the editor ([long-form.md](long-form.md)). Each section's
+  block in `videos/clrs/plan.md` is its plan (step 1 below), and the plan's rules (the depths, "previously" beats,
+  the ledger of who teaches what) apply on top of this skill. CLRS Chapter 1 keeps its one chapter video,
+  `videos/clrs/ch01/script.md`.
+- **Any other book: one long-form video per chapter** (`videos.long_form`), `videos/<book>/chNN/script.md`, covering
+  the whole chapter in one sitting.
+
+Both are written by the method in [long-form.md](long-form.md). A chapter or section gets no other videos: no lesson
 series, and no intro, summary or wrap-up videos.
+
+**The recorder doesn't handle section folders yet.** `narrate.py` and the tools after it name a video after its folder
+and look the title up in `book.json` `chapters`, so a `chNN/sMM/` video needs the change listed under "Tooling to add"
+in `videos/clrs/plan.md` before it's recorded for real. Writing and judging a section script don't depend on it.
 
 The format comes from measuring a well-regarded programming course video by video (`videos/demo`). Today the recorder
 can drive only CLRS pages (`books/clrs`).
@@ -26,8 +39,8 @@ Each step has a gate. Don't start the next step until the gate passes.
 
 | #   | Step                   | Command                                                          | Gate                                                                                     |
 | --- | ---------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| 1   | **Plan**               | `make video-plan PAGE=books/<slug>/chNN.html`, then `make video-trace` for each machine | You've chosen the parts (one question each) and the machine each one drives |
-| 2   | **Start the script**   | create `videos/<book>/chNN/script.md`                            | It has its front matter (below), the cold open, the agenda and a `{goto}` card per part  |
+| 1   | **Plan**               | read the video's block in the book's plan (CLRS: `videos/clrs/plan.md`), `make video-plan PAGE=books/<slug>/chNN.html`, then `make video-trace` for each machine | You've chosen the parts (one question each) and the machine each one drives |
+| 2   | **Start the script**   | create the script: `videos/clrs/chNN/sMM/script.md`, or `videos/<book>/chNN/script.md` | It has its front matter (below), the cold open, the agenda and a `{goto}` card per part  |
 | 3   | **Ready the machines** | edit `books/<slug>/chNN.html`                                    | Every layer the video won't explain has a `data-part`; `make smoke` and `make steps` pass |
 | 4   | **Write**              | edit `script.md`                                                 | No TODO left; every number said aloud has a `{check}`                                     |
 | 5   | **Judge**              | hand the script to the `script-judge` agent                      | Its verdict is **pass**, recorded by `tools/video/judgement.py` (see below)               |
@@ -48,18 +61,22 @@ script: the point is a reader who didn't write it. Give `script-judge` only the 
 
 ```
 books/<slug>/book.json                     the book's outputs, playlists, title formats, voice, language
-videos/<book>/chNN/script.md               the chapter's long-form script (<!-- comments --> are never spoken)
-videos/<book>/chNN/script.judgement.json   its judge's verdict, hashed against the script
-videos/<book>/chNN/build/<voice>/          clips, Whisper word times, manifest.json, frames while recording
-videos/<book>/chNN/chNN-<chapter>.mp4      the video (ch06-heapsort.mp4), with its .srt captions and .chapters.txt
+videos/clrs/plan.md                        the CLRS plan: rules, ledger, and one block per section video
+videos/clrs/chNN/sMM/script.md             a CLRS section's script (<!-- comments --> are never spoken)
+videos/<book>/chNN/script.md               a chapter's long-form script (CLRS Chapter 1, other books)
+<video folder>/script.judgement.json       its judge's verdict, hashed against the script
+<video folder>/build/<voice>/              clips, Whisper word times, manifest.json, frames while recording
+videos/<book>/chNN/chNN-<chapter>.mp4      a chapter video (ch06-heapsort.mp4), with its .srt captions and .chapters.txt
 ```
 
-**Front matter**, between `---` lines at the top (copy an existing chapter's): `title` and `kicker` (the title card),
-`page` (the chapter page), `scene` (the first scene's id), `seed` (fixes `Math.random`), and `targets:` (named
-`svg:` / `css:` / `code:` regions that `{focus}`, `{show}` and `{hide}` use). Code videos also set `kind` and `start`.
+A section video's file name comes with the section-folder tooling (planned: `chNN-sMM-<section-title>.mp4`).
 
-Everything made while producing a chapter's video, test renders included, goes in its chapter folder, never under
-`tools/`. The book folder is the book's slug (`clrs`). Scripts never go to GitHub: `videos/` has its own git repo with
+**Front matter**, between `---` lines at the top (copy an existing script's): `title` and `kicker` (the title card),
+`page` (the chapter page, shared by all its section videos), `scene` (the first scene's id), `seed` (fixes
+`Math.random`), and `targets:` (named `svg:` / `css:` / `code:` regions that `{focus}`, `{show}` and `{hide}` use).
+Code videos also set `kind` and `start`.
+
+Everything made while producing a video, test renders included, goes in that video's folder, never under `tools/`. The book folder is the book's slug (`clrs`). Scripts never go to GitHub: `videos/` has its own git repo with
 no remote, so commit script changes there (`git -C videos commit`). Never `git add -f` anything under `videos/` in the
 main repo.
 

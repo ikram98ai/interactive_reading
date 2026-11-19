@@ -32,6 +32,209 @@
     "ch05": { "book": "Probabilistic Analysis and Randomized Algorithms" },
     "ch06": { "book": "Heapsort" }
   },
+  "sections": {
+    "ch02": {
+      "s01": "Insertion sort",
+      "s02": "Analyzing algorithms",
+      "s03": "Designing algorithms"
+    },
+    "ch03": {
+      "s01": "O-notation, Ω-notation, and Θ-notation",
+      "s02": "Asymptotic notation: formal definitions",
+      "s03": "Standard notations and common functions"
+    },
+    "ch04": {
+      "s01": "Multiplying square matrices",
+      "s02": "Strassen's algorithm for matrix multiplication",
+      "s03": "The substitution method for solving recurrences",
+      "s04": "The recursion-tree method for solving recurrences",
+      "s05": "The master method for solving recurrences",
+      "s06": "Proof of the continuous master theorem",
+      "s07": "Akra-Bazzi recurrences"
+    },
+    "ch05": {
+      "s01": "The hiring problem",
+      "s02": "Indicator random variables",
+      "s03": "Randomized algorithms",
+      "s04": "Probabilistic analysis and further uses of indicator random variables"
+    },
+    "ch06": {
+      "s01": "Heaps",
+      "s02": "Maintaining the heap property",
+      "s03": "Building a heap",
+      "s04": "The heapsort algorithm",
+      "s05": "Priority queues"
+    },
+    "ch07": {
+      "s01": "Description of quicksort",
+      "s02": "Performance of quicksort",
+      "s03": "A randomized version of quicksort",
+      "s04": "Analysis of quicksort"
+    },
+    "ch08": {
+      "s01": "Lower bounds for sorting",
+      "s02": "Counting sort",
+      "s03": "Radix sort",
+      "s04": "Bucket sort"
+    },
+    "ch09": {
+      "s01": "Minimum and maximum",
+      "s02": "Selection in expected linear time",
+      "s03": "Selection in worst-case linear time"
+    },
+    "ch10": {
+      "s01": "Simple array-based data structures: arrays, matrices, stacks, queues",
+      "s02": "Linked lists",
+      "s03": "Representing rooted trees"
+    },
+    "ch11": {
+      "s01": "Direct-address tables",
+      "s02": "Hash tables",
+      "s03": "Hash functions",
+      "s04": "Open addressing",
+      "s05": "Practical considerations"
+    },
+    "ch12": {
+      "s01": "What is a binary search tree?",
+      "s02": "Querying a binary search tree",
+      "s03": "Insertion and deletion"
+    },
+    "ch13": {
+      "s01": "Properties of red-black trees",
+      "s02": "Rotations",
+      "s03": "Insertion",
+      "s04": "Deletion"
+    },
+    "ch14": {
+      "s01": "Rod cutting",
+      "s02": "Matrix-chain multiplication",
+      "s03": "Elements of dynamic programming",
+      "s04": "Longest common subsequence",
+      "s05": "Optimal binary search trees"
+    },
+    "ch15": {
+      "s01": "An activity-selection problem",
+      "s02": "Elements of the greedy strategy",
+      "s03": "Huffman codes",
+      "s04": "Offline caching"
+    },
+    "ch16": {
+      "s01": "Aggregate analysis",
+      "s02": "The accounting method",
+      "s03": "The potential method",
+      "s04": "Dynamic tables"
+    },
+    "ch17": {
+      "s01": "Dynamic order statistics",
+      "s02": "How to augment a data structure",
+      "s03": "Interval trees"
+    },
+    "ch18": {
+      "s01": "Definition of B-trees",
+      "s02": "Basic operations on B-trees",
+      "s03": "Deleting a key from a B-tree"
+    },
+    "ch19": {
+      "s01": "Disjoint-set operations",
+      "s02": "Linked-list representation of disjoint sets",
+      "s03": "Disjoint-set forests",
+      "s04": "Analysis of union by rank with path compression"
+    },
+    "ch20": {
+      "s01": "Representations of graphs",
+      "s02": "Breadth-first search",
+      "s03": "Depth-first search",
+      "s04": "Topological sort",
+      "s05": "Strongly connected components"
+    },
+    "ch21": {
+      "s01": "Growing a minimum spanning tree",
+      "s02": "The algorithms of Kruskal and Prim"
+    },
+    "ch22": {
+      "s01": "The Bellman-Ford algorithm",
+      "s02": "Single-source shortest paths in directed acyclic graphs",
+      "s03": "Dijkstra's algorithm",
+      "s04": "Difference constraints and shortest paths",
+      "s05": "Proofs of shortest-paths properties"
+    },
+    "ch23": {
+      "s01": "Shortest paths and matrix multiplication",
+      "s02": "The Floyd-Warshall algorithm",
+      "s03": "Johnson's algorithm for sparse graphs"
+    },
+    "ch24": {
+      "s01": "Flow networks",
+      "s02": "The Ford-Fulkerson method",
+      "s03": "Maximum bipartite matching"
+    },
+    "ch25": {
+      "s01": "Maximum bipartite matching (revisited)",
+      "s02": "The stable-marriage problem",
+      "s03": "The Hungarian algorithm for the assignment problem"
+    },
+    "ch26": {
+      "s01": "The basics of fork-join parallelism",
+      "s02": "Parallel matrix multiplication",
+      "s03": "Parallel merge sort"
+    },
+    "ch27": {
+      "s01": "Waiting for an elevator",
+      "s02": "Maintaining a search list",
+      "s03": "Online caching"
+    },
+    "ch28": {
+      "s01": "Solving systems of linear equations",
+      "s02": "Inverting matrices",
+      "s03": "Symmetric positive-definite matrices and least-squares approximation"
+    },
+    "ch29": {
+      "s01": "Linear programming formulations and algorithms",
+      "s02": "Formulating problems as linear programs",
+      "s03": "Duality"
+    },
+    "ch30": {
+      "s01": "Representing polynomials",
+      "s02": "The DFT and FFT",
+      "s03": "FFT circuits"
+    },
+    "ch31": {
+      "s01": "Elementary number-theoretic notions",
+      "s02": "Greatest common divisor",
+      "s03": "Modular arithmetic",
+      "s04": "Solving modular linear equations",
+      "s05": "The Chinese remainder theorem",
+      "s06": "Powers of an element",
+      "s07": "The RSA public-key cryptosystem",
+      "s08": "Primality testing"
+    },
+    "ch32": {
+      "s01": "The naive string-matching algorithm",
+      "s02": "The Rabin-Karp algorithm",
+      "s03": "String matching with finite automata",
+      "s04": "The Knuth-Morris-Pratt algorithm",
+      "s05": "Suffix arrays"
+    },
+    "ch33": {
+      "s01": "Clustering",
+      "s02": "Multiplicative-weights algorithms",
+      "s03": "Gradient descent"
+    },
+    "ch34": {
+      "s01": "Polynomial time",
+      "s02": "Polynomial-time verification",
+      "s03": "NP-completeness and reducibility",
+      "s04": "NP-completeness proofs",
+      "s05": "NP-complete problems"
+    },
+    "ch35": {
+      "s01": "The vertex-cover problem",
+      "s02": "The traveling-salesperson problem",
+      "s03": "The set-covering problem",
+      "s04": "Randomization and linear programming",
+      "s05": "The subset-sum problem"
+    }
+  },
   "videos": {
     "dir": "videos/clrs",
     "voice": "kokoro:bm_fable",
@@ -44,7 +247,7 @@
       "publish": "one chapter a week, on weekday at time, starting on the day the user picks",
       "time": "08:00",
       "weekday": "Saturday",
-      "language": false
+      "language": true
     }
   }
 }

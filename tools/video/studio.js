@@ -36,7 +36,21 @@ const fs = require("fs"), path = require("path"), cp = require("child_process");
 const { chromium } = require("playwright-core");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ROOT = path.resolve(__dirname, "../..");
-const W = 1920, H = 1080, ZOOM = 1.34;
+let W = 1920, H = 1080; const ZOOM = 1.34; // a short (kind: short) is 1080×1920: set once the manifest is read
+// A YouTube Short: the frame stands up. The picture sits in the upper middle, captions burn in below it, and the top bar,
+// the bottom fifth and the right-hand buttons of the Shorts player stay clear. The code panel is never shown: a short's
+// code is typed in the editor, after {goto editor}.
+const SHORT = { top: 280, bottom: 1210, label: 168, cap: 1262 }; // device pixels: picture from top to bottom, label, captions
+const SHORT_CSS = `
+.wrap .stage.is-full { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) auto !important;
+  box-sizing: border-box; padding: ${SHORT.top / ZOOM}px 0 ${(1920 - SHORT.bottom) / ZOOM}px; }
+.stage.is-full > .codepane { display: none !important; }
+.vid-center .stage.is-full:not(.no-code) > .stage-scroll, .vid-center .stage.is-full:not(.no-code) > .statrow { transform: none; }
+.stage.is-full > .stage-scroll { padding: 0 10px; }
+.stage.is-full > .stage-scroll > svg { width: 100%; height: 100%; }
+.stage.is-full > .statrow { padding: 0 0 10px; gap: 40px; }
+#vid-label { top: ${SHORT.label}px !important; font-size: 54px !important; line-height: 1.1; color: #f3f5ff !important; padding: 0 70px; white-space: nowrap; }
+`;
 // targets every scene has, so every chapter's script can use the same names
 const BUILTIN = { panel: "css:.is-full > .codepane", stats: "css:.is-full > .statrow", memory: "css:.is-full .memstrip", stack: "mem:6,0,322", heap: "mem:342,0,316" };
 
@@ -113,6 +127,7 @@ function overlayScript() {
       <div id="vid-card-a" style="font:800 80px/1.12 ${FONT};color:#f3f5ff;letter-spacing:-.01em;text-wrap:balance"></div>
       <div id="vid-card-b" style="font:400 38px/1.3 'Atkinson Hyperlegible',system-ui;color:#aeb9dc;text-wrap:balance"></div>
     </div>
+    <div id="vid-cap" style="position:absolute;left:60px;right:150px;display:none;text-align:center;font:800 66px/1.16 ${FONT};letter-spacing:-.01em;color:#f3f5ff;text-wrap:balance;text-shadow:0 3px 14px #000c"></div>
     <div id="vid-black" style="position:absolute;inset:0;background:#000;opacity:0;transition:opacity .8s linear"></div>`;
   document.body.appendChild(root);
   const $ = (id) => document.getElementById(id);
@@ -234,11 +249,30 @@ function overlayScript() {
       document.querySelectorAll(".stage.is-full").forEach((x) => x.classList.remove("is-full"));
       s.querySelector(".stage").classList.add("is-full"); document.documentElement.classList.add("has-full");
     },
-    label(text) { const l = $("vid-label"); if (text) l.textContent = text; l.style.opacity = text ? 1 : 0; l.style.transform = text ? "none" : "translateY(8px)"; },
+    label(text) {
+      const l = $("vid-label"); if (text) l.textContent = text; l.style.opacity = text ? 1 : 0; l.style.transform = text ? "none" : "translateY(8px)";
+      if (text && getComputedStyle(l).whiteSpace === "nowrap") { // a short's headline stays on one line: shrink it to fit
+        l.style.fontSize = ""; const room = l.clientWidth - 140, w = l.scrollWidth - 140;
+        if (w > room) l.style.setProperty("font-size", (parseFloat(getComputedStyle(l).fontSize) * room / w).toFixed(1) + "px", "important");
+      }
+    },
     hideTitle() { $("vid-title").style.opacity = 0; $("vid-card").style.opacity = 0; }, // {scene}: back to the picture
     section(kicker, head) { state.targets = []; this.label(""); $("vid-list").innerHTML = ""; $("vid-kicker").textContent = kicker; $("vid-head").textContent = head; $("vid-title").style.opacity = 1; $("vid-card").style.opacity = 0; },
     card(a, b) { $("vid-card-a").textContent = a; $("vid-card-b").textContent = b || ""; $("vid-card").style.opacity = 1; },
     black() { $("vid-black").style.opacity = 1; },
+    // a short's burned-in captions: a few words at a time, the word being said in the accent colour. chunks are
+    // [[t0, t1, [[word, t], …]], …] in seconds from the segment's start, `elapsed` seconds ago (a page switch carries on).
+    subtitle(chunks, top, elapsed = 0) {
+      const c = $("vid-cap"), t0 = performance.now() - elapsed * 1000; c.style.top = top + "px"; c.style.display = "block";
+      const my = (this._cap = (this._cap || 0) + 1);
+      (function f() {
+        if (this._cap !== my) return;
+        const t = (performance.now() - t0) / 1000, k = chunks.find(([a, b]) => t >= a && t < b);
+        const html = k ? k[2].map(([w, s], i) => `<span style="color:${t >= s && (i + 1 === k[2].length || t < k[2][i + 1][1]) ? ACCENT : "inherit"}">${w.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</span>`).join(" ") : "";
+        if (c.innerHTML !== html) c.innerHTML = html;
+        if (t < chunks[chunks.length - 1][1] + 0.05) requestAnimationFrame(f.bind(this)); else c.innerHTML = "";
+      }).call(this);
+    },
     // a button by its text, or a tappable SVG group (AL.clickable: role=button) by its aria-label
     find(label, live) { return [...stage().querySelectorAll("button, [role=button]")].find((x) => (x.tagName === "BUTTON" ? x.textContent.trim() : x.getAttribute("aria-label")) === label && !(live && x.disabled)); },
     enabled(label) { const b = this.find(label); return b ? !b.disabled : null; },
@@ -261,7 +295,9 @@ function overlayScript() {
   const mf = path.resolve(process.argv[2]), M = JSON.parse(fs.readFileSync(mf, "utf8")), meta = M.meta;
   const dir = path.dirname(mf), frames = path.join(dir, "frames");
   const out = path.resolve(process.argv[3] || M.out);
-  const EDITOR = meta.kind === "code"; // a code video records the editor, not a chapter page
+  let EDITOR = meta.kind === "code"; // a code video records the editor, not a chapter page; a page video can switch to it once
+  const IS_SHORT = meta.kind === "short"; if (IS_SHORT) { W = 1080; H = 1920; }
+  if (IS_SHORT && !meta.page) EDITOR = true; // a short with no page is all code
   fs.rmSync(frames, { recursive: true, force: true }); fs.mkdirSync(frames, { recursive: true });
   const named = (t) => t.split("+").map((x) => { const k = x.trim(), v = meta.targets[k] || BUILTIN[k]; if (v) return v; if (/^(svg|css|btn|stat|code|rs|mem|slider):/.test(k)) return k; throw new Error("unknown target " + k); });
   // check every target name before spending minutes on a recording
@@ -285,12 +321,17 @@ function overlayScript() {
     await page.goto("file://" + path.join(ROOT, "tools/video/editor.html"), { waitUntil: "load" });
     await page.evaluate(() => window.__ed.ready());
     await page.evaluate(overlayScript);
-    await page.addStyleTag({ content: "#vid-label { top: 14px !important; }" }); // inside the tab bar, clear of the code
+    if (IS_SHORT) { await page.evaluate(() => window.__ed.short()); await page.addStyleTag({ content: SHORT_CSS.slice(SHORT_CSS.indexOf("#vid-label")) }); }
+    else await page.addStyleTag({ content: "#vid-label { top: 14px !important; }" }); // inside the tab bar, clear of the code
     await page.evaluate((n) => window.__ed.name(n), M.file || "main.rs");
     const cols = Math.max(0, ...Object.values(M.code || {}).flatMap((t) => t.split("\n").map((l) => l.length)));
-    if (cols > 72) console.log(`widest line is ${cols} characters: font ${(await page.evaluate((c) => window.__ed.fit(c), cols)).toFixed(1)} px`);
+    if (cols > (IS_SHORT ? 39 : 72)) console.log(`widest line is ${cols} characters: font ${(await page.evaluate((c) => window.__ed.fit(c), cols)).toFixed(1)} px`);
     if (meta.start) await page.evaluate((t) => window.__ed.set(t), M.code[meta.start]);
   }
+  const switches = M.segments.flatMap((s) => s.cues).filter((c) => c.op === "goto" && c.arg.split("|")[0].trim() === "editor");
+  if (switches.length && (EDITOR || switches.length > 1))
+    throw new Error("a page video switches to the editor once: {goto editor} (a crossfade) or {goto editor | kicker | heading}");
+  const hidden = []; // [from, to] on the frames' clock: frames to drop while the editor loads, when the page's last frame holds instead
   if (EDITOR) { // a code video: the editor instead of a chapter page
     await openEditor();
     await page.evaluate(() => window.__vid.title(true, "", ""));
@@ -299,10 +340,15 @@ function overlayScript() {
   await page.evaluate(() => document.fonts.ready);
   if (!(await page.evaluate(() => !!window.AL))) await page.addStyleTag({ content: KIT_CSS }); // a kit.js page (CS:APP)
   await page.addStyleTag({ content: CSS });
+  if (IS_SHORT) await page.addStyleTag({ content: SHORT_CSS });
   await page.evaluate(overlayScript);
   await page.evaluate(() => window.__vid.title(true, "", "")); // a cold open: the first {scene} fades straight into the picture
   await page.evaluate((id) => { window.__vid.enter(id); if (window.K) K.speed.value = 1; window.__vid.fresh(); }, meta.scene);
   }
+  // a short keeps a headline at the top of the frame: its title, until a {label} says otherwise
+  let headline = IS_SHORT ? meta.title : "";
+  const keepHeadline = () => headline && page.evaluate((v) => window.__vid.label(v), headline);
+  await keepHeadline();
   // One part of a long form (assemble.js), on a page of its own: set it up off camera as the whole video would have it
   // here. The layers earlier parts hid stay hidden, and the part's own card is already up (the part before it faded it in).
   const P = M.part;
@@ -377,6 +423,31 @@ function overlayScript() {
     else if (c.op === "goto") {
       const [id, kicker, head] = a.split("|").map((v) => v.trim());
       const card = head != null;
+      if (id === "editor") { // the switch to the editor: the page's last frame holds while the editor loads unseen beneath it
+        // With a card ({goto editor | kicker | heading}) the card fades in first and holds until {scene}, a new chapter.
+        // Without one ({goto editor}) the page crossfades straight into the editor while the voice goes on: one video.
+        if (card) { chapters.push([now(), head]); await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]); await sleep(750); }
+        const last = (await page.screenshot({ type: "png" })).toString("base64"), from = Date.now() / 1000;
+        await openEditor();
+        if (card) await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]);
+        else await page.evaluate((src) => new Promise((done) => { // the page's last frame on top, to fade away
+          const t = document.getElementById("vid-title"); t.style.transition = "none"; t.style.opacity = 0;
+          const img = document.createElement("img"); img.id = "vid-xfade"; img.src = "data:image/png;base64," + src;
+          img.style.cssText = "position:fixed;inset:0;width:100vw;height:100vh;z-index:99999;opacity:1;transition:opacity 1s ease";
+          document.body.appendChild(img); img.decode().then(() => requestAnimationFrame(() => requestAnimationFrame(done)));
+        }), last);
+        if (cap) await page.evaluate(([c, top, e]) => window.__vid.subtitle(c, top, e), [cap.chunks, SHORT.cap, now() - cap.at]); // the words carry on
+        await cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1, maxWidth: W, maxHeight: H }).catch(() => {});
+        await sleep(card ? 900 : 300); // the card's fade on the new page, or the old frame's first paint
+        hidden.push([from, Date.now() / 1000]); EDITOR = true; entered = true;
+        if (!card) {
+          await page.evaluate(() => { const img = document.getElementById("vid-xfade"); img.style.opacity = 0; setTimeout(() => img.remove(), 1100); });
+          await sleep(1000);
+        }
+        await keepHeadline();
+        log(`goto editor${card ? "" : " (crossfade)"}`);
+        return;
+      }
       if (card) {
         chapters.push([now(), head]);
         if (entered) { await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]); await sleep(750); } // the card has faded in
@@ -386,6 +457,7 @@ function overlayScript() {
       await page.evaluate((id) => { window.__vid.enter(id); K.speed.value = 1; window.__lastBtn = null; window.__vid.fresh(); }, id);
       await sleep(card ? 500 : 250);
       if (!card) await page.evaluate(() => window.__vid.dip(false));
+      await keepHeadline();
       log(`goto ${id}`);
     }
     else if (c.op === "title") { await page.evaluate(([a, b]) => window.__vid.title(true, a, b), [meta.title, meta.kicker]); log("title"); }
@@ -394,7 +466,7 @@ function overlayScript() {
     else if (c.op === "focus") { await page.evaluate((l) => window.__vid.focus(l), a === "off" ? [] : named(a)); }
     else if (c.op === "show" || c.op === "hide") { await page.evaluate(([l, on]) => window.__vid.show(l, on), [named(a).map((x) => x.slice(4)), c.op === "show"]); }
     else if (c.op === "center" || c.op === "split") { await page.evaluate((on) => window.__vid.center(on), c.op === "center"); }
-    else if (c.op === "label") { await page.evaluate((v) => window.__vid.label(v), a); }
+    else if (c.op === "label") { headline = a || (IS_SHORT ? meta.title : ""); await page.evaluate((v) => window.__vid.label(v), headline); }
     else if (c.op === "speed") { await page.evaluate((v) => { K.speed.value = v; }, +a); }
     else if (c.op === "card") { const [x, y] = a.split("|").map((v) => v.trim()); await page.evaluate(([p, q]) => window.__vid.card(p, q), [x, y]); }
     else if (c.op === "click") {
@@ -425,8 +497,20 @@ function overlayScript() {
 
   // the performance
   const offsets = [];
+  let cap = null; // a short's captions for the segment being spoken: its chunks and when it started
+  const chunk = (s) => { // a few words at a time: break after a sentence, a comma once there are three words, or about 16 letters
+    const out = []; let cur = [];
+    s.words.forEach((w, k) => {
+      cur.push([w, s.start[k]]);
+      const len = cur.map(([x]) => x).join(" ").length, end = k + 1 === s.words.length;
+      if (end || /[.?!:]$/.test(w) || (/[,;]$/.test(w) && cur.length >= 3) || len >= 16) { out.push([cur[0][1], end ? s.dur + 0.15 : s.start[k + 1], cur]); cur = []; }
+    });
+    out.forEach((c, i) => { if (out[i + 1] && out[i + 1][0] - c[1] > 0.6) c[1] += 0.3; }); // let a chunk linger a breath, never into the next
+    return out;
+  };
   for (const s of M.segments) {
     const start = now(); offsets.push(start);
+    if (IS_SHORT && s.words.length) { cap = { chunks: chunk(s), at: start }; await page.evaluate(([c, top]) => window.__vid.subtitle(c, top), [cap.chunks, SHORT.cap]); }
     for (const c of s.cues.slice().sort((p, q) => p.t - q.t)) {
       const wait = start + (c.t || 0) - now();
       if (wait > 0) await sleep(wait * 1000);
@@ -447,7 +531,8 @@ function overlayScript() {
   if (P && P.exit) { // the next part's card fades in, as the next {goto} would: the next part starts on that same frame
     await page.evaluate(([k, h]) => window.__vid.section(k, h), P.exit);
     await sleep(750);
-  } else {
+  } else if (IS_SHORT) await sleep(450); // a short loops: no fade to black, the last picture runs straight into the hook
+  else {
     await sleep(700);
     await page.evaluate(() => window.__vid.black());
     await sleep(1100);
@@ -464,7 +549,7 @@ function overlayScript() {
   // drifting ~10 s behind the narration over a long form, with a hold-then-skip stutter at every out-of-order frame.
   const startTs = t0 / 1000;
   const late = stamps.filter(([, t], i) => i && t < stamps[i - 1][1]).length;
-  const useful = stamps.filter(([, t]) => t >= startTs - 0.2 && t <= startTs + total).sort((p, q) => p[1] - q[1])
+  const useful = stamps.filter(([, t]) => t >= startTs - 0.2 && t <= startTs + total && !hidden.some(([a, b]) => t > a && t < b)).sort((p, q) => p[1] - q[1])
     .filter(([, t], i, a) => i + 1 === a.length || a[i + 1][1] > t); // of frames sharing a timestamp, keep the last
   const list = path.join(dir, "frames.txt");
   let txt = "";

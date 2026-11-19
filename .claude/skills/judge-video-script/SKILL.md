@@ -1,6 +1,6 @@
 ---
 name: judge-video-script
-description: Judge whether a video script (videos/<book>/**/script.md, such as a chapter's long form) is true — to the book, the arithmetic, the screen and the code — and record a pass or fail verdict that narrate.py requires. Use after writing or editing any script and before narrating it; run it as the script-judge agent, never in the writer's own context.
+description: Judge whether a video script (videos/<book>/**/script.md, such as a CLRS section video or a chapter's long form) is true — to the book, the arithmetic, the screen and the code — and record a pass or fail verdict that narrate.py requires. Use after writing or editing any script and before narrating it; run it as the script-judge agent, never in the writer's own context.
 ---
 
 # Judge a video script
@@ -47,7 +47,7 @@ written beside it. Otherwise it is **fail**.
 
 ## The report
 
-One table per chapter. Quote the sentence exactly, and give its file and line.
+One table per script. Quote the sentence exactly, and give its file and line.
 
 ```
 | File:line                          | Sentence (quoted)                | # | Severity   | Source / evidence                 | Fix                                  |

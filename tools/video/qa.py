@@ -21,6 +21,11 @@ BY_KIND = {
     "code": {"pace (wpm)": ((140, 164), (131, 173), (117, 187)), "moving (% of time)": ((0, 70), (0, 80), (0, 95)),
              "changes a minute": ((0, 40), (0, 60), (0, 90)), "longest pause (s)": ((0, 3.5), (0, 4.5), (0, 6.0)),
              "silent motion (s)": ((0, 3.0), (0, 5.0), (0, 8.0)), "clutter (% of frame)": ((0, 40), (0, 50), (0, 70))},
+    # a YouTube Short (kind: short): a concept on the chapter page, then its Rust in the editor, in at most three minutes
+    "short": {"pace (wpm)": ((145, 178), (136, 187), (117, 196)), "moving (% of time)": ((4, 55), (3, 70), (1, 90)),
+              "changes a minute": ((6, 35), (4, 50), (2, 80)), "longest pause (s)": ((0, 2.0), (0, 2.5), (0, 3.5)),
+              "silent motion (s)": ((0, 2.0), (0, 3.0), (0, 5.0)), "clutter (% of frame)": ((0, 35), (0, 45), (0, 65)),
+              "length (s)": ((0, 90), (0, 120), (0, 180)), "first word (s)": ((0, 0.6), (0, 1.0), (0, 2.0))},
     "board": {"pace (wpm)": ((131, 178), (122, 187), (108, 201)), "moving (% of time)": ((0, 12), (0, 16), (0, 25)),
               "changes a minute": ((0, 14), (0, 18), (0, 25)), "longest pause (s)": ((0, 3.0), (0, 3.5), (0, 5.0)),
               "silent motion (s)": ((0, 1.5), (0, 2.5), (0, 4.0)), "clutter (% of frame)": ((0, 15), (0, 20), (0, 30))},
@@ -36,14 +41,16 @@ BAR = {
 }
 
 
-def picture(path):
-    """Stream the video small and grey: per frame, did it move; once a second, how much of it isn't background."""
+def picture(path, W=W, H=H, mask=None):
+    """Stream the video small and grey: per frame, did it move; once a second, how much of it isn't background.
+    mask (top, bottom), as fractions of the height, leaves out a band: a short's burned-in captions change by design."""
     p = subprocess.Popen(["ffmpeg", "-nostdin", "-v", "error", "-i", path, "-vf", f"scale={W}:{H},format=gray", "-r", str(FPS), "-f", "rawvideo", "-"], stdout=subprocess.PIPE)
     moving, clutter, prev, n = [], [], None, 0
     while True:
         buf = p.stdout.read(W * H)
         if len(buf) < W * H: break
         f = np.frombuffer(buf, dtype=np.uint8).astype(np.int16).reshape(H, W)
+        if mask: f = np.delete(f, slice(int(mask[0] * H), int(mask[1] * H)), axis=0)
         if prev is not None: moving.append((np.abs(f - prev) > 12).mean() > 0.0003)
         if n % FPS == 0: clutter.append((np.abs(f - np.median(f)) > 25).mean())
         prev, n = f, n + 1
@@ -75,7 +82,8 @@ def main():
     # a script can accept one measure for a written reason (front matter `qa-allow: clutter (why)`): it can warn, never fail
     try: allow = re.search(r"^qa-allow:\s*(.+)$", open(re.sub(r"[^/]+$", "script.md", path)).read(), re.M).group(1)
     except (OSError, AttributeError): allow = ""
-    moving, dur, clutter = picture(path)
+    # a short stands up, and its captions (studio.js SHORT.cap, 1262 px of 1920, two lines at most) aren't the picture moving
+    moving, dur, clutter = picture(path, *((H, W, (0.645, 0.78)) if kind == "short" else (W, H)))
     # a change is a run of motion; gaps under a fifth of a second belong to the same change
     changes, i = 0, 0
     while i < len(moving):
@@ -83,7 +91,8 @@ def main():
             changes += 1
             while i < len(moving) and moving[i:i + 6].any(): i += 1
         i += 1
-    quiet = [(s, e) for s, e in silences(path) if s > 3 and e < dur - 3]  # the opening and the fade-out are allowed to be quiet
+    edge = 1 if kind == "short" else 3
+    quiet = [(s, e) for s, e in silences(path) if s > edge and e < dur - edge]  # the opening and the fade-out are allowed to be quiet
     still = lambda s, e: moving[int(s * FPS):int(e * FPS)].mean() if e - s > 0.1 else 0
     # a pause over a still picture is a breath or a card; over a moving one, it's an animation with nobody talking
     pauses = [(e - s, s) for s, e in quiet if still(s, e) < 0.3]
@@ -100,6 +109,10 @@ def main():
         "silent motion (s)": max([m for m, _ in talkless], default=0),
         "clutter (% of frame)": clutter,
     }
+    if kind == "short":   # a short has a hard cap, and it must be talking before a thumb scrolls past
+        got["length (s)"] = dur
+        sil = silences(path)
+        got["first word (s)"] = sil[0][1] if sil and sil[0][0] < 0.05 else 0.0
     worst = 0
     print(f"{path}  ·  {clock(dur)}  ·  {kind}")
     for k, v in got.items():

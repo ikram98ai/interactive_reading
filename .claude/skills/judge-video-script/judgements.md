@@ -74,12 +74,18 @@ The compiler proves that the code compiles. It doesn't prove what the voice says
 - What the voice says the language does (copying, moving, borrowing, freeing, typing) must be exactly what it does.
 - Every API used must exist in the stable language. Note any API that is recent.
 - An explanation of the output must match the output: ordering, stability, and trailing spaces.
+- **A CLRS RUST part** (`videos/clrs/plan.md`, rule 13 and "The Rust track"): its program must be the book's
+  procedure (any departure, such as a loop for a tail call, said once), meet the bound the voice claims, and print what
+  the walk ended on. It may teach only the Rust concepts the plan's Rust concept ledger gives that video; a concept
+  owned by an earlier video gets one clause at most, and one owned by a later video is avoided in the code; if it can't be, the voice names it in one clause and points to its owner.
+  A claim about std ("`Vec` never shrinks by itself") is checked against the installed `rustc`'s docs.
 
 ## 10. Are references to other videos and the book true?
 
 These include "Next, we're going to…", "We'll see this later", "The book has a whole chapter on…" and "as in Chapter
-22". Check each one against what the video it points to really covers, the next chapter's text, or the book's table of
-contents.
+22". Check each one against what the video it points to really covers, the next section's or chapter's text, or the book's
+table of contents. For a CLRS section video, a pointer must name the section that teaches the idea
+(`videos/clrs/plan.md`, the ledger), and a "previously" beat must say only what that earlier section taught.
 
 ## 11. Does the recap claim only what was taught?
 

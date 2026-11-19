@@ -1,14 +1,28 @@
 # The long-form video
 
-`videos/<book>/chNN/script.md` teaches the whole chapter in one video. It's for a viewer who wants the algorithms in
-depth, so it has **no time limit**. It runs as long as the chapter needs, as long as it keeps to the method below, which
-is the reference course's own method, measured in `videos/demo`. Record it with `narrate.py videos/<book>/chNN/script.md`,
-then `studio.js` on its manifest.
+A long-form video teaches one unit of the book in depth: for CLRS a numbered section
+(`videos/clrs/chNN/sMM/script.md`, Chapters 2–35), for any other book the whole chapter (`videos/<book>/chNN/script.md`).
+It's for a viewer who wants the algorithms in depth, so it has **no fixed time limit**. It runs as long as its unit
+needs, as long as it keeps to the method below, which is the reference course's own method, measured in
+`videos/demo`. A CLRS section video's target length, parts and depths are in its block in `videos/clrs/plan.md`. Record
+it with `narrate.py <script>`, then `studio.js` on its manifest.
 
-**No code language when `book.json` `videos.long_form.language` is false** (CLRS: no Rust). No `{rust}` cue, no stack or
-heap, no ownership or borrowing, and no machine number types ("sixty-four-bit float", "a hundred-twenty-eight-bit
-integer") in the narration, the agenda or the recap. The code language stays out of the long form. In its place, **each of
-the chapter's own algorithms is read in the book's pseudocode, one line at a time**.
+**A CLRS section video** also follows the plan's own rules: each part is tagged WALK, PROOF, ANIM or LINE; a video that
+builds on earlier sections opens with a "previously" beat of at most two sentences, never re-teaching them; a chapter's
+opening and its chapter map card go in its first section's video; and each idea is taught by the one section the
+plan's ledger names. Its hook leads into the next section's video.
+
+**Each algorithm is read in the book's pseudocode, one line at a time**, on the page. What follows it depends on
+`book.json` `videos.long_form.language`:
+
+- **false: no code language.** No `{rust}` cue, no stack or heap, no ownership or borrowing, and no machine number
+  types ("sixty-four-bit float", "a hundred-twenty-eight-bit integer") in the narration, the agenda or the recap.
+- **true (CLRS): every algorithm ends in Rust.** Once the walk and the cost are done, a RUST part crossfades to the
+  editor (`{goto editor}`), types an efficient, executable Rust program for that algorithm (`{code name}`), runs it on
+  the walk's own input (`{run}`, with a `{check}` on the output), and comes back (`{goto page}`). It explains each
+  core Rust concept the first time a program needs it, and only there: `videos/clrs/plan.md` has the series' Rust
+  concept ledger (which video owns each concept) and every RUST part's program, concepts and efficiency note.
+  Anywhere else in the video, Rust stays out: the page parts, the agenda and the recap talk about the algorithm.
 
 ## Depth follows the book
 
@@ -17,7 +31,7 @@ in with the example's numbers, a definition with one example that meets it and o
 the long form. What the video must not do is go deep where the book has no content. **Match the depth of the book's own
 text**:
 
-- **Line-by-line walks are only for pseudocode the book prints in this chapter.** A procedure the page added (a checker,
+- **Line-by-line walks are only for pseudocode the book prints in this chapter** (for a CLRS section video, in this section). A procedure the page added (a checker,
   a scan, an evaluator, a memo, a simulator) is never read line by line. Show it running with `{click Play}` and say what
   it does in one or two sentences ("The page checks every node against its parent. Every parent wins.").
 - **An algorithm the chapter only names** (chapter 1's Dijkstra, Huffman, DFS, Miller-Rabin; a later chapter's topic
@@ -25,13 +39,13 @@ text**:
   pseudocode waits for its own chapter.
 - **An idea the book states in a sentence or a footnote** (repeated squaring, address arithmetic, the cost of a
   subroutine call) gets a sentence or two over its animation, not a segment.
-- **Exercises and Problems** can have a part when they teach something the chapter needs. Give the result and the one
+- **Exercises and Problems** can have a part only when the chapter or section body needs their result; no video sets exercises for the viewer. Give the result and the one
   idea behind it on the machine. Don't solve each sub-part on screen.
 
 ## Say it once
 
-A viewer who hears the same point three times stops listening. A long form usually runs 30–45 minutes, so this matters
-more here than in a short video.
+A viewer who hears the same point three times stops listening. A chapter long form usually runs 20–45 minutes and a
+CLRS section video 6–30, so this matters more here than in a short video.
 
 - **One demonstration per point.** Once the machine has shown a result, don't run it again to confirm it, not at random
   and not on a second input, unless the second run shows something new (a worst case, a failure). Say "run it a thousand
@@ -73,5 +87,5 @@ the book says little, the machine does the showing and the voice stays brief (se
 
 **Everything else is the same:** the cold open, the title card with an agenda, parts as questions with a `{goto}` card
 each, the voice and its pace, one change at a time, cues on the noun, no silent motion, recap cards, and the hook into
-the next chapter. Reuse the long forms' running examples (for CLRS: 31, 41, 59, 26, 41, 58, the cards, the race) and keep each lint
+the next video (the next section, or the next chapter). Reuse the long forms' running examples (for CLRS: 31, 41, 59, 26, 41, 58, the cards, the race) and keep each lint
 rule: no digits or symbols in speech, at most two numbers a sentence, at most 34 words.

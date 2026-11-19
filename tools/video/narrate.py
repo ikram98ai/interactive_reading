@@ -10,7 +10,8 @@ Everything a chapter's video needs stays in its folder: script.md, build/ (clips
   5. trim, level and write build/<voice>/manifest.json for studio.js
 
 --silent skips 3 and 4 and estimates timing at 150 words a minute: a fast way to check the highlights.
-A code video (kind: code) keeps the editor's text in fenced blocks, ```rust @name … ```, which are never spoken. {code name}
+A page video can switch to the editor once, at {goto editor} (a YouTube Short, kind: short, does): from there on it talks
+at code pace, and its code cues work as in a code video. A code video (kind: code) keeps the editor's text in fenced blocks, ```rust @name … ```, which are never spoken. {code name}
 types the editor into that snapshot, and {run} shows the program's real output: each snapshot that is run is compiled with
 rustc here, and the build fails if it doesn't compile, unless the cue is {run error}, which shows the compiler's error instead.
 
@@ -113,11 +114,11 @@ def book_profile(script):
     """books/<book>/book.json for a script under videos/<book>/…, or {} if there is none."""
     try: rel = pathlib.Path(script).resolve().relative_to(ROOT / "videos")
     except ValueError: return {}
-    p = ROOT / "books" / rel.parts[0] / "book.json"
+    p = ROOT / "books" / rel.parts[1 if rel.parts[0] == "shorts" else 0] / "book.json"   # videos/shorts/<book>/… too
     return json.loads(p.read_text()) if p.exists() else {}
 
 
-def rust(src, work, want_error, compile_cmd=("rustc", "--edition", "2021", "-A", "warnings")):
+def rust(src, work, want_error, compile_cmd=("rustc", "--edition", "2021", "-A", "warnings"), warnings=False):
     """Compile and run one snapshot, as the run panel will show it. Cached by the source text."""
     key = hashlib.md5(src.encode()).hexdigest()[:12]
     d = work / "rust"; d.mkdir(parents=True, exist_ok=True)
@@ -134,6 +135,8 @@ def rust(src, work, want_error, compile_cmd=("rustc", "--edition", "2021", "-A",
         r = subprocess.run([str(exe)], capture_output=True, text=True, timeout=20)
         err = re.sub(r"thread '([^']*)' \(\d+\)", r"thread '\1'", r.stderr.replace(str(rs), "main.rs").replace(str(pathlib.Path.home()), "~"))  # the same on every run, and no user name on screen
         out, ok = (r.stdout + (err if r.returncode else "")).rstrip(), r.returncode == 0
+        if warnings and c.stderr.strip():   # a short shows rustc's warnings, as the command on screen would print them
+            out = c.stderr.replace(str(rs), "main.rs").rstrip() + "\n\n" + out
     if ok == want_error:
         sys.exit(f"narrate: a {{run{' error' if want_error else ''}}} expected {'an error' if want_error else 'a clean run'}, but got:\n{out}\n--- source ---\n{src}")
     return {"out": out, "ok": ok}
@@ -270,8 +273,13 @@ def main():
         wrong = [l for l in meta["code_langs"] if l != lang.get("fence", "rust")]
         if wrong: sys.exit(f"narrate: snapshots are fenced as {wrong}, but book.json says the language is {lang.get('fence', 'rust')}")
     compile_cmd = tuple(lang.get("compile") or ("rustc", "--edition", "2021", "-A", "warnings"))
+    short = meta.get("kind") == "short"
+    if short:   # a short's terminal shows `rustc main.rs`, so it builds like that, warnings and all
+        compile_cmd = tuple(x for i, x in enumerate(compile_cmd) if not (x == "-A" or (i and compile_cmd[i - 1] == "-A")))
     home = pathlib.Path(a.script).resolve().parent
     name, build = home.name, home / "build"
+    section = re.fullmatch(r"s\d\d", home.name) and re.fullmatch(r"ch\d\d", home.parent.name)
+    if section: name = f"{home.parent.name}-{home.name}"   # a section video, videos/<book>/chNN/sMM/: named chNN-sMM
     if a.only:
         heads = [i for i, s in enumerate(segs) if any(c["op"] == "goto" for c in s["cues"])]
         goto = lambda i: next(c["arg"] for c in segs[i]["cues"] if c["op"] == "goto")
@@ -295,24 +303,28 @@ def main():
                 current = c["arg"].split()[0]
                 if current not in meta["code"]: problems.append(f"{{code {current}}}: no ```rust @{current} block")
             if c["op"] == "run" and current in meta["code"] and current not in runs:
-                runs[current] = rust(meta["code"][current], build, c["arg"].strip() == "error", compile_cmd)
+                runs[current] = rust(meta["code"][current], build, c["arg"].strip() == "error", compile_cmd, short)
     if problems and not a.no_lint: sys.exit("script lint failed:\n  " + "\n  ".join(problems))
     tag = "silent" if a.silent else f"{engine}-{voice}"
     out = build / tag; (out / "raw").mkdir(parents=True, exist_ok=True)
     speed, stretch = PACE.get(meta.get("kind"), (SPEED, 1.0))
     base = int(meta.get("seed", 1))
     res = []
+    in_editor, pace = short and not meta.get("page"), {}   # a short with no page is in the editor from the start   # a page video that switches to the editor ({goto editor}) talks at code pace from there on
     for i, s in enumerate(segs):
         words = s["text"]; text = " ".join(words)
+        if any(c["op"] == "goto" and c["arg"].split("|")[0].strip() == "editor" for c in s["cues"]): in_editor = True
+        sp, st = PACE["code"] if in_editor else (speed, stretch)
         # each block's breath comes from its own words, so an edit in one part leaves every other part's timing alone
         # (assemble.js re-records only the parts whose timing changed)
         rng = random.Random(f"{base}|{text}")
-        rec = {"i": i, "text": text, "words": words, "cues": [c for c in s["cues"] if c["op"] != "say"], "then": s["then"], "gap": round(gap_after(s, rng) * stretch, 3), "dur": 0.0, "wav": None}
+        rec = {"i": i, "text": text, "words": words, "cues": [c for c in s["cues"] if c["op"] != "say"], "then": s["then"], "gap": round(gap_after(s, rng) * st, 3), "dur": 0.0, "wav": None}
+        pace[i] = sp   # kept out of the manifest, so the parts assemble.js caches keep their hashes
         res.append(rec)
         if not words: continue
         rec["say"] = spoken(words, s["cues"])
         # a clip spoken as written keeps its old cache key; one with a respelling gets its own
-        rec["key"] = hashlib.md5((f"{tag}|{speed}|{text}" + ("" if rec["say"] == text else f"|say:{rec['say']}")).encode()).hexdigest()[:12]
+        rec["key"] = hashlib.md5((f"{tag}|{sp}|{text}" + ("" if rec["say"] == text else f"|say:{rec['say']}")).encode()).hexdigest()[:12]
     if a.silent:
         for r in res:
             r["dur"] = len(r["words"]) * 0.4
@@ -320,8 +332,9 @@ def main():
     else:
         todo = [r for r in res if r["words"]]
         for attempt in range(RETRIES + 1):
-            need = [{"text": r["say"], "out": str(out / "raw" / f"{r['key']}.wav"), "seed": base + attempt * 101 + r["i"]} for r in todo if not (out / "raw" / f"{r['key']}.wav").exists()]
-            if need: print(f"{name}: synthesizing {len(need)} clips with {a.voice} (attempt {attempt + 1})", flush=True); synth(engine, voice, need, out, speed)
+            need = [({"text": r["say"], "out": str(out / "raw" / f"{r['key']}.wav"), "seed": base + attempt * 101 + r["i"]}, pace[r["i"]]) for r in todo if not (out / "raw" / f"{r['key']}.wav").exists()]
+            if need: print(f"{name}: synthesizing {len(need)} clips with {a.voice} (attempt {attempt + 1})", flush=True)
+            for sp in sorted({v for _, v in need}): synth(engine, voice, [x for x, v in need if v == sp], out, sp)
             bad = []
             for r in todo:
                 raw = out / "raw" / f"{r['key']}.wav"; clean = out / f"seg{r['i']:03d}.wav"
@@ -342,9 +355,12 @@ def main():
     for r in res:
         for c in r["cues"]:
             c["t"] = 0.0 if c["w"] == 0 or not r["words"] else (r["start"][c["w"]] if c["w"] < len(r["words"]) else r["dur"])
-    # a chapter's long form is named after the book's chapter (ch06-heapsort.mp4); silent passes and parts after the voice
+    # a chapter's long form is named after the book's chapter (ch06-heapsort.mp4), a section video after the book's section
+    # (book.json sections); silent passes and parts after the voice
     chapter = (book.get("chapters") or {}).get(home.name, {}).get("book")
+    if section: chapter = (book.get("sections") or {}).get(home.parent.name, {}).get(home.name)   # ch02-s01-insertion-sort.mp4
     stem = f"{name}-{'silent' if a.silent else long_form_name(chapter) if chapter and not a.only else voice}"
+    if meta.get("kind") == "short" and not a.silent: stem = name   # a short is named after its folder: 001-1-the-slower-computer-wins.mp4
     src = lang.get("file", "main.rs")   # the editor's tab, and the command its run panel shows
     (out / "manifest.json").write_text(json.dumps({"meta": meta, "code": meta["code"], "runs": runs, "file": src, "run_cmd": f"rustc {src} && ./{pathlib.Path(src).stem}","name": name, "out": str(home / f"{stem}.mp4"), "voice": a.voice, "silent": a.silent, "segments": res}, indent=1, default=float))
     words = sum(len(r["words"]) for r in res); dur = sum(r["dur"] + r["gap"] for r in res)

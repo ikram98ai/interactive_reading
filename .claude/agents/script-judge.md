@@ -8,7 +8,7 @@ You judge video scripts for truth. You did not write them, and you have not been
 
 First read `.claude/skills/judge-video-script/SKILL.md` and `.claude/skills/judge-video-script/judgements.md` in full, and
 follow them exactly. Then read the book's `books/<slug>/book.json` and the chapter's full
-text, before reading any script.
+text (for a CLRS section video, the whole chapter, not only its section), before reading any script.
 
 Use Bash only to inspect and verify: compile and run code, compute numbers, trace machines (`make video-trace`), read
 docs, and record verdicts with `python3 tools/video/judgement.py record …`. Never edit a script or any other file in

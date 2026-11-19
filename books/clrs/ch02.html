@@ -2905,10 +2905,10 @@ K.page(2);
       1: "POWER line 1: r = 1, a store (data movement).",
       2: ea.go ? `POWER line 2: k = ${ea.k} > 0, keep going (control).` : "POWER line 2: k = 0, the loop is over.",
       3: `POWER line 3: k = ${ea.k} is ${ea.odd ? "odd, so multiply r by x" : "even, skip the multiply"}.`,
-      4: ea.over != null ? `POWER line 4: r · x = ${big(ea.over)} needs ${ea.over.toString(2).length} bits, more than a ${w}-bit word holds. In Rust, checked_mul returns None here.` : `POWER line 4: r = r · x = ${big(ea.r)} (arithmetic).`,
+      4: ea.over != null ? `POWER line 4: r · x = ${big(ea.over)} needs ${ea.over.toString(2).length} bits, more than a ${w}-bit word holds.${CODE_LANG.rust ? " In Rust, checked_mul returns None here." : ""}` : `POWER line 4: r = r · x = ${big(ea.r)} (arithmetic).`,
       5: `POWER line 5: k = ⌊k/2⌋ = ${ea.k}. Halving k is why the loop runs only about lg k times.`,
       6: ea.go ? "POWER line 6: k > 0, so square x." : "POWER line 6: k = 0, no need to square x again.",
-      7: ea.over != null ? `POWER line 7: x · x = ${big(ea.over)} needs ${ea.over.toString(2).length} bits: it does not fit in ${w}. checked_mul returns None.` : `POWER line 7: x = x · x = ${big(ea.x)}.`,
+      7: ea.over != null ? `POWER line 7: x · x = ${big(ea.over)} needs ${ea.over.toString(2).length} bits: it does not fit in ${w}.${CODE_LANG.rust ? " In Rust, checked_mul returns None." : ""}` : `POWER line 7: x = x · x = ${big(ea.x)}.`,
       8: `POWER returns r = ${big(ea.r)} after ${stepsA()} steps; POWER-OF-2 needed 2, one shift and the return. Squaring's step count grows with lg k, so exponentiation is not one RAM instruction in general.`,
     };
     return t + L[ea.line];

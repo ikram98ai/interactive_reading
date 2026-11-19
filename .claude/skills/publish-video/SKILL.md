@@ -1,6 +1,6 @@
 ---
 name: publish-video
-description: Upload recorded videos (a chapter's long form) to YouTube through Studio's web UI, or edit ones already uploaded (titles, descriptions, thumbnails, schedule, playlists). Run only when the user asks for it.
+description: Upload recorded videos (a CLRS section video or a chapter's long form) to YouTube through Studio's web UI, or edit ones already uploaded (titles, descriptions, thumbnails, schedule, playlists). Run only when the user asks for it.
 disable-model-invocation: true
 ---
 
@@ -14,7 +14,10 @@ block names the outputs, their playlists and title formats, the schedule and the
 | --- | ----------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | 9   | **Publish** | `node tools/video/studio_upload.js videos/<book> --long-form chNN --day YYYY-MM-DD --plan`, then without `--plan` | Every video is up, titled, described, captioned, scheduled and in its playlist |
 
-One chapter per run. `--plan` uploads nothing: it prints the title, playlist, publish time, description, judgement, QA
+One video per run. **`studio_upload.js` uploads chapter long forms only today** (`--long-form chNN`). CLRS section
+videos (`videos/clrs/chNN/sMM/`) need the section-folder change in `videos/clrs/plan.md` ("Tooling to add"): a
+`--section` mode, a `videos.section` block in `book.json` with its title template, playlist and schedule, and a
+`book.json` `sections` map for the titles. Until it exists, don't upload a section video by hand; tell the user. `--plan` uploads nothing: it prints the title, playlist, publish time, description, judgement, QA
 and every problem, and exits 1 if there is one. The real run refuses on any problem too.
 
 **Judged and checked only.** Publish only a video narrated from a script that passes `judgement.py check`, never one
@@ -41,9 +44,11 @@ the MP4 changes). Its WARN lines are in the plan: fix each, or write down why it
     unfinished upload when rerun. It can't create a playlist: one missing from Studio's list stops the run.
   - `--titles` updates the title and description of a long-form video that's already up (it needs the video's record
     on disk).
-- **Every book: one long form per chapter**, in `videos.long_form.playlist` and titled by `videos.long_form.title`. For
-  CLRS that's "Introduction to Algorithms", and a title like "Chapter 1: The Role of Algorithms in Computing |
-  Introduction to Algorithms".
+- **What each book publishes:** CLRS publishes one video per section for Chapters 2–35, plus Chapter 1's chapter video;
+  any other book, one long form per chapter. A chapter long form goes in `videos.long_form.playlist`, titled by
+  `videos.long_form.title`: for CLRS, "Introduction to Algorithms", and a title like "Chapter 1: The Role of Algorithms
+  in Computing | Introduction to Algorithms". The section videos' playlist (one per chapter, or the series playlist)
+  and release rhythm are still the author's to decide (`videos/clrs/plan.md`, "Still for the author to decide").
 - Studio allows 100 characters in a title.
 - **Descriptions:**
   - A long-form description opens with `videos.long_form.intro`, then the chapter's page link (`videos.site`) and the

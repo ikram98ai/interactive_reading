@@ -1,13 +1,21 @@
 ---
 name: record-video
-description: Narrate, record and QA judged video scripts (a chapter's long form) into finished MP4s with captions, all local — silent pass, pilot, full render, quality bar. Use when the user asks to record, render, narrate or finish a video. Not for uploading (publish-video) or writing and judging scripts (write-video-script, judge-video-script).
+description: Narrate, record and QA judged video scripts (a CLRS section video or a chapter's long form) into finished MP4s with captions, all local — silent pass, pilot, full render, quality bar. Use when the user asks to record, render, narrate or finish a video. Not for uploading (publish-video) or writing and judging scripts (write-video-script, judge-video-script).
 ---
 
-# Record a chapter's videos
+# Record a video
 
-This is steps 6–8 of a chapter's videos. Steps 1–5 are the `write-video-script` and `judge-video-script` skills: a
+This is steps 6–8 of a video. Steps 1–5 are the `write-video-script` and `judge-video-script` skills: a
 script reaches this skill written and judged. Step 9, uploading, is the `publish-video` skill, which only the user
 starts. Read `books/<slug>/book.json` first: its `videos` block names the voice and the outputs.
+
+`SCRIPT` below is the video's script: `videos/clrs/chNN/sMM/script.md` for a CLRS section video, or
+`videos/<book>/chNN/script.md` for a chapter long form. **Section folders aren't wired up yet.** `narrate.py` names
+the video after its folder, so a section's would come out as `s02-<voice>.mp4` with no section title, and
+`studio_upload.js` knows only chapters. Make the section-folder change in `videos/clrs/plan.md` ("Tooling to add")
+before recording a section video for real; a silent pass works meanwhile. A section video with more than one RUST
+  part also needs the editor round trip (`{goto page}`) from the same list: today `studio.js` allows one switch to the
+  editor per video.
 
 Everything here stays on this machine, so it's safe to run whenever the user asks for a video to be recorded or
 finished. It is slow: narration and recording run in real time, so start long renders in the background.
@@ -18,11 +26,11 @@ Each step has a gate. Don't start the next step until the gate passes.
 
 | #   | Step                 | Command                                                                      | Gate                                                                                   |
 | --- | -------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| 6   | **Silent pass**      | `make video-silent SCRIPT=videos/<book>/chNN/script.md`                      | No `CHECK FAILED`, `no button`, `could not press` or unknown target                    |
+| 6   | **Silent pass**      | `make video-silent SCRIPT=<script>`                                          | No `CHECK FAILED`, `no button`, `could not press` or unknown target                    |
 | 7   | **Pilot**            | `make video-part SCRIPT=… ONLY="Part 4 of"`                                  | You've looked at one part at full size                                                 |
 | 8   | **Render and QA**    | `make video-long SCRIPT=…`, then `make video-qa VIDEO=…`                     | No FAIL. Fix every WARN, or write down why it stays ([quality-bar.md](quality-bar.md))  |
 
-**The long-form video** is recorded with `make video-long SCRIPT=videos/<book>/chNN/script.md`: `narrate.py`, then
+**The video** is recorded with `make video-long SCRIPT=<script>`: `narrate.py`, then
 `assemble.js` on the manifest it prints. That records each part (the intro, and each section card on) on its own, caches
 it under `build/<voice>/parts/`, and joins the parts without a seam: a part ends on the next part's card, and the next
 starts under it.
@@ -34,7 +42,7 @@ every part. If a page edit only touched some scenes, say which: `ARGS="--page-sc
 parts that don't show them. Run QA on the joined video as always, and look at the re-recorded parts.
 
 Its pilot is one
-part: `make video-part SCRIPT=videos/<book>/chNN/script.md ONLY="Part 4 of"` narrates and records just that part.
+part: `make video-part SCRIPT=<script> ONLY="Part 4 of"` narrates and records just that part.
 `ONLY` picks the first `{goto}` whose text contains it (here, the card "Part 4 of 15"), and names the output after it
 (`chNN-part-4-of-…mp4`).
 
