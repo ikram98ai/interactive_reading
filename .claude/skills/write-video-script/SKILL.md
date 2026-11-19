@@ -19,9 +19,8 @@ Every book with videos (`books/<slug>/book.json` `videos` is not null) gets one 
 Both are written by the method in [long-form.md](long-form.md). A chapter or section gets no other videos: no lesson
 series, and no intro, summary or wrap-up videos.
 
-**The recorder doesn't handle section folders yet.** `narrate.py` and the tools after it name a video after its folder
-and look the title up in `book.json` `chapters`, so a `chNN/sMM/` video needs the change listed under "Tooling to add"
-in `videos/clrs/plan.md` before it's recorded for real. Writing and judging a section script don't depend on it.
+**Section folders are recorded like chapter folders.** `narrate.py` and the tools after it read a script under
+`chNN/sMM/` as Section N.M: they name it `chNN-sMM` and take its title from `book.json` `sections`.
 
 The format comes from measuring a well-regarded programming course video by video (`videos/demo`). Today the recorder
 can drive only CLRS pages (`books/clrs`).
@@ -69,7 +68,8 @@ videos/<book>/chNN/script.md               a chapter's long-form script (CLRS Ch
 videos/<book>/chNN/chNN-<chapter>.mp4      a chapter video (ch06-heapsort.mp4), with its .srt captions and .chapters.txt
 ```
 
-A section video's file name comes with the section-folder tooling (planned: `chNN-sMM-<section-title>.mp4`).
+A section video is `videos/clrs/chNN/sMM/chNN-sMM-<section>.mp4`, its section's title from `book.json` `sections` as a
+file name (`ch02-s01-insertion-sort.mp4`), with its `.srt` and `.chapters.txt`.
 
 **Front matter**, between `---` lines at the top (copy an existing script's): `title` and `kicker` (the title card),
 `page` (the chapter page, shared by all its section videos), `scene` (the first scene's id), `seed` (fixes
