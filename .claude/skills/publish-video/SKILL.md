@@ -59,7 +59,7 @@ the MP4 changes). Its WARN lines are in the plan: fix each, or write down why it
     at least three, and each lasts 10 seconds, so `--long-form` refuses a file that breaks those rules.
   - `studio_upload.js --titles` rewrites only that first line, and refuses if the text it reads doesn't link that
     chapter's page.
-  - Every video gets its `.srt` captions, "not made for kids", and a thumbnail made by `tools/video/thumb.js`: the chapter and title in large type, readable at a phone feed's size.
+  - Every video gets its `.srt` captions, "not made for kids", and a thumbnail made by `tools/video/thumb.js`, readable at a phone feed's size. Give each video a `thumb.json` beside its script (format in thumb.js's header): the video's real title as the headline, under it a two-line hook that opens the video's own opening question, beside one bold picture of the video's machine (`race`, `cards`, `curves`, `tree`), and `"rust": true` (the Rust logo, in orange) when the video ends in Rust. The hook promises only what the video shows. Without a `thumb.json` it falls back to the plain title card.
 - **The schedule** (`videos.schedule`) is in the channel's time zone, Asia/Karachi. A long form goes out at
   `videos.long_form.time` on a `videos.long_form.weekday`. Ask the user which day a video goes out. Scheduling is done
   on YouTube, not by holding files back locally.

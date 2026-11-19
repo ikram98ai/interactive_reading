@@ -22,8 +22,8 @@
    Updates the title and the description's first line (videos.long_form.intro) of every long form already up, and never
    moves a publish time. --plan lists what would change.
 
-   Everything goes through YouTube Studio's web UI (no API). The thumbnail is the chapter and title in large type
-   (thumb.js), saved beside the video as <video>.thumb.jpg. --steps screenshots each dialog step. Progress is written to
+   Everything goes through YouTube Studio's web UI (no API). The thumbnail is made by thumb.js (the title, a hook
+   and a picture from thumb.json), saved beside the video as <video>.thumb.jpg. --steps screenshots each dialog step. Progress is written to
    <video>.youtube.json, so a rerun resumes. Names, title formats, site and schedule come from books/<book>/book.json
    (its "videos" block). Chrome profile: ~/.config/interactive-reading/chrome-studio. */
 const fs = require("fs"), os = require("os"), path = require("path"), crypto = require("crypto"), cp = require("child_process");
@@ -197,9 +197,9 @@ function printLong(it) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-// The thumbnail: the video's chapter and title in large type, from its script's front matter (thumb.js). THUMB names this
-// design in each upload record.
-const THUMB = "large-title";
+// The thumbnail (thumb.js): the video's title with its hook and picture when a thumb.json sits beside the script, otherwise
+// the chapter and title in large type. THUMB names the design in each upload record.
+const THUMB = (it) => (fs.existsSync(path.join(path.dirname(it.video), "thumb.json")) ? "title-hook" : "large-title");
 const makeThumb = (it) => cp.execFileSync("node", [path.join(__dirname, "thumb.js"), path.join(path.dirname(it.video), "script.md"), it.thumb, ...(it.part ? [it.part] : [])], { stdio: "ignore" });
 
 const shot = (page, it, step) => STEPS && page.screenshot({ path: path.join(STEPS, `${it.id.replace("/", "-")}-${step}.png`) });
@@ -337,7 +337,7 @@ async function upload(page, it) {
 
   await setText(page, dlg.locator("#title-textarea #textbox"), it.title);
   await setText(page, dlg.locator("#description-textarea #textbox"), it.description);
-  // thumbnail: the chapter and title in large type (thumb.js), readable at a phone feed's size
+  // thumbnail: made by thumb.js (title, hook and picture, or the plain title card), readable at a phone feed's size
   makeThumb(it);
   await dlg.locator("input#file-loader").first().setInputFiles(it.thumb);
   await sleep(4000);
@@ -404,7 +404,7 @@ async function upload(page, it) {
   const confirmed = page.getByText(it.now ? /video published|published/i : /will be set to public on/i).first();
   await Promise.race([confirmed.waitFor({ timeout: 90000 }), ...(it.now ? [dlg.waitFor({ state: "hidden", timeout: 90000 })] : [])])
     .catch(() => { throw new Error(`Studio did not confirm the ${it.now ? "publish" : "schedule"}`); });
-  Object.assign(rec, { title: it.title, meta: it.meta, captions: "studio", thumbnail: THUMB },
+  Object.assign(rec, { title: it.title, meta: it.meta, captions: "studio", thumbnail: THUMB(it) },
     it.now ? { visibility: "public", published: new Date().toISOString().replace(/\.\d+Z$/, "Z") } : { publish_at: it.publish_at });
   Object.assign(rec, { playlist: it.playlist, status: it.now ? "public" : "scheduled", done: true }, it.replaces ? { replaces: it.replaces } : {});
   delete rec.incomplete;
@@ -467,7 +467,7 @@ async function rethumb(page, it, rec) {
     saved = (await save.getAttribute("aria-disabled").catch(() => null)) === "true" || !(await save.isEnabled().catch(() => true));
   }
   if (!saved) throw new Error("Studio did not save the new thumbnail");
-  rec.thumbnail = THUMB; rec.thumbnail_set = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+  rec.thumbnail = THUMB(it); rec.thumbnail_set = new Date().toISOString().replace(/\.\d+Z$/, "Z");
   fs.writeFileSync(it.record, JSON.stringify(rec, null, 2) + "\n");
 }
 
