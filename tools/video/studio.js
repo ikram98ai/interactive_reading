@@ -74,6 +74,24 @@ html:not(.vid-rust) .memstrip, .stage:not(.is-full) [id$="-mem"] { display: none
 .vid-part { transition: opacity .4s ease; }
 html, body { cursor: none !important; } * { scrollbar-width: none !important; }
 `;
+// Pages built on assets/kit.js (CS:APP) have no full-screen button of their own. studio.js gives their stage the same
+// .is-full layout as books/clrs/algo.css (copied from there), so every cue, target and check works the same on both.
+const KIT_CSS = `
+.has-full, .has-full body { overflow: hidden; }
+.wrap .stage.is-full { position: fixed; inset: 0; z-index: 70; margin: 0; max-width: none; width: auto; height: 100vh; border: 0; border-radius: 0; box-shadow: none;
+  display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(360px, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto auto; background-image: none; }
+.stage.is-full > * { grid-column: 1; min-width: 0; }
+.stage.is-full > .stage-head { grid-column: 1 / -1; }
+.stage.is-full .sim-zoom { display: none; }
+.stage.is-full > .stage-scroll { display: flex; overflow: auto; padding: 8px; }
+.stage.is-full > .stage-scroll > svg { flex: none; margin: auto; min-width: 0; max-width: none; width: 100%; height: 100%; }
+.stage.is-full > .codepane { grid-column: 2; grid-row: 2 / -1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-top: 0; }
+.stage.is-full .codepane > * { flex: none; }
+.stage.is-full .codepane > .cp-body { flex: 1 1 0; min-height: 0; max-height: none; }
+.stage.is-full .cp-lang, .stage.is-full .cp-tabs button[aria-selected=false] { display: none !important; }
+html.vid-rust .wrap .stage.is-full .codepane > .cp-body { max-height: none; } /* no stack-and-heap strip to make room for */
+html.vid-rust .wrap .stage.is-full .cp-body ol { font-size: 15px; line-height: 1.85; }
+`;
 
 // Runs inside the page. Everything is drawn above the stage and never touches the book's own code.
 function overlayScript() {
@@ -168,15 +186,16 @@ function overlayScript() {
       $("vid-list").appendChild(li); requestAnimationFrame(() => requestAnimationFrame(() => { li.style.opacity = 1; li.style.transform = "none"; }));
     },
     async lang(rust) {
-      const was = window.AL && AL.CODE_LANG.v;
+      const was = window.AL ? AL.CODE_LANG.v : typeof CODE_LANG !== "undefined" ? CODE_LANG.v : undefined;
       document.documentElement.classList.toggle("vid-rust", rust);
       if (window.AL) AL.CODE_LANG.set(rust ? "rust" : "pseudo");
+      else if (typeof CODE_LANG !== "undefined") CODE_LANG.set(rust ? "rust" : "c"); // CS:APP: {pseudo} means the book's C
       return was;
     },
     fresh() { // how every scene starts: nothing that the narration hasn't named
       this.label(""); state.targets = []; $("vid-card").style.opacity = 0;
       document.documentElement.classList.remove("vid-rust", "vid-quiet");
-      if (window.AL) AL.CODE_LANG.set("pseudo");
+      if (window.AL) AL.CODE_LANG.set("pseudo"); else if (typeof CODE_LANG !== "undefined") CODE_LANG.set("c");
       this.show([".is-full > .codepane", ".is-full > .statrow"], false);
       this.center(true);
     },
@@ -208,6 +227,13 @@ function overlayScript() {
       }));
     },
     center(on) { document.documentElement.classList.toggle("vid-center", on); },
+    enter(id) { // full screen on a scene: CLRS pages have a button for it; CS:APP (kit.js) pages get the class from KIT_CSS
+      const s = document.getElementById(id); if (s.querySelector(".is-full")) return;
+      s.scrollIntoView(); const fs = s.querySelector(".fs-btn");
+      if (fs) { fs.click(); return; }
+      document.querySelectorAll(".stage.is-full").forEach((x) => x.classList.remove("is-full"));
+      s.querySelector(".stage").classList.add("is-full"); document.documentElement.classList.add("has-full");
+    },
     label(text) { const l = $("vid-label"); if (text) l.textContent = text; l.style.opacity = text ? 1 : 0; l.style.transform = text ? "none" : "translateY(8px)"; },
     hideTitle() { $("vid-title").style.opacity = 0; $("vid-card").style.opacity = 0; }, // {scene}: back to the picture
     section(kicker, head) { state.targets = []; this.label(""); $("vid-list").innerHTML = ""; $("vid-kicker").textContent = kicker; $("vid-head").textContent = head; $("vid-title").style.opacity = 1; $("vid-card").style.opacity = 0; },
@@ -271,10 +297,11 @@ function overlayScript() {
   } else {
   await page.goto("file://" + path.join(ROOT, meta.page), { waitUntil: "load" });
   await page.evaluate(() => document.fonts.ready);
+  if (!(await page.evaluate(() => !!window.AL))) await page.addStyleTag({ content: KIT_CSS }); // a kit.js page (CS:APP)
   await page.addStyleTag({ content: CSS });
   await page.evaluate(overlayScript);
   await page.evaluate(() => window.__vid.title(true, "", "")); // a cold open: the first {scene} fades straight into the picture
-  await page.evaluate((id) => { const s = document.getElementById(id); s.scrollIntoView(); s.querySelector(".fs-btn").click(); if (window.K) K.speed.value = 1; window.__vid.fresh(); }, meta.scene);
+  await page.evaluate((id) => { window.__vid.enter(id); if (window.K) K.speed.value = 1; window.__vid.fresh(); }, meta.scene);
   }
   // One part of a long form (assemble.js), on a page of its own: set it up off camera as the whole video would have it
   // here. The layers earlier parts hid stay hidden, and the part's own card is already up (the part before it faded it in).
@@ -356,7 +383,7 @@ function overlayScript() {
         entered = true;
       }
       else { await page.evaluate(() => window.__vid.dip(true)); await sleep(330); }
-      await page.evaluate((id) => { const s = document.getElementById(id); if (!s.querySelector(".is-full")) { s.scrollIntoView(); s.querySelector(".fs-btn").click(); } K.speed.value = 1; window.__lastBtn = null; window.__vid.fresh(); }, id);
+      await page.evaluate((id) => { window.__vid.enter(id); K.speed.value = 1; window.__lastBtn = null; window.__vid.fresh(); }, id);
       await sleep(card ? 500 : 250);
       if (!card) await page.evaluate(() => window.__vid.dip(false));
       log(`goto ${id}`);

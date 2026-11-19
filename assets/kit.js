@@ -466,7 +466,178 @@
     },
   };
 
+  /* ---- full screen: one machine and its code side by side (CS:APP pages) ----
+     The same idea as books/clrs/algo.js's Full screen, for pages that don't load algo.js. A Full screen button in each
+     machine's head row lifts that stage over the page (and into the browser's own full screen where allowed): the
+     picture fills the left and the code panel the right. The picture fits its box at 100%; − and + (or ctrl/⌘ + wheel,
+     a trackpad pinch, or the - + 0 keys) zoom it, and a zoomed picture pans by dragging. Code hides or shows the
+     listing. Esc or the button leaves. Code panels are built after this file runs, so a stage's panel is looked up
+     when it enters full screen. */
+  const FULL_BOOKS = ["csapp"];
+  const FULL_CSS = `
+.fs-btn, .fs-code { appearance: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px;
+  border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink-2); font: 700 12px/1 var(--f-body); }
+.fs-btn { padding-left: 9px; }
+.fs-btn:hover, .fs-code:hover { border-color: var(--lilac); color: var(--lilac); }
+.fs-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.fs-btn[aria-pressed="true"], .fs-code[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.stage-head > .stage-title { margin-right: auto; }
+.fs-zoom, .fs-code { display: none; }
+.is-full .fs-code { display: inline-flex; }
+.is-full .fs-zoom { display: inline-flex; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px; gap: 2px; }
+.fs-zoom button { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: 700 13px/1 var(--f-mono); min-width: 28px; height: 24px; padding: 0 7px; border-radius: 999px; cursor: pointer; }
+.fs-zoom button:hover { background: var(--surface-2); color: var(--lilac); }
+.has-full, .has-full body { overflow: hidden; }
+.wrap .stage.is-full { position: fixed; inset: 0; z-index: 70; margin: 0; max-width: none; width: auto; height: 100vh; height: 100dvh;
+  border: 0; border-radius: 0; box-shadow: none; background-image: none;
+  display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(360px, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto auto; }
+.stage.is-full > * { grid-column: 1; min-width: 0; }
+.stage.is-full > .stage-head { grid-column: 1 / -1; }
+.stage.is-full .sim-zoom { display: none; }
+.stage.is-full > .stage-scroll { display: flex; overflow: auto; padding: 8px; overscroll-behavior: contain; }
+.stage.is-full > .stage-scroll > svg { flex: none; margin: auto; min-width: 0; max-width: none; }
+.stage.is-full > .stage-scroll.zoomed { cursor: grab; }
+.stage.is-full > .stage-scroll.panning { cursor: grabbing; user-select: none; }
+.stage.is-full > .codepane { grid-column: 2; grid-row: 2 / -1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-top: 0; border-left: 1px solid var(--line); }
+.stage.is-full .codepane > * { flex: none; }
+.stage.is-full .codepane > .cp-body { flex: 1 1 0; min-height: 0; max-height: none; }
+.stage.is-full .codepane > .cp-out { max-height: 22vh; overflow: auto; }
+.wrap .stage.is-full.no-code { grid-template-columns: minmax(0, 1fr); }
+.stage.is-full.no-code > .codepane { display: none; }
+@media (max-width: 899px) and (orientation: portrait) {
+  .wrap .stage.is-full { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto auto minmax(0, 40%); }
+  .stage.is-full > .codepane { grid-column: 1; grid-row: 6; border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (max-width: 899px) and (orientation: landscape) { .wrap .stage.is-full { grid-template-columns: minmax(0, 1.2fr) minmax(300px, 1fr); } }
+@media (max-width: 899px), (max-height: 560px) {
+  .stage.is-full > .stage-head { padding: 6px 10px; gap: 6px; }
+  .stage.is-full > .stage-head > .stage-title { display: none; }
+  .stage.is-full > .controls { padding: 6px 10px; }
+  .stage.is-full > .statrow { flex-wrap: nowrap; overflow-x: auto; padding: 6px 10px; gap: 6px; }
+  .stage.is-full > .caption { padding: 6px 12px; min-height: 0; font-size: 14px; }
+  .stage.is-full .codepane .cp-head { padding: 5px 10px; }
+}`;
+  function mountFull() {
+    if (!FULL_BOOKS.includes(BOOK.slug)) return;
+    document.head.appendChild(h("style", { id: "kit-full-css" }, FULL_CSS));
+    const STEPS = [1, 1.25, 1.5, 2, 2.5, 3, 4];
+    const ICON_IN = "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5", ICON_OUT = "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5";
+    const stages = [];
+    let cur = null;
+    const pane = (st) => $(":scope > .codepane", st.stage); // built by the page after this file runs
+    function size() {
+      if (!cur) return;
+      const { scroller: sc, svg } = cur, vb = svg.viewBox.baseVal;
+      if (vb && vb.width && vb.height) {
+        const k = Math.max(0.1, Math.min((sc.clientWidth - 16) / vb.width, (sc.clientHeight - 16) / vb.height)) * cur.z;
+        svg.style.width = vb.width * k + "px"; svg.style.height = vb.height * k + "px";
+      }
+      sc.classList.toggle("zoomed", cur.z > 1);
+      cur.pct.textContent = Math.round(cur.z * 100) + "%";
+    }
+    /** zoom to z, keeping the point (x, y) of the scroller's box still */
+    function zoom(z, x, y) {
+      if (!cur) return;
+      const sc = cur.scroller;
+      z = Math.min(STEPS[STEPS.length - 1], Math.max(1, z));
+      if (x == null) { x = sc.clientWidth / 2; y = sc.clientHeight / 2; }
+      const fx = (sc.scrollLeft + x) / sc.scrollWidth, fy = (sc.scrollTop + y) / sc.scrollHeight;
+      cur.z = z; size();
+      sc.scrollLeft = fx * sc.scrollWidth - x; sc.scrollTop = fy * sc.scrollHeight - y;
+    }
+    const step = (dir) => cur && zoom(dir > 0 ? STEPS.find((v) => v > cur.z + 0.01) || cur.z : [...STEPS].reverse().find((v) => v < cur.z - 0.01) || 1);
+    function paint(st) {
+      const on = cur === st, hasCode = !!pane(st);
+      st.btn.setAttribute("aria-pressed", String(on));
+      $("path", st.btn).setAttribute("d", on ? ICON_OUT : ICON_IN);
+      st.btn.lastChild.textContent = on ? "Exit" : "Full screen";
+      st.btn.title = on ? "Leave full screen (Esc)" : "Show this machine and its code side by side";
+      st.stage.classList.toggle("no-code", on && (st.codeOff || !hasCode));
+      st.code.hidden = !hasCode;
+      st.code.setAttribute("aria-pressed", String(!st.codeOff));
+    }
+    function enter(st) {
+      if (cur) exit();
+      cur = Object.assign(st, { z: 1, native: false });
+      st.stage.classList.add("is-full");
+      document.documentElement.classList.add("has-full");
+      st.ro = new ResizeObserver(size); st.ro.observe(st.scroller);
+      st.mo = new MutationObserver(size); st.mo.observe(st.svg, { attributes: true, attributeFilter: ["viewBox"] });
+      paint(st); size(); st.btn.focus();
+      try {
+        const p = st.stage.requestFullscreen && st.stage.requestFullscreen({ navigationUI: "hide" });
+        if (p && p.then) p.then(() => { if (cur === st) st.native = true; }, () => {});
+      } catch (e) {}
+    }
+    function exit() {
+      const st = cur; if (!st) return;
+      cur = null;
+      st.ro.disconnect(); st.mo.disconnect();
+      st.stage.classList.remove("is-full", "no-code");
+      document.documentElement.classList.remove("has-full");
+      st.scroller.classList.remove("zoomed", "panning");
+      st.svg.style.width = st.svg.style.height = "";
+      if (document.fullscreenElement === st.stage) document.exitFullscreen().catch(() => {});
+      paint(st);
+      st.stage.scrollIntoView({ block: "nearest" });
+    }
+    document.addEventListener("fullscreenchange", () => { if (cur && cur.native && document.fullscreenElement !== cur.stage) exit(); });
+    document.addEventListener("keydown", (e) => {
+      if (!cur || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+      if (e.key === "Escape") { e.preventDefault(); exit(); }
+      else if ((e.key === "+" || e.key === "=") && !e.ctrlKey && !e.metaKey) step(1);
+      else if (e.key === "-" && !e.ctrlKey && !e.metaKey) step(-1);
+      else if (e.key === "0" && !e.ctrlKey && !e.metaKey) zoom(1);
+    });
+    /** ctrl/⌘ + wheel (and a trackpad pinch, which arrives as one) zooms; a zoomed picture drags to pan */
+    function wire(st) {
+      const sc = st.scroller;
+      sc.addEventListener("wheel", (e) => {
+        if (cur !== st || !(e.ctrlKey || e.metaKey)) return;
+        e.preventDefault();
+        const r = sc.getBoundingClientRect();
+        zoom(st.z * Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+      }, { passive: false });
+      let drag = null, moved = false;
+      sc.addEventListener("pointerdown", (e) => {
+        if (cur !== st || st.z <= 1 || e.pointerType !== "mouse" || e.button !== 0) return;
+        drag = { x: e.clientX, y: e.clientY, l: sc.scrollLeft, t: sc.scrollTop }; moved = false;
+      });
+      window.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+        if (!moved && Math.hypot(dx, dy) < 5) return;
+        moved = true; sc.classList.add("panning");
+        sc.scrollLeft = drag.l - dx; sc.scrollTop = drag.t - dy;
+      });
+      window.addEventListener("pointerup", () => { drag = null; sc.classList.remove("panning"); });
+      // a drag that panned is not a click on whatever it started over
+      sc.addEventListener("click", (e) => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+    }
+    $$(".stage").forEach((stage) => {
+      const scroller = $(":scope > .stage-scroll", stage), svg = scroller && $(":scope > svg", scroller);
+      const head = $(":scope > .stage-head", stage);
+      if (!svg || !head || $(".fs-btn", head)) return;
+      const btn = h("button", { type: "button", class: "fs-btn" },
+        s("svg", { viewBox: "0 0 24 24", "aria-hidden": "true" }, s("path", { d: ICON_IN })), h("span", {}, ""));
+      const bar = h("span", { class: "fs-zoom", role: "group", "aria-label": "Zoom the picture" });
+      const zb = (label, aria, fn) => { const x = h("button", { type: "button", "aria-label": aria, title: aria }, label); x.addEventListener("click", fn); bar.appendChild(x); return x; };
+      zb("−", "Zoom out", () => step(-1));
+      const pct = zb("100%", "Fit the picture to the screen", () => zoom(1));
+      zb("+", "Zoom in", () => step(1));
+      const code = h("button", { type: "button", class: "fs-code", title: "Show or hide the code panel" }, "Code");
+      const st = { stage, scroller, svg, btn, pct, code, codeOff: stage.dataset.code === "off" };
+      btn.addEventListener("click", () => (cur === st ? exit() : enter(st)));
+      code.addEventListener("click", () => { st.codeOff = !st.codeOff; paint(st); });
+      head.append(code, bar, btn);
+      stages.push(st); wire(st); paint(st);
+    });
+    // a page builds its code panels after this file runs: paint again so Code shows where a listing exists
+    window.addEventListener("load", () => stages.forEach(paint));
+  }
+
   mountTheme();
   mountZoom();
+  mountFull();
   window.K = { BOOK, CHAPTERS, BUILT, h, s, $, $$, clear, tween, fly, path, loop, sleep, lerp, ease, speed, setSpeed, reduced, whenVisible, seg, slider, stat, toast, quiz, page, themeSwitch, speedSwitch, applyTheme, getProgress, setDone, file, draw };
 })();

@@ -40,12 +40,9 @@
   .cp-tab[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
   .cp-file { font: 700 12.5px/1 var(--f-mono); color: var(--ink); padding: 6px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); }
   .cp-cmd { font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); }
-  .cp-lang { margin-left: auto; display: inline-flex; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 9px; padding: 2px; gap: 2px; }
-  .cp-lang button { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: 700 12px/1 var(--f-mono); padding: 6px 10px; border-radius: 7px; cursor: pointer; }
-  .cp-lang button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
-  .first .cp-lang { margin: 8px 0 0; display: flex; width: max-content; }
   .cp-body { overflow: auto; max-height: 240px; background: var(--surface); border-top: 1px solid var(--line); position: relative; }
   .cp-body:focus-visible { outline-offset: -3px; }
+  #s5-prog .cp-body, #s6-prog .cp-body { max-height: 400px; }
   .cp-body ol { font-variant-ligatures: none; list-style: none; margin: 0; padding: 8px 0; min-width: 100%; width: max-content; font-family: var(--f-mono); font-size: 12.5px; line-height: 1.62; color: var(--ink); }
   .cp-body li { position: relative; white-space: pre; padding: 0 18px 0 46px; transition: background-color .18s; }
   .cp-body li::before { content: attr(data-n); position: absolute; left: 0; width: 32px; text-align: right; color: var(--ink-3); }
@@ -68,7 +65,6 @@
   .t-fn { font-weight: 700; }
   @media (prefers-reduced-motion: reduce) { .fade, .cp-body li { transition: none; } }
   details.book pre.prelude { margin: 0; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-s); font-family: var(--f-mono); font-size: 12px; line-height: 1.5; overflow-x: auto; color: var(--ink); }
-  #rust-prelude[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -81,37 +77,29 @@
       <h1>System-Level I/O</h1>
       <p class="lede">Input copies bytes from a device into memory. Output copies bytes the other way. Linux makes every device look like a file, so one small set of calls serves the disk, the keyboard, and the network.</p>
       <p class="quote">“All I/O devices, such as networks, disks, and terminals, are modeled as files, and all input and output is performed by reading and writing the appropriate files.”</p>
-      <p class="first"><b>New here?</b> Each section of the chapter is one little machine. Read the story, then press the buttons. Under the picture, <b>The program</b> is the code that step is running — the highlighted line is now. <b>The idea</b> is the same step in a few lines, so you can see what the picture is for. Press <b>C</b> or <b>Rust</b>. You cannot break it.</p>
+      <p class="first"><b>New here?</b> Each section of the chapter is one little machine. Read the story, then press the buttons. Under the picture, <b>The program</b> is the code that step is running — the highlighted line is now. <b>The idea</b> is the same step in a few lines, so you can see what the picture is for. The book’s code is C; ours is <b>Rust</b>, and the story says in words what the book’s C does. Every listing really ran on Linux, and the dark strip under it shows what came out, often the exact system call the kernel saw. You cannot break it.</p>
+      <p class="story">Three bits of Rust to start. <code>let</code> gives a value a name. <code>File::open("foo.txt")</code> asks the kernel to open a file and hands back a <code>File</code>, Rust’s open file, which holds the descriptor. The <code>?</code> after a call means “if this failed, stop and hand the error to whoever called us”, so a listing never ignores an error by accident. Text after <code>//</code> is a comment.</p>
 
-      <details class="book" id="rust-prelude" hidden>
+      <details class="book" id="rust-prelude">
         <summary>Rust setup: what the listings assume</summary>
         <div class="inner">
-          <p>The book’s C listings rely on system headers. The Rust listings on this page are fragments too, and they rely on this block. Rust’s standard library covers everyday file work (<code>std::fs</code>, <code>std::io</code>); these raw calls show what those wrap.</p>
-          <pre class="prelude">use std::ffi::{c_char, c_int};
+          <p>The listings are fragments. They assume this block at the top of the file, and that they run inside a function that returns <code>io::Result</code>, so <code>?</code> has somewhere to send an error. <code>use</code> brings a name into scope, so <code>File</code> means <code>std::fs::File</code>. Rust’s standard library, <code>std</code>, covers nearly all of this chapter. It has no function for four of the calls the chapter uses (<code>umask</code>, <code>dup2</code>, <code>fork</code>, <code>wait</code>); those come from the C library, inside an <code>extern</code> block, and every call to them sits in <code>unsafe { … }</code>: a promise from us, because the compiler cannot check what they do.</p>
+          <p>Every listing was compiled and run with rustc 1.100.0 (<code>--edition 2021 -C opt-level=1</code>). Program output and compiler messages come from x86-64 Linux. The kernel-call lines in the dark output strips, such as <code>openat(AT_FDCWD, "foo.txt", O_RDONLY|O_CLOEXEC) = 3</code>, are real captures from <b>strace</b>, a Linux tool that prints every system call a program makes. They were taken on Linux running natively (arm64), because the x86-64 toolbox here runs under an emulator that keeps a few descriptors of its own open. The descriptor numbers are the same on any Linux, and so are the calls, except where a strip says otherwise (arm64 Linux has no <code>dup2</code> system call, so the C library’s <code>dup2</code> makes <code>dup3</code>).</p>
+          <pre class="prelude">use std::ffi::c_int; // C's int: an i32, a 32-bit signed number
+use std::fs::File;
+use std::io::{self, BufReader, BufWriter, ErrorKind};
+use std::io::{BufRead, Read, Seek, SeekFrom, Write};
+use std::os::fd::{AsRawFd, FromRawFd}; // a File's descriptor number
+use std::os::unix::fs::{DirEntryExt, OpenOptionsExt}; // .ino(), .mode()
+use std::path::Path;
 
-// The C library, called directly. C's `void *` is written `*mut u8` / `*const u8`
-// here (the same machine-level pointer). `...` marks a variable-argument function.
+// Four calls std has no function for, from the C library (Linux).
 unsafe extern "C" {
-    fn open(path: *const c_char, flags: c_int, ...) -&gt; c_int;
-    fn close(fd: c_int) -&gt; c_int;
-    fn read(fd: c_int, buf: *mut u8, n: usize) -&gt; isize;
-    fn write(fd: c_int, buf: *const u8, n: usize) -&gt; isize;
-    fn dup2(old: c_int, new: c_int) -&gt; c_int;
-    fn fork() -&gt; c_int;
-    fn wait(status: *mut c_int) -&gt; c_int;
     fn umask(mask: u32) -&gt; u32;
-    #[link_name = "__errno_location"] // macOS: __error
-    fn errno_location() -&gt; *mut c_int;
-}
-
-// Linux x86-64 values
-const O_RDONLY: c_int = 0;    const O_WRONLY: c_int = 1;
-const O_CREAT: c_int = 0o100; const O_TRUNC: c_int = 0o1000;
-const O_APPEND: c_int = 0o2000;
-const S_IRUSR: u32 = 0o400; const S_IWUSR: u32 = 0o200;
-const S_IRGRP: u32 = 0o040; const S_IWGRP: u32 = 0o020;
-const S_IROTH: u32 = 0o004; const S_IWOTH: u32 = 0o002;
-const EINTR: c_int = 4;</pre>
+    fn dup2(oldfd: c_int, newfd: c_int) -&gt; c_int;
+    fn fork() -&gt; c_int;
+    fn wait(status: *mut c_int) -&gt; c_int; // *mut: a raw pointer
+}</pre>
         </div>
       </details>
       <nav class="toc" aria-label="Scenes in this chapter">
@@ -146,7 +134,9 @@ const EINTR: c_int = 4;</pre>
         <h2>A ticket, not the drawer</h2>
         <p class="story">A Linux file is a sequence of <b>m</b> bytes. Opening one asks the kernel for a small nonnegative integer, the <b>descriptor</b>. Priya stores that number. The kernel stores everything else, including a <b>file position</b> <b>k</b> that starts at 0.</p>
         <p class="story">A new process already holds three descriptors: 0 standard input, 1 standard output, 2 standard error. A read of n bytes copies from k and then sets k to k+n. If k is already past the last byte, the read returns 0. That condition is end-of-file. There is no EOF character hiding in the file. Close puts the descriptor back in the pool. Exit closes whatever is left.</p>
-        <p class="imagine"><b>Try it:</b> press <b>Open foo.txt</b>. The lowest free number is 3. Then <b>Read 4</b> twice, and once more for EOF. Watch the same line light up in both listings.</p>
+        <p class="story">In the Rust, <code>let mut</code> names a value we are allowed to change. <code>[0u8; 8]</code> is an array of eight bytes, all zero (<code>u8</code> is one unsigned byte). <code>&amp;mut buf[..4]</code> lends <code>read</code> the first four of them to write into: a <b>slice</b>, a view of part of an array, and <code>&amp;mut</code> means “borrowed, and you may change it”. <code>read</code> returns how many bytes it copied. <code>drop(f)</code> closes the file now; Rust would also close it by itself when <code>f</code> goes out of scope.</p>
+        <p class="story">We ran this listing under strace on Linux. Each step’s strip shows the system call it made: <code>File::open</code> became <code>openat(…, O_RDONLY|O_CLOEXEC) = 3</code>, and each <code>f.read</code> became exactly one kernel <code>read</code>. <code>O_CLOEXEC</code> is a flag std adds to every descriptor it opens, so the descriptor is closed for you if this program later starts another one.</p>
+        <p class="imagine"><b>Try it:</b> press <b>Open foo.txt</b>. The lowest free number is 3. Then <b>Read 4</b> twice, and once more for EOF. Watch the same line light up in both listings, and read the real system call underneath.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -174,11 +164,12 @@ const EINTR: c_int = 4;</pre>
         <h2>A type, a place, and bytes</h2>
         <p class="story">Kenji’s tree hangs from one root, <code>/</code>. A <b>regular file</b> holds bytes. A <b>directory</b> is a list of names, and it always contains <code>.</code> (itself) and <code>..</code> (its parent). A <b>socket</b> is a file used to talk to another process across a network. The kernel does not have a separate text type and binary type. Programs invent that distinction.</p>
         <p class="story">A Linux text line ends with one byte, newline, value <code>0x0a</code>. Windows and HTTP end a line with <code>0x0d 0x0a</code>. Open that file on Linux and each line shows a <code>^M</code>. An absolute pathname starts with <code>/</code>. A relative pathname starts from the process’s <b>current working directory</b>.</p>
+        <p class="story">In the Rust, <code>Path::new</code> treats a string as a pathname without touching the disk. <code>b"\r\n"</code> is a <b>byte string</b>: raw bytes rather than text, which is exactly what the kernel stores. <code>.is_absolute()</code> answers whether a path starts at the root. <code>String::from</code> makes a <code>String</code>, Rust’s growable text, and <code>println!</code> fills each <code>{}</code> with the next value (<code>{:x?}</code> prints bytes in hex). <code>.replace</code> swaps every match for new text, and <code>.as_bytes()</code> shows a <code>String</code>’s raw bytes.</p>
         <p class="imagine"><b>Try it:</b> tap a file, then change cwd and read the pathname the listing prints. Switch to <b>end of line</b> and compare one Linux newline with a Windows pair.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>A regular file contains arbitrary data. Applications distinguish text files from binary files. “To the kernel there is no difference between text and binary files.” A Linux text line ends with <code>'\n'</code>, the ASCII line feed, numeric value 0x0a. MS Windows and HTTP use <code>'\r\n'</code> (0x0d 0x0a).</p>
+            <p>A regular file contains arbitrary data. Applications distinguish text files from binary files. “To the kernel there is no difference between text and binary files.” A Linux text line ends with a single newline character, the ASCII line feed, numeric value 0x0a. MS Windows and HTTP end a line with carriage return plus line feed (0x0d 0x0a).</p>
             <p>A directory is an array of links. Each contains at least <code>.</code> and <code>..</code>. Figure 10.1 includes <code>/home/droh/hello.c</code>, <code>/usr/include/stdio.h</code>, <code>/bin/bash</code>, and <code>/dev/tty1</code>. An absolute pathname starts with a slash. If the cwd is <code>/home/droh</code>, the relative name of <code>hello.c</code> is <code>./hello.c</code>. If the cwd is <code>/home/bryant</code>, it is <code>../droh/hello.c</code>. Named pipes, symbolic links, and character and block devices are beyond the chapter’s scope.</p>
             <p class="cite">p.&nbsp;927 · §10.2 Files</p>
           </div>
@@ -200,14 +191,14 @@ const EINTR: c_int = 4;</pre>
       <div class="copy">
         <span class="eyebrow">10.3 · opening and closing files</span>
         <h2>The lowest free number</h2>
-        <p class="story"><code>open</code> returns a descriptor, or −1. It never skips a hole. Mei already holds 0, 1, and 2, so the first open returns 3. She closes 3. The next open — even of a different file — returns 3 again. Closing a descriptor that is already closed is an error.</p>
-        <p class="story">The flags say how she will use the file: read, write, or both, plus <code>O_CREAT</code>, <code>O_TRUNC</code>, and <code>O_APPEND</code>. Append sets the position to the end before each write. A new file’s permission bits are <code>mode &amp; ~umask</code>. The umask crosses out bits the process refuses to grant.</p>
-        <p class="imagine"><b>Try it:</b> step Practice Problem 10.1. Then <b>umask</b>, and watch group-write and other-write disappear. Then <b>O_APPEND</b> and write one <code>Z</code>.</p>
+        <p class="story">The kernel’s <code>open</code> returns a descriptor, or −1. It never skips a hole. Mei already holds 0, 1, and 2, so the first open returns 3. She closes 3. The next open — even of a different file — returns 3 again. In C, closing a descriptor that is already closed is an error, −1. In Rust it does not even compile: <code>drop</code> takes the <code>File</code> away, and the compiler refuses a second use of it.</p>
+        <p class="story">Rust’s <code>File::open</code> never hands back −1. It returns a <code>Result</code>: <code>Ok(file)</code> or <code>Err(error)</code>, and <code>?</code> unwraps the first or passes on the second. <code>.as_raw_fd()</code> shows the descriptor number inside a <code>File</code>. The kernel’s flags say how she will use the file — read, write, or both, plus <code>O_CREAT</code>, <code>O_TRUNC</code>, and <code>O_APPEND</code> — and in Rust they are switches on <code>File::options()</code>: <code>.write(true)</code>, <code>.create(true)</code>, <code>.truncate(true)</code>, <code>.append(true)</code>. Append sets the position to the end before each write. A new file’s permission bits are <code>mode &amp; !umask</code> (<code>!</code> flips every bit; C writes <code>~</code>). The umask crosses out bits the process refuses to grant. <code>0o666</code> is an octal number, the way permissions are usually written. std has no call to set the umask, so the listing borrows the C library’s, inside <code>unsafe</code>. Under strace the switches show up as the kernel’s flags: <code>.write(true)</code>, <code>.create(true)</code> and <code>.truncate(true)</code> became <code>O_WRONLY|O_CREAT|O_TRUNC</code> with mode <code>0666</code>, and <code>.append(true)</code> alone became <code>O_WRONLY|O_APPEND</code>, because append implies write.</p>
+        <p class="imagine"><b>Try it:</b> step Practice Problem 10.1, then press <b>Close 3 twice</b>. Then <b>umask</b>, and watch group-write and other-write disappear. Then <b>append</b> and write one <code>Z</code>.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p><code>open(filename, flags, mode)</code> returns a new descriptor or −1. “The descriptor returned is always the smallest descriptor that is not currently open in the process.” Access flags: <code>O_RDONLY</code>, <code>O_WRONLY</code>, <code>O_RDWR</code>. Extra flags, or-ed in: <code>O_CREAT</code>, <code>O_TRUNC</code>, <code>O_APPEND</code>.</p>
-            <p>Figure 10.2 lists the permission bits. New-file bits are <code>mode &amp; ~umask</code>. With <code>DEF_MODE</code> granting read and write to user, group, and other, and <code>DEF_UMASK</code> equal to <code>S_IWGRP|S_IWOTH</code>, the owner can read and write and everyone else can only read. <code>close</code> returns 0 or −1. Practice Problem 10.1 prints <code>fd2 = 3</code>.</p>
+            <p><code>open</code> takes a filename, flags, and a mode, and returns a new descriptor or −1. “The descriptor returned is always the smallest descriptor that is not currently open in the process.” Access flags: <code>O_RDONLY</code>, <code>O_WRONLY</code>, <code>O_RDWR</code>. Extra flags, or-ed in: <code>O_CREAT</code>, <code>O_TRUNC</code>, <code>O_APPEND</code>.</p>
+            <p>Figure 10.2 lists the permission bits. A new file gets the requested mode with every umask bit cleared. With <code>DEF_MODE</code> granting read and write to user, group, and other, and <code>DEF_UMASK</code> made of group-write and other-write (<code>S_IWGRP</code> and <code>S_IWOTH</code>), the owner can read and write and everyone else can only read. <code>close</code> returns 0 or −1. Practice Problem 10.1 prints <code>fd2 = 3</code>.</p>
             <p class="cite">p.&nbsp;929 · §10.3 Opening and Closing Files</p>
           </div>
         </details>
@@ -229,7 +220,8 @@ const EINTR: c_int = 4;</pre>
         <span class="eyebrow">10.4 · reading and writing files</span>
         <h2>Fewer bytes is not a failure</h2>
         <p class="story"><code>read</code> copies at most n bytes from the current position into memory. It returns −1 on error, 0 on EOF, otherwise the number of bytes it actually moved. <code>write</code> is the same idea toward the device. A return smaller than n is a <b>short count</b>. It is not an error.</p>
-        <p class="story">On a disk, reads come up short only at the end, and writes do not come up short at all. On a terminal, each read returns one typed line. On a socket, buffering and delay can hand back any number, and a write can go short too. <code>size_t</code> is unsigned. <code>ssize_t</code> is signed, because the call must be able to return −1.</p>
+        <p class="story">On a disk, reads come up short only at the end, and writes do not come up short at all. On a terminal, each read returns one typed line. On a socket, buffering and delay can hand back any number, and a write can go short too. In C the count is a signed <code>ssize_t</code>, because the call must be able to return −1. Rust’s <code>read</code> returns <code>io::Result&lt;usize&gt;</code>: <code>Ok(n)</code> with the count, or <code>Err(e)</code>. <code>usize</code> is an unsigned size, so the count can never be −1; the error travels on its own.</p>
+        <p class="story">All three cases are real runs on Linux. The disk read was traced with strace. For the terminal we typed three lines into a pseudo-terminal: Rust’s <code>io::stdin()</code> keeps its own buffer, so the kernel was asked for 8192 bytes each time, and it still handed over one line per read. For the socket, a <code>TcpStream</code> (std’s network connection, which is a socket) on this machine received <code>HEL</code>, <code>LO!!?</code> and <code>??</code> from a sender that paused between them.</p>
         <p class="imagine"><b>Try it:</b> on <b>disk EOF</b>, ask for 50 from a 20-byte file. Then a <b>terminal</b> line, then a <b>socket</b> that dribbles.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -257,13 +249,15 @@ const EINTR: c_int = 4;</pre>
         <span class="eyebrow">10.5.1 · Rio unbuffered</span>
         <h2>Stay until the count is met</h2>
         <p class="story">Rio is a small package that deals with short counts for you. The unbuffered pair, <code>rio_readn</code> and <code>rio_writen</code>, copies straight between memory and a descriptor. No private buffer. That is the right tool for binary data on a network.</p>
-        <p class="story"><code>rio_readn</code> may return a short count only when it hits EOF. <code>rio_writen</code> never returns a short count: it loops until every byte is written, or a real error occurs. If a signal handler interrupts the system call, <code>errno</code> is <code>EINTR</code> and the function simply tries again. The two calls may be interleaved on the same descriptor.</p>
+        <p class="story"><code>rio_readn</code> may return a short count only when it hits EOF. <code>rio_writen</code> never returns a short count: it loops until every byte is written, or a real error occurs. If a signal handler interrupts the system call, it fails with <code>EINTR</code>, and the function simply tries again. The two calls may be interleaved on the same descriptor.</p>
+        <p class="story">Reading the Rust: <code>fn</code> starts a function. <code>r: &amp;mut impl Read</code> means “any reader, lent to us for a while”: a <code>File</code>, a socket, standard input. <code>usrbuf: &amp;mut [u8]</code> is the slice to fill, and its length is the request. <code>match</code> compares what <code>read</code> returned against each pattern in turn and runs the first that fits. std reports <code>EINTR</code> as the error kind <code>Interrupted</code>, and the <code>if</code> after <code>Err(e)</code> is a guard: that arm is taken only for that kind. <code>ErrorKind::WriteZero.into()</code> turns an error kind into a full <code>io::Error</code>. In real code you would not write this loop. std already has it: <code>read_exact</code> fills the whole buffer and retries <code>Interrupted</code>, though an early EOF is an error there (<code>UnexpectedEof</code>), not a short count; <code>write_all</code> is <code>rio_writen</code>, and like ours it turns a write that accepts 0 bytes into an error (<code>WriteZero</code>). We spell it out so you can watch it.</p>
+        <p class="story">We ran <code>rio_readn</code> on Linux against a real <code>TcpStream</code> whose sender paused between <code>ABC</code>, <code>DEF</code> and <code>GH</code>: the reads returned 3, 3 and 2, and the function returned 8. We also made <code>EINTR</code> happen for real: an alarm signal, with a handler installed so the kernel would not restart the call, landed during the second read. That read came back <code>Err(Interrupted)</code>, the loop counted 0 and tried again, and the result was still 8. A real socket rarely accepts a short write on cue, so the <code>rio_writen</code> run used a stand-in writer that takes at most 3 bytes and then 5.</p>
         <p class="imagine"><b>Try it:</b> press <b>Step</b> and watch <code>nleft</code> fall 8, 5, 2, 0. Press <b>Signal</b> before a read and see the retry leave <code>nleft</code> alone. Then switch to <b>rio_writen</b>.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
             <p>Applications that must be robust call <code>read</code> and <code>write</code> until every requested byte has moved. Rio does that loop. Unbuffered <code>rio_readn</code> and <code>rio_writen</code> transfer directly between memory and a file. “The rio_readn function can only return a short count if it encounters EOF.” <code>rio_writen</code> never returns a short count. Both restart after <code>EINTR</code>. They may be interleaved on the same descriptor.</p>
-            <p>The package is inspired by Stevens’s <code>readn</code> and <code>writen</code>. The picture below is a teaching sketch of that loop, with a tiny transfer of 8 bytes so each subtraction fits on the stage. The book’s listing is Figure 10.4.</p>
+            <p>The package is inspired by Stevens’s <code>readn</code> and <code>writen</code>. The book’s listing is Figure 10.4; our Rust version follows it line for line, with a tiny transfer of 8 bytes so each subtraction fits on the stage.</p>
             <p class="cite">p.&nbsp;933 · §10.5.1 Rio Unbuffered Input and Output Functions</p>
           </div>
         </details>
@@ -285,13 +279,16 @@ const EINTR: c_int = 4;</pre>
         <span class="eyebrow">10.5.2 · Rio buffered input</span>
         <h2>One kernel read, then serve from the drawer</h2>
         <p class="story">Reading a file one byte at a time with <code>read</code> traps into the kernel for every byte. <code>rio_readinitb</code> ties a descriptor to a <code>rio_t</code>: a descriptor, an unread count, a pointer, and a buffer. The book sizes that buffer at 8192 bytes. This picture uses 8 so you can see it refill.</p>
-        <p class="story">When the buffer is empty, an internal read fills it. A short fill is fine. <code>rio_readlineb</code> then copies until newline, and adds a terminating zero. <code>rio_readnb</code> is the buffered cousin of <code>rio_readn</code>. Those two may share a descriptor. Do not mix them with unbuffered <code>rio_readn</code>: the kernel position has already moved past bytes still sitting in the buffer.</p>
-        <p class="imagine"><b>Try it:</b> <b>Init</b>, then <b>Read a line</b> twice. The second line does not call the kernel. Then press <b>Unbuffered read</b> and watch it skip the bytes still in the drawer.</p>
+        <p class="story">When the buffer is empty, an internal read fills it. A short fill is fine. <code>rio_readlineb</code> then copies until newline. The book’s version also adds a terminating zero byte, because a C string needs one; a Rust <code>Vec&lt;u8&gt;</code>, a growable array of bytes, knows its own length. <code>rio_readnb</code> is the buffered cousin of <code>rio_readn</code>. Those two may share a descriptor. Do not mix them with unbuffered <code>rio_readn</code>: the kernel position has already moved past bytes still sitting in the buffer.</p>
+        <p class="story">Reading the Rust: a <code>struct</code> bundles named fields into one value, and <code>Rio&lt;R&gt;</code> works for any reader type <code>R</code>. An <code>impl</code> block gives it functions of its own, called methods; <code>&amp;mut self</code> means the method may change this <code>Rio</code>. <code>b'\n'</code> is the newline as one byte, <code>.min</code> picks the smaller number, and <code>copy_from_slice</code> copies one slice into another of the same length. <code>Rio</code> takes ownership of the reader it is given, so the compiler stops you from reading that same value around it — but <code>&amp;File</code> is a reader too, so two readers can still share one file, and the bug comes back. Our run on Linux did exactly that: <code>Rio::rio_readinitb(&amp;f)</code> for the lines, then <code>rio_readn(&amp;mut &amp;f, …)</code> on the same file. strace shows one <code>read</code> of 8 bytes serving the lines, and the unbuffered read starting at <code>MORE</code>. After one line, <code>bye!↵</code> was still in the buffer, so the unbuffered read skipped it.</p>
+        <p class="story">Two small differences from the book’s C. <code>rio_readlineb</code> starts with <code>line.clear()</code> (empty the <code>Vec</code>), so the new line replaces the old one, the way the book’s version writes from the start of <code>usrbuf</code>. And the book’s version stops after <code>maxlen-1</code> bytes, so a long line cannot overflow its fixed array; a <code>Vec</code> grows instead, so ours has no maximum, like std’s <code>read_line</code>. On a socket a real server would cap it, because the other side decides how long a “line” is; std’s docs suggest <code>.take(n)</code>, which stops a reader after n bytes.</p>
+        <p class="story">In real code, std’s <code>BufReader</code> and its <code>read_line</code> do this job. Its buffer is 8 KiB by default (the docs say “currently”, so it may change), the same 8192 bytes the book picks. Reading a 20,001-byte line through it, strace shows reads of 8192, 8192, then 3617.</p>
+        <p class="imagine"><b>Try it:</b> <b>Init</b>, then <b>Read a line</b> once. Press <b>Unbuffered read</b> and watch it skip <code>bye!↵</code>, still in the drawer. Then <b>Reset</b>, <b>Init</b>, and <b>Read a line</b> twice: the second line does not call the kernel.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
             <p><code>rio_readinitb</code> associates a descriptor with a <code>rio_t</code> and sets the unread count to 0. <code>rio_readlineb</code> copies the next text line, including the newline, NUL-terminates it, and reads at most <code>maxlen-1</code> bytes. <code>rio_readnb</code> transfers raw bytes from the same buffer. Figure 10.5 is <code>cpfile</code>: init, then readline and writen.</p>
-            <p>Internal <code>rio_read</code> refills when <code>rio_cnt &lt;= 0</code>. A short fill is not an error. It then copies <code>min(n, rio_cnt)</code> bytes. Buffered calls must not be interleaved with unbuffered <code>rio_readn</code> on the same descriptor. The buffered pair is thread-safe, which fixes the static buffer in Stevens’s <code>readline</code>.</p>
+            <p>Internal <code>rio_read</code> refills when the unread count has reached zero. A short fill is not an error. It then copies <code>min(n, rio_cnt)</code> bytes. Buffered calls must not be interleaved with unbuffered <code>rio_readn</code> on the same descriptor. The buffered pair is thread-safe, which fixes the static buffer in Stevens’s <code>readline</code>.</p>
             <p class="cite">p.&nbsp;934 · §10.5.2 Rio Buffered Input Functions</p>
           </div>
         </details>
@@ -312,14 +309,15 @@ const EINTR: c_int = 4;</pre>
       <div class="copy">
         <span class="eyebrow">10.6 · reading file metadata</span>
         <h2>Read the card, not the book</h2>
-        <p class="story">Fatima wants the size of a file, and whether she may read it, without opening it. <code>stat</code> and <code>fstat</code> fill a <code>struct stat</code>. That record is the file’s <b>metadata</b>. Standard I/O has no call for this. It is one reason Unix I/O exists at all.</p>
-        <p class="story">Two facts share <code>st_mode</code>: the type, and the permission bits. <code>S_ISREG</code>, <code>S_ISDIR</code>, and <code>S_ISSOCK</code> read the type. <code>st_mode &amp; S_IRUSR</code> asks whether the owner may read. <code>st_size</code> is the length in bytes. The chapter needs those two members later for a Web server. The rest of the struct is beyond its scope.</p>
-        <p class="imagine"><b>Try it:</b> pick a file, then press <b>Step</b>. The highlighted branch is the one <code>statcheck</code> actually takes. <code>secret</code> is a regular file the owner cannot read.</p>
+        <p class="story">Fatima wants the size of a file, and whether she may read it, without opening it. The kernel’s <code>stat</code> and <code>fstat</code> fill a <code>struct stat</code>. That record is the file’s <b>metadata</b>. C’s standard I/O library has no call for this. It is one reason Unix I/O exists at all.</p>
+        <p class="story">Two facts share <code>st_mode</code>: the type, and the permission bits. The book’s C tests the type with the macros <code>S_ISREG</code>, <code>S_ISDIR</code>, and <code>S_ISSOCK</code>, and asks whether the owner may read with the bit <code>S_IRUSR</code>, 0o400. <code>st_size</code> is the length in bytes. The chapter needs those two members later for a Web server. The rest of the struct is beyond its scope.</p>
+        <p class="story">In Rust, <code>std::fs::metadata</code> plays the part of <code>stat</code>: <code>.is_file()</code>, <code>.is_dir()</code>, and <code>.len()</code> for the size. On Linux it actually makes the newer <code>statx</code> system call, which strace shows filling in the same type, mode and size. <code>use … MetadataExt</code> switches on Unix-only extras such as <code>.mode()</code>, the whole raw <code>st_mode</code>: for <code>foobar.txt</code> it is octal <code>100644</code>, the type bits <code>100</code> (regular file) followed by the permission bits <code>644</code>. In a format string, <code>{kind}</code> prints the variable <code>kind</code>. An <code>if</code> in Rust hands back a value, so <code>kind</code> becomes <code>"regular"</code>, <code>"directory"</code>, or <code>"other"</code>.</p>
+        <p class="imagine"><b>Try it:</b> pick a file, then press <b>Step</b>. The highlighted branch is the one our <code>statcheck</code> really took for that file. <code>secret</code> is a regular file the owner cannot read, and <code>socket</code> is a socket file our run made with <code>std::os::unix::net::UnixListener::bind</code>. The strip shows the real <code>statx</code> call and the program’s real output on Linux.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p><code>stat(filename, &amp;buf)</code> and <code>fstat(fd, &amp;buf)</code> fill a <code>struct stat</code> (Figure 10.9). The chapter needs <code>st_mode</code> and <code>st_size</code>. <code>st_mode</code> encodes both the permission bits of Figure 10.2 and the file type of Section 10.2.</p>
-            <p>Macros: <code>S_ISREG</code>, <code>S_ISDIR</code>, <code>S_ISSOCK</code>. Figure 10.10 prints <code>type: regular</code>, <code>directory</code>, or <code>other</code>, and <code>read: yes</code> or <code>no</code> from <code>st_mode &amp; S_IRUSR</code>. The standard I/O library provides no way to read this metadata.</p>
+            <p><code>stat</code> (given a filename) and <code>fstat</code> (given a descriptor) fill a <code>stat</code> structure (Figure 10.9). The chapter needs <code>st_mode</code> and <code>st_size</code>. <code>st_mode</code> encodes both the permission bits of Figure 10.2 and the file type of Section 10.2.</p>
+            <p>Macros: <code>S_ISREG</code>, <code>S_ISDIR</code>, <code>S_ISSOCK</code>. Figure 10.10 prints <code>type: regular</code>, <code>directory</code>, or <code>other</code>, and <code>read: yes</code> or <code>no</code> from the owner-read bit <code>S_IRUSR</code> in <code>st_mode</code>. The standard I/O library provides no way to read this metadata.</p>
             <p class="cite">p.&nbsp;939 · §10.6 Reading File Metadata</p>
           </div>
         </details>
@@ -340,20 +338,21 @@ const EINTR: c_int = 4;</pre>
       <div class="copy">
         <span class="eyebrow">10.7 · reading directory contents</span>
         <h2>A stream of names</h2>
-        <p class="story">Nia opens a directory the way she would open a book of names: <code>opendir</code> returns a stream, <code>readdir</code> returns the next entry, <code>closedir</code> puts it away. Each <code>struct dirent</code> has two fields you can count on: <code>d_ino</code> and <code>d_name</code>.</p>
-        <p class="story">The awkward part is the end. <code>readdir</code> returns NULL both when the stream is finished and when something went wrong. The only way to tell is to set <code>errno</code> to 0 before the call. NULL with <code>errno</code> still 0 means “no more entries.” NULL with <code>errno</code> changed means an error.</p>
-        <p class="imagine"><b>Try it:</b> press <b>Step</b>. You should see <code>.</code>, <code>..</code>, and <code>hello.c</code>, then a quiet NULL. Press <b>Force an error</b> to see the other NULL.</p>
+        <p class="story">Nia opens a directory the way she would open a book of names. The C library’s <code>opendir</code> returns a stream, <code>readdir</code> returns the next entry, <code>closedir</code> puts it away. Each entry has two fields you can count on: <code>d_ino</code>, the inode number, and <code>d_name</code>.</p>
+        <p class="story">In C the awkward part is the end. <code>readdir</code> returns NULL both when the stream is finished and when something went wrong, and the only way to tell is to set <code>errno</code> to 0 before the call and look again after. Rust’s <code>std::fs::read_dir</code> removes the guess. It is an <b>iterator</b>, something a <code>for</code> loop pulls items from by calling <code>next()</code>, and each answer says what it is: <code>Some(Ok(entry))</code> for an entry, <code>Some(Err(e))</code> for an error, and <code>None</code> at the end, which stops the loop. <code>{:?}</code> prints a value in its debug form, here the name in quotes. (<code>Option</code> is Rust’s “maybe”: <code>Some(value)</code> or <code>None</code>.) The loop unwraps the <code>Some</code> for us, so inside it <code>entry</code> is <code>Ok(entry)</code> or <code>Err(e)</code>, and <code>entry?</code> keeps the entry or passes the error up. It also skips <code>.</code> and <code>..</code>, which every directory holds.</p>
+        <p class="story">Underneath, on Linux, <code>read_dir</code> uses the C library’s <code>opendir</code> and <code>readdir64</code>. Our strace run shows one <code>getdents64</code> system call handing over all three entries at once, in the order this filesystem keeps them: <code>..</code> first, then <code>.</code>, then <code>hello.c</code>. The order is up to the filesystem, so never count on it. The inode numbers in the picture are the real ones from that run; yours will differ.</p>
+        <p class="imagine"><b>Try it:</b> press <b>Step</b>. The kernel hands over <code>..</code>, <code>.</code>, and <code>hello.c</code>; read_dir passes on only <code>hello.c</code>, then <code>None</code>. Press <b>Force an error</b> to see what <code>Some(Err)</code> would look like; a real one is rare (a failing disk, say), so that step is drawn, not captured.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>Applications read a directory with <code>opendir</code>, <code>readdir</code>, and <code>closedir</code>. Only <code>d_ino</code> and <code>d_name</code> are standard across systems. <code>readdir</code> returns NULL at the end or on error. “The only way to tell the difference is to check whether errno has changed.” Figure 10.11 sets <code>errno = 0</code> before the loop and tests it after.</p>
+            <p>Applications read a directory with <code>opendir</code>, <code>readdir</code>, and <code>closedir</code>. Only <code>d_ino</code> and <code>d_name</code> are standard across systems. <code>readdir</code> returns NULL at the end or on error. “The only way to tell the difference is to check whether errno has changed.” Figure 10.11 sets <code>errno</code> to zero before the loop and tests it after.</p>
             <p class="cite">p.&nbsp;941 · §10.7 Reading Directory Contents</p>
           </div>
         </details>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-title">opendir · readdir · errno</span></div>
-        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 680 230" role="img" aria-label="A directory stream yielding dot, dot-dot, and hello.c, then NULL"></svg></div>
+        <div class="stage-head"><span class="stage-title">read_dir · Some(Ok) · Some(Err) · None</span></div>
+        <div class="stage-scroll"><svg id="s8-svg" viewBox="0 0 680 230" role="img" aria-label="A directory stream holding dot, dot-dot, and hello.c; read_dir skips the first two, then ends with None"></svg></div>
         <div class="controls" id="s8-controls"></div>
         <div class="caption" id="s8-cap" aria-live="polite"></div>
         <div id="s8-prog"></div>
@@ -369,6 +368,8 @@ const EINTR: c_int = 4;</pre>
         <h2>Three tables, one question: whose bookmark?</h2>
         <p class="story">The kernel keeps three related tables. Each process has a <b>descriptor table</b>. Each open descriptor points at an entry in the process-wide <b>file table</b>, which holds the position and a <b>reference count</b>. That entry points at a <b>v-node</b>, which holds most of the <code>stat</code> facts, including size and type.</p>
         <p class="story">Yuki opens <code>foobar.txt</code> twice. Two descriptor slots, two file-table entries, one v-node. Each entry has its own position, so both reads return <code>f</code>. If she <code>fork</code>s instead, Sofia gets a copy of the descriptor table but shares the file-table entry. One position. Sofia reads <code>f</code>, Yuki’s next read is <code>o</code>. Both must close before the reference count hits zero and the kernel deletes the entry.</p>
+        <p class="story">In the Rust, <code>read_exact</code> reads until the buffer is full, here one byte, and <code>c[0] as char</code> shows that byte as a letter (<code>as</code> converts between simple types). std has no <code>fork</code>: it starts programs with <code>std::process::Command</code> instead. So the listing calls the C library’s <code>fork</code>, inside <code>unsafe</code> like every function from the <code>extern</code> block. Here the promise is a big one: the child is a copy of the whole running program, which the compiler cannot reason about. <code>wait</code> makes the parent sleep until the child is done, and <code>std::process::exit(0)</code> ends the child on the spot.</p>
+        <p class="story">Both programs ran on Linux under strace. Two opens returned descriptors 3 and 4, and each <code>read</code> got <code>f</code>. In the fork run, the C library’s <code>fork</code> made the kernel’s <code>clone</code> call; the child’s <code>read(3, …)</code> got <code>f</code>, and the parent’s <code>read(3, …)</code> on the same descriptor got <code>o</code>.</p>
         <p class="imagine"><b>Try it:</b> on <b>two opens</b>, read fd1 and then fd2. Both say <code>f</code>. On <b>fork</b>, let the child read first. The parent gets <code>o</code>.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -396,13 +397,15 @@ const EINTR: c_int = 4;</pre>
         <span class="eyebrow">10.9 · I/O redirection</span>
         <h2>Point descriptor 1 at a different file</h2>
         <p class="story">The shell command <code>ls &gt; foo.txt</code> sends a listing into a file. The book’s nickname for <code>&gt;</code> is the right hoinky. The call underneath is <code>dup2(oldfd, newfd)</code>: copy descriptor-table slot <code>oldfd</code> onto slot <code>newfd</code>. If <code>newfd</code> was already open, <code>dup2</code> closes it first.</p>
-        <p class="story">Start with fd 1 as the terminal (file A) and fd 4 as a disk file (file B). After <code>dup2(4, 1)</code> both slots point at B, A’s file-table entry is deleted, and B’s reference count is 2. Anything written to standard output now lands in the notebook. Practice Problem 10.5 uses the same trick on two opens of <code>foobar.txt</code>: after the copy, the next read is <code>o</code>, not <code>f</code>.</p>
+        <p class="story">Start with fd 1 as the terminal (file A) and fd 4 as a disk file (file B). After <code>dup2(4, 1)</code> both slots point at B, A’s file-table entry is deleted, and B’s reference count is 2. Anything written to standard output now lands in file B. Practice Problem 10.5 uses the same trick on two opens of <code>foobar.txt</code>: after the copy, the next read is <code>o</code>, not <code>f</code>.</p>
+        <p class="story">std has no <code>dup2</code> either, so it comes from the C library and its call sits in <code>unsafe</code>. The promise matters here: <code>dup2</code> changes which file a descriptor number means underneath every <code>File</code> that holds that number, and the compiler cannot see that happen. std’s own docs warn that dup2’s second descriptor “is closed and assigned a new resource”, which can break other code using it. In Practice 10.5 that descriptor belongs to our own <code>fd1</code>, so nothing else is surprised. In the listing, <code>File::create</code> opens a file for writing, creating it or emptying it first.</p>
+        <p class="story">Both programs ran on Linux. In the first, the two opens really returned 3 and 4, and after <code>dup2(4, 1)</code> the <code>println!</code> line was found in <code>foo.txt</code>, not on the screen. On arm64 Linux the C library’s <code>dup2</code> makes the kernel’s <code>dup3</code> call, which is what strace prints.</p>
         <p class="imagine"><b>Try it:</b> press <b>dup2(4, 1)</b> and watch fd 1 leave the terminal. Then step Practice Problem 10.5.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p><code>dup2(oldfd, newfd)</code> copies descriptor table entry <code>oldfd</code> to <code>newfd</code>, closing <code>newfd</code> first if it was open. Figure 10.15 is that picture: both descriptors point at file B, and B’s reference count is 2. Practice Problem 10.4 redirects standard input with <code>dup2(5, STDIN_FILENO)</code>.</p>
-            <p>Practice Problem 10.5: two opens of <code>foobar.txt</code>, <code>Read(fd2)</code>, <code>Dup2(fd2, fd1)</code>, <code>Read(fd1)</code>. fd1 now shares fd2’s file position, already past the first byte, so the output is <code>c = o</code>.</p>
+            <p><code>dup2</code> copies descriptor table entry <code>oldfd</code> to <code>newfd</code>, closing <code>newfd</code> first if it was open. Figure 10.15 is that picture: both descriptors point at file B, and B’s reference count is 2. Practice Problem 10.4 redirects standard input by copying descriptor 5 onto descriptor 0.</p>
+            <p>Practice Problem 10.5: two opens of <code>foobar.txt</code>, a read on fd2, a dup2 of fd2 onto fd1, then a read on fd1. fd1 now shares fd2’s file position, already past the first byte, so the output is <code>c = o</code>.</p>
             <p class="cite">p.&nbsp;945 · §10.9 I/O Redirection</p>
           </div>
         </details>
@@ -422,10 +425,11 @@ const EINTR: c_int = 4;</pre>
     <div class="wrap scene-grid">
       <div class="copy">
         <span class="eyebrow">10.10 · standard I/O</span>
-        <h2>A FILE is a descriptor plus a buffer</h2>
-        <p class="story">ANSI C gives you a higher layer: <code>fopen</code>, <code>fclose</code>, <code>fread</code>, <code>fwrite</code>, <code>fgets</code>, <code>scanf</code>, <code>printf</code>. An open file at this layer is a <b>stream</b>, a pointer to a <code>FILE</code>. Every C program starts with <code>stdin</code>, <code>stdout</code>, and <code>stderr</code>, which are descriptors 0, 1, and 2 in disguise.</p>
-        <p class="story">A <code>FILE</code> holds a descriptor and a buffer. The first <code>getc</code> may fill that buffer with one <code>read</code>. Later <code>getc</code> calls stay in user space. Streams are full duplex, but there is a rule: input after output needs an <code>fflush</code> or a seek, and output after input needs a seek, unless the input hit EOF. A socket cannot seek.</p>
-        <p class="imagine"><b>Try it:</b> press <b>getc</b> and count kernel reads. Then switch to <b>direction</b> and step until a socket makes <code>fseek</code> illegal.</p>
+        <h2>A stream is a descriptor plus a buffer</h2>
+        <p class="story">The book’s C has a higher layer, the standard I/O library: <code>fopen</code>, <code>fgets</code>, <code>printf</code> and friends. An open file there is a <b>stream</b>, a pointer to a <code>FILE</code> that holds a descriptor and a buffer. The first character read may fill that buffer with one <code>read</code>; the next ones stay in user space. C streams can read and write one file, with a rule: input after output needs an <code>fflush</code> or a seek, and output after input needs a seek, unless the input hit EOF.</p>
+        <p class="story">Rust’s std builds the same layer from two parts: <code>BufReader</code> puts a read buffer in front of any reader, and <code>BufWriter</code> a write buffer in front of any writer. <code>.bytes()</code> turns a reader into an iterator of bytes, and each <code>next()</code> hands back <code>Some(Ok(byte))</code>, or <code>None</code> at the end. The rule comes from the buffers, so it holds in Rust too: bytes still in <code>w</code> have not reached the kernel until <code>flush</code>, and <code>r</code> reads ahead, which moves the kernel position past what the program has used. <code>write!</code> is <code>println!</code>’s cousin that writes into any writer. <code>let (mut w, mut r) = (…, …)</code> names both halves of a pair in one line. A socket cannot seek.</p>
+        <p class="story">Both modes are real runs on Linux. strace shows the first <code>next()</code> making one <code>read</code> that asks for 8192 bytes and gets all six, and the seventh making a second <code>read</code> that returns 0. In the direction run, <code>notes.txt</code> starts as <code>abcdef</code>. The plan is to overwrite <code>ab</code> with <code>hi</code>, read the next byte, then write <code>yo</code> just after it. We ran it three ways and show the file each way ends up as. <code>BufReader</code>’s <code>seek</code> throws away what it read ahead, and <code>SeekFrom::Current(0)</code> means “where the program really is”, so it moves the kernel back by the unread bytes. (Clippy, Rust’s linter, suggests <code>stream_position()</code> for that line; on a <code>BufReader</code> that only reports the position and keeps the buffer, so here the seek is the point.) The last <code>flush</code> matters too: dropping a <code>BufWriter</code> writes what is left, but ignores any error, so std’s docs call flushing first “critical”.</p>
+        <p class="imagine"><b>Try it:</b> press <b>next()</b> and count kernel reads. Then switch to <b>direction</b> and step until a socket makes the seek impossible.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -436,8 +440,8 @@ const EINTR: c_int = 4;</pre>
         </details>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-title">FILE buffer · then the direction rule</span><span id="s11-seg"></span></div>
-        <div class="stage-scroll"><svg id="s11-svg" viewBox="0 0 680 250" role="img" aria-label="One kernel read filling a FILE buffer, then getc serving bytes in user space"></svg></div>
+        <div class="stage-head"><span class="stage-title">read buffer · then the direction rule</span><span id="s11-seg"></span></div>
+        <div class="stage-scroll"><svg id="s11-svg" viewBox="0 0 680 250" role="img" aria-label="One kernel read filling a BufReader buffer, then next() serving bytes in user space"></svg></div>
         <div class="controls" id="s11-controls"></div>
         <div class="caption" id="s11-cap" aria-live="polite"></div>
         <div id="s11-prog"></div>
@@ -451,9 +455,9 @@ const EINTR: c_int = 4;</pre>
       <div class="copy">
         <span class="eyebrow">10.11 · which I/O functions should I use?</span>
         <h2>Three guidelines</h2>
-        <p class="story">Noor has three toolboxes and three rules. <b>G1:</b> use standard I/O whenever you can — disk files and terminals. <b>G2:</b> do not use <code>scanf</code> or <code>rio_readlineb</code> on a binary file. A <code>0x0a</code> byte in a picture is not a newline. <b>G3:</b> use Rio for sockets.</p>
-        <p class="story">The socket trap is specific. People open one descriptor twice with <code>fdopen</code>, once to read and once to write, because they cannot seek between directions. The first <code>fclose</code> closes the descriptor. The second <code>fclose</code> closes it again. The book’s way around it: format with <code>sprintf</code> and send with <code>rio_writen</code>; read a line with <code>rio_readlineb</code> and parse with <code>sscanf</code>.</p>
-        <p class="imagine"><b>Try it:</b> tap <b>disk text</b>, <b>binary</b>, or <b>socket</b>. Then <b>socket trap</b> and step both <code>fclose</code> calls.</p>
+        <p class="story">Noor has three toolboxes and three rules. <b>G1:</b> use standard I/O whenever you can — disk files and terminals. In Rust that means std’s buffered readers and writers. <b>G2:</b> do not use a line reader (C’s <code>scanf</code>, <code>rio_readlineb</code>) on a binary file. A <code>0x0a</code> byte in a picture is not a newline. <b>G3:</b> use Rio for sockets.</p>
+        <p class="story">The socket trap is specific. In C, people wrap one socket descriptor in two streams with <code>fdopen</code>, one to read and one to write, because they cannot seek between directions. The first <code>fclose</code> closes the descriptor. The second closes it again. In safe Rust you cannot make this mistake: a <code>File</code> owns its descriptor and closes it once, when it is dropped. Making two owners of one number takes <code>unsafe</code> <code>File::from_raw_fd</code>, as the listing shows. <code>String::from_utf8_lossy</code> turns bytes into text, replacing any bytes that are not valid UTF-8 with �. The safe way to read and write one socket is to borrow it twice: <code>BufReader::new(&amp;sock)</code> to read, <code>&amp;sock</code> to write. The book’s fix, in Rust: build the reply with <code>format!</code> (it makes a <code>String</code>, like C’s <code>sprintf</code>), send it with <code>rio_writen</code>, read a line with <code>BufReader</code>’s <code>read_line</code> (std’s <code>rio_readlineb</code>) and split it into words.</p>
+        <p class="imagine"><b>Try it:</b> tap <b>disk text</b>, <b>binary</b>, or <b>socket</b>. Then <b>socket trap</b> and step both <code>drop</code> calls.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -465,7 +469,7 @@ const EINTR: c_int = 4;</pre>
       </div>
       <div class="stage">
         <div class="stage-head"><span class="stage-title">G1 · G2 · G3</span><span id="s12-seg"></span></div>
-        <div class="stage-scroll"><svg id="s12-svg" viewBox="0 0 680 250" role="img" aria-label="Standard I/O, Rio, and Unix I/O, and the double-fclose socket trap"></svg></div>
+        <div class="stage-scroll"><svg id="s12-svg" viewBox="0 0 680 250" role="img" aria-label="Standard I/O, Rio, and Unix I/O, and the double-close socket trap"></svg></div>
         <div class="controls" id="s12-controls"></div>
         <div class="caption" id="s12-cap" aria-live="polite"></div>
         <div id="s12-prog"></div>
@@ -478,11 +482,11 @@ const EINTR: c_int = 4;</pre>
     <div class="wrap">
       <div class="section-title"><h2>10.12 · the choices, side by side</h2><p>Tap either side. The listing under the row is the one-line version of that choice.</p></div>
       <div class="tradeoffs" id="sum-grid">
-        <div class="tradeoff"><button type="button" class="side" data-sum="0"><h4>Unix I/O</h4><p>open, read, write, close, stat. The kernel’s own verbs.</p></button><div class="vs">vs</div><button type="button" class="side" data-sum="1"><h4>Standard I/O</h4><p>fopen, printf, fgets. The everyday choice on disk and the terminal.</p></button></div>
+        <div class="tradeoff"><button type="button" class="side" data-sum="0"><h4>Unix I/O</h4><p>open, read, write, close, stat. The kernel’s own verbs.</p></button><div class="vs">vs</div><button type="button" class="side" data-sum="1"><h4>Standard I/O</h4><p>BufReader, BufWriter, println! (C: fopen, printf, fgets). The everyday choice on disk and the terminal.</p></button></div>
         <div class="tradeoff"><button type="button" class="side" data-sum="2"><h4>Raw read / write</h4><p>Can return a short count. Fine on disk. Fragile on a socket.</p></button><div class="vs">vs</div><button type="button" class="side" data-sum="3"><h4>Rio</h4><p>rio_readn loops. rio_writen never returns short.</p></button></div>
         <div class="tradeoff"><button type="button" class="side" data-sum="4"><h4>Two opens</h4><p>Two file-table entries. Two positions. Both reads start at f.</p></button><div class="vs">vs</div><button type="button" class="side" data-sum="5"><h4>fork</h4><p>One file-table entry, refcnt 2. One position. The parent reads o.</p></button></div>
-        <div class="tradeoff"><button type="button" class="side" data-sum="6"><h4>Line readers</h4><p>scanf and rio_readlineb stop at 0x0a.</p></button><div class="vs">vs</div><button type="button" class="side" data-sum="7"><h4>Binary</h4><p>That 0x0a is just a byte. Use rio_readn or fread.</p></button></div>
-        <div class="tradeoff"><button type="button" class="side" data-sum="8"><h4>stdio on a socket</h4><p>No lseek. Two fclose calls close one descriptor twice.</p></button><div class="vs">vs</div><button type="button" class="side" data-sum="9"><h4>Rio on a socket</h4><p>sprintf plus rio_writen. readlineb plus sscanf.</p></button></div>
+        <div class="tradeoff"><button type="button" class="side" data-sum="6"><h4>Line readers</h4><p>rio_readlineb and read_line (C: scanf) stop at 0x0a.</p></button><div class="vs">vs</div><button type="button" class="side" data-sum="7"><h4>Binary</h4><p>That 0x0a is just a byte. Use rio_readn or read_exact.</p></button></div>
+        <div class="tradeoff"><button type="button" class="side" data-sum="8"><h4>Standard I/O on a socket</h4><p>No lseek. Two owners close one descriptor twice.</p></button><div class="vs">vs</div><button type="button" class="side" data-sum="9"><h4>Rio on a socket</h4><p>format! plus rio_writen. read_line (or rio_readlineb), then split.</p></button></div>
         <div class="tradeoff"><button type="button" class="side" data-sum="10"><h4>Absolute path</h4><p>Starts with /. Always from the root.</p></button><div class="vs">vs</div><button type="button" class="side" data-sum="11"><h4>Relative path</h4><p>From the current working directory.</p></button></div>
       </div>
       <div class="stage" style="margin-top:18px">
@@ -492,7 +496,7 @@ const EINTR: c_int = 4;</pre>
         <div id="sum-idea"></div>
       </div>
       <div class="themes" style="margin-top:18px">
-        <div class="card"><h3>What the pictures leave out</h3><p>The book’s full Rio listings are Figures 10.4, 10.7, and 10.8. These scenes use a short sketch of the same control flow, and a buffer of 8 bytes so a refill fits on the stage. The book’s <code>rio_buf</code> is 8192. Also left aside: general <code>lseek</code>, named pipes, symbolic links, character and block devices, and most <code>stat</code> members beyond <code>st_mode</code> and <code>st_size</code>.</p></div>
+        <div class="card"><h3>What the pictures leave out</h3><p>The Rio listings follow the book’s Figures 10.4 and 10.6 to 10.8, rewritten in Rust; <code>rio_readnb</code> is left out, and the buffer is 8 bytes so a refill fits on the stage. The book’s <code>rio_buf</code> is 8192, the same as std’s <code>BufReader</code> default. The kernel-call lines are real strace captures, trimmed where a long argument would not fit (a <code>…</code> marks the cut). A few steps are drawn rather than captured, and their strips say so: the <code>Some(Err)</code> from read_dir, EINTR during <code>rio_writen</code>, and 10.4’s disk reads when the slider asks for anything but 50. Also left aside: general <code>lseek</code>, named pipes, symbolic links, character and block devices, and most <code>stat</code> members beyond <code>st_mode</code> and <code>st_size</code>.</p></div>
       </div>
     </div>
   </section>
@@ -505,16 +509,19 @@ const EINTR: c_int = 4;</pre>
         <div class="word"><dt>file position</dt><dd>The byte offset k where the next read or write begins. It lives in the kernel, not in your variable.</dd></div>
         <div class="word"><dt>EOF</dt><dd>A read when k is past the last byte. Returns 0. There is no end-of-file character in the file.</dd></div>
         <div class="word"><dt>short count</dt><dd>Fewer bytes than you asked for. Not an error. Normal at EOF, on a terminal, and on a socket.</dd></div>
-        <div class="word"><dt>umask</dt><dd>Permission bits the process refuses to grant. A new file’s mode is mode &amp; ~umask.</dd></div>
+        <div class="word"><dt>umask</dt><dd>Permission bits the process refuses to grant. A new file’s mode is mode &amp; !umask (C writes ~umask).</dd></div>
         <div class="word"><dt>Rio</dt><dd>Robust I/O. Unbuffered rio_readn and rio_writen, and buffered rio_readlineb and rio_readnb.</dd></div>
-        <div class="word"><dt>rio_t</dt><dd>The buffered reader’s private drawer: descriptor, unread count, pointer, and an 8192-byte buffer.</dd></div>
-        <div class="word"><dt>EINTR</dt><dd>A system call was interrupted by a signal. Rio sets the count to 0 and tries again.</dd></div>
+        <div class="word"><dt>rio_t</dt><dd>The buffered reader’s private drawer (our <code>Rio</code>): descriptor, unread count, pointer, and an 8192-byte buffer.</dd></div>
+        <div class="word"><dt>EINTR</dt><dd>A system call was interrupted by a signal. Rio counts 0 bytes and tries again. std calls it ErrorKind::Interrupted.</dd></div>
         <div class="word"><dt>metadata</dt><dd>Facts about a file from stat or fstat — type, size, permissions — without reading the bytes.</dd></div>
         <div class="word"><dt>descriptor table</dt><dd>Per process. Each open slot points at one file-table entry.</dd></div>
         <div class="word"><dt>file table</dt><dd>Shared. Holds the file position, a reference count, and a pointer to a v-node.</dd></div>
         <div class="word"><dt>v-node</dt><dd>Shared. Holds most of the stat information for one file, including type and size.</dd></div>
         <div class="word"><dt>dup2</dt><dd>Copy one descriptor-table slot onto another. How the shell implements &gt; and &lt;.</dd></div>
-        <div class="word"><dt>stream</dt><dd>A FILE* : a descriptor plus a buffer, so later getc calls can stay in user space.</dd></div>
+        <div class="word"><dt>stream</dt><dd>A descriptor plus a buffer (C’s FILE, Rust’s BufReader), so later reads can stay in user space.</dd></div>
+        <div class="word"><dt>Result</dt><dd>Rust’s way to return “it worked” or “it failed”: Ok(value) or Err(error). The ? after a call passes an Err up.</dd></div>
+        <div class="word"><dt>unsafe</dt><dd>A block where we promise the compiler something it cannot check, such as a call into the C library.</dd></div>
+        <div class="word"><dt>strace</dt><dd>A Linux tool that prints each system call a program makes, with its arguments and result. It shows what std really asked the kernel for.</dd></div>
         <div class="word"><dt>current working directory</dt><dd>The process’s location in the tree. Relative pathnames start here.</dd></div>
       </dl>
     </div>
@@ -538,7 +545,7 @@ K.page(10);
 const cap = (id, html) => { const n = K.$(id); if (n) n.innerHTML = html; };
 const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const lines = (xs) => xs.join("\n");
-const C = (name, src) => ({ name, lang: "c", src });
+const R = (name, src, map) => ({ name, lang: "rust", src, map });
 
 function box(parent, x, y, w, hgt, cls, title, sub, size = 13) {
   const r = s("rect", { x, y, width: w, height: hgt, rx: 10, class: cls });
@@ -597,29 +604,20 @@ function mark(cv, at, notes, out) {
 }
 
 const TOKENS = {
-  c: [
-    [/\/\/.*|\/\*.*?\*\//, "cm"],
-    [/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/, "st"],
-    [/^\s*#\s*\w+/, "pp"],
-    [/\b(?:int|long|short|char|float|double|void|unsigned|signed|const|static|extern|struct|typedef|size_t|ssize_t|mode_t|off_t|FILE|DIR)\b/, "ty"],
-    [/\b(?:return|for|while|if|else|do|break|continue|sizeof|NULL|goto)\b/, "kw"],
-    [/\b(?:0x[0-9a-fA-F]+|\d+)\b/, "nu"],
-    [/\b[A-Za-z_]\w*(?=\s*\()/, "fn"],
-  ],
   rust: [
     [/\/\/.*|\/\*.*?\*\//, "cm"],
     [/[bc]?"(?:[^"\\]|\\.)*"|b?'(?:[^'\\]|\\.)'/, "st"],
     [/#!?\[[^\]]*\]/, "pp"],
     [/\b[a-z_]\w*!/, "pp"],
-    [/\b(?:i8|i16|i32|i64|isize|u8|u16|u32|u64|usize|f32|f64|bool|char|str)\b/, "ty"],
-    [/\b(?:fn|let|mut|for|in|while|loop|if|else|match|return|pub|static|const|unsafe|extern|as|struct|enum|true|false|Some|None)\b/, "kw"],
-    [/\b(?:0x[0-9a-fA-F_]+|\d[\d_]*(?:\.\d+)?(?:e[+-]?\d+)?(?:f32|f64|i32|i64|u32|u8|usize)?)\b/, "nu"],
+    [/\b(?:i8|i16|i32|i64|isize|u8|u16|u32|u64|usize|f32|f64|bool|char|str|Self)\b/, "ty"],
+    [/\b(?:fn|let|mut|for|in|while|loop|if|else|match|return|break|pub|static|const|unsafe|extern|as|struct|enum|impl|use|true|false|Some|None|Ok|Err)\b/, "kw"],
+    [/\b(?:0x[0-9a-fA-F_]+|0o[0-7_]+|\d[\d_]*(?:\.\d+)?(?:e[+-]?\d+)?(?:f32|f64|i32|i64|u32|u8|usize)?)\b/, "nu"],
     [/\b[A-Za-z_]\w*(?=\s*\()/, "fn"],
   ],
 };
 const TOKEN_RE = {};
 function highlight(line, lang) {
-  const rules = TOKENS[lang] || TOKENS.c;
+  const rules = TOKENS[lang] || TOKENS.rust;
   const re = TOKEN_RE[lang] || (TOKEN_RE[lang] = new RegExp(rules.map(([r]) => "(" + r.source + ")").join("|"), "g"));
   re.lastIndex = 0;
   let out = "", last = 0, m;
@@ -631,77 +629,42 @@ function highlight(line, lang) {
   }
   return out + esc(line.slice(last));
 }
-const RUST_PAIRS = [["/* a new process already holds 0, 1, and 2 */\n/* 0  stdin   keyboard */\n/* 1  stdout  screen   */\n/* 2  stderr  screen   */\nint fd = open(\"foo.txt\", O_RDONLY, 0); /* 3 */", "// a new process already holds 0, 1, and 2\n// 0  stdin   keyboard\n// 1  stdout  screen\n// 2  stderr  screen\nlet fd = unsafe { open(c\"foo.txt\".as_ptr(), O_RDONLY, 0) }; // 3"], ["/* every device is a file */\n/* the process stores a descriptor */\n/* the kernel stores the open file */\n/* the same read and write serve all of them */", "// every device is a file\n// the process stores a descriptor\n// the kernel stores the open file\n// the same read and write serve all of them"], ["/* 0, 1, and 2 are already open */\nint fd = open(\"foo.txt\", O_RDONLY, 0);\nchar buf[8];\nssize_t n;\nn = read(fd, buf, 4);\nn = read(fd, buf, 4);\nn = read(fd, buf, 4);\nclose(fd);", "// 0, 1, and 2 are already open\nlet fd = unsafe { open(c\"foo.txt\".as_ptr(), O_RDONLY, 0) };\nlet mut buf = [0u8; 8];\nlet mut n: isize;\nn = unsafe { read(fd, buf.as_mut_ptr(), 4) };\nn = unsafe { read(fd, buf.as_mut_ptr(), 4) };\nn = unsafe { read(fd, buf.as_mut_ptr(), 4) };\nunsafe { close(fd) };"], ["/* the process stores fd; the kernel stores the file and k */\nk = 0;\nn = read(fd, buf, 4); /* then k = k + n */\n/* if k >= m, read returns 0. No EOF byte. */\nclose(fd); /* fd goes back to the pool */", "// the process stores fd; the kernel stores the file and k\nk = 0;\nn = unsafe { read(fd, buf.as_mut_ptr(), 4) }; // then k = k + n\n// if k >= m, read returns 0. No EOF byte.\nunsafe { close(fd) }; // fd goes back to the pool"], ["", ""], ["/* regular file: bytes. directory: names. socket: a peer */\n/* '.' is this directory, '..' is the parent */\n/* absolute path starts with / */\n/* relative path starts at the current working directory */\n/* the kernel has no text type and no binary type */", "// regular file: bytes. directory: names. socket: a peer\n// '.' is this directory, '..' is the parent\n// absolute path starts with /\n// relative path starts at the current working directory\n// the kernel has no text type and no binary type"], ["/* Linux and macOS end a line with 0x0a */\n/* Windows and HTTP end a line with 0x0d 0x0a */\n/* Linux prints the 0x0d as ^M */\n/* in a binary file, 0x0a is just another byte */", "// Linux and macOS end a line with 0x0a\n// Windows and HTTP end a line with 0x0d 0x0a\n// Linux prints the 0x0d as ^M\n// in a binary file, 0x0a is just another byte"], ["/* Linux text */\nchar linux_eol = 0x0a;\n/* Windows and HTTP */\nchar win_eol[] = { 0x0d, 0x0a };\n/* perl -pi -e 's/\\r\\n/\\n/g' foo.txt */", "// Linux text\nlet linux_eol: u8 = 0x0a;\n// Windows and HTTP\nlet win_eol = [0x0du8, 0x0a];\n// perl -pi -e 's/\\r\\n/\\n/g' foo.txt"], ["int fd1, fd2;\nfd1 = Open(\"foo.txt\", O_RDONLY, 0);\nClose(fd1);\nfd2 = Open(\"baz.txt\", O_RDONLY, 0);\nprintf(\"fd2 = %d\\n\", fd2);", "let mut fd1: i32;\nfd1 = unsafe { open(c\"foo.txt\".as_ptr(), O_RDONLY, 0) };\nunsafe { close(fd1) };\nlet fd2 = unsafe { open(c\"baz.txt\".as_ptr(), O_RDONLY, 0) };\nprintln!(\"fd2 = {fd2}\");"], ["#define DEF_MODE  S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH\n#define DEF_UMASK S_IWGRP|S_IWOTH\numask(DEF_UMASK);\nopen(\"foo.txt\", O_CREAT|O_TRUNC|O_WRONLY, DEF_MODE);\n/* surviving bits = mode & ~umask */", "let def_mode: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;\nlet def_umask: u32 = S_IWGRP | S_IWOTH;\nunsafe { umask(def_umask) };\nunsafe { open(c\"foo.txt\".as_ptr(), O_CREAT | O_TRUNC | O_WRONLY, def_mode) };\n// surviving bits = mode & !umask"], ["int fd = open(\"foo.txt\", O_WRONLY | O_APPEND, 0);\n/* before each write, the kernel sets k to the end */\nwrite(fd, \"Z\", 1);\n/* without O_APPEND, Z would land at the current k */", "let fd = unsafe { open(c\"foo.txt\".as_ptr(), O_WRONLY | O_APPEND, 0) };\n// before each write, the kernel sets k to the end\nunsafe { write(fd, c\"Z\".as_ptr().cast(), 1) };\n// without O_APPEND, Z would land at the current k"], ["/* open returns the smallest descriptor not currently open */\n/* close returns that number to the pool */\n/* closing an already-closed descriptor returns -1 */", "// open returns the smallest descriptor not currently open\n// close returns that number to the pool\n// closing an already-closed descriptor returns -1"], ["/* new mode = mode & ~umask */\n/* DEF_UMASK clears group-write and other-write */\n/* owner rw, everyone else read-only */", "// new mode = mode & ~umask\n// DEF_UMASK clears group-write and other-write\n// owner rw, everyone else read-only"], ["/* O_APPEND: k = file size, then the write */\n/* a plain write uses the current k and overwrites */", "// O_APPEND: k = file size, then the write\n// a plain write uses the current k and overwrites"], ["char buf[50];\nssize_t n;\nn = read(disk, buf, 50); /* 20 left \u2192 n = 20 */\nn = read(disk, buf, 50); /* then n = 0, EOF */\nn = read(tty, buf, 50);  /* one typed line */\nn = read(sock, buf, 50); /* any short count */\n/* a disk write does not come back short */", "let mut buf = [0u8; 50];\nlet mut n: isize;\nn = unsafe { read(disk, buf.as_mut_ptr(), 50) }; // 20 left \u2192 n = 20\nn = unsafe { read(disk, buf.as_mut_ptr(), 50) }; // then n = 0, EOF\nn = unsafe { read(tty, buf.as_mut_ptr(), 50) }; // one typed line\nn = unsafe { read(sock, buf.as_mut_ptr(), 50) }; // any short count\n// a disk write does not come back short"], ["/* n == -1   error */\n/* n == 0    EOF */\n/* 0 < n < request   short count, not an error */\n/* size_t is unsigned; ssize_t is signed so -1 fits */\n/* disk reads short only at EOF; disk writes do not */", "// n == -1   error\n// n == 0    EOF\n// 0 < n < request   short count, not an error\n// size_t is unsigned; ssize_t is signed so -1 fits\n// disk reads short only at EOF; disk writes do not"], ["size_t nleft = n;\nchar *bufp = usrbuf;\nwhile (nleft > 0) {\n    ssize_t nr = read(fd, bufp, nleft);\n    if (nr < 0) {\n        if (errno == EINTR)\n            nr = 0;\n        else\n            return -1;\n    } else if (nr == 0)\n        break;\n    nleft -= nr;\n    bufp += nr;\n}\nreturn n - nleft;", "let mut nleft = n;\nlet mut bufp = usrbuf;\nwhile nleft > 0 {\n    let mut nr = unsafe { read(fd, bufp, nleft) };\n    if nr < 0 {\n        if unsafe { *errno_location() } == EINTR // Linux: *__errno_location()\n        { nr = 0; }\n        else\n        { return -1; }\n    } else if nr == 0\n    { break; }\n    nleft -= nr as usize;\n    bufp = unsafe { bufp.add(nr as usize) };\n}\nreturn (n - nleft) as isize;"], ["size_t nleft = n;\nchar *bufp = usrbuf;\nwhile (nleft > 0) {\n    ssize_t nw = write(fd, bufp, nleft);\n    if (nw <= 0) {\n        if (errno == EINTR)\n            nw = 0;\n        else\n            return -1;\n    }\n    nleft -= nw;\n    bufp += nw;\n}\nreturn n;", "let mut nleft = n;\nlet mut bufp = usrbuf;\nwhile nleft > 0 {\n    let mut nw = unsafe { write(fd, bufp, nleft) };\n    if nw <= 0 {\n        if unsafe { *errno_location() } == EINTR // Linux: *__errno_location()\n        { nw = 0; }\n        else\n        { return -1; }\n    }\n    nleft -= nw as usize;\n    bufp = unsafe { bufp.add(nw as usize) };\n}\nreturn n as isize;"], ["/* loop while bytes are still owed */\n/* EINTR: pretend this call moved 0 bytes, and retry */\n/* readn may return short only on EOF */\n/* writen never returns a short count */\n/* return how many bytes actually moved */", "// loop while bytes are still owed\n// EINTR: pretend this call moved 0 bytes, and retry\n// readn may return short only on EOF\n// writen never returns a short count\n// return how many bytes actually moved"], ["void init(rio_t *rp, int fd) {\n    rp->cnt = 0;\n    rp->ptr = rp->buf;\n}\nint fill(rio_t *rp) {\n    if (rp->cnt > 0) return rp->cnt;\n    rp->cnt = read(rp->fd, rp->buf, 8); /* book: 8192 */\n    rp->ptr = rp->buf;\n    return rp->cnt;\n}\n/* copy from rp->ptr until newline, then cnt -= taken */\n/* rio_readn ignores rp->buf and reads at the kernel position */", "fn init(rp: &mut Rio, fd: i32) {\n    rp.cnt = 0;\n    rp.ptr = rp.buf.as_mut_ptr();\n}\nfn fill(rp: &mut Rio) -> isize {\n    if rp.cnt > 0 { return rp.cnt; }\n    rp.cnt = unsafe { read(rp.fd, rp.buf.as_mut_ptr(), 8) }; // book: 8192\n    rp.ptr = rp.buf.as_mut_ptr();\n    rp.cnt\n}\n// copy from rp.ptr until newline, then cnt -= taken\n// rio_readn ignores rp.buf and reads at the kernel position"], ["/* empty buffer: one read fills it, a short fill is fine */\n/* later bytes come from rp->buf, with no kernel trap */\n/* readlineb and readnb share that buffer */\n/* rio_readn on the same fd skips bytes still in the buffer */", "// empty buffer: one read fills it, a short fill is fine\n// later bytes come from rp->buf, with no kernel trap\n// readlineb and readnb share that buffer\n// rio_readn on the same fd skips bytes still in the buffer"], ["struct stat st;\nstat(path, &st);\nif (S_ISREG(st.st_mode)) type = \"regular\";\nelse if (S_ISDIR(st.st_mode)) type = \"directory\";\nelse type = \"other\";\nreadok = (st.st_mode & S_IRUSR) ? \"yes\" : \"no\";\nprintf(\"type: %s, read: %s\\n\", type, readok);", "use std::os::unix::fs::MetadataExt;\nlet md = std::fs::metadata(path).unwrap(); // stat(2) fills the card\nlet kind = if md.is_file() { \"regular\" } // S_ISREG\nelse if md.is_dir() { \"directory\" } // S_ISDIR\nelse { \"other\" };\nlet readok = if md.mode() & S_IRUSR != 0 { \"yes\" } else { \"no\" };\nprintln!(\"type: {kind}, read: {readok}\");"], ["/* stat fills the card; it does not open the file */\n/* st_mode holds the type and the permission bits */\n/* st_size is the length in bytes */\n/* standard I/O has no call for this */", "// stat fills the card; it does not open the file\n// st_mode holds the type and the permission bits\n// st_size is the length in bytes\n// standard I/O has no call for this"], ["DIR *dp = opendir(\"/home/droh\");\nstruct dirent *e;\nerrno = 0;\nwhile ((e = readdir(dp)) != NULL) {\n    /* only d_name and d_ino are portable */\n}\nif (errno != 0)\n    /* a real error */\n/* else: NULL and errno still 0 means end of stream */\nclosedir(dp);", "let dp = unsafe { opendir(c\"/home/droh\".as_ptr()) };\nlet mut e: *mut Dirent = std::ptr::null_mut();\nunsafe { *errno_location() = 0 };\nwhile { e = unsafe { readdir(dp) }; !e.is_null() } {\n    // only d_name and d_ino are portable\n}\nif unsafe { *errno_location() } != 0\n{ } // a real error\n// else: NULL and errno still 0 means end of stream\nunsafe { closedir(dp) };"], ["/* readdir returns NULL for both end and error */\n/* set errno = 0 first, then see if it changed */\n/* NULL + errno 0: finished */\n/* NULL + errno set: failed */", "// readdir returns NULL for both end and error\n// set errno = 0 first, then see if it changed\n// NULL + errno 0: finished\n// NULL + errno set: failed"], ["fd1 = Open(\"foobar.txt\", O_RDONLY, 0);\nfd2 = Open(\"foobar.txt\", O_RDONLY, 0);\nRead(fd1, &c, 1);\nRead(fd2, &c, 1);\nprintf(\"c = %c\\n\", c);", "let fd1 = unsafe { open(c\"foobar.txt\".as_ptr(), O_RDONLY, 0) };\nlet fd2 = unsafe { open(c\"foobar.txt\".as_ptr(), O_RDONLY, 0) };\nunsafe { read(fd1, &raw mut c, 1) };\nunsafe { read(fd2, &raw mut c, 1) };\nprintln!(\"c = {}\", c as char);"], ["fd = Open(\"foobar.txt\", O_RDONLY, 0);\nif (Fork() == 0) {\n    Read(fd, &c, 1);\n    exit(0);\n}\nWait(NULL);\nRead(fd, &c, 1);\nprintf(\"c = %c\\n\", c);", "fd = unsafe { open(c\"foobar.txt\".as_ptr(), O_RDONLY, 0) };\nif unsafe { fork() } == 0 {\n    unsafe { read(fd, &raw mut c, 1) };\n    std::process::exit(0);\n}\nunsafe { wait(std::ptr::null_mut()) };\nunsafe { read(fd, &raw mut c, 1) };\nprintln!(\"c = {}\", c as char);"], ["/* descriptor table: one per process */\n/* file table: position + refcnt, shared by processes */\n/* v-node: size, type, and the rest of stat */\n/* two opens \u2192 two positions */\n/* fork \u2192 one position, refcnt 2 */", "// descriptor table: one per process\n// file table: position + refcnt, shared by processes\n// v-node: size, type, and the rest of stat\n// two opens \u2192 two positions\n// fork \u2192 one position, refcnt 2"], ["/* fd 1 \u2192 file A (terminal), fd 4 \u2192 file B (disk) */\ndup2(4, 1);\n/* slot 1 is closed, then overwritten with slot 4 */\n/* writes to stdout now land in file B */", "// fd 1 \u2192 file A (terminal), fd 4 \u2192 file B (disk)\nunsafe { dup2(4, 1) };\n// slot 1 is closed, then overwritten with slot 4\n// writes to stdout now land in file B"], ["fd1 = Open(\"foobar.txt\", O_RDONLY, 0);\nfd2 = Open(\"foobar.txt\", O_RDONLY, 0);\nRead(fd2, &c, 1);\nDup2(fd2, fd1);\nRead(fd1, &c, 1);\nprintf(\"c = %c\\n\", c);", "let fd1 = unsafe { open(c\"foobar.txt\".as_ptr(), O_RDONLY, 0) };\nlet fd2 = unsafe { open(c\"foobar.txt\".as_ptr(), O_RDONLY, 0) };\nunsafe { read(fd2, &raw mut c, 1) };\nunsafe { dup2(fd2, fd1) };\nunsafe { read(fd1, &raw mut c, 1) };\nprintln!(\"c = {}\", c as char);"], ["/* dup2 copies a descriptor-table slot onto another */\n/* if the target was open, it is closed first */\n/* both slots then share one file position */\n/* that is how the shell implements > and < */", "// dup2 copies a descriptor-table slot onto another\n// if the target was open, it is closed first\n// both slots then share one file position\n// that is how the shell implements > and <"], ["FILE *fp = fopen(\"notes.txt\", \"r\");\nint c = getc(fp); /* may call read once */\nc = getc(fp);     /* served from the buffer */\nc = getc(fp);\nc = getc(fp);\nc = getc(fp);\nc = getc(fp);     /* the newline */", "let fp = unsafe { fopen(c\"notes.txt\".as_ptr(), c\"r\".as_ptr()) };\nlet mut c = unsafe { getc(fp) }; // may call read once\nc = unsafe { getc(fp) }; // served from the buffer\nc = unsafe { getc(fp) };\nc = unsafe { getc(fp) };\nc = unsafe { getc(fp) };\nc = unsafe { getc(fp) }; // the newline"], ["fprintf(fp, \"hi\");\nfflush(fp);              /* required before a later read */\nc = fgetc(fp);\nfseek(fp, 0, SEEK_SET);  /* required before a later write */\nfprintf(fp, \"yo\");\n/* on a socket, fseek and lseek are illegal */", "unsafe { fprintf(fp, c\"hi\".as_ptr()) };\nunsafe { fflush(fp) }; // required before a later read\nc = unsafe { fgetc(fp) };\nunsafe { fseek(fp, 0, SEEK_SET) }; // required before a later write\nunsafe { fprintf(fp, c\"yo\".as_ptr()) };\n// on a socket, fseek and lseek are illegal"], ["/* a FILE is a descriptor plus a buffer */\n/* the first getc may read; the next ones do not */\n/* input after output needs fflush or a seek */\n/* output after input needs a seek, unless EOF */\n/* a socket cannot seek */", "// a FILE is a descriptor plus a buffer\n// the first getc may read; the next ones do not\n// input after output needs fflush or a seek\n// output after input needs a seek, unless EOF\n// a socket cannot seek"], ["fp = fopen(\"notes.txt\", \"r\");  /* G1: disk and terminal */\nn = rio_readn(fd, buf, 8);       /* G2: binary, not a line reader */\nrio_readlineb(&rio, buf, MAXLINE); /* G3: sockets */\nsscanf(buf, \"%s %s\", method, uri);", "let fp = unsafe { fopen(c\"notes.txt\".as_ptr(), c\"r\".as_ptr()) }; // G1: disk and terminal\nlet n = unsafe { rio_readn(fd, buf.as_mut_ptr(), 8) }; // G2: binary, not a line reader\nunsafe { rio_readlineb(&raw mut rio, buf.as_mut_ptr(), MAXLINE) }; // G3: sockets\nunsafe { sscanf(buf.as_ptr().cast(), c\"%s %s\".as_ptr(), method, uri) };"], ["/* G1  standard I/O whenever you can */\n/* G2  line readers are for text, not for bytes that merely look like newlines */\n/* G3  Rio on sockets */\n/* two fclose calls on one socket descriptor close it twice */", "// G1  standard I/O whenever you can\n// G2  line readers are for text, not for bytes that merely look like newlines\n// G3  Rio on sockets\n// two fclose calls on one socket descriptor close it twice"], ["FILE *in = fdopen(sockfd, \"r\");\nFILE *out = fdopen(sockfd, \"w\");\nfclose(in);   /* closes sockfd */\nfclose(out);  /* closes it again */\nsprintf(msg, \"HTTP/1.0 200 OK\\r\\n\");\nrio_writen(sockfd, msg, strlen(msg));", "let inp = unsafe { fdopen(sockfd, c\"r\".as_ptr()) };\nlet outp = unsafe { fdopen(sockfd, c\"w\".as_ptr()) };\nunsafe { fclose(inp) }; // closes sockfd\nunsafe { fclose(outp) }; // closes it again\nunsafe { sprintf(msg, c\"HTTP/1.0 200 OK\\r\\n\".as_ptr()) };\nunsafe { rio_writen(sockfd, msg, strlen(msg)) };"], ["int fd = open(path, O_RDONLY, 0);\nn = read(fd, buf, n);", "let fd = unsafe { open(path, O_RDONLY, 0) };\nn = unsafe { read(fd, buf.as_mut_ptr(), n as usize) };"], ["FILE *fp = fopen(path, \"r\");\nfgets(buf, n, fp);", "let fp = unsafe { fopen(path, c\"r\".as_ptr()) };\nunsafe { fgets(buf.as_mut_ptr(), n, fp) };"], ["n = read(sock, buf, 8); /* might be 3 */", "n = unsafe { read(sock, buf.as_mut_ptr(), 8) }; // might be 3"], ["while (nleft > 0) {\n    nr = read(fd, bufp, nleft);\n    nleft -= nr;\n}", "while nleft > 0 {\n    nr = unsafe { read(fd, bufp, nleft as usize) };\n    nleft -= nr;\n}"], ["fd1 = Open(path, O_RDONLY, 0);\nfd2 = Open(path, O_RDONLY, 0);\nRead(fd2, &c, 1); /* c = f */", "let fd1 = unsafe { open(path, O_RDONLY, 0) };\nlet fd2 = unsafe { open(path, O_RDONLY, 0) };\nunsafe { read(fd2, &raw mut c, 1) }; // c = f"], ["fd = Open(path, O_RDONLY, 0);\nFork();\n/* child reads f, parent reads o */", "fd = unsafe { open(path, O_RDONLY, 0) };\nunsafe { fork() };\n// child reads f, parent reads o"], ["rio_readlineb(&rio, buf, MAXLINE);", "unsafe { rio_readlineb(&raw mut rio, buf.as_mut_ptr(), MAXLINE) };"], ["rio_readn(fd, buf, n); /* or fread */", "unsafe { rio_readn(fd, buf.as_mut_ptr(), n) }; // or fread"], ["fclose(in);  /* closes sockfd */\nfclose(out); /* closes it again */", "unsafe { fclose(inp) }; // closes sockfd\nunsafe { fclose(outp) }; // closes it again"], ["sprintf(msg, \"OK\\r\\n\");\nrio_writen(fd, msg, strlen(msg));", "unsafe { sprintf(msg, c\"OK\\r\\n\".as_ptr()) };\nunsafe { rio_writen(fd, msg, strlen(msg)) };"], ["\"/home/droh/hello.c\"", "\"/home/droh/hello.c\";"], ["/* cwd /home/bryant */\n\"../droh/hello.c\"", "// cwd /home/bryant\n\"../droh/hello.c\";"], ["/* kernel verbs: descriptor, position, stat */", "// kernel verbs: descriptor, position, stat"], ["/* a FILE is a descriptor plus a buffer */", "// a FILE is a descriptor plus a buffer"], ["/* a short count is not an error */", "// a short count is not an error"], ["/* rio_writen does not return until n bytes are gone */", "// rio_writen does not return until n bytes are gone"], ["/* two file-table entries, two positions */", "// two file-table entries, two positions"], ["/* one file-table entry, refcnt 2 */", "// one file-table entry, refcnt 2"], ["/* stops at 0x0a and writes a NUL */", "// stops at 0x0a and writes a NUL"], ["/* 0x0a inside a picture is data */", "// 0x0a inside a picture is data"], ["/* lseek on a socket is illegal */", "// lseek on a socket is illegal"], ["/* readlineb, then sscanf */", "// readlineb, then sscanf"], ["/* starts at the root */", "// starts at the root"], ["/* starts at the current working directory */", "// starts at the current working directory"]];
-const RUST_BY_C = new Map(RUST_PAIRS);
+/* ---------- the code language: every code panel on this page shows Rust (the book's C is described in words) ----------
+   A file may carry a map from the line numbers its engine speaks in to the listing's lines. */
 const CODE_LANG = (() => {
-  let v = "c";
-  try { if (new URLSearchParams(location.search).get("code") === "rust") v = "rust"; } catch (e) {}
+  const v = "rust"; // fixed: the pages teach Rust only
   const subs = [];
   return {
     get v() { return v; },
     get rust() { return v === "rust"; },
     on(fn) { subs.push(fn); },
-    set(nv) {
-      if (nv === v) return;
-      v = nv;
-      try {
-        const u = new URL(location.href);
-        if (v === "rust") u.searchParams.set("code", "rust"); else u.searchParams.delete("code");
-        history.replaceState(null, "", u);
-      } catch (e) {}
-      subs.forEach((fn) => fn(v));
-    },
+    set() {}, // there is no other language to switch to
   };
 })();
-function langToggle() {
-  const wrap = h("div", { class: "cp-lang", role: "group", "aria-label": "Show the code in C or Rust" });
-  [["c", "C"], ["rust", "Rust"]].forEach(([k, label]) => {
-    const b = h("button", { type: "button", "data-lang": k, "aria-pressed": String(CODE_LANG.v === k) }, label);
-    b.addEventListener("click", () => CODE_LANG.set(k));
-    wrap.appendChild(b);
-  });
-  CODE_LANG.on((nv) => wrap.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === nv))));
-  return wrap;
-}
-document.querySelector(".first").appendChild(langToggle());
-{ const pre = document.getElementById("rust-prelude"); const sync = () => { pre.hidden = !CODE_LANG.rust; }; CODE_LANG.on(sync); sync(); }
-function rustName(name) { return /\.c$/.test(name) ? name.replace(/\.c$/, ".rs") : name + ".rs"; }
-function attach(f) {
-  const c = Object.assign({}, f);
-  if (f.rs) c.rs = Object.assign({}, f.rs);
-  else if (RUST_BY_C.has(c.src)) c.rs = { name: rustName(c.name), src: RUST_BY_C.get(c.src), map: "same", cmd: "" };
-  return c;
-}
 function code(sel, o) {
   const root = K.$(sel);
   root.className = "codepane";
   const tabs = h("div", { class: "cp-tabs" });
   const cmd = h("span", { class: "cp-cmd" });
-  root.appendChild(h("div", { class: "cp-head" }, h("span", { class: "cp-k" }, o.label || "The code"), tabs, langToggle(), cmd));
+  root.appendChild(h("div", { class: "cp-head" }, h("span", { class: "cp-k" }, o.label || "The code"), tabs, cmd));
   const body = h("div", { class: "cp-body", tabindex: "0", role: "region", "aria-label": (o.label || "The code") + " listing" });
   const ol = h("ol");
   body.appendChild(ol);
   const out = h("pre", { class: "cp-out", hidden: true, "aria-live": "polite" });
   root.append(body, out);
-  let files = o.files.map(attach);
+  let files = o.files.map((f) => Object.assign({}, f));
   let cur = null, lis = [];
   let req = { marks: {}, notes: {}, out: null };
-  function labelOf(f) { return CODE_LANG.rust && f.rs ? f.rs.name : f.name; }
-  function view() {
-    if (CODE_LANG.rust && cur.rs) return { lang: "rust", src: cur.rs.src, cmd: cur.rs.cmd || "" };
-    if (CODE_LANG.rust) return { lang: cur.lang || "c", src: cur.src, cmd: "the same in C and Rust" };
-    return { lang: cur.lang || "c", src: cur.src, cmd: "" };
-  }
   function tr(n) {
-    if (!CODE_LANG.rust || !cur.rs || !cur.rs.map || cur.rs.map === "same") return n;
-    const hit = cur.rs.map[n];
+    if (!cur.map) return n;
+    const hit = cur.map[n];
     return hit == null ? null : hit;
   }
   function drawTabs() {
     K.clear(tabs);
-    if (files.length === 1) { tabs.appendChild(h("span", { class: "cp-file" }, labelOf(files[0]))); return; }
+    if (files.length === 1) { tabs.appendChild(h("span", { class: "cp-file" }, files[0].name)); return; }
     files.forEach((f) => {
-      const b = h("button", { type: "button", class: "cp-tab", "aria-pressed": String(f === cur) }, labelOf(f));
+      const b = h("button", { type: "button", class: "cp-tab", "aria-pressed": String(f === cur) }, f.name);
       b.addEventListener("click", () => { show(f.name); o.onTab && o.onTab(f.name); });
       tabs.appendChild(b);
     });
@@ -732,14 +695,13 @@ function code(sel, o) {
   }
   function render() {
     K.clear(ol);
-    const shown = view();
-    lis = shown.src.split("\n").map((line, i) => {
+    lis = cur.src.split("\n").map((line, i) => {
       const li = h("li", { "data-n": String(i + 1) });
-      li.innerHTML = highlight(line, shown.lang) || " ";
+      li.innerHTML = highlight(line, cur.lang || "rust") || " ";
       ol.appendChild(li);
       return li;
     });
-    cmd.textContent = shown.cmd;
+    cmd.textContent = cur.cmd || "";
     paintMarks(); paintNotes(); paintOut();
   }
   function show(name) {
@@ -755,13 +717,12 @@ function code(sel, o) {
   const api = {
     show,
     get file() { return cur && cur.name; },
-    setFiles(list) { files = list.map(attach); cur = null; req = { marks: {}, notes: {}, out: null }; show(files[0].name); api.out(null); },
-    src(name, text, rustSrc) {
+    setFiles(list) { files = list.map((f) => Object.assign({}, f)); cur = null; req = { marks: {}, notes: {}, out: null }; show(files[0].name); api.out(null); },
+    src(name, text, map) {
       const f = files.find((x) => x.name === name);
       if (!f) return;
       f.src = text;
-      const rust = rustSrc != null ? rustSrc : (RUST_BY_C.has(text) ? RUST_BY_C.get(text) : null);
-      if (rust != null) f.rs = { name: rustName(f.name), src: rust, map: "same", cmd: "" };
+      if (map !== undefined) f.map = map;
       if (f === cur) render();
     },
     at(atLines, cls = "on") {
@@ -775,7 +736,6 @@ function code(sel, o) {
     notes(map) { req.notes = map || {}; paintNotes(); },
     out(textOrNull) { req.out = textOrNull == null ? null : textOrNull; paintOut(); },
   };
-  CODE_LANG.on(() => { drawTabs(); if (cur) render(); });
   show(files[0].name);
   return api;
 }
@@ -789,18 +749,18 @@ function code(sel, o) {
     { fd: 2, name: "stderr", dev: "screen" },
     { fd: 3, name: "foo.txt", dev: "disk" },
   ];
-  const prog = code("#hero-prog", { label: "The program", files: [C("open.c", lines([
-    "/* a new process already holds 0, 1, and 2 */",
-    "/* 0  stdin   keyboard */",
-    "/* 1  stdout  screen   */",
-    "/* 2  stderr  screen   */",
-    "int fd = open(\"foo.txt\", O_RDONLY, 0); /* 3 */",
+  const prog = code("#hero-prog", { label: "The program", files: [R("open.rs", lines([
+    "// a new process already holds 0, 1, and 2",
+    "// 0  stdin   keyboard   std::io::stdin()",
+    "// 1  stdout  screen     std::io::stdout()",
+    "// 2  stderr  screen     std::io::stderr()",
+    "let f = File::open(\"foo.txt\")?; // its descriptor is 3",
   ]))] });
-  const idea = code("#hero-idea", { label: "The idea", files: [C("idea.c", lines([
-    "/* every device is a file */",
-    "/* the process stores a descriptor */",
-    "/* the kernel stores the open file */",
-    "/* the same read and write serve all of them */",
+  const idea = code("#hero-idea", { label: "The idea", files: [R("idea.rs", lines([
+    "// every device is a file",
+    "// the process stores a descriptor",
+    "// the kernel stores the open file",
+    "// the same read and write serve all of them",
   ]))] });
   svg.append(draw.label(24, 22, "DESCRIPTOR TABLE", "sv-label", "start"), draw.label(430, 22, "THE FILE", "sv-label", "start"));
   const slots = ROWS.map((row, i) => {
@@ -848,22 +808,22 @@ function code(sel, o) {
   svg.append(draw.label(430, 24, "FOO.TXT", "sv-label", "start"));
   const st = { fd: stat("fd", "—"), k: stat("k", "—"), n: stat("n", "—") };
   Object.values(st).forEach((v) => K.$("#s1-stats").appendChild(v));
-  const prog = code("#s1-prog", { label: "The program", files: [C("ticket.c", lines([
-    "/* 0, 1, and 2 are already open */",
-    "int fd = open(\"foo.txt\", O_RDONLY, 0);",
-    "char buf[8];",
-    "ssize_t n;",
-    "n = read(fd, buf, 4);",
-    "n = read(fd, buf, 4);",
-    "n = read(fd, buf, 4);",
-    "close(fd);",
+  const prog = code("#s1-prog", { label: "The program", files: [R("ticket.rs", lines([
+    "// 0, 1, and 2 are already open",
+    "let mut f = File::open(\"foo.txt\")?;",
+    "let mut buf = [0u8; 8]; // eight bytes, all zero",
+    "// read copies at most the slice's length, and says how many",
+    "let n = f.read(&mut buf[..4])?;",
+    "let n = f.read(&mut buf[4..])?;",
+    "let n = f.read(&mut buf[..4])?;",
+    "drop(f); // close",
   ]))] });
-  const idea = code("#s1-idea", { label: "The idea", files: [C("idea.c", lines([
-    "/* the process stores fd; the kernel stores the file and k */",
-    "k = 0;",
-    "n = read(fd, buf, 4); /* then k = k + n */",
-    "/* if k >= m, read returns 0. No EOF byte. */",
-    "close(fd); /* fd goes back to the pool */",
+  const idea = code("#s1-idea", { label: "The idea", files: [R("idea.rs", lines([
+    "// the process holds f; the kernel holds the file and k",
+    "// k = 0 when the file opens",
+    "let n = f.read(&mut buf[..4])?; // then k = k + n",
+    "// if k >= m, read returns Ok(0). No EOF byte.",
+    "drop(f); // the descriptor goes back to the pool",
   ]))] });
   let step = 0, k = 0, got = "", last = null;
   const run = session();
@@ -897,7 +857,12 @@ function code(sel, o) {
       6: step === 3 ? "n = 4, k = 8" : "",
       7: step === 4 ? ["n = 0  EOF", "bad"] : "",
       8: step === 5 ? ["fd 3 free", "good"] : "",
-    }, step === 4 ? "n = 0" : step === 2 || step === 3 ? "n = 4" : null);
+    }, [null,
+      'openat(AT_FDCWD, "foo.txt", O_RDONLY|O_CLOEXEC) = 3',
+      'read(3, "HELL", 4) = 4',
+      'read(3, "O!!!", 4) = 4',
+      'read(3, "", 4) = 0',
+      "close(3) = 0"][step]);
     const ideaLine = step <= 1 ? 1 : step <= 3 ? 3 : step === 4 ? 4 : 5;
     mark(idea, [ideaLine], {
       2: step >= 1 && step < 5 ? "k = " + k : "",
@@ -962,20 +927,20 @@ function code(sel, o) {
   const win = ["h", "i", "0x0d", "0x0a"].map((ch, i) => box(gEol, 16 + i * 70, 120, 62, 52, i === 2 ? "sv-bad" : "sv-db", ch, i === 2 ? "^M" : i === 3 ? "\\\\n" : "text", 12));
   const bin = box(gEol, 340, 40, 300, 132, "sv-panel", "a binary byte 0x0a", "not a newline");
   let mode = 0, sel = 0, cwd = 0;
-  const prog = code("#s2-prog", { label: "The program", files: [C("path.c", "")] });
-  const idea = code("#s2-idea", { label: "The idea", files: [C("idea.c", "")] });
+  const prog = code("#s2-prog", { label: "The program", files: [R("path.rs", "")] });
+  const idea = code("#s2-idea", { label: "The idea", files: [R("idea.rs", "")] });
   const IDEA_TREE = lines([
-    "/* regular file: bytes. directory: names. socket: a peer */",
-    "/* '.' is this directory, '..' is the parent */",
-    "/* absolute path starts with / */",
-    "/* relative path starts at the current working directory */",
-    "/* the kernel has no text type and no binary type */",
+    "// regular file: bytes. directory: names. socket: a peer",
+    "// '.' is this directory, '..' is the parent",
+    "// absolute path starts with /",
+    "// relative path starts at the current working directory",
+    "// the kernel has no text type and no binary type",
   ]);
   const IDEA_EOL = lines([
-    "/* Linux and macOS end a line with 0x0a */",
-    "/* Windows and HTTP end a line with 0x0d 0x0a */",
-    "/* Linux prints the 0x0d as ^M */",
-    "/* in a binary file, 0x0a is just another byte */",
+    "// Linux and macOS end a line with 0x0a",
+    "// Windows and HTTP end a line with 0x0d 0x0a",
+    "// Linux prints the 0x0d as ^M",
+    "// in a binary file, 0x0a is just another byte",
   ]);
   function paint() {
     showG(gTree, mode === 0);
@@ -987,39 +952,37 @@ function code(sel, o) {
       info.u.textContent = "from " + here + "  →  " + f.rel[here];
       cwdB.t.textContent = here;
       const rel = f.rel[here];
-      prog.src("path.c", lines([
-        "char *cwd = \"" + here + "\";",
-        "/* absolute */",
-        "\"" + f.abs + "\";",
-        "/* relative, from the cwd */",
-        "\"" + rel + "\";",
-        "/* type: " + f.type + (f.type === "directory" ? ", contains . and .." : "") + " */",
-      ]), lines([
-        "let cwd = \"" + here + "\";",
-        "// absolute",
-        "\"" + f.abs + "\";",
-        "// relative, from the cwd",
-        "\"" + rel + "\";",
+      const sock = f.type === "socket";
+      prog.src("path.rs", lines([
+        "// cwd: " + here,
+        "// absolute: from the root",
+        sock ? "// a network socket comes from a call, such as" : "let abs = Path::new(\"" + f.abs + "\");",
+        "// relative: from the cwd",
+        sock ? "// TcpStream::connect, not from a pathname" : "let rel = Path::new(\"" + rel + "\");",
+        sock ? "// so it has neither kind of name" : "println!(\"{} {}\", abs.is_absolute(), rel.is_absolute());",
         "// type: " + f.type + (f.type === "directory" ? ", contains . and .." : ""),
       ]));
-      idea.src("idea.c", IDEA_TREE);
-      mark(prog, [3, 5], { 1: "cwd", 5: rel });
+      idea.src("idea.rs", IDEA_TREE);
+      mark(prog, sock ? [3, 5] : [3, 5, 6], { 1: "cwd", 5: sock ? "" : rel }, sock ? null : "true false");
       mark(idea, [f.type === "socket" ? 1 : f.type === "directory" ? 2 : 3]);
       cap("#s2-cap", f.type === "directory"
         ? "<b>" + f.abs + "</b> is a directory: an array of names. It always contains <code>.</code> and <code>..</code>."
         : f.type === "socket"
-          ? "A socket is a file used to talk to another process. Same open, read, and write. No pathname until it is connected."
+          ? "A socket is a file used to talk to another process. Same read and write. A network socket comes from a call such as <code>TcpStream::connect</code>, not from a pathname in the tree."
           : "Type <b>" + f.type + "</b>. Absolute <span class=\"mono\">" + f.abs + "</span>. From <span class=\"mono\">" + here + "</span> the relative name is <span class=\"mono\">" + rel + "</span>.");
     } else {
-      prog.src("path.c", lines([
-        "/* Linux text */",
-        "char linux_eol = 0x0a;",
-        "/* Windows and HTTP */",
-        "char win_eol[] = { 0x0d, 0x0a };",
-        "/* perl -pi -e 's/\\r\\n/\\n/g' foo.txt */",
+      prog.src("path.rs", lines([
+        "// Linux text",
+        "let linux_eol = b\"\\n\"; // one byte: 0x0a",
+        "// Windows and HTTP",
+        "let win_eol = b\"\\r\\n\"; // two bytes: 0x0d 0x0a",
+        "println!(\"{:x?} {:x?}\", linux_eol, win_eol); // :x? prints hex",
+        "let text = String::from(\"hi\\r\\n\");",
+        "let fixed = text.replace(\"\\r\\n\", \"\\n\"); // the book uses a perl one-liner",
+        "println!(\"{:x?}\", fixed.as_bytes());",
       ]));
-      idea.src("idea.c", IDEA_EOL);
-      mark(prog, [2, 4], { 2: "LF", 4: "CR LF" });
+      idea.src("idea.rs", IDEA_EOL);
+      mark(prog, [2, 4, 5], { 2: "LF", 4: "CR LF" }, "[a] [d, a]\n[68, 69, a]");
       mark(idea, [1, 2, 4]);
       cap("#s2-cap", "The Linux line is the two letters plus <b>0x0a</b>. The Windows line adds <b>0x0d</b> first, which Linux tools draw as ^M. A picture that happens to contain 0x0a is not a text file to the kernel — it is still just bytes.");
     }
@@ -1045,55 +1008,59 @@ function code(sel, o) {
   ];
   gMask.append(draw.label(16, 24, "mode bits, then umask knocks out group-write and other-write", "sv-label", "start"));
   const bits = PERM.map((p, i) => box(gMask, 16 + i * 72, 40, 66, 64, "sv-panel", p.lab, "mode", 12));
-  const result = box(gMask, 16, 130, 648, 70, "sv-good", "owner rw · group r · other r", "mode & ~umask");
+  const result = box(gMask, 16, 130, 648, 70, "sv-good", "owner rw · group r · other r", "mode & !umask");
   const fileCells = ["a", "b", "c", "d"].map((ch, i) => box(gApp, 16 + i * 48, 36, 42, 48, "sv-db", ch, String(i), 14));
   const wrote = box(gApp, 500, 36, 150, 48, "sv-panel", "write Z", "one byte");
   const kbox = box(gApp, 16, 110, 648, 80, "sv-panel", "k = 0", "O_APPEND sets k to the end first");
   const PROG = [
     lines([
-      "int fd1, fd2;",
-      "fd1 = Open(\"foo.txt\", O_RDONLY, 0);",
-      "Close(fd1);",
-      "fd2 = Open(\"baz.txt\", O_RDONLY, 0);",
-      "printf(\"fd2 = %d\\n\", fd2);",
+      "// Practice Problem 10.1, with std's File",
+      "let fd1 = File::open(\"foo.txt\")?;",
+      "drop(fd1); // close",
+      "let fd2 = File::open(\"baz.txt\")?;",
+      "println!(\"fd2 = {}\", fd2.as_raw_fd());",
     ]),
     lines([
-      "#define DEF_MODE  S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH",
-      "#define DEF_UMASK S_IWGRP|S_IWOTH",
-      "umask(DEF_UMASK);",
-      "open(\"foo.txt\", O_CREAT|O_TRUNC|O_WRONLY, DEF_MODE);",
-      "/* surviving bits = mode & ~umask */",
+      "let def_mode = 0o666; // rw-rw-rw-: what we ask for",
+      "let def_umask = 0o022; // ----w--w-: what we refuse",
+      "unsafe { umask(def_umask) }; // std has no umask",
+      "let f = File::options().write(true).create(true).truncate(true)",
+      "    .mode(def_mode).open(\"foo.txt\")?;",
+      "// new mode = mode & !umask = 0o644, rw-r--r--",
     ]),
     lines([
-      "int fd = open(\"foo.txt\", O_WRONLY | O_APPEND, 0);",
-      "/* before each write, the kernel sets k to the end */",
-      "write(fd, \"Z\", 1);",
-      "/* without O_APPEND, Z would land at the current k */",
+      "// foo.txt holds abcd",
+      "let mut f = File::options().append(true).open(\"foo.txt\")?;",
+      "// before each write, the kernel sets k to the end",
+      "f.write_all(b\"Z\")?; // write_all: write every byte",
+      "// without append: File::options().write(true) opens at k = 0,",
+      "// and the same write_all turns abcd into Zbcd",
     ]),
   ];
+  const PMAP = [null, { 3: 3, 4: [4, 5], 5: 6 }, null];
   const IDEA = [
     lines([
-      "/* open returns the smallest descriptor not currently open */",
-      "/* close returns that number to the pool */",
-      "/* closing an already-closed descriptor returns -1 */",
+      "// open returns the smallest descriptor not currently open",
+      "// close returns that number to the pool",
+      "// C: closing it twice returns -1. Rust: does not compile",
     ]),
     lines([
-      "/* new mode = mode & ~umask */",
-      "/* DEF_UMASK clears group-write and other-write */",
-      "/* owner rw, everyone else read-only */",
+      "// new mode = mode & !umask",
+      "// the umask 0o022 clears group-write and other-write",
+      "// owner rw, everyone else read-only",
     ]),
     lines([
-      "/* O_APPEND: k = file size, then the write */",
-      "/* a plain write uses the current k and overwrites */",
+      "// append(true): k = file size, then the write",
+      "// a plain write uses the current k and overwrites",
     ]),
   ];
-  const prog = code("#s3-prog", { label: "The program", files: [C("open.c", PROG[0])] });
-  const idea = code("#s3-idea", { label: "The idea", files: [C("idea.c", IDEA[0])] });
+  const prog = code("#s3-prog", { label: "The program", files: [R("open.rs", PROG[0])] });
+  const idea = code("#s3-idea", { label: "The idea", files: [R("idea.rs", IDEA[0])] });
   let mode = 0, step = 0, appended = null;
   function paint() {
     showG(gFd, mode === 0); showG(gMask, mode === 1); showG(gApp, mode === 2);
-    prog.src("open.c", PROG[mode]);
-    idea.src("idea.c", IDEA[mode]);
+    prog.src("open.rs", PROG[mode], PMAP[mode]);
+    idea.src("idea.rs", IDEA[mode]);
     if (mode === 0) {
       const lab = ["stdin", "stdout", "stderr", "free", "free"];
       if (step === 1) lab[3] = "foo.txt";
@@ -1102,21 +1069,26 @@ function code(sel, o) {
         b.u.textContent = lab[i];
         setCls(b.r, lab[i] === "free" ? "sv-panel" : i === 3 && step > 0 ? "sv-good" : "sv-server");
       });
-      msg.t.textContent = ["next unused = 3", "fd1 = 3 · foo.txt", "3 is free again", "fd2 = 3 · baz.txt", "close(3) = -1"][Math.min(step, 4)];
+      msg.t.textContent = ["next unused = 3", "fd1 = 3 · foo.txt", "3 is free again", "fd2 = 3 · baz.txt", "a second drop(fd1) will not compile"][Math.min(step, 4)];
       setCls(msg.r, step === 4 ? "sv-bad" : step === 3 ? "sv-good" : "sv-panel");
       const texts = [
         "Lockers 0, 1, and 2 are taken. The next open must return 3.",
         "fd1 is 3. Press Step to close it.",
         "Close returned 3 to the pool. The next open, of a different file, still gets 3.",
         "Practice Problem 10.1 prints <b>fd2 = 3</b>.",
-        "Closing a descriptor that is already closed returns <b>−1</b>.",
+        "In C, closing a descriptor that is already closed returns <b>−1</b>. In Rust, <code>drop</code> takes the <code>File</code> away for good, so a second <code>drop(fd1)</code> is a compile error: “use of moved value”.",
       ];
       cap("#s3-cap", texts[Math.min(step, 4)]);
       mark(prog, [[1], [2], [3], [4, 5], [3]][Math.min(step, 4)], {
         2: step === 1 ? "fd1 = 3" : "",
+        3: step === 4 ? ["drop it twice?", "bad"] : "",
         4: step >= 3 && step !== 4 ? "fd2 = 3" : "",
         5: step === 3 ? ["fd2 = 3", "good"] : "",
-      }, step === 3 ? "fd2 = 3" : step === 4 ? "close → -1" : null);
+      }, [null,
+        'openat(AT_FDCWD, "foo.txt", O_RDONLY|O_CLOEXEC) = 3',
+        "close(3) = 0",
+        'openat(AT_FDCWD, "baz.txt", O_RDONLY|O_CLOEXEC) = 3\nfd2 = 3',
+        "error[E0382]: use of moved value: `fd1`\n  value moved here: drop(fd1); // close\n  value used here after move: drop(fd1)"][Math.min(step, 4)]);
       mark(idea, [step === 0 || step === 1 ? 1 : step === 4 ? 3 : 2]);
     } else if (mode === 1) {
       bits.forEach((b, i) => {
@@ -1124,9 +1096,9 @@ function code(sel, o) {
         b.u.textContent = !p.on ? "off" : p.mask ? "masked" : "kept";
         setCls(b.r, !p.on ? "sv-box" : p.mask ? "sv-bad" : "sv-good");
       });
-      mark(prog, [3, 4, 5], { 5: "rw-r--r--" });
+      mark(prog, [3, 4, 5], { 5: "rw-r--r--" }, 'umask(022) = 022\nopenat(AT_FDCWD, "foo.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 3\nls -l foo.txt: -rw-r--r--');
       mark(idea, [1, 2, 3]);
-      cap("#s3-cap", "The requested mode includes group-write and other-write. The umask is those two bits. <code>mode &amp; ~umask</code> leaves owner read/write, and read-only for everyone else.");
+      cap("#s3-cap", "The requested mode includes group-write and other-write. The umask is those two bits. <code>mode &amp; !umask</code> leaves owner read/write, and read-only for everyone else.");
     } else {
       const text = appended == null ? ["a", "b", "c", "d"] : appended ? ["a", "b", "c", "d", "Z"] : ["Z", "b", "c", "d"];
       fileCells.forEach((c, i) => { c.t.textContent = text[i] || ""; setCls(c.r, appended === false && i === 0 ? "sv-bad" : appended && i === 4 ? "sv-good" : "sv-db"); });
@@ -1134,13 +1106,16 @@ function code(sel, o) {
       kbox.t.textContent = appended == null ? "file is abcd · k depends on the flag" : appended ? "O_APPEND · k jumped to 4 · file is abcdZ" : "no append · k stayed 0 · file is Zbcd";
       kbox.u.textContent = appended == null ? "O_APPEND sets k to the end first" : appended ? "kernel sought to the end, then wrote" : "plain write used k = 0";
       setCls(kbox.r, appended == null ? "sv-panel" : appended ? "sv-good" : "sv-bad");
-      mark(prog, appended == null ? [1] : [2, 3], { 3: appended ? "wrote at end" : appended === false ? "overwrote a" : "" });
+      mark(prog, appended == null ? [1, 2] : appended ? [3, 4] : [5, 6], { 4: appended ? ["abcdZ", "good"] : "", 6: appended === false ? ["Zbcd", "bad"] : "" },
+        appended == null ? null : appended
+          ? 'openat(AT_FDCWD, "foo.txt", O_WRONLY|O_APPEND|O_CLOEXEC) = 3\nwrite(3, "Z", 1) = 1\nfoo.txt: abcdZ'
+          : 'openat(AT_FDCWD, "foo.txt", O_WRONLY|O_CLOEXEC) = 3\nwrite(3, "Z", 1) = 1\nfoo.txt: Zbcd');
       mark(idea, [appended === false ? 2 : 1]);
       cap("#s3-cap", appended == null
-        ? "foo.txt is the four bytes abcd. Press a write. O_APPEND seeks to the end first. Without it, Z replaces a."
+        ? "foo.txt is the four bytes abcd. Press a write. Append mode moves k to the end first. Without it, Z replaces a."
         : appended
-          ? "Because of <code>O_APPEND</code>, the kernel set k to 4 and then wrote Z. The old bytes are still there."
-          : "Without <code>O_APPEND</code>, write uses the current k. k was 0, so Z replaced a.");
+          ? "Because of <code>append(true)</code> (the kernel’s <code>O_APPEND</code>), the kernel set k to 4 and then wrote Z. The old bytes are still there."
+          : "Without append mode, write uses the current k. k was 0, so Z replaced a.");
     }
   }
   const extra = box(gApp, 16 + 4 * 48, 36, 42, 48, "sv-panel", "", "", 14);
@@ -1150,9 +1125,9 @@ function code(sel, o) {
   const stepB = btn(ctr, "Step", "primary", 0, () => { if (step >= 3) return; step++; paint(); if (step >= 3) stepB.disabled = true; });
   btn(ctr, "Reset", null, 0, () => { step = 0; stepB.disabled = false; paint(); });
   btn(ctr, "Close 3 twice", null, 0, () => { step = 4; paint(); });
-  btn(ctr, "write with O_APPEND", "primary", 2, () => { appended = true; extra.r.setAttribute("visibility", "visible"); extra.t.setAttribute("visibility", "visible"); paint(); });
+  btn(ctr, "write in append mode", "primary", 2, () => { appended = true; extra.r.setAttribute("visibility", "visible"); extra.t.setAttribute("visibility", "visible"); paint(); });
   btn(ctr, "write at k = 0", null, 2, () => { appended = false; extra.r.setAttribute("visibility", "hidden"); extra.t.setAttribute("visibility", "hidden"); paint(); });
-  modeSeg(K.$("#s3-seg"), ["Practice 10.1", "umask", "O_APPEND"], (i) => {
+  modeSeg(K.$("#s3-seg"), ["Practice 10.1", "umask", "append"], (i) => {
     mode = i; step = 0; appended = null; stepB.disabled = false;
     extra.r.setAttribute("visibility", "hidden"); extra.t.setAttribute("visibility", "hidden");
     modeBtns(ctr, mode); paint();
@@ -1180,22 +1155,24 @@ function code(sel, o) {
   let mode = 0, pos = 0, last = null, nreq = 50, ti = 0, si = 0, sgot = 0;
   const run = session();
   const layer = s("g"); svg.appendChild(layer);
-  const prog = code("#s4-prog", { label: "The program", files: [C("read.c", lines([
-    "char buf[50];",
-    "ssize_t n;",
-    "n = read(disk, buf, 50); /* 20 left → n = 20 */",
-    "n = read(disk, buf, 50); /* then n = 0, EOF */",
-    "n = read(tty, buf, 50);  /* one typed line */",
-    "n = read(sock, buf, 50); /* any short count */",
-    "/* a disk write does not come back short */",
+  const readSrc = (q) => lines([
+    "let mut buf = [0u8; 50];",
+    "// disk: a File, tty: io::stdin(), sock: a TcpStream",
+    q === 50 ? "let n = disk.read(&mut buf)?; // 20 left → n = 20" : "let n = disk.read(&mut buf[.." + q + "])?; // asks for " + q,
+    q === 50 ? "let n = disk.read(&mut buf)?; // then n = 0, EOF" : "let n = disk.read(&mut buf[.." + q + "])?; // ...until n = 0, EOF",
+    "let n = tty.read(&mut buf)?;  // one typed line",
+    "let n = sock.read(&mut buf)?; // any short count: 3, 5, 2",
+    "// a disk write does not come back short",
+  ]);
+  const prog = code("#s4-prog", { label: "The program", files: [R("read.rs", readSrc(50))] });
+  const idea = code("#s4-idea", { label: "The idea", files: [R("idea.rs", lines([
+    "// Err(e)   error (C's read returns -1)",
+    "// Ok(0)    EOF",
+    "// Ok(n), n < request: a short count, not an error",
+    "// n is a usize, never negative: errors travel in Err",
+    "// disk reads short only at EOF; disk writes do not",
   ]))] });
-  const idea = code("#s4-idea", { label: "The idea", files: [C("idea.c", lines([
-    "/* n == -1   error */",
-    "/* n == 0    EOF */",
-    "/* 0 < n < request   short count, not an error */",
-    "/* size_t is unsigned; ssize_t is signed so -1 fits */",
-    "/* disk reads short only at EOF; disk writes do not */",
-  ]))] });
+
   function paint() {
     showG(gDisk, mode === 0); showG(gTerm, mode === 1); showG(gSock, mode === 2);
     if (mode === 0) {
@@ -1203,19 +1180,29 @@ function code(sel, o) {
       gotD.t.textContent = last == null ? "nread = —" : last === 0 ? "nread = 0  EOF" : "nread = " + last;
       setCls(gotD.r, last === 0 ? "sv-bad" : last ? "sv-good" : "sv-panel");
       reqD.t.textContent = "ask for " + nreq;
-      mark(prog, [last === 0 ? 4 : 3], { 3: last && last !== 0 ? "n = " + last : "", 4: last === 0 ? ["n = 0", "bad"] : "" });
+      reqD.u.textContent = (20 - pos) + " bytes left in the file";
+      prog.src("read.rs", readSrc(nreq));
+      const captured = nreq === 50 && (last === 0 || last === 20);
+      mark(prog, [last === 0 ? 4 : 3], { 3: last && last !== 0 ? "n = " + last : "", 4: last === 0 ? ["n = 0", "bad"] : "" },
+        last == null ? null : captured
+          ? (last === 0 ? 'read(3, "", 50) = 0' : 'read(3, "ABCDEFGHIJ0123456789", 50) = 20')
+          : "n = " + last + "   (drawn, not captured: our traced run asked for 50)");
       mark(idea, [last === 0 ? 2 : last ? 3 : 5]);
+      const left = 20 - pos;
       cap("#s4-cap", last == null
         ? "Twenty bytes are left and Omar is about to ask for <b>" + nreq + "</b>. A disk read only comes up short at the end."
         : last === 0
           ? "k is past the last byte, so read returns 0. That is how EOF looks. It is a short count of zero, and it is not an error."
-          : "Only " + last + " bytes were left, so read returned <b>" + last + "</b>. Not an error. The next read returns 0.");
+          : last < nreq
+            ? "Only " + last + " bytes were left, so read returned <b>" + last + "</b>. Not an error. The next read returns 0."
+            : "read asked for " + nreq + " and got all <b>" + last + "</b>. " + (left ? left + " bytes are still left, so read again." : "Nothing is left, so the next read returns 0."));
     } else if (mode === 1) {
       termBoxes.forEach((b, i) => setCls(b.r, i < ti ? "sv-good" : "sv-db"));
       const shown = ti ? linesT[ti - 1].replace("\n", "↵") : "—";
       gotT.t.textContent = ti ? "nread = " + linesT[ti - 1].length + "  “" + shown + "”" : "nread = —";
       setCls(gotT.r, ti ? "sv-good" : "sv-panel");
-      mark(prog, [5], ti ? { 5: "n = " + linesT[ti - 1].length } : {});
+      mark(prog, [5], ti ? { 5: "n = " + linesT[ti - 1].length } : {},
+        ti ? 'read(0, "' + linesT[ti - 1].replace("\n", "\\n") + '", 8192) = ' + linesT[ti - 1].length : null);
       mark(idea, [3], { 3: "one line" });
       cap("#s4-cap", ti === 0
         ? "The descriptor is a terminal. Each read waits for a line and returns exactly that line, newline included."
@@ -1224,7 +1211,8 @@ function code(sel, o) {
       sockCells.forEach((b, i) => setCls(b.r, i < sgot ? "sv-good" : "sv-db"));
       gotS.t.textContent = "got " + sgot + " / 10" + (si ? "   last short count " + CH[si - 1] : "");
       setCls(gotS.r, sgot === 10 ? "sv-good" : "sv-panel");
-      mark(prog, [6], si ? { 6: "n = " + CH[si - 1] } : {});
+      mark(prog, [6], si ? { 6: "n = " + CH[si - 1] } : {},
+        si ? CH.slice(0, si).map((n, k) => "sock n = " + n + ' "' + ["HEL", "LO!!?", "??"][k] + '"').join("\n") : null);
       mark(idea, [3, 5]);
       cap("#s4-cap", sgot === 0
         ? "A socket may return any number of bytes, and a write may go short too. The first read here returns 3 of the 10."
@@ -1271,47 +1259,56 @@ function code(sel, o) {
   const DATA = "ABCDEFGH";
   const cells = DATA.split("").map((ch, i) => box(svg, 24 + i * 78, 36, 68, 56, "sv-db", ch, String(i), 16));
   const meta = box(svg, 24, 120, 632, 70, "sv-panel", "nleft = 8", "nothing copied yet");
+  // The book's Figure 10.4 in Rust. The engine below speaks in the line numbers of a 15-line (readn) and a
+  // 14-line (writen) sketch of that loop; each map turns them into lines of these listings.
   const READN = lines([
-    "size_t nleft = n;",
-    "char *bufp = usrbuf;",
-    "while (nleft > 0) {",
-    "    ssize_t nr = read(fd, bufp, nleft);",
-    "    if (nr < 0) {",
-    "        if (errno == EINTR)",
-    "            nr = 0;",
-    "        else",
-    "            return -1;",
-    "    } else if (nr == 0)",
-    "        break;",
-    "    nleft -= nr;",
-    "    bufp += nr;",
-    "}",
-    "return n - nleft;",
-  ]);
-  const WRITEN = lines([
-    "size_t nleft = n;",
-    "char *bufp = usrbuf;",
-    "while (nleft > 0) {",
-    "    ssize_t nw = write(fd, bufp, nleft);",
-    "    if (nw <= 0) {",
-    "        if (errno == EINTR)",
-    "            nw = 0;",
-    "        else",
-    "            return -1;",
+    "fn rio_readn(r: &mut impl Read, usrbuf: &mut [u8]) -> io::Result<usize> {",
+    "    let n = usrbuf.len(); // the request: fill all of usrbuf",
+    "    let mut nleft = n;",
+    "    let mut bufp = 0; // where the next byte goes",
+    "    while nleft > 0 {",
+    "        let nr = match r.read(&mut usrbuf[bufp..]) {",
+    "            Err(e) if e.kind() == ErrorKind::Interrupted => 0, // EINTR",
+    "            Err(e) => return Err(e), // a real error",
+    "            Ok(0) => break, // EOF",
+    "            Ok(nr) => nr, // maybe fewer than asked",
+    "        };",
+    "        nleft -= nr;",
+    "        bufp += nr;",
     "    }",
-    "    nleft -= nw;",
-    "    bufp += nw;",
+    "    Ok(n - nleft)",
     "}",
-    "return n;",
   ]);
-  const prog = code("#s5-prog", { label: "The program", files: [C("rio_readn.c", READN)] });
-  const idea = code("#s5-idea", { label: "The idea", files: [C("idea.c", lines([
-    "/* loop while bytes are still owed */",
-    "/* EINTR: pretend this call moved 0 bytes, and retry */",
-    "/* readn may return short only on EOF */",
-    "/* writen never returns a short count */",
-    "/* return how many bytes actually moved */",
-  ]))] });
+  const READN_MAP = { 1: [2, 3], 2: 4, 3: 5, 4: [6, 10], 5: 7, 6: 7, 7: 7, 8: 8, 9: 8, 10: 9, 11: 9, 12: 12, 13: 13, 14: 14, 15: 15 };
+  const WRITEN = lines([
+    "fn rio_writen(w: &mut impl Write, usrbuf: &[u8]) -> io::Result<usize> {",
+    "    let n = usrbuf.len();",
+    "    let mut nleft = n;",
+    "    let mut bufp = 0;",
+    "    while nleft > 0 {",
+    "        let nw = match w.write(&usrbuf[bufp..]) {",
+    "            Err(e) if e.kind() == ErrorKind::Interrupted => 0, // EINTR",
+    "            Err(e) => return Err(e),",
+    "            Ok(0) => return Err(ErrorKind::WriteZero.into()), // stuck",
+    "            Ok(nw) => nw,",
+    "        };",
+    "        nleft -= nw;",
+    "        bufp += nw;",
+    "    }",
+    "    Ok(n) // never a short count",
+    "}",
+  ]);
+  const WRITEN_MAP = { 1: [2, 3], 2: 4, 3: 5, 4: [6, 10], 5: 7, 6: 7, 7: 7, 8: 8, 9: [8, 9], 10: 11, 11: 12, 12: 13, 13: 14, 14: 15 };
+  const rioFile = (m) => m === 0 ? R("rio_readn.rs", READN, READN_MAP) : R("rio_writen.rs", WRITEN, WRITEN_MAP);
+  const IDEA5 = lines([
+    "// loop while bytes are still owed",
+    "// Interrupted (EINTR): count 0 bytes, and try again",
+    "// readn may return short only at EOF",
+    "// writen never returns a short count",
+    "// return how many bytes actually moved",
+  ]);
+  const prog = code("#s5-prog", { label: "The program", files: [rioFile(0)] });
+  const idea = code("#s5-idea", { label: "The idea", files: [R("idea.rs", IDEA5)] });
   let mode = 0, nleft = 8, got = 0, ci = 0, phase = "loop", armed = false, nr = 0, done = false;
   const chunks = () => mode === 0 ? [3, 3, 2] : [3, 5];
   function reset() {
@@ -1334,7 +1331,7 @@ function code(sel, o) {
     if (phase === "start") {
       phase = "loop";
       sync([1, 2], { 1: "n = 8, nleft = 8" }, 1);
-      paint("nleft starts equal to the request, 8. The buffer pointer sits at the start of usrbuf.");
+      paint("nleft starts equal to the request, 8. bufp, the index of the next free byte, starts at 0.");
       return;
     }
     if (phase === "loop") {
@@ -1342,6 +1339,7 @@ function code(sel, o) {
         phase = "done"; done = true;
         const retLine = mode === 0 ? 15 : 14;
         sync([retLine], { [retLine]: ["return " + got, "good"] }, 5);
+        prog.out(mode === 0 ? 'rio_readn returned 8: "ABCDEFGH"' : 'write asked 8 took 3\nwrite asked 5 took 5\nrio_writen returned 8: "ABCDEFGH"');
         paint(mode === 0
           ? "nleft is 0, so the loop ends. rio_readn returns 8. It would return a short count only if read hit EOF first."
           : "nleft is 0. rio_writen returns n, which is 8. The caller never sees the short write of 3.");
@@ -1358,7 +1356,8 @@ function code(sel, o) {
         phase = "account";
         nr = 0;
         sync(mode === 0 ? [5, 6, 7] : [5, 6, 7], { [mode === 0 ? 7 : 7]: ["EINTR → 0", "warn"] }, 2);
-        paint("A signal handler returned. errno is EINTR, so the count is treated as 0 and the loop will try the system call again. nleft stays " + nleft + ".");
+        prog.out(mode === 0 ? "read -> Err(Interrupted)" : "write -> Err(Interrupted)   (drawn, not captured)");
+        paint("A signal handler returned, so the call failed with EINTR, which std reports as <code>ErrorKind::Interrupted</code>. That match arm counts it as 0 bytes, and the loop will try again. nleft stays " + nleft + "." + (mode === 0 ? " Our real run on Linux printed exactly this." : " This step is drawn, not captured: our runs interrupted a read, not a write."));
         return;
       }
       if (ci >= ch.length) {
@@ -1371,7 +1370,8 @@ function code(sel, o) {
       got += nr;
       phase = "account";
       sync([4], { 4: (mode === 0 ? "nr = " : "nw = ") + nr }, 1);
-      paint((mode === 0 ? "read" : "write") + " returned <b>" + nr + "</b>, not the " + nleft + " we still wanted. The function does not stop.");
+      prog.out(mode === 0 ? "read -> Ok(" + nr + ")" : "write asked " + nleft + " took " + nr);
+      paint((mode === 0 ? "read" : "write") + " returned <b>" + nr + "</b>" + (nr < nleft ? ", not the " + nleft + " we still wanted. The function does not stop." : ", all " + nleft + " bytes still owed. One more subtraction and the loop is done."));
       return;
     }
     if (phase === "account") {
@@ -1387,20 +1387,14 @@ function code(sel, o) {
     armed = true;
     cap("#s5-cap", "Armed. The next system call will come back as EINTR: the count becomes 0 and nleft does not move. Then the loop tries again.");
   });
-  btn(ctr, "Reset", null, null, () => { reset(); prog.setFiles([C(mode === 0 ? "rio_readn.c" : "rio_writen.c", mode === 0 ? READN : WRITEN)]); paint("Press Step. Eight bytes are owed. The device will hand them over in pieces."); sync([1], {}, 1); });
+  btn(ctr, "Reset", null, null, () => { reset(); prog.setFiles([rioFile(mode)]); paint("Press Step. Eight bytes are owed. The device will hand them over in pieces."); sync([1], {}, 1); });
   modeSeg(K.$("#s5-seg"), ["rio_readn", "rio_writen"], (i) => {
     mode = i; reset();
-    prog.setFiles([C(i === 0 ? "rio_readn.c" : "rio_writen.c", i === 0 ? READN : WRITEN)]);
-    idea.setFiles([C("idea.c", lines([
-      "/* loop while bytes are still owed */",
-      "/* EINTR: pretend this call moved 0 bytes, and retry */",
-      "/* readn may return short only on EOF */",
-      "/* writen never returns a short count */",
-      "/* return how many bytes actually moved */",
-    ]))]);
+    prog.setFiles([rioFile(i)]);
+    idea.setFiles([R("idea.rs", IDEA5)]);
     paint(i === 0
       ? "rio_readn wants 8 bytes. The socket will offer 3, then 3, then 2. Press Step."
-      : "rio_writen wants to send 8 bytes. The first write accepts only 3. The function keeps going and returns 8, never 3.");
+      : "rio_writen wants to send 8 bytes. The stand-in device accepts only 3 on the first write. The function keeps going and returns 8, never 3.");
     sync([1], { 1: "n = 8" }, i === 0 ? 3 : 4);
   });
   paint("rio_readn wants 8 bytes. The socket will offer 3, then 3, then 2. Press Step.");
@@ -1415,27 +1409,54 @@ function code(sel, o) {
   const usr = box(svg, 24, 114, 300, 64, "sv-panel", "usrbuf  —", "rio_readlineb");
   const meta = box(svg, 348, 114, 308, 64, "sv-server", "cnt = 0", "unread in the buffer");
   const stolen = box(svg, 24, 196, 632, 56, "sv-panel", "kernel position is at the end of the refill", "do not call rio_readn on this fd");
-  const prog = code("#s6-prog", { label: "The program", files: [C("rio_buf.c", lines([
-    "void init(rio_t *rp, int fd) {",
-    "    rp->cnt = 0;",
-    "    rp->ptr = rp->buf;",
+  // The book's Figures 10.6 to 10.8 in Rust (rio_readnb left out). The engine speaks in the line numbers of a
+  // 12-line sketch: 1-3 init, 5-8 the refill, 11 copying a line out, 12 an unbuffered read on the same file.
+  const prog = code("#s6-prog", { label: "The program", files: [R("rio.rs", lines([
+    "struct Rio<R> {",
+    "    fd: R,        // the file this buffer reads from",
+    "    cnt: usize,   // unread bytes left in buf",
+    "    ptr: usize,   // index of the next unread byte",
+    "    buf: [u8; 8], // the book uses 8192",
     "}",
-    "int fill(rio_t *rp) {",
-    "    if (rp->cnt > 0) return rp->cnt;",
-    "    rp->cnt = read(rp->fd, rp->buf, 8); /* book: 8192 */",
-    "    rp->ptr = rp->buf;",
-    "    return rp->cnt;",
+    "impl<R: Read> Rio<R> {",
+    "    fn rio_readinitb(fd: R) -> Rio<R> {",
+    "        Rio { fd, cnt: 0, ptr: 0, buf: [0; 8] }",
+    "    }",
+    "    fn rio_read(&mut self, usrbuf: &mut [u8]) -> io::Result<usize> {",
+    "        while self.cnt == 0 { // empty: refill with one read",
+    "            match self.fd.read(&mut self.buf) {",
+    "                Err(e) if e.kind() == ErrorKind::Interrupted => {}",
+    "                Err(e) => return Err(e),",
+    "                Ok(0) => return Ok(0), // EOF",
+    "                Ok(nr) => { self.cnt = nr; self.ptr = 0; } // short is fine",
+    "            }",
+    "        }",
+    "        let cnt = usrbuf.len().min(self.cnt); // min(n, cnt)",
+    "        usrbuf[..cnt].copy_from_slice(&self.buf[self.ptr..self.ptr + cnt]);",
+    "        self.ptr += cnt;",
+    "        self.cnt -= cnt;",
+    "        Ok(cnt)",
+    "    }",
+    "    fn rio_readlineb(&mut self, line: &mut Vec<u8>) -> io::Result<usize> {",
+    "        line.clear(); // like the book's usrbuf: the new line replaces the old",
+    "        let mut c = [0u8; 1];",
+    "        while self.rio_read(&mut c)? == 1 { // one byte at a time",
+    "            line.push(c[0]);",
+    "            if c[0] == b'\\n' { break; } // keep the newline, then stop",
+    "        }",
+    "        Ok(line.len())",
+    "    }",
     "}",
-    "/* copy from rp->ptr until newline, then cnt -= taken */",
-    "/* rio_readn ignores rp->buf and reads at the kernel position */",
+    "// rio_readn(&mut &f, …) on the same file skips the bytes in buf",
+  ]), { 1: 8, 2: 9, 3: 9, 5: 11, 6: 12, 7: [17, 13], 8: 13, 11: [23, 29, 30, 31], 12: 36 })] });
+  const idea = code("#s6-idea", { label: "The idea", files: [R("idea.rs", lines([
+    "// empty buffer: one read fills it, a short fill is fine",
+    "// later bytes come from buf, with no kernel trap",
+    "// readlineb and readnb share that buffer",
+    "// rio_readn on the same file skips bytes still in buf",
   ]))] });
-  const idea = code("#s6-idea", { label: "The idea", files: [C("idea.c", lines([
-    "/* empty buffer: one read fills it, a short fill is fine */",
-    "/* later bytes come from rp->buf, with no kernel trap */",
-    "/* readlineb and readnb share that buffer */",
-    "/* rio_readn on the same fd skips bytes still in the buffer */",
-  ]))] });
-  let cnt = 0, ptr = 0, filePos = 0, filled = "", linesOut = [], inited = false, didSteal = false;
+
+  let cnt = 0, ptr = 0, filePos = 0, filled = "", linesOut = [], inited = false, didSteal = false, stolenLeft = "";
   const run = session();
   const layer = s("g"); svg.appendChild(layer);
   function showBuf() {
@@ -1453,13 +1474,13 @@ function code(sel, o) {
     setCls(usr.r, linesOut.length ? "sv-good" : "sv-panel");
     meta.t.textContent = "cnt = " + cnt;
     meta.u.textContent = inited ? "file position " + filePos : "not inited";
-    stolen.t.textContent = didSteal ? "rio_readn got “MORE” and skipped bye!↵" : "kernel position follows the refill, not the pointer";
-    setCls(stolen.r, didSteal ? "sv-bad" : "sv-panel");
+    stolen.t.textContent = !didSteal ? "kernel position follows the refill, not the pointer" : stolenLeft ? "rio_readn got “MORE” and skipped " + stolenLeft.replace(/\n/g, "↵") : "rio_readn got “MORE”: the drawer was empty";
+    setCls(stolen.r, didSteal && stolenLeft ? "sv-bad" : "sv-panel");
     if (text) cap("#s6-cap", text);
   }
   const ctr = K.$("#s6-controls");
   btn(ctr, "Init", null, null, () => {
-    inited = true; cnt = 0; ptr = 0; filePos = 0; filled = ""; linesOut = []; didSteal = false;
+    inited = true; cnt = 0; ptr = 0; filePos = 0; filled = ""; linesOut = []; didSteal = false; stolenLeft = "";
     mark(prog, [1, 2, 3], { 2: "cnt = 0" }, null);
     mark(idea, [1]);
     paint("rio_readinitb sets the unread count to 0 and points ptr at the start of the buffer. No kernel read yet.");
@@ -1475,7 +1496,7 @@ function code(sel, o) {
       const p = draw.tag("read " + n); layer.appendChild(p);
       await w(fly(p, [340, 16], [340, 60], 360));
       p.remove();
-      mark(prog, [5, 6, 7, 8], { 7: "cnt = " + n }, "read returned " + n);
+      mark(prog, [5, 6, 7, 8], { 7: "cnt = " + n }, 'read(3, "' + filled.replace(/\n/g, "\\n") + '", 8) = ' + n);
       mark(idea, [1]);
       paint("The buffer was empty, so one read filled " + n + " bytes. The book’s buffer is 8192; this one is 8 so you can see it. A short fill would have been fine.");
       await w(sleep(350));
@@ -1487,7 +1508,8 @@ function code(sel, o) {
       if (ch === "\n") break;
     }
     linesOut.push(take);
-    mark(prog, refilled ? [11] : [6, 11], { 6: refilled ? "" : ["cnt > 0, no read", "good"], 11: "cnt = " + cnt }, take.replace(/\n/g, "\\n"));
+    mark(prog, refilled ? [11] : [6, 11], { 6: refilled ? "" : ["cnt > 0, no read", "good"], 11: "cnt = " + cnt },
+      (refilled ? 'read(3, "' + filled.replace(/\n/g, "\\n") + '", 8) = ' + filled.length + "\n" : "(no system call)\n") + "line " + linesOut.length + ' "' + take.replace(/\n/g, "\\n") + '"');
     mark(idea, [2, 3]);
     paint("Copied <b>" + take.replace(/\n/g, "↵") + "</b> out of the buffer. cnt is " + cnt + ". " + (cnt ? "The next line is already in the drawer, so it will not trap into the kernel." : "The drawer is empty."));
   }));
@@ -1496,14 +1518,18 @@ function code(sel, o) {
       cap("#s6-cap", "Init and read a line first, so the buffer is holding bytes the kernel has already moved past.");
       return;
     }
+    if (didSteal) return; // the real run made one unbuffered read
     didSteal = true;
+    stolenLeft = filled.slice(ptr, ptr + cnt);
     const rest = FILE.slice(filePos);
-    mark(prog, [12], { 12: ["skipped the buffer", "bad"] }, rest ? "read → " + rest : "read → 0");
+    mark(prog, [12], { 12: [stolenLeft ? "skipped the buffer" : "nothing left to skip", stolenLeft ? "bad" : "warn"] }, rest ? 'read(3, "' + rest + '", 8) = ' + rest.length + '\nread(3, "", ' + (8 - rest.length) + ") = 0\nrio_readn got " + rest.length + ' "' + rest + '"' : "read(3, \"\", 8) = 0");
     mark(idea, [4]);
-    paint("Unbuffered rio_readn reads at the kernel position, which is already at <b>" + filePos + "</b>. It receives <b>" + (FILE.slice(filePos) || "EOF") + "</b> and never sees <b>bye!↵</b>, still sitting in the rio_t. That is why the book says not to mix them.");
+    paint(stolenLeft
+      ? "Unbuffered rio_readn reads at the kernel position, which is already at <b>" + filePos + "</b>. It receives <b>" + (rest || "EOF") + "</b> and never sees <b>" + stolenLeft.replace(/\n/g, "↵") + "</b>, still sitting in the rio_t. That is why the book says not to mix them."
+      : "The drawer was already empty, so this time nothing was skipped: rio_readn starts at the kernel position, <b>" + filePos + "</b>, and gets <b>" + (rest || "EOF") + "</b>. Mixing only worked by luck. Press Reset, read one line, and try again.");
   });
   btn(ctr, "Reset", null, null, () => {
-    run.cancel(); inited = false; cnt = 0; ptr = 0; filePos = 0; filled = ""; linesOut = []; didSteal = false; K.clear(layer);
+    run.cancel(); inited = false; cnt = 0; ptr = 0; filePos = 0; filled = ""; linesOut = []; didSteal = false; stolenLeft = ""; K.clear(layer);
     mark(prog, [], {}, null); mark(idea, [], {}, null);
     paint("Press Init. The buffer starts empty. The file behind it is hi↵ bye!↵ MORE.");
   });
@@ -1514,10 +1540,10 @@ function code(sel, o) {
 (function statSim() {
   const svg = K.$("#s7-svg");
   const FILES = [
-    { name: "foobar.txt", kind: "regular", size: "6", read: true, pred: "S_ISREG", branch: 3 },
-    { name: "/home/droh", kind: "directory", size: "—", read: true, pred: "S_ISDIR", branch: 4 },
-    { name: "socket", kind: "socket", size: "—", read: true, pred: "S_ISSOCK", branch: 5 },
-    { name: "secret", kind: "regular", size: "6", read: false, pred: "S_ISREG", branch: 3 },
+    { name: "foobar.txt", kind: "regular", size: "6", read: true, pred: "S_ISREG", rs: "md.is_file()", branch: 3, sx: "S_IFREG|0644", mode: "100644" },
+    { name: "/home/droh", kind: "directory", size: "4096", read: true, pred: "S_ISDIR", rs: "md.is_dir()", branch: 4, sx: "S_IFDIR|0755", mode: "40755" },
+    { name: "socket", kind: "socket", size: "0", read: true, pred: "S_ISSOCK", rs: "else", branch: 5, sx: "S_IFSOCK|0755", mode: "140755" },
+    { name: "secret", kind: "regular", size: "6", read: false, pred: "S_ISREG", rs: "md.is_file()", branch: 3, sx: "S_IFREG|0200", mode: "100200" },
   ];
   const tiles = FILES.map((f, i) => {
     const b = box(svg, 16 + (i % 4) * 166, 24, 154, 56, "sv-panel", f.name, f.kind, 12);
@@ -1530,20 +1556,20 @@ function code(sel, o) {
     return b;
   });
   const out = box(svg, 16, 110, 648, 80, "sv-panel", "stat has not been called", "type and owner-read live in st_mode");
-  const prog = code("#s7-prog", { label: "The program", files: [C("statcheck.c", lines([
-    "struct stat st;",
-    "stat(path, &st);",
-    "if (S_ISREG(st.st_mode)) type = \"regular\";",
-    "else if (S_ISDIR(st.st_mode)) type = \"directory\";",
-    "else type = \"other\";",
-    "readok = (st.st_mode & S_IRUSR) ? \"yes\" : \"no\";",
-    "printf(\"type: %s, read: %s\\n\", type, readok);",
+  const prog = code("#s7-prog", { label: "The program", files: [R("statcheck.rs", lines([
+    "use std::os::unix::fs::MetadataExt; // adds .mode(): st_mode",
+    "let md = std::fs::metadata(path)?; // stat (statx on Linux)",
+    "let kind = if md.is_file() { \"regular\" } // S_ISREG",
+    "    else if md.is_dir() { \"directory\" } // S_ISDIR",
+    "    else { \"other\" };",
+    "let readok = if md.mode() & 0o400 != 0 { \"yes\" } else { \"no\" }; // S_IRUSR",
+    "println!(\"type: {kind}, read: {readok}\");",
   ]))] });
-  const idea = code("#s7-idea", { label: "The idea", files: [C("idea.c", lines([
-    "/* stat fills the card; it does not open the file */",
-    "/* st_mode holds the type and the permission bits */",
-    "/* st_size is the length in bytes */",
-    "/* standard I/O has no call for this */",
+  const idea = code("#s7-idea", { label: "The idea", files: [R("idea.rs", lines([
+    "// metadata fills the card; it does not open the file",
+    "// st_mode holds the type and the permission bits",
+    "// st_size is the length in bytes: md.len()",
+    "// C's standard I/O has no call for this",
   ]))] });
   let sel = 0, step = 0;
   function paint() {
@@ -1555,12 +1581,14 @@ function code(sel, o) {
     const texts = [
       "Pick a file and press Step. stat will fill the card without opening the file.",
       "stat returned. st_mode is loaded. st_size is " + f.size + ".",
-      "The type test that matches is <b>" + f.pred + "</b>. Figure 10.10 prints “" + type + "”" + (f.kind === "socket" ? " — it only names regular and directory, so a socket prints other." : "."),
+      f.kind === "socket"
+        ? "Neither <code>md.is_file()</code> nor <code>md.is_dir()</code> is true (the book’s C would see <code>S_ISSOCK</code>), so the <code>else</code> branch gives “other”. Figure 10.10 names only regular and directory too."
+        : "The type test that matches is <code>" + f.rs + "</code> (the book’s C uses <code>" + f.pred + "</code>), so kind is “" + type + "”.",
       "Owner-read is " + (f.read ? "set" : "clear") + ", so readok is <b>" + read + "</b>.",
-      "printf → <b>type: " + type + ", read: " + read + "</b>.",
+      "println! → <b>type: " + type + ", read: " + read + "</b>.",
     ];
     out.t.textContent = step < 4 ? texts[step].replace(/<[^>]+>/g, "") : "type: " + type + ", read: " + read;
-    out.u.textContent = step >= 1 ? "st_size " + f.size + " · " + f.pred : "type and owner-read live in st_mode";
+    out.u.textContent = step >= 1 ? "st_size " + f.size + " · " + f.rs : "type and owner-read live in st_mode";
     setCls(out.r, step === 4 ? "sv-good" : step === 3 && !f.read ? "sv-bad" : "sv-panel");
     cap("#s7-cap", texts[Math.min(step, 4)]);
     const at = [[], [2], [f.branch], [6], [7]][step];
@@ -1568,7 +1596,9 @@ function code(sel, o) {
       2: step >= 1 ? "st_size = " + f.size : "",
       6: step >= 3 ? readokNote(read) : "",
       7: step >= 4 ? ["type: " + type + ", read: " + read, "good"] : "",
-    }, step === 4 ? "type: " + type + ", read: " + read : null);
+    }, step === 0 ? null
+      : 'statx(AT_FDCWD, "' + f.name + '", …, {stx_mode=' + f.sx + ", stx_size=" + f.size + ", …}) = 0" +
+        (step >= 3 ? "\nmd.mode() = 0o" + f.mode : "") + (step === 4 ? "\ntype: " + type + ", read: " + read : ""));
     mark(idea, [step === 0 ? 1 : step === 1 ? 3 : step >= 3 ? 2 : 4]);
   }
   function readokNote(read) { return read === "yes" ? ["yes", "good"] : ["no", "bad"]; }
@@ -1582,30 +1612,27 @@ function code(sel, o) {
 /* ================= 10.7 ================= */
 (function dirent() {
   const svg = K.$("#s8-svg");
+  // the real order and inode numbers from one strace run on Linux (getdents64)
   const ENTRIES = [
-    { name: ".", ino: "1001" },
-    { name: "..", ino: "1000" },
-    { name: "hello.c", ino: "2244" },
+    { name: "..", ino: "2529558" },
+    { name: ".", ino: "2569958" },
+    { name: "hello.c", ino: "2569963" },
   ];
   const slots = ENTRIES.map((e, i) => box(svg, 16 + i * 220, 28, 200, 72, "sv-panel", "—", "not yet"));
-  const head = box(svg, 16, 124, 648, 72, "sv-panel", "DIR * closed", "errno = 0 before the walk");
-  const prog = code("#s8-prog", { label: "The program", files: [C("readdir.c", lines([
-    "DIR *dp = opendir(\"/home/droh\");",
-    "struct dirent *e;",
-    "errno = 0;",
-    "while ((e = readdir(dp)) != NULL) {",
-    "    /* only d_name and d_ino are portable */",
-    "}",
-    "if (errno != 0)",
-    "    /* a real error */",
-    "/* else: NULL and errno still 0 means end of stream */",
-    "closedir(dp);",
+  const head = box(svg, 16, 124, 648, 72, "sv-panel", "directory closed", "press Step");
+  const prog = code("#s8-prog", { label: "The program", files: [R("readdir.rs", lines([
+    "let dir = std::fs::read_dir(\"/home/droh\")?; // opendir",
+    "for entry in dir { // each item: Some(Ok), Some(Err); None ends",
+    "    let entry = entry?; // Err(e): a real error, passed up",
+    "    println!(\"{:?} {}\", entry.file_name(), entry.ino());",
+    "} // None: the end of the stream",
+    "// the loop used up dir; dropping it closes the stream",
   ]))] });
-  const idea = code("#s8-idea", { label: "The idea", files: [C("idea.c", lines([
-    "/* readdir returns NULL for both end and error */",
-    "/* set errno = 0 first, then see if it changed */",
-    "/* NULL + errno 0: finished */",
-    "/* NULL + errno set: failed */",
+  const idea = code("#s8-idea", { label: "The idea", files: [R("idea.rs", lines([
+    "// C's readdir returns NULL for both end and error",
+    "// so C sets errno to zero first, then sees if it changed",
+    "// Rust: None means finished",
+    "// Rust: Some(Err(e)) means failed",
   ]))] });
   let step = 0, forced = false;
   function paint() {
@@ -1613,40 +1640,47 @@ function code(sel, o) {
     slots.forEach((b, i) => {
       const on = step >= 2 && i < Math.min(step - 1, 3);
       b.t.textContent = on ? ENTRIES[i].name : "—";
-      b.u.textContent = on ? "d_ino " + ENTRIES[i].ino : "not yet";
+      b.u.textContent = on ? (i < 2 ? "skipped by read_dir" : "d_ino " + ENTRIES[i].ino) : "not yet";
       setCls(b.r, on && i === shown - 1 && step < 5 ? "sv-good" : on ? "sv-data-soft" : "sv-panel");
     });
     const labels = [
-      ["DIR * closed", "press Step to opendir"],
-      ["DIR * open", "errno set to 0"],
-      ["entry .", "d_ino 1001"],
-      ["entry ..", "d_ino 1000"],
-      ["entry hello.c", "d_ino 2244"],
-      [forced ? "NULL · errno = EIO" : "NULL · errno still 0", forced ? "this one is an error" : "end of the stream"],
-      ["closedir", "stream released"],
+      ["directory closed", "press Step: read_dir opens it"],
+      ["ReadDir open", "no errno to clear"],
+      ["entry ..  (skipped)", "d_ino 2529558"],
+      ["entry .  (skipped)", "d_ino 2569958"],
+      ["entry hello.c", "Some(Ok(entry)) · d_ino 2569963"],
+      [forced ? "Some(Err(e))" : "None", forced ? "this one is an error" : "end of the stream"],
+      ["dropped", "stream closed"],
     ];
     const i = Math.min(step, 6);
     head.t.textContent = labels[i][0];
     head.u.textContent = labels[i][1];
     setCls(head.r, step === 5 && forced ? "sv-bad" : step >= 5 ? "sv-good" : step >= 1 ? "sv-server" : "sv-panel");
     const texts = [
-      "The directory is closed. Press Step. opendir returns a stream positioned at the first entry.",
-      "errno is 0 before the loop, so a later NULL can be interpreted.",
-      "readdir returned <b>.</b> — this directory.",
-      "readdir returned <b>..</b> — the parent.",
-      "readdir returned <b>hello.c</b>. Only d_name and d_ino are portable.",
+      "The directory is closed. Press Step. read_dir opens it (opendir underneath) and returns a stream at the first entry.",
+      "read_dir returned a stream. There is no errno to clear: each item will say for itself whether it is an entry or an error.",
+      "On this filesystem the kernel’s first entry is <b>..</b>, the parent. read_dir skips it.",
+      "Next is <b>.</b>, this directory. read_dir skips that too.",
+      "<b>hello.c</b> arrives as <code>Some(Ok(entry))</code>. Only the name and the inode number (d_ino) are portable.",
       forced
-        ? "readdir returned NULL and errno changed. That is an error, not the end of the directory."
-        : "readdir returned NULL and errno is still 0. The stream is finished. Press Step to closedir.",
-      "closedir released the stream.",
+        ? "The read failed. In C this NULL looks just like the end unless you check errno. Rust hands over <code>Some(Err(e))</code>, and <code>?</code> passes the error up."
+        : "The stream is finished and the loop gets <code>None</code>. Nothing to check. Press Step to close it.",
+      "The loop used up <code>dir</code> and dropped it, which closed the stream (closedir underneath).",
     ];
     cap("#s8-cap", texts[i]);
-    const at = [[], [1, 3], [4, 5], [4, 5], [4, 5], forced ? [7, 8] : [9], [10]][i];
+    const at = [[], [1], [2], [2], [2, 3, 4], forced ? [3] : [5], [6]][i];
     mark(prog, at, {
-      4: step >= 2 && step <= 4 ? ENTRIES[step - 2].name : "",
-      8: forced && step >= 5 ? ["errno set", "bad"] : "",
-      9: !forced && step >= 5 ? ["end", "good"] : "",
-    }, step >= 2 && step <= 4 ? ENTRIES[step - 2].name : step === 5 ? (forced ? "NULL, errno=EIO" : "NULL, errno=0") : null);
+      2: step === 2 ? "skips .." : step === 3 ? "skips ." : "",
+      3: forced && step >= 5 ? ["Err(e)", "bad"] : "",
+      4: step === 4 ? "hello.c" : "",
+      5: !forced && step >= 5 ? ["None: end", "good"] : "",
+    }, [null,
+      'openat(AT_FDCWD, "/home/droh", O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3',
+      'getdents64(3, [{d_ino=2529558, …, d_name=".."}, {d_ino=2569958, …, d_name="."}, {d_ino=2569963, …, d_name="hello.c"}], 32768) = 80\n("..", skipped)',
+      '(no new system call: "." comes from the same batch, skipped)',
+      '"hello.c" 2569963   (still no new system call)',
+      forced ? "Some(Err(e))   (drawn, not captured)" : "getdents64(3, [], 32768) = 0   (None)",
+      "close(3) = 0"][Math.min(step, 6)]);
     mark(idea, [step < 5 ? 1 : forced ? 4 : 3]);
   }
   const ctr = K.$("#s8-controls");
@@ -1677,29 +1711,29 @@ function code(sel, o) {
   gFork.append(draw.arrow(196, 72, 240, 100), draw.arrow(196, 156, 240, 120), draw.arrow(430, 114, 490, 114));
   const outF = box(gFork, 16, 214, 648, 60, "sv-panel", "shared bookmark at 0", "child then parent");
   const OPEN_SRC = lines([
-    "fd1 = Open(\"foobar.txt\", O_RDONLY, 0);",
-    "fd2 = Open(\"foobar.txt\", O_RDONLY, 0);",
-    "Read(fd1, &c, 1);",
-    "Read(fd2, &c, 1);",
-    "printf(\"c = %c\\n\", c);",
+    "let mut fd1 = File::open(\"foobar.txt\")?;",
+    "let mut fd2 = File::open(\"foobar.txt\")?;",
+    "fd1.read_exact(&mut c)?; // c: [u8; 1], room for one byte",
+    "fd2.read_exact(&mut c)?;",
+    "println!(\"c = {}\", c[0] as char); // as: the byte as a letter",
   ]);
   const FORK_SRC = lines([
-    "fd = Open(\"foobar.txt\", O_RDONLY, 0);",
-    "if (Fork() == 0) {",
-    "    Read(fd, &c, 1);",
-    "    exit(0);",
+    "let mut fd = File::open(\"foobar.txt\")?;",
+    "if unsafe { fork() } == 0 { // the child sees 0",
+    "    fd.read_exact(&mut c)?;",
+    "    std::process::exit(0);",
     "}",
-    "Wait(NULL);",
-    "Read(fd, &c, 1);",
-    "printf(\"c = %c\\n\", c);",
+    "unsafe { wait(std::ptr::null_mut()) }; // null: no status wanted",
+    "fd.read_exact(&mut c)?;",
+    "println!(\"c = {}\", c[0] as char);",
   ]);
-  const prog = code("#s9-prog", { label: "The program", files: [C("two-opens.c", OPEN_SRC)] });
-  const idea = code("#s9-idea", { label: "The idea", files: [C("idea.c", lines([
-    "/* descriptor table: one per process */",
-    "/* file table: position + refcnt, shared by processes */",
-    "/* v-node: size, type, and the rest of stat */",
-    "/* two opens → two positions */",
-    "/* fork → one position, refcnt 2 */",
+  const prog = code("#s9-prog", { label: "The program", files: [R("two-opens.rs", OPEN_SRC)] });
+  const idea = code("#s9-idea", { label: "The idea", files: [R("idea.rs", lines([
+    "// descriptor table: one per process",
+    "// file table: position + refcnt, shared by processes",
+    "// v-node: size, type, and the rest of stat",
+    "// two opens → two positions",
+    "// fork → one position, refcnt 2",
   ]))] });
   let mode = 0, p1 = 0, p2 = 0, c1 = "", c2 = "", fpos = 0, childC = "", parentC = "";
   const run = session();
@@ -1712,7 +1746,9 @@ function code(sel, o) {
       setCls(fd1.r, c1 ? "sv-good" : "sv-server");
       setCls(fd2.r, c2 ? "sv-good" : "sv-server");
       outO.t.textContent = c2 ? "c = " + c2 : c1 ? "fd1 read " + c1 : "c = —";
-      mark(prog, [c2 ? 5 : c1 ? 4 : 1], { 3: c1 ? "c = " + c1 : "", 4: c2 ? "c = " + c2 : "", 5: c2 ? ["c = f", "good"] : "" }, c2 ? "c = f" : null);
+      mark(prog, [c2 ? 5 : c1 ? 4 : 1], { 3: c1 ? "c = " + c1 : "", 4: c2 ? "c = " + c2 : "", 5: c2 ? ["c = f", "good"] : "" },
+        'openat(AT_FDCWD, "foobar.txt", O_RDONLY|O_CLOEXEC) = 3\nopenat(AT_FDCWD, "foobar.txt", O_RDONLY|O_CLOEXEC) = 4' +
+        (c1 ? '\nread(3, "f", 1) = 1' : "") + (c2 ? '\nread(4, "f", 1) = 1\nc = f' : ""));
       mark(idea, [c1 || c2 ? 4 : 1]);
       cap("#s9-cap", !c1
         ? "Two opens, two file-table entries, one v-node. Press Read fd1. Only that entry’s position moves."
@@ -1726,7 +1762,9 @@ function code(sel, o) {
       setCls(chd.r, childC ? "sv-good" : "sv-server");
       setCls(par.r, parentC ? "sv-good" : "sv-server");
       outF.t.textContent = parentC ? "c = " + parentC : childC ? "child ate f" : "shared bookmark at 0";
-      mark(prog, parentC ? [7, 8] : childC ? [3] : [2], { 3: childC ? "c = " + childC : "", 7: parentC ? "c = " + parentC : "", 8: parentC ? ["c = o", "good"] : "" }, parentC ? "c = o" : null);
+      mark(prog, parentC ? [7, 8] : childC ? [3] : [2], { 3: childC ? "c = " + childC : "", 7: parentC ? "c = " + parentC : "", 8: parentC ? ["c = o", "good"] : "" },
+        'openat(AT_FDCWD, "foobar.txt", O_RDONLY|O_CLOEXEC) = 3\nclone(…) = 53   (fork; 53 is the child’s pid)' +
+        (childC ? '\n[child]  read(3, "f", 1) = 1' : "") + (parentC ? '\n[parent] read(3, "o", 1) = 1\nc = o' : ""));
       mark(idea, [5]);
       cap("#s9-cap", !childC
         ? "After fork, parent and child share one file-table entry. refcnt is 2. One position. Press Child reads."
@@ -1764,7 +1802,7 @@ function code(sel, o) {
   btn(ctr, "Reset", null, 1, () => { run.cancel(); fpos = 0; childC = parentC = ""; K.clear(layer); paint(); });
   modeSeg(K.$("#s9-seg"), ["two opens", "fork"], (i) => {
     mode = i; K.clear(layer);
-    prog.setFiles([C(i === 0 ? "two-opens.c" : "fork.c", i === 0 ? OPEN_SRC : FORK_SRC)]);
+    prog.setFiles([R(i === 0 ? "two-opens.rs" : "fork.rs", i === 0 ? OPEN_SRC : FORK_SRC)]);
     modeBtns(ctr, mode); paint();
   });
   modeBtns(ctr, 0);
@@ -1797,25 +1835,26 @@ function code(sel, o) {
   const pA2 = draw.arrow(156, 141, 190, 141);
   gP.append(pA1, pA1b, pA2, draw.arrow(360, 65, 400, 96), draw.arrow(360, 141, 400, 110));
   const DUP = lines([
-    "/* fd 1 → file A (terminal), fd 4 → file B (disk) */",
-    "dup2(4, 1);",
-    "/* slot 1 is closed, then overwritten with slot 4 */",
-    "/* writes to stdout now land in file B */",
+    "// fd 1 is file A, where standard output goes",
+    "let _input = File::open(\"foobar.txt\")?; // fd 3 (_: kept open, not used)",
+    "let out = File::create(\"foo.txt\")?; // fd 4: file B",
+    "unsafe { dup2(out.as_raw_fd(), 1) }; // dup2(4, 1)",
+    "println!(\"this line goes to foo.txt\"); // fd 1 is B now",
   ]);
   const P10 = lines([
-    "fd1 = Open(\"foobar.txt\", O_RDONLY, 0);",
-    "fd2 = Open(\"foobar.txt\", O_RDONLY, 0);",
-    "Read(fd2, &c, 1);",
-    "Dup2(fd2, fd1);",
-    "Read(fd1, &c, 1);",
-    "printf(\"c = %c\\n\", c);",
+    "let mut fd1 = File::open(\"foobar.txt\")?;",
+    "let mut fd2 = File::open(\"foobar.txt\")?;",
+    "fd2.read_exact(&mut c)?;",
+    "unsafe { dup2(fd2.as_raw_fd(), fd1.as_raw_fd()) };",
+    "fd1.read_exact(&mut c)?;",
+    "println!(\"c = {}\", c[0] as char);",
   ]);
-  const prog = code("#s10-prog", { label: "The program", files: [C("dup2.c", DUP)] });
-  const idea = code("#s10-idea", { label: "The idea", files: [C("idea.c", lines([
-    "/* dup2 copies a descriptor-table slot onto another */",
-    "/* if the target was open, it is closed first */",
-    "/* both slots then share one file position */",
-    "/* that is how the shell implements > and < */",
+  const prog = code("#s10-prog", { label: "The program", files: [R("dup2.rs", DUP)] });
+  const idea = code("#s10-idea", { label: "The idea", files: [R("idea.rs", lines([
+    "// dup2 copies a descriptor-table slot onto another",
+    "// if the target was open, it is closed first",
+    "// both slots then share one file position",
+    "// that is how the shell implements > and <",
   ]))] });
   let mode = 0, done = false, step = 0;
   const run = session();
@@ -1833,28 +1872,34 @@ function code(sel, o) {
       a1.setAttribute("opacity", done ? "0" : "1");
       a1b.setAttribute("opacity", done ? "1" : "0");
       noteD.t.textContent = done ? "stdout now writes file B" : "ls > foo.txt";
-      mark(prog, [done ? 4 : 1], { 2: done ? ["both slots → B", "good"] : "" });
+      mark(prog, done ? [4, 5] : [1, 2, 3], { 3: "fd 4", 4: done ? ["both slots → B", "good"] : "" },
+        'openat(AT_FDCWD, "foobar.txt", O_RDONLY|O_CLOEXEC) = 3\nopenat(AT_FDCWD, "foo.txt", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 4' +
+        (done ? '\ndup3(4, 1, 0) = 1   (glibc’s dup2 on arm64)\nwrite(1, "this line goes to foo.txt\\n", 26) = 26' : ""));
       mark(idea, [done ? 2 : 1]);
       cap("#s10-cap", done
         ? "dup2 closed the old stdout, so file A’s refcnt hit 0. Both tickets name B, and B’s refcnt is 2."
-        : "fd 1 is the terminal. fd 4 is the disk. Press dup2(4, 1). That is the right hoinky.");
+        : "fd 1 is standard output, the terminal in the book’s picture. fd 4 is the disk file foo.txt. Press dup2(4, 1). That is the right hoinky.");
     } else {
       const pos2 = step >= 1 ? 1 : 0;
       pFd1.u.textContent = step >= 2 ? "shares entry 2" : "own entry";
       pFd2.u.textContent = "pos " + pos2;
       pFt1.t.textContent = step >= 2 ? "closed" : "entry 1";
       pFt2.t.textContent = "entry 2 · pos " + pos2;
-      pOut.t.textContent = ["two opens of foobar.txt", "Read(fd2) → f", "Dup2(fd2, fd1)", "Read(fd1) → o"][step];
+      pOut.t.textContent = ["two opens of foobar.txt", "fd2 reads → f", "dup2(fd2, fd1)", "fd1 reads → o"][step];
       setCls(pFt1.r, step >= 2 ? "sv-bad" : "sv-panel");
       setCls(pFd1.r, step >= 2 ? "sv-good" : "sv-server");
       setCls(pOut.r, step === 3 ? "sv-good" : "sv-panel");
       pA1.setAttribute("opacity", step >= 2 ? "0" : "1");
       pA1b.setAttribute("opacity", step >= 2 ? "1" : "0");
-      mark(prog, [[1], [3], [4], [5, 6]][step], { 3: step >= 1 ? "c = f" : "", 5: step === 3 ? "c = o" : "", 6: step === 3 ? ["c = o", "good"] : "" }, step === 3 ? "c = o" : step >= 1 ? "c = f" : null);
+      mark(prog, [[1, 2], [3], [4], [5, 6]][step], { 3: step >= 1 ? "c = f" : "", 5: step === 3 ? "c = o" : "", 6: step === 3 ? ["c = o", "good"] : "" },
+        ['openat(AT_FDCWD, "foobar.txt", O_RDONLY|O_CLOEXEC) = 3\nopenat(AT_FDCWD, "foobar.txt", O_RDONLY|O_CLOEXEC) = 4',
+          'read(4, "f", 1) = 1',
+          "dup3(4, 3, 0) = 3   (glibc’s dup2 on arm64)",
+          'read(3, "o", 1) = 1\nc = o'][step]);
       mark(idea, [step >= 2 ? 3 : 4]);
       const texts = [
         "Two opens, two bookmarks, both at f. Press Step.",
-        "fd2’s read consumed f. Its position is 1. Next, Dup2 makes fd1 share that entry.",
+        "fd2’s read consumed f. Its position is 1. Next, dup2 makes fd1 share that entry.",
         "fd1 now uses fd2’s bookmark, already past f.",
         "The next read on fd1 is the second byte. Practice Problem 10.5 prints <b>c = o</b>.",
       ];
@@ -1883,7 +1928,8 @@ function code(sel, o) {
   btn(ctr, "Reset", null, 1, () => { run.cancel(); step = 0; stB.disabled = false; K.clear(layer); paint(); });
   modeSeg(K.$("#s10-seg"), ["dup2(4, 1)", "Practice 10.5"], (i) => {
     mode = i; K.clear(layer);
-    prog.setFiles([C(i === 0 ? "dup2.c" : "practice105.c", i === 0 ? DUP : P10)]);
+    prog.setFiles([R(i === 0 ? "dup2.rs" : "practice105.rs", i === 0 ? DUP : P10)]);
+
     modeBtns(ctr, mode); paint();
   });
   modeBtns(ctr, 0);
@@ -1899,34 +1945,38 @@ function code(sel, o) {
   svg.append(gB, gD);
   const WORD = "hello\n";
   const cells = WORD.split("").map((ch, i) => box(gB, 24 + i * 70, 28, 60, 52, "sv-db", ch === "\n" ? "↵" : ch, "buf", 16));
-  const kern = box(gB, 24, 110, 300, 64, "sv-server", "kernel reads 0", "one read fills the FILE");
-  const gc = box(gB, 348, 110, 300, 64, "sv-panel", "getc → —", "later calls stay in user space");
+  const kern = box(gB, 24, 110, 300, 64, "sv-server", "kernel reads 0", "one read fills the buffer");
+  const gc = box(gB, 348, 110, 300, 64, "sv-panel", "next() → —", "later calls stay in user space");
   const phase = box(gD, 24, 28, 632, 70, "sv-panel", "a stream can read and write", "but not in either order for free");
-  const rule = box(gD, 24, 120, 632, 80, "sv-panel", "press Step", "fflush, fseek, or give up on the socket");
+  const rule = box(gD, 24, 120, 632, 80, "sv-panel", "press Step", "flush before a read, seek before a write");
   const BSRC = lines([
-    "FILE *fp = fopen(\"notes.txt\", \"r\");",
-    "int c = getc(fp); /* may call read once */",
-    "c = getc(fp);     /* served from the buffer */",
-    "c = getc(fp);",
-    "c = getc(fp);",
-    "c = getc(fp);",
-    "c = getc(fp);     /* the newline */",
+    "let mut fp = BufReader::new(File::open(\"notes.txt\")?).bytes();",
+    "let c = fp.next(); // may call read once",
+    "let c = fp.next(); // served from the buffer",
+    "let c = fp.next();",
+    "let c = fp.next();",
+    "let c = fp.next();",
+    "let c = fp.next(); // the newline",
+    "let c = fp.next(); // None: EOF",
   ]);
   const DSRC = lines([
-    "fprintf(fp, \"hi\");",
-    "fflush(fp);              /* required before a later read */",
-    "c = fgetc(fp);",
-    "fseek(fp, 0, SEEK_SET);  /* required before a later write */",
-    "fprintf(fp, \"yo\");",
-    "/* on a socket, fseek and lseek are illegal */",
+    "let f = File::options().read(true).write(true).open(\"notes.txt\")?; // abcdef",
+    "let (mut w, mut r) = (BufWriter::new(&f), BufReader::new(&f));",
+    "write!(w, \"hi\")?; // sits in w's buffer",
+    "w.flush()?; // push \"hi\" to the kernel first",
+    "r.read_exact(&mut c)?; // c: [u8; 1]",
+    "r.seek(SeekFrom::Current(0))?; // undo r's read-ahead",
+    "write!(w, \"yo\")?; // sits in w's buffer again",
+    "w.flush()?; // write it now; a drop would also, but would hide an error",
+    "// sock.seek(…) on a TcpStream: error[E0599], no method named `seek`",
   ]);
-  const prog = code("#s11-prog", { label: "The program", files: [C("getc.c", BSRC)] });
-  const idea = code("#s11-idea", { label: "The idea", files: [C("idea.c", lines([
-    "/* a FILE is a descriptor plus a buffer */",
-    "/* the first getc may read; the next ones do not */",
-    "/* input after output needs fflush or a seek */",
-    "/* output after input needs a seek, unless EOF */",
-    "/* a socket cannot seek */",
+  const prog = code("#s11-prog", { label: "The program", files: [R("bufreader.rs", BSRC)] });
+  const idea = code("#s11-idea", { label: "The idea", files: [R("idea.rs", lines([
+    "// a buffered reader is a descriptor plus a buffer",
+    "// the first next() may read; the next ones do not",
+    "// input after output needs a flush (or a seek)",
+    "// output after input needs a seek, unless EOF",
+    "// a socket cannot seek",
   ]))] });
   let mode = 0, pos = -1, reads = 0, dstep = 0;
   function paint() {
@@ -1935,49 +1985,55 @@ function code(sel, o) {
       cells.forEach((c, i) => setCls(c.r, pos >= 0 && i < pos ? "sv-good" : pos >= 0 ? "sv-data-soft" : "sv-db"));
       kern.t.textContent = "kernel reads " + reads;
       const ch = pos > 0 ? WORD[pos - 1] : "";
-      gc.t.textContent = pos <= 0 ? "getc → —" : pos > WORD.length ? "getc → EOF" : "getc → " + (ch === "\n" ? "↵" : ch);
+      gc.t.textContent = pos <= 0 ? "next() → —" : pos > WORD.length ? "next() → None" : "next() → " + (ch === "\n" ? "↵" : ch);
       setCls(gc.r, pos > WORD.length ? "sv-bad" : pos > 0 ? "sv-good" : "sv-panel");
-      mark(prog, [pos <= 0 ? 1 : Math.min(pos + 1, 7)], { 2: reads ? "reads = " + reads : "" });
+      mark(prog, [pos <= 0 ? 1 : Math.min(pos + 1, 8)], { 2: reads ? "reads = " + reads : "", 8: pos > WORD.length ? ["reads = 2", "bad"] : "" },
+        pos <= 0 ? 'openat(AT_FDCWD, "notes.txt", O_RDONLY|O_CLOEXEC) = 3'
+          : 'read(3, "hello\\n", 8192) = 6' + (pos > WORD.length ? '\nread(3, "", 8192) = 0\nnext() -> None'
+            : "\nnext() -> Some(Ok(" + WORD.charCodeAt(pos - 1) + "))   (" + WORD.charCodeAt(pos - 1) + " is b'" + (WORD[pos - 1] === "\n" ? "\\n" : WORD[pos - 1]) + "')" + (pos > 1 ? "; no system call" : "")));
       mark(idea, [pos <= 1 ? 1 : 2]);
       cap("#s11-cap", pos < 0
-        ? "The FILE buffer is empty. The first getc will fill it with one kernel read of hello↵, then return h."
+        ? "The BufReader’s buffer is empty. The first <code>next()</code> will fill it with one kernel read of hello↵, then hand back h."
         : pos === 1
-          ? "That getc caused <b>1</b> kernel read and returned h. The other five bytes are already in user space."
+          ? "That <code>next()</code> caused <b>1</b> kernel read and returned <code>Some(Ok(b'h'))</code>. The other five bytes are already in user space."
           : pos <= WORD.length
-            ? "getc returned <b>" + (WORD[pos - 1] === "\n" ? "newline" : WORD[pos - 1]) + "</b> from the buffer. Kernel reads are still " + reads + "."
-            : "The buffer is used up. The next getc finds EOF. Still just that one kernel read.");
+            ? "<code>next()</code> returned <b>" + (WORD[pos - 1] === "\n" ? "newline" : WORD[pos - 1]) + "</b> from the buffer. Kernel reads are still " + reads + "."
+            : "The buffer is used up, so this <code>next()</code> asked the kernel again. That read returned 0, EOF, and <code>next()</code> gave <code>None</code>. Two kernel reads for six bytes.");
     } else {
+      // [headline, caption, listing lines, marks, idea line, real output]
       const rows = [
-        ["start", "A stream is full duplex. The restriction is about order.", 1],
-        ["fprintf wrote “hi”", "Output is sitting in the stdio buffer.", 1],
-        ["getc would be illegal", "Input after output needs fflush, fseek, fsetpos, or rewind.", 3],
-        ["fflush, then getc is allowed", "The buffer was pushed to the kernel first.", 2],
-        ["fprintf after that read", "Output after input needs a seek, unless the read hit EOF.", 4],
-        ["fseek, then the write is allowed", "The position was set explicitly.", 4],
-        ["same pattern on a socket", "lseek is illegal, so this rule cannot be repaired. Use Rio.", 5],
+        ["notes.txt holds abcdef", "One file, a write buffer w and a read buffer r. The plan: hi over ab, read the next byte, then yo right after it.", [1, 2], {}, 1, 'openat(AT_FDCWD, "notes.txt", O_RDWR|O_CLOEXEC) = 3'],
+        ["write! put “hi” in w", "The bytes sit in w’s buffer. No system call yet: the file still says abcdef and the kernel position is 0.", [3], {}, 1, "(no system call)"],
+        ["skip the flush: the read gets a", "Input after output needs a flush first. Without it, r reads from position 0 and gets a, not c, and hi lands later at the end. Real run: c = a, file abcdefhiyo. (C’s rule: fflush, fseek, fsetpos, or rewind.)", [5], { 5: ["c = a", "bad"] }, 3, 'read(3, "abcdef", 8192) = 6\nwrite(3, "hiyo", 4) = 4\nfile = abcdefhiyo'],
+        ["flush, then the read is right", "w.flush() pushed hi to the kernel first. Then r read ahead in one go and handed back c.", [4, 5], { 4: ["write(3, \"hi\")", "good"], 5: ["c = c", "good"] }, 3, 'write(3, "hi", 2) = 2\nread(3, "cdef", 8192) = 4'],
+        ["but yo lands at the end", "r read ahead to the end of the file, so the kernel position is 6, not 3. Output after input needs a seek, unless the read hit EOF. Real run: hicdefyo.", [7, 8], { 8: ["lands at 6", "bad"] }, 4, 'write(3, "yo", 2) = 2\nfile = hicdefyo'],
+        ["seek, then the write lands right", "seek(SeekFrom::Current(0)) dropped r’s 3 unread bytes and moved the kernel back to 3. Real run: hicyof.", [6, 7, 8], { 6: ["back 3", "good"], 8: ["lands at 3", "good"] }, 4, 'lseek(3, -3, SEEK_CUR) = 3\nwrite(3, "yo", 2) = 2\nfile = hicyof'],
+        ["same pattern on a socket", "A TcpStream does not implement Seek, so the repair does not even compile. Use Rio-style code on sockets.", [9], { 9: ["no seek", "bad"] }, 5, "error[E0599]: no method named `seek` found for struct `TcpStream` in the current scope"],
       ];
       const row = rows[dstep];
       phase.t.textContent = row[0];
-      rule.t.textContent = row[1];
+      phase.u.textContent = ["file: abcdef", "file: abcdef · w holds hi", "c = a · file ends abcdefhiyo", "c = c · file: hicdef", "file ends hicdefyo", "file ends hicyof", "TcpStream has no seek"][dstep];
+      rule.t.textContent = ["start", "buffered", "wrong byte", "right byte", "wrong place", "right place", "cannot seek"][dstep];
       setCls(rule.r, dstep === 2 || dstep === 4 || dstep === 6 ? "sv-bad" : dstep === 0 ? "sv-panel" : "sv-good");
-      mark(prog, [Math.min(dstep, 6) || 1], dstep === 6 ? { 6: ["illegal", "bad"] } : {});
-      mark(idea, [row[2]]);
+      mark(prog, row[2], row[3], row[5]);
+      mark(idea, [row[4]]);
       cap("#s11-cap", row[1]);
     }
   }
   const ctr = K.$("#s11-controls");
-  btn(ctr, "getc", "primary", 0, () => {
+  btn(ctr, "next()", "primary", 0, () => {
     if (pos > WORD.length) return;
     if (pos < 0) { reads = 1; pos = 1; }
     else pos++;
+    if (pos > WORD.length) reads = 2; // the buffer is empty: one more read, which returns 0
     paint();
   });
   btn(ctr, "Reset", null, 0, () => { pos = -1; reads = 0; paint(); });
   const st = btn(ctr, "Step", "primary", 1, () => { if (dstep < 6) { dstep++; paint(); if (dstep >= 6) st.disabled = true; } });
   btn(ctr, "Reset", null, 1, () => { dstep = 0; st.disabled = false; paint(); });
-  modeSeg(K.$("#s11-seg"), ["FILE buffer", "direction"], (i) => {
+  modeSeg(K.$("#s11-seg"), ["the buffer", "direction"], (i) => {
     mode = i;
-    prog.setFiles([C(i === 0 ? "getc.c" : "order.c", i === 0 ? BSRC : DSRC)]);
+    prog.setFiles([i === 0 ? R("bufreader.rs", BSRC) : R("order.rs", DSRC)]);
     modeBtns(ctr, mode); paint();
   });
   modeBtns(ctr, 0);
@@ -1989,40 +2045,44 @@ function code(sel, o) {
   const svg = K.$("#s12-svg");
   const gPick = s("g"), gTrap = s("g");
   svg.append(gPick, gTrap);
-  const stdioB = box(gPick, 16, 28, 210, 72, "sv-panel", "standard I/O", "fopen printf fgets");
+  const stdioB = box(gPick, 16, 28, 210, 72, "sv-panel", "standard I/O", "BufReader BufWriter");
   const rioB = box(gPick, 236, 28, 210, 72, "sv-panel", "Rio", "readn writen readlineb");
   const unixB = box(gPick, 456, 28, 200, 72, "sv-server", "Unix I/O", "open read write stat");
   const job = box(gPick, 16, 120, 640, 56, "sv-panel", "pick a job", "G1 disk · G2 binary · G3 socket");
   const tip = box(gPick, 16, 190, 640, 40, "sv-panel", "guideline", null, 13);
-  const t1 = box(gTrap, 16, 28, 200, 64, "sv-panel", "fdopen r", "stream 1");
-  const t2 = box(gTrap, 236, 28, 200, 64, "sv-panel", "fdopen w", "stream 2");
+  const t1 = box(gTrap, 16, 28, 200, 64, "sv-panel", "File inp", "owner 1");
+  const t2 = box(gTrap, 236, 28, 200, 64, "sv-panel", "File outp", "owner 2");
   const sock = box(gTrap, 456, 28, 200, 64, "sv-db", "sockfd", "one descriptor");
-  const tOut = box(gTrap, 16, 114, 640, 56, "sv-panel", "two FILE streams, one socket", "the second fclose closes it again");
-  const tRio = box(gTrap, 16, 186, 640, 44, "sv-good", "sprintf + rio_writen, readlineb + sscanf", null, 13);
+  const tOut = box(gTrap, 16, 114, 640, 56, "sv-panel", "two owners, one socket", "the second drop closes it again");
+  const tRio = box(gTrap, 16, 186, 640, 44, "sv-good", "format! + rio_writen, then read_line + split", null, 13);
   const JOBS = [
-    { k: "disk text", g: "G1", good: [true, false, true], line: 1, text: "Use standard I/O on disk and the terminal. fopen, printf, and fgets are the default." },
-    { k: "binary", g: "G2", good: [false, true, true], line: 2, text: "Do not use scanf or rio_readlineb on a binary file. A 0x0a byte is not a newline. Use rio_readn or fread." },
+    { k: "disk text", g: "G1", good: [true, false, true], line: 1, text: "Use buffered standard I/O on disk and the terminal. In Rust that is BufReader, BufWriter and println!; in the book’s C, fopen, printf and fgets." },
+    { k: "binary", g: "G2", good: [false, true, true], line: 2, text: "Do not run a line reader (C’s scanf, rio_readlineb, Rust’s read_line) over a binary file. A 0x0a byte is not a newline. Ask for a count of bytes: rio_readn, or std’s read_exact." },
     { k: "socket", g: "G3", good: [false, true, true], line: 3, text: "Use Rio on a network socket. Standard I/O’s direction rules need a seek, and a socket cannot seek." },
   ];
-  const prog = code("#s12-prog", { label: "The program", files: [C("choose.c", lines([
-    "fp = fopen(\"notes.txt\", \"r\");  /* G1: disk and terminal */",
-    "n = rio_readn(fd, buf, 8);       /* G2: binary, not a line reader */",
-    "rio_readlineb(&rio, buf, MAXLINE); /* G3: sockets */",
-    "sscanf(buf, \"%s %s\", method, uri);",
-  ]))] });
-  const idea = code("#s12-idea", { label: "The idea", files: [C("idea.c", lines([
-    "/* G1  standard I/O whenever you can */",
-    "/* G2  line readers are for text, not for bytes that merely look like newlines */",
-    "/* G3  Rio on sockets */",
-    "/* two fclose calls on one socket descriptor close it twice */",
+  const CHOOSE = lines([
+    "let fp = BufReader::new(File::open(\"notes.txt\")?); // G1: disk",
+    "let n = rio_readn(&mut img, &mut buf)?; // G2: binary, not lines",
+    "rio.rio_readlineb(&mut line)?; // G3: sockets",
+    "let words = String::from_utf8_lossy(&line); // then split it",
+  ]);
+  const prog = code("#s12-prog", { label: "The program", files: [R("choose.rs", CHOOSE)] });
+  const idea = code("#s12-idea", { label: "The idea", files: [R("idea.rs", lines([
+    "// G1  standard I/O whenever you can",
+    "// G2  line readers are for text, not bytes that look like newlines",
+    "// G3  Rio on sockets",
+    "// two owners of one socket descriptor close it twice",
   ]))] });
   const TRAP = lines([
-    "FILE *in = fdopen(sockfd, \"r\");",
-    "FILE *out = fdopen(sockfd, \"w\");",
-    "fclose(in);   /* closes sockfd */",
-    "fclose(out);  /* closes it again */",
-    "sprintf(msg, \"HTTP/1.0 200 OK\\r\\n\");",
-    "rio_writen(sockfd, msg, strlen(msg));",
+    "let inp = unsafe { File::from_raw_fd(sockfd) }; // owner 1",
+    "let outp = unsafe { File::from_raw_fd(sockfd) }; // owner 2: a lie",
+    "drop(inp); // closes sockfd",
+    "drop(outp); // closes it again",
+    "// the fix: one owner, sock, borrowed twice",
+    "let (mut rd, mut wr) = (BufReader::new(&sock), &sock);",
+    "let msg = format!(\"HTTP/1.0 {} OK\\r\\n\", 200);",
+    "rio_writen(&mut wr, msg.as_bytes())?;",
+    "rd.read_line(&mut line)?; // then split it into words",
   ]);
   let mode = 0, jobI = 0, trap = 0;
   function paint() {
@@ -2034,32 +2094,31 @@ function code(sel, o) {
       setCls(unixB.r, "sv-server");
       job.t.textContent = J.k + "  ·  " + J.g;
       tip.t.textContent = J.g;
-      if (prog.file !== "choose.c") prog.setFiles([C("choose.c", lines([
-        "fp = fopen(\"notes.txt\", \"r\");  /* G1: disk and terminal */",
-        "n = rio_readn(fd, buf, 8);       /* G2: binary, not a line reader */",
-        "rio_readlineb(&rio, buf, MAXLINE); /* G3: sockets */",
-        "sscanf(buf, \"%s %s\", method, uri);",
-      ]))]);
+      if (prog.file !== "choose.rs") prog.setFiles([R("choose.rs", CHOOSE)]);
       mark(prog, [J.line], { [J.line]: J.g });
       mark(idea, [J.line]);
       cap("#s12-cap", J.text);
     } else {
-      if (prog.file !== "trap.c") prog.setFiles([C("trap.c", TRAP)]);
+      if (prog.file !== "trap.rs") prog.setFiles([R("trap.rs", TRAP)]);
       t1.u.textContent = trap >= 1 ? "open" : "not yet";
       t2.u.textContent = trap >= 1 ? "open" : "not yet";
       setCls(t1.r, trap >= 1 ? "sv-server" : "sv-panel");
       setCls(t2.r, trap >= 1 ? "sv-server" : "sv-panel");
-      tOut.t.textContent = ["two FILE streams on one socket", "fclose(in) closes sockfd", "fclose(out) closes it again", "Rio never shares that trap"][trap];
+      tOut.t.textContent = ["two Files own one socket", "drop(inp) closes sockfd", "drop(outp) closes it again", "one owner, closed once"][trap];
       setCls(tOut.r, trap === 2 ? "sv-bad" : trap === 3 ? "sv-good" : "sv-panel");
       setCls(sock.r, trap === 2 ? "sv-bad" : "sv-db");
-      const at = [[1, 2], [3], [4], [5, 6]][trap];
-      mark(prog, at, trap === 2 ? { 4: ["second close", "bad"] } : trap === 3 ? { 6: ["one descriptor", "good"] } : {});
+      const at = [[1, 2], [3], [4], [5, 6, 7, 8, 9]][trap];
+      mark(prog, at, trap === 2 ? { 4: ["second close", "bad"] } : trap === 3 ? { 6: ["one descriptor", "good"] } : {},
+        [null,
+          "close(4) = 0",
+          "debug build:\nfcntl(4, F_GETFD) = -1 EBADF (Bad file descriptor)\nfatal runtime error: IO Safety violation: owned file descriptor already closed, aborting\n(exit status 134)\nrelease build (-C opt-level=3):\nclose(4) = -1 EBADF (Bad file descriptor)\nsecond drop done, still running",
+          '["HTTP/1.0", "200", "OK"]   (an echo server sent the line back)'][trap]);
       mark(idea, [trap === 3 ? 3 : 4]);
       const texts = [
-        "A socket cannot lseek, so the stdio seek-between-directions rule has no fix. Two fdopen streams look tempting. Press Step.",
-        "Both streams wrap the same sockfd. The first fclose closes that descriptor.",
-        "The second fclose closes an already-closed descriptor. Sequential code may shrug. Threaded code (Section 12.7.4) does not.",
-        "Format with sprintf and send with rio_writen. Read a line with rio_readlineb and parse with sscanf.",
+        "A socket cannot seek, so the seek-between-directions rule has no fix. Two streams on one socket look tempting. In Rust that takes <code>unsafe</code>: <code>from_raw_fd</code> makes a File that owns the number, and trusts us that nothing else does. Press Step.",
+        "Both Files own the same sockfd. Dropping the first one closes that descriptor.",
+        "Dropping the second closes it again. A debug build (plain <code>rustc</code>: no optimisation, so debug assertions are on) checks the descriptor first and aborts: “fatal runtime error: IO Safety violation: owned file descriptor already closed, aborting”. A release build (<code>-C opt-level=3</code>, debug assertions off) skips the check: its close fails with EBADF, File’s drop ignores close errors, and the program carries on. Both builds ran on x86-64 Linux; the strace lines come from the same program built and traced on arm64 Linux. The book calls this a recipe for disaster in a threaded program (Section 12.7.4), where another thread may already have reused the number.",
+        "The book’s way, in Rust: one owner, <code>sock</code>, lent out twice. <code>BufReader::new(&amp;sock)</code> reads and <code>&amp;sock</code> writes, because std implements Read and Write for <code>&amp;TcpStream</code>. Format the reply in memory, send it with rio_writen, read a line and split it. The socket is closed once, when sock is dropped.",
       ];
       cap("#s12-cap", texts[trap]);
     }
@@ -2076,26 +2135,27 @@ function code(sel, o) {
 /* ================= 10.12 ================= */
 (function summary() {
   const ITEMS = [
-    { prog: "int fd = open(path, O_RDONLY, 0);\nn = read(fd, buf, n);", idea: "/* kernel verbs: descriptor, position, stat */", cap: "Unix I/O is the interface underneath the others. You need it when you want metadata, or when a nicer library is the wrong tool." },
-    { prog: "FILE *fp = fopen(path, \"r\");\nfgets(buf, n, fp);", idea: "/* a FILE is a descriptor plus a buffer */", cap: "Standard I/O is the default on disk and the terminal. The buffer is why getc is cheap after the first read." },
-    { prog: "n = read(sock, buf, 8); /* might be 3 */", idea: "/* a short count is not an error */", cap: "Raw read and write can return early. On a disk you mostly see that at EOF. On a socket you see it all the time." },
-    { prog: "while (nleft > 0) {\n    nr = read(fd, bufp, nleft);\n    nleft -= nr;\n}", idea: "/* rio_writen does not return until n bytes are gone */", cap: "Rio’s unbuffered loop hides short counts. rio_readn stops early only on EOF. rio_writen does not stop early at all." },
-    { prog: "fd1 = Open(path, O_RDONLY, 0);\nfd2 = Open(path, O_RDONLY, 0);\nRead(fd2, &c, 1); /* c = f */", idea: "/* two file-table entries, two positions */", cap: "Opening the same name twice builds two bookmarks. Both reads start at the first byte. Practice Problem 10.2 prints c = f." },
-    { prog: "fd = Open(path, O_RDONLY, 0);\nFork();\n/* child reads f, parent reads o */", idea: "/* one file-table entry, refcnt 2 */", cap: "fork copies the descriptor table and shares the file table. One position. Practice Problem 10.3 prints c = o." },
-    { prog: "rio_readlineb(&rio, buf, MAXLINE);", idea: "/* stops at 0x0a and writes a NUL */", cap: "Line readers are for text. They treat 0x0a as the end of a record." },
-    { prog: "rio_readn(fd, buf, n); /* or fread */", idea: "/* 0x0a inside a picture is data */", cap: "Guideline 2: do not run a line reader over a binary file. Ask for a count of bytes instead." },
-    { prog: "fclose(in);  /* closes sockfd */\nfclose(out); /* closes it again */", idea: "/* lseek on a socket is illegal */", cap: "Two stdio streams on one socket look like a way around the seek rule. The second fclose closes a dead descriptor." },
-    { prog: "sprintf(msg, \"OK\\r\\n\");\nrio_writen(fd, msg, strlen(msg));", idea: "/* readlineb, then sscanf */", cap: "Guideline 3: Rio on sockets. Format in memory, write the bytes, read a line, then scan it." },
-    { prog: "\"/home/droh/hello.c\"", idea: "/* starts at the root */", cap: "An absolute pathname begins with / and does not depend on where the process is standing." },
-    { prog: "/* cwd /home/bryant */\n\"../droh/hello.c\"", idea: "/* starts at the current working directory */", cap: "A relative pathname is resolved from the process’s current working directory. The same file has many of them." },
+    { prog: "let mut f = File::open(path)?;\nlet n = f.read(&mut buf)?;", idea: "// kernel verbs: descriptor, position, stat", cap: "Unix I/O is the interface underneath the others. You need it when you want metadata, or when a nicer library is the wrong tool." },
+    { prog: "let mut fp = BufReader::new(File::open(path)?);\nfp.read_line(&mut text)?; // text: a String", idea: "// a BufReader is a descriptor plus a buffer", cap: "Buffered standard I/O is the default on disk and the terminal. The buffer is why reading a byte is cheap after the first read." },
+    { prog: "let n = sock.read(&mut buf[..8])?; // might be 3", idea: "// a short count is not an error", cap: "Raw read and write can return early. On a disk you mostly see that at EOF. On a socket you see it all the time." },
+    { prog: "rio_writen(&mut w, usrbuf)?; // loops until every byte is written\nw.write_all(usrbuf)?; // std's own version of that loop", idea: "// rio_writen does not return until n bytes are gone", cap: "Rio’s unbuffered loop hides short counts. rio_readn stops early only on EOF. rio_writen does not stop early at all." },
+    { prog: "let mut fd1 = File::open(path)?;\nlet mut fd2 = File::open(path)?;\nfd2.read_exact(&mut c)?; // c = f", idea: "// two file-table entries, two positions", cap: "Opening the same name twice builds two bookmarks. Both reads start at the first byte. Practice Problem 10.2 prints c = f." },
+    { prog: "let mut fd = File::open(path)?;\nunsafe { fork() };\n// child reads f, parent reads o", idea: "// one file-table entry, refcnt 2", cap: "fork copies the descriptor table and shares the file table. One position. Practice Problem 10.3 prints c = o." },
+    { prog: "rio.rio_readlineb(&mut line)?;", idea: "// stops after the 0x0a", cap: "Line readers are for text. They treat 0x0a as the end of a record." },
+    { prog: "rio_readn(&mut img, &mut buf)?; // or read_exact", idea: "// 0x0a inside a picture is data", cap: "Guideline 2: do not run a line reader over a binary file. Ask for a count of bytes instead." },
+    { prog: "drop(inp); // closes sockfd\ndrop(outp); // closes it again", idea: "// a socket cannot seek", cap: "Two owners of one socket look like a way around the seek rule. The second close hits a dead descriptor." },
+    { prog: "let (mut rd, mut wr) = (BufReader::new(&sock), &sock);\nlet msg = format!(\"HTTP/1.0 {} OK\\r\\n\", 200);\nrio_writen(&mut wr, msg.as_bytes())?;", idea: "// then read_line (std's rio_readlineb) and split it", cap: "Guideline 3: Rio on sockets. Format in memory, write the bytes, read a line, then scan it." },
+    { prog: "let abs = Path::new(\"/home/droh/hello.c\");", idea: "// starts at the root", cap: "An absolute pathname begins with / and does not depend on where the process is standing." },
+    { prog: "// cwd /home/bryant\nlet rel = Path::new(\"../droh/hello.c\");", idea: "// starts at the current working directory", cap: "A relative pathname is resolved from the process’s current working directory. The same file has many of them." },
   ];
-  const prog = code("#sum-prog", { label: "The program", files: [C("choice.c", ITEMS[0].prog)] });
-  const idea = code("#sum-idea", { label: "The idea", files: [C("idea.c", ITEMS[0].idea)] });
+  const prog = code("#sum-prog", { label: "The program", files: [R("choice.rs", ITEMS[0].prog)] });
+  const idea = code("#sum-idea", { label: "The idea", files: [R("idea.rs", ITEMS[0].idea)] });
   function pick(i) {
     document.querySelectorAll("#sum-grid .side").forEach((b) => b.classList.toggle("pick", Number(b.dataset.sum) === i));
     const it = ITEMS[i];
-    prog.src("choice.c", it.prog);
-    idea.src("idea.c", it.idea);
+    prog.src("choice.rs", it.prog);
+    idea.src("idea.rs", it.idea);
+
     mark(prog, [1]);
     mark(idea, [1]);
     cap("#sum-cap", it.cap);
@@ -2110,11 +2170,12 @@ K.quiz(K.$("#quiz-root"), [
   { q: "The cwd is /home/bryant. What is the relative pathname of /home/droh/hello.c?", options: ["/home/droh/hello.c", "./hello.c", "../droh/hello.c", "../home/droh/hello.c"], answer: 2, why: "A relative path starts at the cwd. From /home/bryant you step up to /home and then into droh." },
   { q: "foobar.txt is the six characters foobar. Two Opens, then Read a byte from each. What is c after the second Read?", options: ["o, because the shared bookmark moved", "f, because each descriptor has its own file position", "r, the last character", "0, meaning EOF"], answer: 1, why: "Two opens create two file-table entries and two positions. Both reads start at the first byte, so c = f." },
   { q: "Same file, one Open, then Fork. The child Reads one byte. The parent Reads one byte. What is c?", options: ["f", "b", "o", "nothing — the child stole the descriptor"], answer: 2, why: "Parent and child share the file-table entry, so they share the position. The child consumed f; the parent reads o." },
-  { q: "Why does rio_writen never return a short count, except on error?", options: ["The kernel forbids short writes", "It only writes one byte at a time", "It uses fwrite, which is buffered", "It loops on write until all n bytes are transferred, and retries on EINTR"], answer: 3, why: "While nleft > 0 it calls write. EINTR is retried. Only a real error returns −1. rio_readn can return short only at EOF." },
-  { q: "readdir returns NULL and errno is still 0. What happened?", options: ["The directory is empty of “.” ", "The call failed", "The stream is finished", "You must call opendir again"], answer: 2, why: "NULL means either end or error. errno is set to 0 before the loop so you can tell them apart. Unchanged errno means end of stream." },
-  { q: "After fopen, the first getc causes one kernel read. What does the next getc do?", options: ["Another kernel read, always", "It returns the next byte already in the FILE buffer", "It calls lseek", "It closes the stream"], answer: 1, why: "A FILE is a descriptor plus a buffer. The fill happens once; later getc calls stay in user space until the buffer runs out." },
-  { q: "Which Unix I/O call is illegal on a socket?", options: ["read", "write", "lseek", "close"], answer: 2, why: "You cannot reposition a socket. That is why the stdio rule “seek between input and output” cannot be followed, and why the book sends you to Rio." },
-  { q: "Which functions should you use for I/O on a network socket?", options: ["Standard I/O, because it is buffered", "fopen on the hostname", "The Rio functions", "scanf, then fflush"], answer: 2, why: "Guideline 3: Rio on sockets. Format with sprintf and send with rio_writen. Read a line with rio_readlineb and parse with sscanf." },
+  { q: "Why does rio_writen never return a short count, except on error?", options: ["The kernel forbids short writes", "It only writes one byte at a time", "It uses fwrite, which is buffered", "It loops on write until all n bytes are transferred, and retries on EINTR"], answer: 3, why: "While nleft > 0 it calls write. EINTR is retried. Only a real error ends it early, as Err(e) in our Rust (the book’s C returns −1). rio_readn can return short only at EOF." },
+  { q: "The iterator from std::fs::read_dir returns Some(Err(e)). What happened?", options: ["The directory is empty", "Reading the directory failed", "The stream is finished", "It skipped . and .."], answer: 1, why: "Each item says what it is: Some(Ok(entry)) is an entry, Some(Err(e)) is an error, and None is the end. C’s readdir returns NULL for both, so C code must check errno." },
+  { q: "The first next() on a BufReader’s bytes() causes one kernel read. What does the next one do?", options: ["Another kernel read, always", "It returns the next byte already in the buffer", "It calls lseek", "It closes the file"], answer: 1, why: "A BufReader, like C’s FILE, is a descriptor plus a buffer. The fill happens once; later calls stay in user space until the buffer runs out." },
+  { q: "Which Unix I/O call is illegal on a socket?", options: ["read", "write", "lseek", "close"], answer: 2, why: "You cannot reposition a socket. That is why the stdio rule “seek between input and output” cannot be followed, and why the book sends you to Rio. In Rust the question never comes up: TcpStream has no seek method, so the call does not compile." },
+  { q: "Which functions should you use for I/O on a network socket?", options: ["Standard I/O, because it is buffered", "fopen on the hostname", "The Rio functions", "scanf, then fflush"], answer: 2, why: "Guideline 3: Rio on sockets. Build the reply in memory and send it with rio_writen. Read a line with rio_readlineb and parse it." },
+
 ], 10);
 </script>
 </body>

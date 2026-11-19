@@ -48,10 +48,6 @@
   .cp-note.good { background: var(--mint-soft); border-color: var(--mint); }
   .cp-note.bad { background: var(--coral-soft); border-color: var(--coral); }
   .cp-note.warn { background: var(--sun-soft); border-color: var(--sun); }
-  .cp-lang { margin-left: auto; display: inline-flex; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 9px; padding: 2px; gap: 2px; }
-  .cp-lang button { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: 700 12px/1 var(--f-mono); padding: 6px 10px; border-radius: 7px; cursor: pointer; }
-  .cp-lang button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
-  .first .cp-lang { margin: 8px 0 0; display: flex; width: max-content; }
   .cp-out { margin: 0; padding: 10px 14px; background: var(--ink); color: var(--bg); font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; min-height: 22px; }
   .t-cm { color: var(--ink-3); font-style: italic; }
   .t-st { color: color-mix(in srgb, var(--mint) 70%, var(--ink)); }
@@ -68,7 +64,6 @@
   .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
   @media (prefers-reduced-motion: reduce) { .fade, .cp-body li { transition: none; } }
   details.book pre.prelude { margin: 0; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-s); font-family: var(--f-mono); font-size: 12px; line-height: 1.5; overflow-x: auto; color: var(--ink); }
-  #rust-prelude[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -81,51 +76,71 @@
       <h1>Exceptional Control Flow</h1>
       <p class="lede">From the moment a processor powers on, the program counter walks a sequence of instruction addresses. Most steps are smooth. A jump, a timer, a finished child, or a bad divide can yank that walk somewhere else — and those yanks are how one machine runs many programs.</p>
       <p class="quote">“In general, we refer to these abrupt changes as exceptional control flow (ECF).”</p>
-      <p class="first"><b>New here?</b> Every numbered section below is one little machine. Read the short story on the left, then press the buttons on the picture. Under each machine is <b>the code it is running</b>: the highlighted line is what the machine is doing right now, and the small tags show live values. Press <b>C</b> or <b>Rust</b>. Assembly and shell commands stay as the book shows them. You cannot break anything. Grown-up details hide under “What the book says.”</p>
+      <p class="first"><b>New here?</b> Every numbered section below is one little machine. Read the short story on the left, then press the buttons on the picture. Under each machine is <b>the code it is running</b>: the highlighted line is what the machine is doing right now, and the small tags show live values. The book writes its programs in C; every program on this page is written in <b>Rust</b> instead, and where the book’s point is about C itself, the story says so in words. Each new piece of Rust is explained in a short comment the first time it appears. Every listing, output and number comes from a real run of our Rust (rustc 1.100.0, <span class="mono">-C opt-level=1</span>): the process and signal programs on Linux, and the faults, system calls and assembly on x86-64 Linux (an emulated x86-64 machine, so its runs are labelled “emulated”). You cannot break anything. Grown-up details hide under “What the book says.”</p>
 
-      <details class="book" id="rust-prelude" hidden>
+      <details class="book" id="rust-prelude">
         <summary>Rust setup: what the listings assume</summary>
         <div class="inner">
-          <p>The book’s C listings rely on POSIX headers. The Rust listings here are fragments, and they rely on this block: the C calls with their real types, the Linux sizes of <code>sigset_t</code> and <code>jmp_buf</code>, and an atomic <code>PID</code>. A plain variable would not do for <code>PID</code>: at <code>-O</code> rustc turns <code>while pid == 0 {}</code> into one load and an endless loop, so the handler’s write would never be seen. (C needs <code>volatile</code> for the same reason.)</p>
-          <pre class="prelude">use std::ffi::{c_char, c_int};
-use std::sync::atomic::{AtomicI32, Ordering};
+          <p>Rust’s standard library, <b>std</b>, covers part of this chapter. <code>std::process::id</code> and <code>std::os::unix::process::parent_id</code> are getpid and getppid. <code>Command</code> starts a program in a new child process: its <code>spawn</code> does the work of fork and exec together, its Unix <code>exec</code> replaces the running program, and <code>process_group</code> picks the child’s process group. A <code>Child</code> can be waited for (<code>wait</code>), checked without blocking (<code>try_wait</code>), or sent SIGKILL (<code>kill</code>), and its <code>ExitStatus</code> tells an exit code from a killing signal. <code>std::process::exit</code> ends the process.</p>
+          <p>std has no fork, no wait for “any child,” no way to install a signal handler, no signal masks, and no setjmp. So the listings declare those few C library functions themselves and call them inside <code>unsafe</code> blocks. <code>unsafe</code> does not switch checks off; it marks the spots where you, not the compiler, promise the call is used correctly. Real Rust programs usually get these calls from crates (libc, signal-hook); declaring them by hand keeps every line visible.</p>
+          <p>The listings rely on this block (each real program includes it; the <code>#[allow(…)]</code> lines that silence “unused” warnings are left out here). A handler and main share data only through atomics such as <code>AtomicI32</code>: Rust makes touching a <code>static mut</code> unsafe, and an atomic can be shared without that. (The book’s C marks such a variable <code>volatile</code>.) Files marked <b>(sketch)</b> model the kernel or the hardware; they compile, but use invented names, as the book’s sketches do.</p>
+          <pre class="prelude">// The C library calls this chapter needs and Rust's std does not offer.
+use std::ffi::{c_char, c_int, c_void};
+use std::sync::atomic::{AtomicI32, AtomicBool, Ordering};
 
-// Linux x86-64 sizes: a sigset_t is 128 bytes and a jmp_buf is 200.
-#[repr(C)] struct SigSet([u64; 16]);
-#[repr(C, align(8))] struct JmpBuf([u64; 25]);
+// struct: a named group of fields. #[repr(C)]: lay it out as C does.
+// On Linux glibc (x86-64 and arm64), a sigset_t is 128 bytes: 16 u64s.
+#[repr(C)]
+struct SigSet([u64; 16]);
 
-const SIGINT: c_int = 2;  const SIGKILL: c_int = 9;
-const SIGTSTP: c_int = 20; const SIG_BLOCK: c_int = 0; const SIG_SETMASK: c_int = 2;
+// const: a fixed value. c_int is C's int (an i32 on Linux).
+const SIGINT: c_int = 2;
+const SIGKILL: c_int = 9;
+const SIGUSR1: c_int = 10;
+const SIGUSR2: c_int = 12;
+const SIGALRM: c_int = 14;
+const SIGCHLD: c_int = 17;
+const SIGCONT: c_int = 18;
+const SIGTSTP: c_int = 20;
+const SIG_DFL: usize = 0;
+const SIG_IGN: usize = 1;
+const SIG_BLOCK: c_int = 0;
+const SIG_SETMASK: c_int = 2;
 const WNOHANG: c_int = 1;
 
+// extern "C": these live in the C library; Rust sees only declarations.
+// Calling one is unsafe: rustc cannot check what it does.
 unsafe extern "C" {
     fn fork() -&gt; c_int;
-    fn getpid() -&gt; c_int;
-    fn getppid() -&gt; c_int;
     fn waitpid(pid: c_int, status: *mut c_int, options: c_int) -&gt; c_int;
     fn sleep(seconds: u32) -&gt; u32;
     fn pause() -&gt; c_int;
     fn alarm(seconds: u32) -&gt; u32;
     fn kill(pid: c_int, sig: c_int) -&gt; c_int;
-    fn execve(path: *const c_char, argv: *const *const c_char,
-              envp: *const *const c_char) -&gt; c_int;
-    static environ: *const *const c_char;
-    fn signal(sig: c_int, handler: extern "C" fn(c_int));
+    fn raise(sig: c_int) -&gt; c_int;
+    fn signal(sig: c_int, handler: extern "C" fn(c_int)) -&gt; usize;
+    #[link_name = "signal"] // the same C function, given SIG_IGN or SIG_DFL
+    fn signal_action(sig: c_int, action: usize) -&gt; usize;
     fn sigemptyset(set: *mut SigSet) -&gt; c_int;
     fn sigaddset(set: *mut SigSet, sig: c_int) -&gt; c_int;
+    fn sigismember(set: *const SigSet, sig: c_int) -&gt; c_int;
+    fn sigpending(set: *mut SigSet) -&gt; c_int;
     fn sigprocmask(how: c_int, set: *const SigSet, old: *mut SigSet) -&gt; c_int;
     fn sigsuspend(mask: *const SigSet) -&gt; c_int;
-    fn __errno_location() -&gt; *mut c_int;          // macOS: __error
-    // setjmp returns twice, which rustc does not support: calling it is undefined
-    // behaviour in Rust. These two are here only to mirror the book.
-    fn setjmp(buf: *mut JmpBuf) -&gt; c_int;
-    fn longjmp(buf: *mut JmpBuf, val: c_int) -&gt; !;
-    fn sigsetjmp(buf: *mut JmpBuf, save_mask: c_int) -&gt; c_int;
-    fn siglongjmp(buf: *mut JmpBuf, val: c_int) -&gt; !;
+    fn write(fd: c_int, buf: *const c_void, count: usize) -&gt; isize;
+    fn _exit(status: c_int) -&gt; !;
+    fn __errno_location() -&gt; *mut c_int; // where glibc keeps errno
 }
-static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by main
 
-// Sketch listings (classes.rs, kernel.rs, ...) also use invented names, as the book's C does.</pre>
+// The book's Sio_puts: print with write alone, safe inside a handler.
+fn sio_puts(s: &amp;str) {
+    unsafe { write(1, s.as_ptr().cast(), s.len()) };
+}
+fn empty_set() -&gt; SigSet {
+    let mut s = SigSet([0; 16]);
+    unsafe { sigemptyset(&amp;mut s) };
+    s
+}</pre>
         </div>
       </details>
       <nav class="toc" aria-label="Scenes in this chapter">
@@ -176,7 +191,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <h2>Three ways the next address is chosen</h2>
         <p class="story">The program counter holds the address of an instruction. If the next address is simply “just after this instruction,” the book calls that a <b>smooth</b> transfer. Nothing surprising happened.</p>
         <p class="story">A jump, a call, or a return is already an abrupt change — but the program itself asked for it. An <b>exception</b> is the other kind of abrupt change: some change in the processor’s state, called an <b>event</b>, yanks the walk into code the running program did not choose.</p>
-        <p class="imagine"><b>Try it:</b> step the same three instructions three ways. Smooth adds the instruction’s length. Jump leaps to a label. Exception ignores both and lands in the kernel.</p>
+        <p class="imagine"><b>Try it:</b> step real rustc instructions three ways. Smooth adds the instruction’s length. Jump leaps to a label. Exception ignores both and lands in the kernel.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -255,8 +270,9 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <span class="eyebrow">8.1.3 · exceptions in Linux/x86-64 systems</span>
         <h2>Divide, page fault, syscall, machine check</h2>
         <p class="story">On x86-64, numbers 0–31 belong to the processor architects and 32–255 to the operating system. A few of them show up constantly: divide error (0), general protection fault (13), page fault (14), and machine check (18).</p>
-        <p class="story">Linux does not try to repair a divide by zero or a protection fault. The shell reports them as “Floating exception” and “Segmentation fault.” A page fault is the famous restart: the handler maps the missing page and runs the same instruction again. System calls are traps. The number goes in <span class="mono">%rax</span>, the arguments in the argument registers, and a return between −4095 and −1 means −errno.</p>
-        <p class="imagine"><b>Try it:</b> fire each example. The code panel follows the syscall hello, or the instruction that faulted.</p>
+        <p class="story">Linux does not try to repair a divide by zero or a protection fault. The book says shells report a divide error as a “Floating exception”; today’s bash and dash print “Floating point exception,” and a bad address as “Segmentation fault.” A page fault is the famous restart: the handler maps the missing page and runs the same instruction again. System calls are traps. The number goes in <span class="mono">%rax</span>, the arguments in the argument registers, and a return between −4095 and −1 means −errno.</p>
+        <p class="story">The book’s divide example is C, where dividing by zero reaches the processor and faults. Rust checks every integer divisor before dividing and <b>panics</b> instead: it stops the program with a message, in every build. The bad-address read is in an <span class="mono">unsafe</span> block, where Rust trusts the programmer with a raw pointer. Reading through a pointer to no real memory is <b>undefined behaviour</b> in Rust, a promise our demo breaks on purpose; it faults as the book says. The book’s Figure 8.11 is a hello written in assembly; ours is Rust that places the same numbers in the same registers with <span class="mono">asm!</span>, Rust’s way to write machine instructions inline.</p>
+        <p class="imagine"><b>Try it:</b> fire each example. Each one ran for real; the black bar is what it reported. The code panel shows the line that faulted, or our hello and the instructions rustc made from it.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -361,9 +377,9 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
       <div class="copy">
         <span class="eyebrow">8.2.3 · private address space</span>
         <h2>Same number, different byte</h2>
-        <p class="story">Every process sees the same tidy map. On x86-64 Linux the code segment begins at <span class="mono">0x400000</span>. Above it sit data, a heap that grows up, a gap, shared libraries, a stack that grows down, and — at the very top — kernel memory the process is not allowed to touch.</p>
-        <p class="story">The addresses are private. Byte <span class="mono">0x400000</span> in process A is not byte <span class="mono">0x400000</span> in process B. The hardware translates each process’s addresses into different physical memory.</p>
-        <p class="imagine"><b>Try it:</b> tap a region. The code line that lives there lights up. Then press <b>Same address, two processes</b> and watch one virtual address name two different bytes.</p>
+        <p class="story">Every process sees the same tidy map: code, then data, a heap that grows up, a gap, shared libraries, a stack that grows down, and, at the very top, kernel memory the process is not allowed to touch. The book’s programs put code at <span class="mono">0x400000</span>. rustc builds a <b>position-independent executable</b>, code that works wherever it is loaded, so the loader picks the spot: our x86-64 run put <span class="mono">main</span> at <span class="mono">0x5555555691d0</span>. Linux normally moves it on every run; two of our Linux runs put it at different addresses.</p>
+        <p class="story">The addresses are private. The same address in process A and in process B names different bytes. The hardware translates each process’s addresses into different physical memory.</p>
+        <p class="imagine"><b>Try it:</b> tap a region. The code line that lives there lights up. Then press <b>Same address</b> and watch one virtual address hold two different values.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -389,7 +405,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <h2>A mode bit, and one legal way through it</h2>
         <p class="story">A <b>mode bit</b> in a control register says how much the running code is allowed to do. <b>User mode</b> cannot execute privileged instructions and cannot touch kernel memory. <b>Kernel mode</b> can.</p>
         <p class="story">The only way for user code to enter kernel mode is an exception — usually a system call. A program that wants kernel facts the polite way reads <span class="mono">/proc</span> (or <span class="mono">/sys</span>), which the kernel exports as text files. Reaching into a kernel address directly is a protection fault.</p>
-        <p class="imagine"><b>Try it:</b> run an ordinary add, a privileged halt, a peek at kernel memory, and a read of <span class="mono">/proc/cpuinfo</span>. Only the last one is a legal question.</p>
+        <p class="imagine"><b>Try it:</b> run an ordinary add, a privileged halt, a peek at kernel memory, and a read of <span class="mono">/proc/cpuinfo</span>. Our Rust tried all four for real. Only the last one is a legal question to the kernel.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -440,8 +456,8 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <span class="eyebrow">8.3 · system call error handling</span>
         <h2>−1 is not a pid</h2>
         <p class="story">Linux system-level functions such as <span class="mono">fork</span> report trouble by returning −1 and setting the global <span class="mono">errno</span>. Forgetting the check is how quiet bugs are born: the next line treats −1 as a process id.</p>
-        <p class="story">The book’s style, following Stevens, is a tiny helper <span class="mono">unix_error</span> and wrappers with capital names. <span class="mono">Fork</span> calls <span class="mono">fork</span> and never returns on error. The rest of the listings can stay readable.</p>
-        <p class="imagine"><b>Try it:</b> call <span class="mono">fork</span> when it works, and when the process table is full. Then switch the code to the wrapper and see the error path in one place.</p>
+        <p class="story">The book’s style, following Stevens, is a tiny helper <span class="mono">unix_error</span> and wrappers with capital names. <span class="mono">Fork</span> calls <span class="mono">fork</span> and never returns on error. The rest of the listings can stay readable. Rust’s std reports errors as values instead: a <b>Result</b> is either <span class="mono">Ok(value)</span> or <span class="mono">Err(error)</span>, and the <span class="mono">?</span> operator hands an Err back to the caller. <span class="mono">std::io::Error::last_os_error()</span> turns errno into such an error, message included, and <span class="mono">eprintln!</span> prints to the error stream.</p>
+        <p class="imagine"><b>Try it:</b> call <span class="mono">fork</span> when it works, and when the process limit is reached (we ran it as a user allowed one process). Then switch to the wrapper and watch the error travel up as a Result.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -468,7 +484,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <h2>Running, stopped, or gone</h2>
         <p class="story">From the moment it is created until it is reaped, a process is in one of three states. <b>Running</b> means it is either on a CPU or waiting for a turn. <b>Stopped</b> means it is suspended until something continues it. <b>Terminated</b> means it has stopped forever — it will never run another instruction — but it still exists until its parent collects it.</p>
         <p class="story">Stop signals include <span class="mono">SIGSTOP</span>, <span class="mono">SIGTSTP</span> (Ctrl+Z), <span class="mono">SIGTTIN</span>, and <span class="mono">SIGTTOU</span>. <span class="mono">SIGCONT</span> runs a stopped process again. Termination comes from a fatal signal, a return from <span class="mono">main</span>, or a call to <span class="mono">exit</span>.</p>
-        <p class="imagine"><b>Try it:</b> walk the three states. Illegal jumps — terminated back to running — are refused.</p>
+        <p class="imagine"><b>Try it:</b> walk the three states. Our Rust drove a real child through them and read its state letter from <span class="mono">/proc</span>: R running, T stopped, Z terminated. Illegal jumps, terminated back to running, are refused.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -492,8 +508,8 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
       <div class="copy">
         <span class="eyebrow">8.4.1 · obtaining process IDs</span>
         <h2>Every process wears a positive number</h2>
-        <p class="story">Each process has a unique positive <b>PID</b>. <span class="mono">getpid</span> returns your own. <span class="mono">getppid</span> returns your parent’s. Both return a <span class="mono">pid_t</span>.</p>
-        <p class="story">The parent does not change when you merely call these functions. It changes when the parent dies — the child is adopted, usually by <span class="mono">init</span>, PID 1.</p>
+        <p class="story">Each process has a unique positive <b>PID</b>. <span class="mono">getpid</span> returns your own. <span class="mono">getppid</span> returns your parent’s. Both return a <span class="mono">pid_t</span>, a C integer type. Rust’s std has both: <span class="mono">std::process::id()</span> and <span class="mono">std::os::unix::process::parent_id()</span>, which return a <span class="mono">u32</span>, an unsigned 32-bit integer.</p>
+        <p class="story">The parent does not change when you merely call these functions. It changes when the parent dies: the child is adopted, usually by <span class="mono">init</span>, PID 1 (or by a process that registered as a “subreaper”).</p>
         <p class="imagine"><b>Try it:</b> step a parent and the child it creates. Each box prints the two ids. Then remove the parent and watch <span class="mono">getppid</span> in the child become 1.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -520,6 +536,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <h2>Called once, returns twice</h2>
         <p class="story"><span class="mono">fork</span> creates a child that is almost a copy of the parent: same code, same data at that instant, same open files. It is called once and returns twice. The child receives 0. The parent receives the child’s PID. On error the parent receives −1 and there is no child.</p>
         <p class="story">After the copy, the address spaces diverge. In the book’s example <span class="mono">x</span> starts at 1. The child increments its copy and prints 2. The parent decrements its copy and prints 0. They share the screen, so both lines appear. Two nested forks with no <span class="mono">if</span> create four processes, and four hellos can appear in any order.</p>
+        <p class="story">Rust’s std has no fork. Its <span class="mono">std::process::Command</span> runs a named program in a new child; your code never carries on in a copy. To show the book’s idea, the listing calls the C library’s fork inside <span class="mono">unsafe</span>. That is sound here only because our programs have one thread: after a fork in a multithreaded program, the child may call only async-signal-safe functions until it runs execve. On Linux, strace shows that fork as a single <span class="mono">clone</span> system call.</p>
         <p class="imagine"><b>Try it:</b> step the private-<span class="mono">x</span> example. Then switch to <b>Four hellos</b> and run processes in different orders. The set of lines stays the same; the order does not.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -546,12 +563,12 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <span class="eyebrow">8.4.3 · reaping child processes</span>
         <h2>Finished, still wearing the name tag</h2>
         <p class="story">A terminated process that has not been <b>reaped</b> is a <b>zombie</b>. It is not running, but the kernel keeps a small record — the PID and the exit status — until the parent collects it with <span class="mono">waitpid</span>.</p>
-        <p class="story">If the parent dies first, <span class="mono">init</span> (PID 1) adopts the orphans and reaps them. A long-running program such as a shell must not rely on that. <span class="mono">waitpid(-1, …)</span> reaps any child, in whatever order they finish. Storing the PIDs and waiting for each one makes the order deterministic. <span class="mono">WNOHANG</span> returns 0 instead of blocking when nobody has exited yet.</p>
+        <p class="story">If the parent dies first, <span class="mono">init</span> (PID 1) adopts the orphans and reaps them. A long-running program such as a shell must not rely on that. <span class="mono">waitpid(-1, …)</span> reaps any child, in whatever order they finish. Storing the PIDs and waiting for each one makes the order deterministic. Rust’s std can wait only for a child it started itself, with <span class="mono">Child::wait</span>; “any child” needs the C library’s waitpid. <span class="mono">WNOHANG</span> returns 0 instead of blocking when nobody has exited yet; std’s <span class="mono">Child::try_wait</span> does the same and returns <span class="mono">None</span>. std never waits on its own, not even when a Child is dropped, so a forgotten Child becomes a zombie.</p>
         <p class="imagine"><b>Try it:</b> let both children exit, look at the zombies, then reap. Switch to creation order, or to “parent exits first.”</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>A terminated unreaped process is a zombie. The kernel keeps it until the parent reaps it and reads the exit status. If the parent terminates first, init (PID 1) adopts the orphans. <span class="mono">waitpid(pid, statusp, options)</span> returns the child’s PID, or 0 with <span class="mono">WNOHANG</span>, or −1 on error. <span class="mono">pid &gt; 0</span> waits for that child; <span class="mono">pid == -1</span> waits for any. <span class="mono">wait(&amp;status)</span> is <span class="mono">waitpid(-1, &amp;status, 0)</span>.</p>
+            <p>A terminated unreaped process is a zombie. The kernel keeps it until the parent reaps it and reads the exit status. If the parent terminates first, init (PID 1) adopts the orphans. <span class="mono">waitpid</span> takes a pid, a place to store the status, and options. It returns the child’s PID, or 0 with <span class="mono">WNOHANG</span>, or −1 on error. A positive pid waits for that child; −1 waits for any. <span class="mono">wait</span> is waitpid for any child, with no options.</p>
             <p>Figure 8.18 (N = 2) reaps in no particular order; the sample run shows child 22966 with status 100, then 22967 with 101. Figure 8.19 stores the PIDs and waits in creation order. Either order is correct. <span class="mono">WIFEXITED</span> and <span class="mono">WEXITSTATUS</span> read a normal exit. No children means <span class="mono">ECHILD</span>; an interrupting signal means <span class="mono">EINTR</span>.</p>
             <p class="cite">pp.&nbsp;779–785 · 8.4.3 Reaping Child Processes</p>
           </div>
@@ -574,7 +591,8 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <h2>Sleep for three seconds, or until a signal</h2>
         <p class="story"><span class="mono">sleep(secs)</span> suspends the caller. It returns 0 if the whole interval elapsed. If a signal wakes it early, it returns the number of seconds still left.</p>
         <p class="story"><span class="mono">pause</span> sleeps until some signal arrives, and always returns −1. It does not take a duration. A signal you are not catching may kill the process instead of waking it into your code — that story continues in 8.5.</p>
-        <p class="imagine"><b>Try it:</b> run a 3-second sleep with no signal, then interrupt it at 1 second. Then <span class="mono">pause</span> and deliver <span class="mono">SIGALRM</span>.</p>
+        <p class="story">Rust’s <span class="mono">std::thread::sleep</span> promises to sleep for <i>at least</i> the time you ask: if a signal interrupts it, std asks again for the rest. So it never returns early with seconds left. To show the book’s behaviour, the listing also calls the C library’s sleep.</p>
+        <p class="imagine"><b>Try it:</b> run a 3-second sleep with no signal, then interrupt it at 1 second. Try Rust’s thread::sleep with the same signal. Then <span class="mono">pause</span> and deliver <span class="mono">SIGALRM</span>.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -600,11 +618,12 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <h2>Same process, different program</h2>
         <p class="story"><span class="mono">execve</span> loads a new program into the <b>current</b> process. On success it does not return: the code, data, heap, and stack are gone, replaced by the new program, which starts at its <span class="mono">main</span>. The PID stays. Open file descriptors stay.</p>
         <p class="story">The new <span class="mono">main</span> receives <span class="mono">argc</span>, <span class="mono">argv</span>, and <span class="mono">envp</span>. By convention <span class="mono">argv[0]</span> is the program name. The list ends with <span class="mono">NULL</span>. The environment is the same shape: strings like <span class="mono">USER=ada</span>, also <span class="mono">NULL</span>-terminated. <span class="mono">getenv</span>, <span class="mono">setenv</span>, and <span class="mono">unsetenv</span> edit that array.</p>
-        <p class="imagine"><b>Try it:</b> press <b>execve</b>. Watch the program name change and the PID stay. On failure the call returns −1 and the old program continues.</p>
+        <p class="story">Rust’s std does this job safely. A <span class="mono">Command</span> collects the program, its argv and its environment; each method call adds one thing and hands the command back, so the calls chain. <span class="mono">arg0</span> sets argv[0], and <span class="mono">env_clear</span> starts the environment empty. Unix’s <span class="mono">exec</span> builds the NULL-terminated lists for you; on Linux, strace shows it ending in the execve system call. Like execve, it comes back only on failure, with an error that says why.</p>
+        <p class="imagine"><b>Try it:</b> press <b>execve /bin/sh</b>. Watch the program change and the PID stay: sh printed our own PID. On failure the call returns an error and the old program continues.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p><span class="mono">execve(filename, argv, envp)</span> is called once and never returns on success (−1 on error). Figure 8.20’s <span class="mono">argv</span> holds the program name, its arguments, and a NULL pointer. Figure 8.21 is the environment list. Figure 8.22 shows those strings on the user stack when the new program starts. <span class="mono">main</span> receives <span class="mono">argc</span> in <span class="mono">%rdi</span>, <span class="mono">argv</span> in <span class="mono">%rsi</span>, and <span class="mono">envp</span> in <span class="mono">%rdx</span>.</p>
+            <p><span class="mono">execve</span> takes a filename, an argv list and an envp list. It is called once and never returns on success (−1 on error). Figure 8.20’s <span class="mono">argv</span> holds the program name, its arguments, and a NULL pointer. Figure 8.21 is the environment list. Figure 8.22 shows those strings on the user stack when the new program starts. <span class="mono">main</span> receives <span class="mono">argc</span> in <span class="mono">%rdi</span>, <span class="mono">argv</span> in <span class="mono">%rsi</span>, and <span class="mono">envp</span> in <span class="mono">%rdx</span>.</p>
             <p class="cite">pp.&nbsp;786–789 · 8.4.5 Loading and Running Programs</p>
           </div>
         </details>
@@ -626,7 +645,8 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <h2>A shell is a loop around those two calls</h2>
         <p class="story">The book’s simple shell prints a prompt, reads a line, and evaluates it. A blank line does nothing. <span class="mono">quit</span> is a <b>builtin</b>: the shell handles it itself. Anything else is a program name.</p>
         <p class="story">The shell forks. The child <span class="mono">execve</span>s the program. If the line did not end with <span class="mono">&amp;</span>, the parent waits — a foreground job. If it did, the parent prints the PID and takes another command — a background job. This shell does not reap background children. They become zombies when they exit. Signals, in the next section, are how a real shell notices.</p>
-        <p class="imagine"><b>Try it:</b> run <span class="mono">quit</span>, a foreground <span class="mono">ls</span>, and <span class="mono">ls &amp;</span>. Step <span class="mono">eval</span> and watch which branch the code takes.</p>
+        <p class="story">Our Rust shell is the book’s, built on std. <span class="mono">Command::spawn</span> does the work of fork and execve in one call, and <span class="mono">Child::wait</span> is the waitpid. spawn returns a Result, and <span class="mono">match</span> picks the branch: <span class="mono">Ok</span> hands over the child, <span class="mono">Err</span> says why the program could not start. We fed it five real lines on Linux.</p>
+        <p class="imagine"><b>Try it:</b> run <span class="mono">quit</span>, a foreground <span class="mono">ls</span>, and <span class="mono">sleep 1 &amp;</span>. Step <span class="mono">eval</span> and watch which branch the code takes.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -650,8 +670,8 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
       <div class="copy">
         <span class="eyebrow">8.5 · signals</span>
         <h2>A small message from the kernel</h2>
-        <p class="story">A <b>signal</b> is a tiny message that the kernel delivers to a process because something exceptional happened. Linux has 30 types. Some are hardware faults turned into software events: divide by zero becomes <span class="mono">SIGFPE</span> (8), an illegal instruction becomes <span class="mono">SIGILL</span> (4), a bad memory reference becomes <span class="mono">SIGSEGV</span> (11).</p>
-        <p class="story">Others are higher-level. Ctrl+C is <span class="mono">SIGINT</span> (2) to the foreground group. <span class="mono">SIGKILL</span> (9) forces termination. A child that stops or exits causes <span class="mono">SIGCHLD</span> (17) in the parent.</p>
+        <p class="story">A <b>signal</b> is a tiny message that the kernel delivers to a process because something exceptional happened. The book’s Figure 8.26 lists 30 types; today’s Linux numbers 31 standard signals, plus real-time ones. Some are hardware faults turned into software events: divide by zero becomes <span class="mono">SIGFPE</span> (8), an illegal instruction becomes <span class="mono">SIGILL</span> (4), a bad memory reference becomes <span class="mono">SIGSEGV</span> (11).</p>
+        <p class="story">Others are higher-level. Ctrl+C is <span class="mono">SIGINT</span> (2) to the foreground group. <span class="mono">SIGKILL</span> (9) forces termination. A child that stops or exits causes <span class="mono">SIGCHLD</span> (17) in the parent. One Rust twist: an integer divide by zero panics before the processor divides, so a Rust program never gets SIGFPE from it.</p>
         <p class="imagine"><b>Try it:</b> press an event. The kernel stamps the matching signal number onto the destination process.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -704,7 +724,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <h2>One pid, or a whole group</h2>
         <p class="story">Processes live in <b>process groups</b>. A child normally joins its parent’s group. A shell puts each job in its own group, so Ctrl+C can hit the foreground job and not the shell, and not the background jobs.</p>
         <p class="story"><span class="mono">/bin/kill -9 15213</span> sends <span class="mono">SIGKILL</span> to one PID. A negative PID means the group: <span class="mono">kill -9 -20</span> hits every member of group 20. <span class="mono">alarm(secs)</span> asks the kernel to send you <span class="mono">SIGALRM</span> later. <span class="mono">SIGKILL</span> and <span class="mono">SIGSTOP</span> cannot be caught or ignored.</p>
-        <p class="imagine"><b>Try it:</b> the picture is Figure 8.28’s groups. Send Ctrl+C, Ctrl+Z, a single-PID kill, a group kill, or an alarm.</p>
+        <p class="imagine"><b>Try it:</b> the picture is our Linux run, shaped like Figure 8.28: our program, a foreground group of three, and two background groups made with std’s <span class="mono">process_group</span>. Send Ctrl+C, Ctrl+Z, a single-PID kill, a group kill, or an alarm.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -730,6 +750,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <h2>Default, ignore, or catch</h2>
         <p class="story">When a process receives a pending unblocked signal, it does one of three things. The <b>default</b> action is often “terminate.” It can <b>ignore</b> the signal. Or it can <b>catch</b> it by running a handler the program installed, then resume.</p>
         <p class="story">A handler can itself be interrupted by a different signal. Figure 8.31 shows handler S running, then handler T, then S again, then the main program. <span class="mono">SIGKILL</span> and <span class="mono">SIGSTOP</span> still cannot be caught or ignored.</p>
+        <p class="story">Rust’s std has no API to install a signal handler. Programs use a crate (ctrlc, signal-hook) or the C library’s <span class="mono">sigaction</span> through FFI. The listings declare the C library’s <span class="mono">signal</span> and write each handler as an <span class="mono">extern "C" fn</span>, a function with the C calling convention, so the C side can call it.</p>
         <p class="imagine"><b>Try it:</b> set <span class="mono">SIGINT</span> to default, ignore, or catch. Then play the nested-handler story: signal <span class="mono">t</span> arrives while handler <span class="mono">s</span> is running.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -780,9 +801,9 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
       <div class="copy">
         <span class="eyebrow">8.5.5 · writing signal handlers</span>
         <h2>Tiny, safe, and ready for more than one</h2>
-        <p class="story">A handler shares the process with the main program, and it can run between any two instructions. That makes it a hard place to write code. Keep it short. Save and restore <span class="mono">errno</span>. Only call functions that are <b>async-signal-safe</b>: <span class="mono">write</span>, <span class="mono">waitpid</span>, and <span class="mono">_exit</span> are; <span class="mono">printf</span>, <span class="mono">malloc</span>, and <span class="mono">exit</span> are not. The book’s <span class="mono">Sio_puts</span> is a safe print.</p>
+        <p class="story">A handler shares the process with the main program, and it can run between any two instructions. That makes it a hard place to write code. Keep it short. Save and restore <span class="mono">errno</span>. Only call functions that are <b>async-signal-safe</b>: <span class="mono">write</span>, <span class="mono">waitpid</span>, and <span class="mono">_exit</span> are; the book’s C library calls <span class="mono">printf</span>, <span class="mono">malloc</span>, and <span class="mono">exit</span> are not. Rust’s std promises nothing of the kind for its own functions. <span class="mono">println!</span> locks stdout’s shared buffer, anything that allocates (a <span class="mono">Vec</span> or a <span class="mono">String</span>) goes through an allocator that std does not promise is safe there (in our Linux programs, the C library’s malloc), and <span class="mono">std::process::exit</span> calls the C library’s exit. We put println! in a handler while main was printing: 3 of 37 Linux runs aborted. The book’s <span class="mono">Sio_puts</span> is a safe print; the setup block’s <span class="mono">sio_puts</span> is the same idea in Rust.</p>
         <p class="story">Pending bits do not count. If three children exit before the parent receives <span class="mono">SIGCHLD</span>, one bit is set. A handler that reaps a single child leaves the others as zombies. A handler that loops on <span class="mono">waitpid</span> until it returns −1 reaps all of them.</p>
-        <p class="imagine"><b>Try it:</b> compare the unsafe <span class="mono">printf</span> handler with <span class="mono">Sio_puts</span>. Then exit three children and reap one versus reap-in-a-loop.</p>
+        <p class="imagine"><b>Try it:</b> compare the <span class="mono">println!</span> handler with <span class="mono">sio_puts</span>. Then exit three children and reap one versus reap-in-a-loop.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -809,7 +830,7 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <h2>The child can finish before you write its name down</h2>
         <p class="story">A shell keeps a list of jobs. The parent forks, then adds the child to the list. The <span class="mono">SIGCHLD</span> handler deletes the job after it reaps the child. If the child exits in the crack — after <span class="mono">fork</span> returns, before <span class="mono">addjob</span> — the handler deletes nothing, and <span class="mono">addjob</span> then records a job that will never be removed.</p>
         <p class="story">You can run this a billion times and miss it. The fix blocks <span class="mono">SIGCHLD</span> before <span class="mono">fork</span> and unblocks only after <span class="mono">addjob</span>. The child inherits that blocked set, so the child must unblock before <span class="mono">execve</span>.</p>
-        <p class="imagine"><b>Try it:</b> run the race with a fast child, then run the blocked version. The job list is the picture; the code highlights the window.</p>
+        <p class="imagine"><b>Try it:</b> run the race, then the blocked version. Our Rust widened the window with a 300 ms sleep so the race happens every run, and kept the job list in atomics because the handler changes it too. The code highlights the window.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -833,13 +854,13 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
       <div class="copy">
         <span class="eyebrow">8.5.7 · explicitly waiting for signals</span>
         <h2>Spin, pause forever, or sigsuspend</h2>
-        <p class="story">Sometimes the main program must wait until a handler has run. A spin loop <span class="mono">while (!pid);</span> is correct and wasteful. Putting <span class="mono">pause</span> in that loop looks kinder, and it has a race: if <span class="mono">SIGCHLD</span> arrives after the test and before <span class="mono">pause</span>, <span class="mono">pause</span> sleeps forever. <span class="mono">sleep(1)</span> in the loop is merely slow.</p>
+        <p class="story">Sometimes the main program must wait until a handler has run. A spin loop that keeps testing <span class="mono">pid</span> until it is nonzero is correct and wasteful. Putting <span class="mono">pause</span> in that loop looks kinder, and it has a race: if <span class="mono">SIGCHLD</span> arrives after the test and before <span class="mono">pause</span>, <span class="mono">pause</span> sleeps forever. <span class="mono">sleep(1)</span> in the loop is merely slow.</p>
         <p class="story"><span class="mono">sigsuspend</span> replaces the blocked set and waits for a signal as one atomic step, then restores the mask when it returns. The signal cannot sneak into the gap.</p>
-        <p class="imagine"><b>Try it:</b> deliver the signal in the gap. Spin still finishes. Pause gets stuck. <span class="mono">sigsuspend</span> wakes up.</p>
+        <p class="imagine"><b>Try it:</b> deliver the signal in the gap. Spin still finishes. Pause gets stuck (our run widened the gap so it does every time). <span class="mono">sigsuspend</span> wakes up.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>Figure 8.41 waits in a spin loop until the handler stores a nonzero PID. It is correct and wasteful. <span class="mono">while (!pid) pause();</span> races: a signal in the window after the test and before <span class="mono">pause</span> sleeps forever. <span class="mono">sleep</span> in the loop is too slow. Figure 8.42 uses <span class="mono">sigsuspend</span>, which atomically unblocks the signals in the given mask and suspends until a handler returns, then restores the previous blocked set.</p>
+            <p>Figure 8.41 waits in a spin loop until the handler stores a nonzero PID. It is correct and wasteful. Calling <span class="mono">pause</span> inside that loop races: a signal in the window after the test and before <span class="mono">pause</span> sleeps forever. <span class="mono">sleep</span> in the loop is too slow. Figure 8.42 uses <span class="mono">sigsuspend</span>, which atomically unblocks the signals in the given mask and suspends until a handler returns, then restores the previous blocked set.</p>
             <p class="cite">pp.&nbsp;814–817 · 8.5.7 Explicitly Waiting for Signals</p>
           </div>
         </details>
@@ -859,9 +880,11 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
       <div class="copy">
         <span class="eyebrow">8.6 · nonlocal jumps</span>
         <h2>Called once, returns again from somewhere else</h2>
-        <p class="story"><span class="mono">setjmp</span> saves the calling environment — program counter, stack pointer, registers — and returns 0. <span class="mono">longjmp</span> restores that environment and makes the original <span class="mono">setjmp</span> return again, this time with a nonzero value. It is the C version of a jump that skips stack frames. Use it as the test of a <span class="mono">switch</span>, not as <span class="mono">rc = setjmp(env)</span>.</p>
+        <p class="story"><span class="mono">setjmp</span> saves the calling environment — program counter, stack pointer, registers — and returns 0. <span class="mono">longjmp</span> restores that environment and makes the original <span class="mono">setjmp</span> return again, this time with a nonzero value. It is C’s way to jump across stack frames. The C standard allows its result only as a direct test, as in the book’s <span class="mono">switch</span>, never saved in a variable.</p>
         <p class="story">From a signal handler, the signal-aware pair is <span class="mono">sigsetjmp</span> / <span class="mono">siglongjmp</span>. The book’s restart program installs the handler only after the first <span class="mono">sigsetjmp</span>, so the bookmark exists before Ctrl+C can fire. Skipping frames can leak anything those frames meant to free. C++ and Java exceptions are a more structured version of this idea.</p>
-        <p class="imagine"><b>Try it:</b> step <span class="mono">main → foo → bar</span> and jump back with code 2. Then switch to the Ctrl+C restart loop.</p>
+        <p class="story">Rust has no setjmp, and calling the C one from Rust is <b>unsound</b>: it can break the program even when every line looks right. Two reasons. C compilers treat setjmp specially, because it returns twice; rustc has no stable way to say that about a foreign function (an unstable attribute for it was removed in Rust 1.78), so the optimizer may keep a value in a register that is wrong when setjmp returns the second time. And longjmp throws frames away without running their cleanup code; the Rust Reference lists that as undefined behaviour for frames that own values with destructors.</p>
+        <p class="story">Rust does this job in structured ways. A function returns a <b>Result</b>, and <span class="mono">?</span> carries an error up frame by frame, freeing what each frame owns. Or the program <b>panics</b>: with the default panic strategy, Rust <b>unwinds</b> the stack, running each frame’s cleanup, until <span class="mono">catch_unwind</span> stops it. A signal handler that wants a restart sets an atomic flag, and main starts over by itself.</p>
+        <p class="imagine"><b>Try it:</b> step <span class="mono">main → foo → bar</span> with Result and <span class="mono">?</span>, then with a panic, and watch each buffer get freed. Then switch to the Ctrl+C restart loop.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -886,8 +909,8 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <span class="eyebrow">8.7 · tools for manipulating processes</span>
         <h2>Look at a process without rewriting it</h2>
         <p class="story">Linux already has tools for the ideas in this chapter. <span class="mono">strace</span> prints every system call a program makes. <span class="mono">ps</span> lists processes, including zombies. <span class="mono">top</span> shows who is using the CPU. <span class="mono">pmap</span> prints a process’s memory map. <span class="mono">/proc</span> is the kernel’s data, as text files — <span class="mono">cat /proc/loadavg</span> is the load average.</p>
-        <p class="story">Compile with <span class="mono">-static</span> if you want an <span class="mono">strace</span> that is not flooded with shared-library calls.</p>
-        <p class="imagine"><b>Try it:</b> point each tool at the same toy process: a shell, a running child, and a zombie. The code panel is the command. The black bar is what it prints.</p>
+        <p class="story">The book suggests compiling with <span class="mono">-static</span> for an <span class="mono">strace</span> that is not flooded with shared-library calls. rustc’s switch is <span class="mono">-C target-feature=+crt-static</span>; it cut our fork program’s trace from 80 lines to 49.</p>
+        <p class="imagine"><b>Try it:</b> point each tool at the same Rust program on Linux: a parent, a busy child, and a zombie. The code panel is the command. The black bar is what it printed.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -911,9 +934,9 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
       <div class="copy">
         <span class="eyebrow">8.8 · summary</span>
         <h2>The same idea at three heights</h2>
-        <p class="story">Exceptional control flow is how a computer does more than one thing. At the bottom, hardware exceptions yank the processor into a handler. In the middle, the kernel uses that mechanism to build processes, switches, and signals. At the top, an application catches signals or jumps nonlocally back to a bookmark.</p>
+        <p class="story">Exceptional control flow is how a computer does more than one thing. At the bottom, hardware exceptions yank the processor into a handler. In the middle, the kernel uses that mechanism to build processes, switches, and signals. At the top, an application catches signals, or (in Rust) hands errors back up through its frames.</p>
         <p class="story">Concurrency in this chapter is mostly one core taking turns. Chapter 12 comes back when several flows really share data on purpose.</p>
-        <p class="imagine"><b>Try it:</b> tap a layer. The code changes to the program that lives at that height.</p>
+        <p class="imagine"><b>Try it:</b> tap a layer. The code changes to a piece of this page’s Rust that lives at that height.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -938,9 +961,10 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
       <div class="tradeoffs">
         <div class="tradeoff"><div class="side"><h4>Smooth walk</h4><p>The next instruction sits immediately after this one.</p></div><div class="vs">vs</div><div class="side"><h4>Exception</h4><p>An event indexes the exception table and runs a handler.</p></div></div>
         <div class="tradeoff"><div class="side"><h4>User mode</h4><p>No privileged instructions, no kernel addresses.</p></div><div class="vs">vs</div><div class="side"><h4>Kernel mode</h4><p>The handler may use every resource. Only an exception gets you there.</p></div></div>
-        <div class="tradeoff"><div class="side"><h4>fork</h4><p>New process, same program, two returns. The child sees 0.</p></div><div class="vs">vs</div><div class="side"><h4>execve</h4><p>Same process, new program, same PID. Success never returns.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>fork</h4><p>New process, same program, two returns. The child sees 0.</p></div><div class="vs">vs</div><div class="side"><h4>execve</h4><p>Same process, new program, same PID. Success never returns. Rust’s Command::spawn does both.</p></div></div>
         <div class="tradeoff"><div class="side"><h4>waitpid(-1)</h4><p>Reap any child. Finish order is a property of this run.</p></div><div class="vs">vs</div><div class="side"><h4>waitpid(pid)</h4><p>Reap the children in the order you stored.</p></div></div>
-        <div class="tradeoff"><div class="side"><h4>One SIGCHLD reap</h4><p>A pending bit is not a count. A child can stay a zombie.</p></div><div class="vs">vs</div><div class="side"><h4>while (waitpid)</h4><p>Each delivery means “at least one.” Loop until the room is empty.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>One SIGCHLD reap</h4><p>A pending bit is not a count. A child can stay a zombie.</p></div><div class="vs">vs</div><div class="side"><h4>Reap in a loop</h4><p>Each delivery means “at least one.” Loop until the room is empty.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4>longjmp</h4><p>Jump back over frames. Their cleanup never runs; from Rust it is unsound.</p></div><div class="vs">vs</div><div class="side"><h4>Result and ?</h4><p>Return the error frame by frame. Each frame frees what it owns.</p></div></div>
         <div class="tradeoff"><div class="side"><h4>pause after a test</h4><p>The signal can arrive in the crack. You sleep forever.</p></div><div class="vs">vs</div><div class="side"><h4>sigsuspend</h4><p>Unblock and sleep as one step.</p></div></div>
       </div>
     </div>
@@ -962,9 +986,14 @@ static PID: AtomicI32 = AtomicI32::new(0);   // written by a handler, read by ma
         <div class="word"><dt>fork / execve</dt><dd>Called once, returns twice. Versus called once and, on success, never returns.</dd></div>
         <div class="word"><dt>pending / blocked</dt><dd>Two bit vectors. At most one pending signal of each type. Blocked means “not yet.”</dd></div>
         <div class="word"><dt>process group</dt><dd>The set of processes a single Ctrl+C or a negative kill pid can hit together.</dd></div>
-        <div class="word"><dt>async-signal-safe</dt><dd>OK to call from a handler. write and waitpid are; printf, malloc, and exit are not.</dd></div>
+        <div class="word"><dt>async-signal-safe</dt><dd>OK to call from a handler. write and waitpid are; printf, malloc and exit are not, and Rust’s println! is not either.</dd></div>
         <div class="word"><dt>sigsuspend</dt><dd>Atomically swap the blocked set and wait for a handler to run.</dd></div>
-        <div class="word"><dt>setjmp / longjmp</dt><dd>Save a calling environment and later snap back to it, skipping the frames in between.</dd></div>
+        <div class="word"><dt>unsafe / extern "C"</dt><dd>An unsafe extern "C" block declares C library functions; an extern "C" fn is a Rust function with C’s calling convention, so C can call it (a signal handler). unsafe marks a call the compiler cannot check, so you vouch for it.</dd></div>
+        <div class="word"><dt>setjmp / longjmp</dt><dd>C’s way to save a calling environment and later snap back to it, skipping the frames in between. Unsound to call from Rust.</dd></div>
+        <div class="word"><dt>Result / ?</dt><dd>A value that is Ok(something) or Err(an error). ? returns the Err to the caller at once.</dd></div>
+        <div class="word"><dt>panic / unwinding</dt><dd>Rust stopping on a bug. With the default panic strategy it unwinds: leaves each frame and runs its cleanup; catch_unwind can stop it.</dd></div>
+        <div class="word"><dt>Command / Child</dt><dd>std’s way to start a program in a new process, and the handle to wait for it, poll it, or kill it.</dd></div>
+        <div class="word"><dt>position-independent executable</dt><dd>Code that works wherever it is loaded, so the loader can put it at a different address each run. rustc’s default on Linux.</dd></div>
       </dl>
     </div>
   </section>

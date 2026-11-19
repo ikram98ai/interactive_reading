@@ -52,10 +52,6 @@
   .cp-note.good { background: var(--mint-soft); border-color: var(--mint); }
   .cp-note.bad { background: var(--coral-soft); border-color: var(--coral); }
   .cp-note.warn { background: var(--sun-soft); border-color: var(--sun); }
-  .cp-lang { margin-left: auto; display: inline-flex; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 9px; padding: 2px; gap: 2px; }
-  .cp-lang button { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: 700 12px/1 var(--f-mono); padding: 6px 10px; border-radius: 7px; cursor: pointer; }
-  .cp-lang button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
-  .first .cp-lang { margin: 8px 0 0; display: flex; width: max-content; }
   .cp-caret { position: absolute; top: 1px; bottom: 1px; width: 1ch; border-radius: 3px; background: color-mix(in srgb, var(--sun) 60%, transparent); left: calc(46px + var(--col) * 1ch); }
   .cp-out { margin: 0; padding: 10px 14px; background: var(--ink); color: var(--bg); font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; min-height: 22px; }
   .t-cm { color: var(--ink-3); font-style: italic; }
@@ -69,6 +65,7 @@
   .t-pr { color: color-mix(in srgb, var(--mint) 70%, var(--ink)); font-weight: 700; }
   .t-of { color: var(--ink-3); }
   .t-hx { font-weight: 700; }
+  .t-pp { color: var(--lilac); }
   .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
   @media (prefers-reduced-motion: reduce) { .fade, .cp-body li { transition: none; } }
 </style>
@@ -83,7 +80,7 @@
       <h1>Processor Architecture</h1>
       <p class="lede">The instruction set promises one job at a time. The chip underneath can keep five jobs in the air — and still finish with the same registers the promise described.</p>
       <p class="quote">“the actual way a modern processor operates can be quite different from the model of computation implied by the ISA.” — Bryant &amp; O’Hallaron</p>
-      <p class="first"><b>New here?</b> Every numbered subsection below is one little machine. Read the short story, then press the buttons on the picture. Under each machine is <b>the code it is running</b>: the highlighted line is the step happening now, and the small tags are live values. Press <b>C</b> or <b>Rust</b>. These listings are Y86-64 and HCL, the book’s processor language, so both sides show the same instructions. You cannot break anything. Grown-up details hide under “What the book says.”</p>
+      <p class="first"><b>New here?</b> Every numbered subsection below is one little machine. Read the short story, then press the buttons on the picture. Under each machine is <b>the code it is running</b>: the highlighted line is the step happening now, and the small tags are live values. Most listings are Y86-64 and HCL, the book’s processor languages, shown exactly as the book prints them. Where the book starts from a C function, the page shows the same function in Rust, and the x86-64 beside it is what rustc made from that Rust. You cannot break anything. Grown-up details hide under “What the book says.”</p>
       <nav class="toc" aria-label="Scenes in this chapter">
         <a href="#state"><span class="n">4.1.1</span>Visible state</a>
         <a href="#instr"><span class="n">4.1.2</span>Instructions</a>
@@ -244,14 +241,15 @@
       <div class="copy">
         <span class="eyebrow">4.1.5 · Y86-64 programs</span>
         <h2>The same loop, with the constants pulled out</h2>
-        <p class="story">Leila wants the sum of a list. x86-64 can add a memory word straight into a register. Y86-64 cannot. She loads the word with <code>mrmovq</code>, then <code>addq</code>. She also cannot add an immediate, so the step “pointer plus 8” and “count minus 1” live in <code>%r8</code> and <code>%r9</code>.</p>
-        <p class="story"><code>subq</code> sets the lamps, so she does not need a separate test. She does need one <code>andq</code> before the loop, so the first <code>jne</code> sees a real zero flag. The picture uses a tiny list, 3 + 5 + 7, so each add fits on the screen. The book’s four-word array sums to <code>0xabcdabcdabcdabcd</code>.</p>
+        <p class="story">Leila wants the sum of a list. In Rust she writes <code>fn sum(xs: &amp;[i64]) -&gt; i64</code>. The argument is a <b>slice</b>: a borrowed view of the list that is two words long, the address of the first element and the number of elements. When rustc compiled it for x86-64 Linux, the address arrived in <code>%rdi</code> and the length in <code>%rsi</code>, the same two registers the book’s Y86-64 code uses for its start address and count.</p>
+        <p class="story">rustc’s x86-64 adds each element straight from memory into <code>%rax</code> with one <code>addq</code>. Y86-64 cannot. Leila loads the word with <code>mrmovq</code>, then <code>addq</code>. She also cannot add an immediate, so the steps “address plus 8” and “count minus 1” use constants kept in <code>%r8</code> and <code>%r9</code>. And where rustc reaches each element as base plus an offset register, <code>(%rdi,%rcx)</code>, Y86-64 has only base plus displacement, so her loop moves the address itself.</p>
+        <p class="story"><code>subq</code> sets the lamps, so she does not need a separate test; rustc’s loop spends a <code>cmpq</code> on it instead. She does need one <code>andq</code> before the loop, so the first <code>jne</code> sees a real zero flag, much as rustc opens with <code>testq</code> to skip an empty slice. The picture uses a tiny list, 3 + 5 + 7, so each add fits on the screen. The book’s four-word array sums to <code>0xabcdabcdabcdabcd</code>.</p>
         <p class="story">Words that start with a dot are <b>assembler directives</b>. <code>.pos 0</code> is where every Y86-64 program starts. <code>.pos 0x200</code> places the stack. The assembler <b>yas</b> writes addresses and bytes. The simulator <b>yis</b> runs the program without pretending to be any particular pipeline.</p>
-        <p class="imagine"><b>Try it:</b> press <b>Step</b> or <b>Play</b>. <code>%rax</code> should become 15, and the loop stops when <code>%rsi</code> hits 0 and ZF turns on. The code panel is the same loop as Figure 4.6.</p>
+        <p class="imagine"><b>Try it:</b> press <b>Step</b> or <b>Play</b>. <code>%rax</code> should become 15, and the loop stops when <code>%rsi</code> hits 0 and ZF turns on. The code panel is the same Y86-64 loop as Figure 4.6. The <b>sum.rs</b> tab is the function it computes, in Rust; its short comments explain each new piece of Rust. The <b>sum.s</b> tab is the x86-64 rustc made from it, built with <code>-C opt-level=s</code> (optimize for size); at <code>opt-level=1</code> it unrolled the loop eight adds at a time, which hides the one-add-per-element shape. Both tabs follow the step the machine is on.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>Figure 4.6 compares x86-64 and Y86-64 for <code>long sum(long *start, long count)</code>. The Y86-64 code loads the constants 8 and 1 (lines 2–3) because arithmetic instructions cannot take immediates. Reading <code>*start</code> and adding it takes two instructions, <code>mrmovq</code> then <code>addq</code>, where x86-64 uses one <code>addq</code> from memory. The <code>subq</code> that decrements the count also sets the condition codes, so the <code>testq</code> in the gcc output is unnecessary — but an <code>andq %rsi, %rsi</code> must set the codes before the loop.</p>
+            <p>Figure 4.6 compares x86-64 and Y86-64 code for the book’s C function <code>sum</code>, which takes a pointer to the start of an array of 8-byte integers and a count, and adds up that many elements. The x86-64 side is the book’s, compiled by gcc from that C. The Y86-64 code loads the constants 8 and 1 (lines 2–3) because arithmetic instructions cannot take immediates. Reading the element the pointer names and adding it takes two instructions, <code>mrmovq</code> then <code>addq</code>, where x86-64 uses one <code>addq</code> from memory. The <code>subq</code> that decrements the count also sets the condition codes, so the <code>testq</code> in the gcc output is unnecessary — but an <code>andq %rsi, %rsi</code> must set the codes before the loop.</p>
             <p>Figure 4.7 is a complete program: <code>.pos 0</code>, an <code>irmovq</code> that points <code>%rsp</code> at <code>stack</code>, a call to <code>main</code>, then <code>halt</code>. The array is four quad words, aligned with <code>.align 8</code>. The stack is placed at <code>0x200</code> with <code>.pos 0x200</code> and grows toward lower addresses. Figure 4.8 is the <b>yas</b> listing: an address and 1 to 10 bytes on each instruction or data line.</p>
             <p><b>yis</b> models the instruction set, not a particular processor. On the sample it stops in 34 steps at PC = 0x13, status HLT, CC Z=1 S=0 O=0. <code>%rax</code> becomes <code>0x0000abcdabcdabcd</code>. Memory words at <code>0x1f0</code> and <code>0x1f8</code> change because of the stack. The highest code address is <code>0x090</code>, so the stack did not overwrite the program.</p>
             <p class="cite">p.&nbsp;400 · 4.1.5 Y86-64 Programs</p>
@@ -276,7 +274,8 @@
         <p class="story"><code>pushq</code> both shrinks <code>%rsp</code> by 8 and stores a register at the new top. If the register <em>is</em> <code>%rsp</code>, two stories are possible: store the old pointer, or store the pointer after it has already moved. Hiro runs a tiny experiment. Copy <code>%rsp</code> into <code>%rax</code>, push <code>%rsp</code>, pop into <code>%rdx</code>, subtract. The result is 0. The old value was the one stored.</p>
         <p class="story"><code>popq %rsp</code> has the twin puzzle. A test pushes <code>0xabcd</code> and pops it into <code>%rsp</code>. The function returns <code>0xabcd</code>. So the popped register becomes the value read from memory, not the incremented pointer. That is exactly what <code>mrmovq (%rsp), %rsp</code> does.</p>
         <p class="story">The 8086 did the other push. Later Intel machines push the old value. Two conventions for one instruction make programs and manuals harder. Y86-64 picks the later x86-64 rule and sticks to it.</p>
-        <p class="imagine"><b>Try it:</b> run <b>pushq %rsp</b> with the x86-64 rule, then switch to the other rule and run it again. The subtraction stops being 0. Then run <b>popq %rsp</b> and watch <code>%rax</code> become <code>0xabcd</code>.</p>
+        <p class="story">The book runs both tests as hand-written assembly, since, as it notes, a compiler would not normally emit <code>pushq %rsp</code>. Rust can hold the same instructions inline. The <b>pushtest.rs</b> tab puts them in an <code>asm!</code> block, Rust’s inline assembly. It has to sit inside <code>unsafe { … }</code>, because the compiler cannot check what raw instructions do. That makes us promise what Rust requires, and the <code>SAFETY</code> comment says how we keep it: the block leaves <code>%rsp</code> where it found it. <code>poptest</code> is a lab trick, though: from the <code>popq</code> to the restore, <code>%rsp</code> holds <code>0xabcd</code>, so a signal handler that ran in that window would build its frame on a bad stack. The test relies on no handler running on this thread just then, and real code must never point <code>%rsp</code> at memory it does not own. Run in our x86-64 Linux toolbox, it prints <code>pushtest = 0</code> and <code>poptest = 0xabcd</code>, the book’s answers.</p>
+        <p class="imagine"><b>Try it:</b> on <b>push old</b> (the x86-64 rule), press <b>Step</b> through <code>pushq %rsp</code>, then switch to <b>push new</b> (the other rule) and step it again. The subtraction stops being 0. Then pick <b>pop %rsp</b>, step it, and watch <code>%rax</code> become <code>0xabcd</code>. The <b>pushtest.rs</b> tab follows the same steps in the Rust version, where x86-64 can push the constant directly.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -302,7 +301,8 @@
         <span class="eyebrow">4.2.1 · Logic gates</span>
         <h2>Wires that answer immediately</h2>
         <p class="story">Yuki does not run a program. She hangs gates on wires. A high voltage near 1.0 volt is a 1. A low voltage near 0.0 volts is a 0. <b>AND</b> is 1 only when both inputs are 1. <b>OR</b> is 1 when either input is 1. <b>NOT</b> flips its one input.</p>
-        <p class="story">HCL writes those gates with the single-bit C operators: <code>&amp;&amp;</code>, <code>||</code>, and <code>!</code>. The word operators <code>&amp;</code>, <code>|</code>, and <code>~</code> are the wrong tool — they act on whole words. A three-input AND is still written <code>a &amp;&amp; b &amp;&amp; c</code>. Gates never wait for a clock. Change an input, and a moment later the output follows.</p>
+        <p class="story">HCL writes those gates with the single-bit logical operators <code>&amp;&amp;</code>, <code>||</code>, and <code>!</code>, the same three logical operators Rust uses on a <code>bool</code> (a true-or-false value). The book’s word operators <code>&amp;</code>, <code>|</code>, and <code>~</code> are the wrong tool here — they act on every bit of a whole word. A three-input AND is still written <code>a &amp;&amp; b &amp;&amp; c</code>. Gates never wait for a clock. Change an input, and a moment later the output follows.</p>
+        <p class="story">One trap if you read HCL with Rust eyes: Rust has no <code>~</code>. It writes word NOT with <code>!</code> too, so in Rust <code>!w</code> on an integer flips all of its bits, and <code>!</code> on a <code>bool</code> flips just the one. In HCL, <code>!</code> is only ever the one-bit kind. Rust’s <code>&amp;</code> and <code>|</code> also work on two <code>bool</code>s, as AND and OR; unlike <code>&amp;&amp;</code> and <code>||</code>, they always evaluate both sides.</p>
         <p class="imagine"><b>Try it:</b> tap the inputs on each gate. The output moves at once. The code under the picture is the same three HCL lines, with live 0s and 1s on the ends.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -329,8 +329,9 @@
         <span class="eyebrow">4.2.2 · Combinational circuits and HCL</span>
         <h2>A network of gates, with three house rules</h2>
         <p class="story">One gate is a toy. A network of them is a <b>combinational circuit</b>. Three rules keep the answer unambiguous. Every input connects to exactly one source. Two outputs may not be tied onto the same wire — they would fight over the voltage. And the network may not contain a loop.</p>
-        <p class="story">Bit equality is the useful example: 1 when both inputs match. A <b>multiplexor</b> is a polite fork. Control bit <code>s</code> picks <code>a</code> when it is 1 and <code>b</code> when it is 0. HCL names the expression; it does not “store” the result the way a C assignment does. And unlike C, every gate always looks at every input. There is no short-circuit.</p>
-        <p class="imagine"><b>Try it:</b> toggle <b>a</b> and <b>b</b> on the equality circuit, then switch to the mux and toggle <b>s</b>. The <b>broken</b> mode ties two outputs together — the picture stops claiming an answer.</p>
+        <p class="story">Bit equality is the useful example: 1 when both inputs match. A <b>multiplexor</b> is a polite fork. Control bit <code>s</code> picks <code>a</code> when it is 1 and <code>b</code> when it is 0. HCL names the expression; it does not “store” the result the way <code>let</code> stores a value in a Rust program.</p>
+        <p class="story">The HCL line looks exactly like a Rust expression, and the <b>eq.rs</b> tab is that expression as a Rust function. Three things still differ. A Rust function computes its answer only when the program calls it; the circuit keeps answering as its inputs change. Rust’s <code>&amp;&amp;</code> accepts only <code>bool</code>s — hand it an integer and the compiler refuses with error E0308, “mismatched types” (the book’s C would quietly treat 0 as false and anything else as true). And Rust’s <code>&amp;&amp;</code> <b>short-circuits</b>: if the left side is already false, the right side is never computed. A gate has no such rule; it always looks at every input. Rust’s plain <code>&amp;</code> on two <code>bool</code>s is the closer match: it computes both sides every time.</p>
+        <p class="imagine"><b>Try it:</b> toggle <b>a</b> and <b>b</b> on the equality circuit, then switch to the mux and toggle <b>s</b>. Open the <b>.rs</b> tab and the live value follows the Rust line too. The <b>tied wire</b> mode ties two outputs together — the picture stops claiming an answer.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -968,7 +969,7 @@
       <div class="copy">
         <span class="eyebrow">4.6.1 · Y86-64 simulators</span>
         <h2>Trust yis. Then make the pipeline agree.</h2>
-        <p class="story">The lab gives SEQ and PIPE simulators in two costumes. The picture version shows memory, code, and state, and it lets you reset, step, or run. The text version prints the same run, which is less friendly and much easier to script. Both are driven by the HCL. A translator turns the control expressions into C, and that C is compiled and linked with the rest of the simulator. Edit the HCL, rebuild, and you are testing a different processor.</p>
+        <p class="story">The lab gives SEQ and PIPE simulators in two costumes. The picture version shows memory, code, and state, and it lets you reset, step, or run. The text version prints the same run, which is less friendly and much easier to script. Both are driven by the HCL. The book’s translator turns the control expressions into C source, and that is compiled and linked with the rest of the simulator. Edit the HCL, rebuild, and you are testing a different processor.</p>
         <p class="story">The reference answer is still <b>yis</b>, which only knows the instruction set. Idris reverses the two write-back forwarding cases. <code>popq %rsp</code> then a move should put the memory value 5 into <code>%rax</code>. The reversed priority forwards the incremented stack pointer, <code>0x108</code>, instead. yis does not budge. The pipeline simulator does. That gap is the bug.</p>
         <p class="imagine"><b>Try it:</b> press <b>Step</b> through assemble, yis, and the pipeline simulator. Then turn on <b>reversed priority</b> and step again. yis still says 5. The pipe says <code>0x108</code>.</p>
         <details class="book">
@@ -1014,6 +1015,7 @@
         <div class="word"><dt>icode / ifun</dt><dd>The two nibbles of the first instruction byte: which instruction, and which extra.</dd></div>
         <div class="word"><dt>valC / valP</dt><dd>The 8-byte constant inside an instruction, and the address of the next sequential instruction.</dd></div>
         <div class="word"><dt>Stat</dt><dd>AOK, HLT, ADR, or INS. Anything but AOK stops this processor.</dd></div>
+        <div class="word"><dt>slice</dt><dd>Rust’s borrowed view of a run of elements, written <code>&amp;[i64]</code>: an address and a length that travel together.</dd></div>
         <div class="word"><dt>HCL</dt><dd>The hardware control language: Boolean expressions and case expressions that name control wires.</dd></div>
         <div class="word"><dt>combinational</dt><dd>Gates with no memory. Outputs follow inputs after a delay. Loops and tied outputs are forbidden.</dd></div>
         <div class="word"><dt>SEQ</dt><dd>The sequential processor: all six stages in one long cycle, one instruction done.</dd></div>
@@ -1031,7 +1033,7 @@
 
   <section class="scene" id="quiz">
     <div class="wrap" style="max-width:820px">
-      <div class="section-title"><h2>Check yourself</h2><p>Eight questions. Finish all eight to mark the chapter explored.</p></div>
+      <div class="section-title"><h2>Check yourself</h2><p>Ten questions. Finish all ten to mark the chapter explored.</p></div>
       <div class="quiz" id="quiz-root"></div>
     </div>
   </section>
@@ -1127,6 +1129,15 @@ function session() {
 }
 
 const TOKENS = {
+  rust: [
+    [/\/\/.*|\/\*.*?\*\//, "cm"],
+    [/[bc]?"(?:[^"\\]|\\.)*"|b?'(?:[^'\\]|\\.)'/, "st"],
+    [/\b[a-z_]\w*!/, "pp"],
+    [/\b(?:i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize|f32|f64|bool|char|str|Self)\b/, "ty"],
+    [/\b(?:fn|let|mut|for|in|while|loop|if|else|match|return|use|pub|const|struct|impl|as|unsafe|break|continue|Some|None|true|false)\b/, "kw"],
+    [/\b(?:0x[0-9a-fA-F_]+|\d[\d_]*)\b/, "nu"],
+    [/\b[A-Za-z_]\w*(?=\s*\()/, "fn"],
+  ],
   asm: [
     [/#.*/, "cm"],
     [/^[\w.]+:/, "lb"],
@@ -1165,38 +1176,21 @@ function highlight(line, lang) {
   return out + esc(line.slice(last));
 }
 const CODE_LANG = (() => {
-  let v = "c";
-  try { if (new URLSearchParams(location.search).get("code") === "rust") v = "rust"; } catch (e) {}
+  const v = "rust"; // fixed: the pages teach Rust only
   const subs = [];
   return {
     get v() { return v; },
     get rust() { return v === "rust"; },
     on(fn) { subs.push(fn); },
-    set(nv) {
-      if (nv === v) return;
-      v = nv;
-      try { const u = new URL(location.href); if (v === "rust") u.searchParams.set("code", "rust"); else u.searchParams.delete("code"); history.replaceState(null, "", u); } catch (e) {}
-      subs.forEach((fn) => fn(v));
-    },
+    set() {}, // there is no other language to switch to
   };
 })();
-function langToggle() {
-  const wrap = h("div", { class: "cp-lang", role: "group", "aria-label": "Show the code in C or Rust" });
-  [["c", "C"], ["rust", "Rust"]].forEach(([k, label]) => {
-    const b = h("button", { type: "button", "data-lang": k, "aria-pressed": String(CODE_LANG.v === k) }, label);
-    b.addEventListener("click", () => CODE_LANG.set(k));
-    wrap.appendChild(b);
-  });
-  CODE_LANG.on((nv) => wrap.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === nv))));
-  return wrap;
-}
-document.querySelector(".first").appendChild(langToggle());
 function code(sel, o) {
   const root = $(sel);
   root.className = "codepane";
   const tabs = h("div", { class: "cp-tabs" });
   const cmd = h("span", { class: "cp-cmd" });
-  root.appendChild(h("div", { class: "cp-head" }, h("span", { class: "cp-k" }, o.label || "The code"), tabs, langToggle(), cmd));
+  root.appendChild(h("div", { class: "cp-head" }, h("span", { class: "cp-k" }, o.label || "The code"), tabs, cmd));
   const body = h("div", { class: "cp-body", tabindex: "0", role: "region", "aria-label": (o.label || "The code") + " listing" });
   const ol = h("ol");
   body.appendChild(ol);
@@ -1208,11 +1202,11 @@ function code(sel, o) {
   let req = fresh();
   function noteFor() {
     if (cur.rsNote) return cur.rsNote;
-    if (cur.lang === "hcl") return "HCL describes the hardware, not a C or Rust program";
+    if (cur.lang === "hcl") return "HCL from the book. It describes hardware, not a program";
     if (cur.lang === "asm") return "Y86-64 from the book. The machine steps these instructions";
     if (cur.lang === "hex") return "Y86 bytes from the book";
-    if (cur.lang === "text") return "the book’s description, not a C or Rust program";
-    return "the same listing either way";
+    if (cur.lang === "text") return "the book’s description, not a program";
+    return "";
   }
   function drawTabs() {
     K.clear(tabs);
@@ -1223,12 +1217,14 @@ function code(sel, o) {
       tabs.appendChild(b);
     });
   }
+  // a twin file maps the machine's line numbers onto its own; a line it leaves out has no twin
+  const mapN = (n) => (cur && cur.map ? cur.map[n] : n);
   function paint() {
     lis.forEach((li) => li.classList.remove("on", "on2", "dim", "good", "bad"));
-    (req.lines || []).forEach((n) => { if (lis[n - 1]) lis[n - 1].classList.add(req.cls || "on"); });
+    (req.lines || []).forEach((n) => { const li = lis[mapN(n) - 1]; if (li) li.classList.add(req.cls || "on"); });
     lis.forEach((li) => { const n = li.querySelector(".cp-note"); if (n) n.remove(); });
-    Object.entries(req.notes || {}).forEach(([k, v]) => {
-      const li = lis[Number(k) - 1];
+    if (!cur.quiet) Object.entries(req.notes || {}).forEach(([k, v]) => { // a quiet twin shows the step, not the other file's values
+      const li = lis[mapN(Number(k)) - 1];
       if (!li || v == null || v === "") return;
       const pair = Array.isArray(v) ? v : [v];
       li.appendChild(h("span", { class: "cp-note" + (pair[1] ? " " + pair[1] : "") }, pair[0]));
@@ -1245,12 +1241,20 @@ function code(sel, o) {
       return li;
     });
     const base = cur.cmd || "";
-    cmd.textContent = CODE_LANG.rust ? (base ? base + "  ·  " + noteFor() : noteFor()) : base;
+    const note = noteFor();
+    cmd.textContent = base && note ? base + "  ·  " + note : base || note;
     paint();
   }
   function show(name) {
     const f = files.find((x) => x.name === name) || files[0];
-    if (f !== cur) { cur = f; req = fresh(); render(); body.scrollTop = 0; }
+    if (f !== cur) {
+      const keep = cur && (cur.map || f.map); // a twin keeps the step that is showing
+      cur = f;
+      if (!keep) req = fresh();
+      render();
+      body.scrollTop = 0;
+      if (keep) { const li = (req.lines || []).map((n) => lis[mapN(n) - 1]).find(Boolean); if (li) scrollTo(li); }
+    }
     drawTabs();
   }
   function scrollTo(li) {
@@ -1258,7 +1262,6 @@ function code(sel, o) {
     if (top < body.scrollTop + 6) body.scrollTop = Math.max(0, top - 24);
     else if (bottom > body.scrollTop + body.clientHeight - 6) body.scrollTop = bottom - body.clientHeight + 24;
   }
-  CODE_LANG.on(() => { if (cur) { render(); drawTabs(); } });
   const api = {
     show,
     setFiles(list) { files = list.map((f) => Object.assign({}, f)); cur = null; req = fresh(); show(files[0].name); },
@@ -1266,7 +1269,7 @@ function code(sel, o) {
       req.cls = cls;
       req.lines = lines == null ? [] : [].concat(lines);
       paint();
-      const li = req.lines.map((n) => lis[n - 1]).find(Boolean);
+      const li = req.lines.map((n) => lis[mapN(n) - 1]).find(Boolean);
       if (li) scrollTo(li);
     },
     notes(map) { req.notes = map || {}; paint(); },
@@ -1532,7 +1535,55 @@ mrmovq 0x1000(%rax), %rbx
     { op: "jne", to: "loop", asm: "jne loop", label: "test" },
     { op: "ret", asm: "ret" },
   ];
-  const cv = code("#s5-code", { label: "The code this loop runs", files: [{ name: "sum.ys", lang: "asm", cmd: "Figure 4.6, short array", src: PROG.map((p) => (p.label ? p.label + ":\n" : "") + p.asm).join("\n") }] });
+  const cv = code("#s5-code", { label: "The code this loop runs", files: [{ name: "sum.ys", lang: "asm", cmd: "Figure 4.6, short array", src: PROG.map((p) => (p.label ? p.label + ":\n" : "") + p.asm).join("\n") }, {
+    name: "sum.rs", lang: "rust", cmd: "the function Figure 4.6 compiles, in Rust", rsNote: "the machine runs sum.ys; this is what it computes", quiet: true,
+    // sum.ys line -> sum.rs line
+    map: {"1": 8, "2": 8, "3": 9, "4": 10, "5": 10, "6": 10, "7": 13, "8": 13, "9": 10, "10": 10, "11": 10, "12": 10, "13": 15},
+    src: [
+      "// The function Figure 4.6 compiles, written in Rust.",
+      "// xs: &[i64] borrows a slice: a view of 64-bit integers",
+      "// that carries its own length, so no count is passed.",
+      "// fn defines a function; -> i64 says it returns an i64.",
+      "// #[...] is an attribute, a note to rustc: keep the plain name",
+      "// \"sum\" in the assembly. unsafe(...): no other symbol may share it.",
+      "#[unsafe(no_mangle)]",
+      "fn sum(xs: &[i64]) -> i64 {",
+      "    let mut sum: i64 = 0; // let makes a variable; mut lets it change",
+      "    for &x in xs {        // each element arrives as &i64; &x copies it out",
+      "        // plain + panics on overflow in a debug build;",
+      "        // wrapping_add wraps in every build, like addq",
+      "        sum = sum.wrapping_add(x);",
+      "    }",
+      "    sum // last line, no semicolon: the value returned",
+      "}",
+      "",
+      "fn main() {",
+      "    // println! is a macro (note the !); {} prints a value",
+      "    println!(\"{}\", sum(&[3, 5, 7])); // &[3, 5, 7] lends a slice; prints 15",
+      "}",
+    ].join("\n") }, {
+    name: "sum.s", lang: "asm", cmd: "rustc 1.100.0 --edition 2021 -C opt-level=s, x86-64 Linux", rsNote: "assembler directives removed", quiet: true,
+    // sum.ys line -> the x86-64 line doing the same job; constants (1, 2) and the test label (11) have none
+    map: {"3": 7, "4": 4, "5": 5, "6": 9, "7": 10, "8": 10, "9": 11, "10": 12, "12": 13, "13": 14},
+    src: [
+      "# rustc's own x86-64 for sum.rs, comments ours",
+      "# xs arrives as two words: address in %rdi, length in %rsi",
+      "sum:",
+      "  testq %rsi, %rsi        # is the slice empty?",
+      "  je .LBB5_1              # then return 0",
+      "  shlq $3, %rsi           # length × 8 = bytes to walk",
+      "  xorl %eax, %eax         # sum = 0 (clears all of %rax)",
+      "  xorl %ecx, %ecx         # byte offset = 0",
+      ".LBB5_3:",
+      "  addq (%rdi,%rcx), %rax  # add the element straight from memory",
+      "  addq $8, %rcx           # next element",
+      "  cmpq %rcx, %rsi         # walked every byte?",
+      "  jne .LBB5_3",
+      "  retq                    # %rax is the sum",
+      ".LBB5_1:",
+      "  xorl %eax, %eax",
+      "  retq",
+    ].join("\n") }] });
   let ln = 1;
   const atLine = PROG.map((p) => { if (p.label) ln++; const here = ln; ln++; return here; });
   let regs, mem, zf, pc, done;
@@ -1572,7 +1623,7 @@ mrmovq 0x1000(%rax), %rbx
       const A = regs[ins.a], B = regs[ins.b];
       const r = ins.op === "addq" ? B + A : ins.op === "subq" ? B - A : ins.op === "andq" ? (A & B) : (A ^ B);
       regs[ins.b] = r; zf = r === 0 ? 1 : 0;
-      msg = ins.asm + " writes " + r + ". ZF is " + zf + " because " + (zf ? "the result is 0." : "the result is not 0.");
+      msg = ins.asm + " writes " + hex(r) + ". ZF is " + zf + " because " + (zf ? "the result is 0." : "the result is not 0.");
       pc++;
     } else if (ins.op === "jmp") { pc = labelAt(ins.to); msg = "Unconditional jump to test. The lamps are already set by andq."; }
     else if (ins.op === "jne") {
@@ -1627,11 +1678,61 @@ mrmovq 0x1000(%rax), %rbx
   txt(svg, 330, 220, "Y86 has no push-immediate, so 0xabcd rides in a register.", { size: 13 });
   txt(svg, 330, 246, "The other push rule stores rsp after it has moved.", { size: 13 });
   let mode = 0, oldRule = true, i = -1;
+  const RS_SRC = [
+    "// Practice Problems 4.7 and 4.8, run on x86-64 from Rust.",
+    "use std::arch::asm; // use: bring in asm!, Rust's inline assembly",
+    "",
+    "fn pushtest() -> i64 {",
+    "    let diff: i64; // declared now, filled in by the asm block",
+    "    // SAFETY: the push and the pop leave %rsp where it began.",
+    "    unsafe {",
+    "        asm!(",
+    "            \"movq %rsp, %rax\",  // copy the stack pointer",
+    "            \"pushq %rsp\",       // push the stack pointer",
+    "            \"popq %rdx\",        // pop it back",
+    "            \"subq %rdx, %rax\",  // 0 if the old value was pushed",
+    "            out(\"rax\") diff, // afterwards, copy %rax into diff",
+    "            out(\"rdx\") _,    // %rdx is overwritten: tell Rust",
+    "            options(att_syntax), // AT&T syntax, as in the book",
+    "        );",
+    "    }",
+    "    diff",
+    "}",
+    "",
+    "fn poptest() -> i64 {",
+    "    let got: i64;",
+    "    // SAFETY: %rsp is put back from %rdi before the block ends.",
+    "    // From popq to the restore %rsp holds 0xabcd, so a signal handler",
+    "    // run then would use a bad stack; this test relies on none",
+    "    // running. Real code must never point %rsp at memory it doesn't own.",
+    "    unsafe {",
+    "        asm!(",
+    "            \"movq %rsp, %rdi\",  // save the stack pointer",
+    "            \"pushq $0xabcd\",    // push a test value",
+    "            \"popq %rsp\",        // pop it into the stack pointer",
+    "            \"movq %rsp, %rax\",  // the value popq left in %rsp",
+    "            \"movq %rdi, %rsp\",  // restore the stack pointer",
+    "            out(\"rax\") got, // afterwards, copy %rax into got",
+    "            out(\"rdi\") _,   // %rdi is overwritten",
+    "            options(att_syntax),",
+    "        );",
+    "    }",
+    "    got",
+    "}",
+    "",
+    "fn main() {",
+    "    println!(\"pushtest = {}\", pushtest());",
+    "    println!(\"poptest  = {:#x}\", poptest()); // {:#x}: hex with 0x",
+    "}",
+  ].join("\n");
+  const RS_NOTE = "the same tests on real x86-64, from Rust";
+  const rsFile = (map, cmd) => ({ name: "pushtest.rs", lang: "rust", cmd, rsNote: RS_NOTE, map, src: RS_SRC });
+  const PUSH_MAP = {"1": 9, "2": 10, "3": 11, "4": 12}, POP_MAP = {"1": 30, "2": 29, "3": 30, "4": 31, "5": 32};
   const cv = code("#s6-code", { files: [{ name: "pushtest.ys", lang: "asm", cmd: "returns 0 if the old rsp was pushed", src:
 `rrmovq %rsp, %rax
 pushq %rsp
 popq %rdx
-subq %rdx, %rax` }] });
+subq %rdx, %rax` }, rsFile(PUSH_MAP, "prints pushtest = 0")] });
   const PUSH = {
     old: [
       { rax: "—", rdx: "—", rsp: "0x200", mem: "—", res: "rsp starts at 0x200", line: null, why: "Nothing pushed yet." },
@@ -1651,6 +1752,7 @@ subq %rdx, %rax` }] });
   const POP = [
     { rax: "—", rdx: "—", rsp: "0x200", mem: "—", res: "ready to push 0xabcd", line: null, why: "popq %rsp either keeps the memory word or the incremented pointer." },
     { rax: "0xabcd", rdx: "—", rsp: "0x200", mem: "—", res: "constant in rax", line: 1, why: "Y86 cannot push an immediate, so 0xabcd is placed in rax first." },
+    { rax: "0xabcd", rdx: "—", rsp: "0x200", mem: "—", res: "rdi keeps the old rsp, 0x200", line: 2, why: "rrmovq %rsp, %rdi saves the stack pointer, 0x200, before popq overwrites it." },
     { rax: "0xabcd", rdx: "—", rsp: "0x1f8", mem: "0xabcd", res: "0xabcd is on the stack", line: 3, why: "pushq stored 0xabcd and rsp is 0x1f8." },
     { rax: "0xabcd", rdx: "—", rsp: "0xabcd", mem: "0xabcd", res: "rsp became the memory word", line: 4, why: "popq %rsp writes the value read from memory into rsp. It does not keep rsp+8." },
     { rax: "0xabcd", rdx: "—", rsp: "0xabcd", mem: "0xabcd", res: "same as mrmovq (%rsp), %rsp", line: 5, why: "rax is 0xabcd. That matches mrmovq (%rsp), %rsp: the memory word replaces the pointer." },
@@ -1670,13 +1772,13 @@ subq %rdx, %rax` }] });
   function usePush(rule) {
     oldRule = rule; mode = 0; i = -1;
     stepB.disabled = false;
-    cv.setFiles([{ name: "pushtest.ys", lang: "asm", cmd: rule ? "old rsp is pushed" : "new rsp is pushed", src: "rrmovq %rsp, %rax\npushq %rsp\npopq %rdx\nsubq %rdx, %rax" }]);
+    cv.setFiles([{ name: "pushtest.ys", lang: "asm", cmd: rule ? "old rsp is pushed" : "new rsp is pushed", src: "rrmovq %rsp, %rax\npushq %rsp\npopq %rdx\nsubq %rdx, %rax" }, rsFile(PUSH_MAP, rule ? "prints pushtest = 0" : "real x86-64 keeps the old rule: still prints 0")]);
     paint();
   }
   function usePop() {
     mode = 1; i = -1;
     stepB.disabled = false;
-    cv.setFiles([{ name: "poptest.ys", lang: "asm", cmd: "rsp becomes the memory word", src: "irmovq $0xabcd, %rax\nrrmovq %rsp, %rdi\npushq %rax\npopq %rsp\nrrmovq %rsp, %rax" }]);
+    cv.setFiles([{ name: "poptest.ys", lang: "asm", cmd: "rsp becomes the memory word", src: "irmovq $0xabcd, %rax\nrrmovq %rsp, %rdi\npushq %rax\npopq %rsp\nrrmovq %rsp, %rax" }, rsFile(POP_MAP, "prints poptest = 0xabcd")]);
     paint();
   }
   $("#s6-seg").appendChild(seg(["push old", "push new", "pop %rsp"], 0, (n) => { if (n === 2) usePop(); else usePush(n === 0); }));
@@ -1729,7 +1831,31 @@ bool not = !a;` }] });
   const t0 = box(svg, 200, 108, 160, 60, "sv-panel", "0", "!a && !b");
   const outB = box(svg, 430, 68, 200, 80, "sv-good", "1", "eq");
   svg.appendChild(draw.arrow(360, 108, 430, 108));
-  const cv = code("#s8-code", { files: [{ name: "eq.hcl", lang: "hcl", cmd: "Figure 4.10", src: "bool eq = (a && b) || (!a && !b);" }] });
+  const RS = "a Rust function: it runs only when called";
+  const FILES = [
+    [{ name: "eq.hcl", lang: "hcl", cmd: "Figure 4.10", src: "bool eq = (a && b) || (!a && !b);" },
+     { name: "eq.rs", lang: "rust", cmd: "the same expression in Rust", rsNote: RS, map: { 1: 6 }, src: [
+       "// Figure 4.10 as a Rust function on two bools.",
+       "// && takes only bool; an integer is error E0308.",
+       "// && skips its right side when the left is false.",
+       "// Idiomatic Rust would say: a == b",
+       "fn eq(a: bool, b: bool) -> bool {",
+       "    (a && b) || (!a && !b) // no semicolon: returned",
+       "}",
+     ].join("\n") }],
+    [{ name: "mux.hcl", lang: "hcl", cmd: "Figure 4.11", src: "bool out = (s && a) || (!s && b);" },
+     { name: "mux.rs", lang: "rust", cmd: "the same expression in Rust", rsNote: RS, map: { 1: 4 }, src: [
+       "// Figure 4.11 as a Rust function on three bools.",
+       "// Idiomatic Rust would say: if s { a } else { b }",
+       "fn mux(s: bool, a: bool, b: bool) -> bool {",
+       "    (s && a) || (!s && b)",
+       "}",
+     ].join("\n") }],
+    [{ name: "illegal.hcl", lang: "hcl", cmd: "not a legal network", src: "# two gate outputs tied\n# a loop would be illegal too\nwire = ???" }],
+  ];
+  let shown = -1;
+  function files() { if (shown !== mode) { shown = mode; cv.setFiles(FILES[mode]); } }
+  const cv = code("#s8-code", { files: FILES[0] });
   function bit(v) { return v ? "1" : "0"; }
   function paint() {
     setBox(aB, bit(a), a ? "sv-good" : "sv-panel");
@@ -1743,7 +1869,7 @@ bool not = !a;` }] });
       setBox(t0, bit(neither), neither ? "sv-good" : "sv-panel");
       setBox(outB, bit(eq), eq ? "sv-good" : "sv-panel");
       cap("#s8-cap", eq ? "The bits match, so eq is 1. One of the two AND terms is carrying it." : "The bits differ, so both AND terms are 0 and eq is 0.");
-      cv.setFiles([{ name: "eq.hcl", lang: "hcl", cmd: "Figure 4.10", src: "bool eq = (a && b) || (!a && !b);" }]);
+      files();
       cv.at(1);
       cv.notes({ 1: ["eq " + bit(eq), eq ? "good" : ""] });
     } else if (mode === 1) {
@@ -1753,7 +1879,7 @@ bool not = !a;` }] });
       setBox(t0, bit(!sbit && b), (!sbit && b) ? "sv-good" : "sv-panel");
       setBox(outB, bit(out), "sv-good");
       cap("#s8-cap", "s is " + bit(sbit) + ", so the mux copies " + (sbit ? "a" : "b") + ". The output is " + bit(out) + ".");
-      cv.setFiles([{ name: "mux.hcl", lang: "hcl", cmd: "Figure 4.11", src: "bool out = (s && a) || (!s && b);" }]);
+      files();
       cv.at(1);
       cv.notes({ 1: ["out " + bit(out), "good"] });
     } else {
@@ -1762,7 +1888,7 @@ bool not = !a;` }] });
       setBox(t0, "0", "sv-bad");
       setBox(outB, "?", "sv-bad");
       cap("#s8-cap", "Two outputs are tied together. They fight over the voltage, so this wire is not a legal combinational circuit.");
-      cv.setFiles([{ name: "illegal.hcl", lang: "hcl", cmd: "not a legal network", src: "# two gate outputs tied\n# a loop would be illegal too\nwire = ???" }]);
+      files();
       cv.at(3, "bad");
       cv.notes({ 3: ["fight", "bad"] });
     }
@@ -2975,7 +3101,7 @@ nop
 nop
 rrmovq %rsp, %rax`;
   const STEPS = [
-    { h: "edit", y: "—", i: "—", p: "—", out: "control is HCL", cls: "sv-panel", line: 1, why: "The simulator's control is the HCL you write. A translator turns it into C and links it in." },
+    { h: "edit", y: "—", i: "—", p: "—", out: "control is HCL", cls: "sv-panel", line: 1, why: "The simulator's control is the HCL you write. The book's translator turns it into C and links it in." },
     { h: "edit", y: "bytes", i: "—", p: "—", out: "assembled", cls: "sv-panel", line: 3, why: "yas assembles the test. %rdx is 5, stored at the address in %rsp, which is 0x100." },
     { h: "edit", y: "bytes", i: "5", p: "—", out: "yis says 5", cls: "sv-good", line: 7, why: "yis only knows the instruction set. popq %rsp then the move leaves 5 in %rax, the word from memory." },
   ];
@@ -3024,6 +3150,8 @@ K.quiz($("#quiz-root"), [
   { q: "Why does a load/use hazard need a stall, even with forwarding?", options: ["The loaded word appears in memory one cycle after decode needed it", "The ALU takes three cycles", "The branch was predicted taken", "The register file has only one write port"], answer: 0, why: "Forwarding can hand over e_valE, M_valE, or m_valM. A load does not have m_valM until the cycle after decode already tried to read that register. Only mrmovq and popq create this case." },
   { q: "On the book's sample mix, what is PIPE's CPI?", options: ["1.00", "1.12", "2.67", "1.27"], answer: 3, why: "CPI = 1 + lp + mp + rp = 1 + 0.05 + 0.16 + 0.06. The 0.16 from mispredicted branches is the biggest slice. A 65% predictor brings it to 1.25. A classic five-stage pipe cannot get below 1.00." },
   { q: "What does popq %rsp leave in %rsp?", options: ["The incremented stack pointer", "The word read from memory", "Zero", "The PC"], answer: 1, why: "It is the same result as mrmovq (%rsp), %rsp. The memory word replaces the pointer. The book's forwarding bug shows up here: reversing write-back priority delivers the incremented pointer instead." },
+  { q: "In this page's Rust, sum takes xs: &[i64]. What does that slice carry, and where did rustc's x86-64 build put it?", options: ["Only the address; the length is found by a zero at the end", "A copy of every element, pushed on the stack", "The address of the first element and the number of elements, in %rdi and %rsi", "The address and the length, both in %rax"], answer: 2, why: "A slice is a borrowed view two words long: an address and a length. In this rustc build they arrived in %rdi and %rsi, the same registers the book's Y86-64 sum uses for its start address and count." },
+  { q: "For two Rust bools, which operator matches a logic gate, always looking at both inputs?", options: ["&&, because it is the logical AND", "&, because it evaluates both sides every time", "Both behave the same", "Neither; Rust has no AND on bool"], answer: 1, why: "&& short-circuits: if the left side is false, the right side is never computed. Plain & on two bools is also AND, but it always evaluates both sides, as a gate always sees every input." },
 ], 4);
 
 </script>

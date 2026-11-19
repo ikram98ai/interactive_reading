@@ -50,7 +50,7 @@
   .cp-tab { appearance: none; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-2); font: 700 12.5px/1 var(--f-mono); padding: 6px 10px; border-radius: 8px; cursor: pointer; }
   .cp-tab[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
   .cp-file { font: 700 12.5px/1 var(--f-mono); color: var(--ink); padding: 6px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); }
-  .cp-cmd { font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); }
+  .cp-cmd { margin-left: auto; font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); }
   .cp-body { overflow: auto; max-height: 280px; background: var(--surface); border-top: 1px solid var(--line); position: relative; }
   .cp-body:focus-visible { outline-offset: -3px; }
   .cp-body ol { font-variant-ligatures: none; list-style: none; margin: 0; padding: 8px 0; min-width: 100%; width: max-content; font-family: var(--f-mono); font-size: 12.5px; line-height: 1.62; color: var(--ink); }
@@ -65,10 +65,6 @@
   .cp-note.good { background: var(--mint-soft); border-color: var(--mint); }
   .cp-note.bad { background: var(--coral-soft); border-color: var(--coral); }
   .cp-note.warn { background: var(--sun-soft); border-color: var(--sun); }
-  .cp-lang { margin-left: auto; display: inline-flex; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 9px; padding: 2px; gap: 2px; }
-  .cp-lang button { appearance: none; border: 0; background: transparent; color: var(--ink-2); font: 700 12px/1 var(--f-mono); padding: 6px 10px; border-radius: 7px; cursor: pointer; }
-  .cp-lang button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
-  .first .cp-lang { margin: 8px 0 0; display: flex; width: max-content; }
   .cp-caret { position: absolute; top: 1px; bottom: 1px; width: 1ch; border-radius: 3px; background: color-mix(in srgb, var(--sun) 60%, transparent); left: calc(46px + var(--col) * 1ch); }
   .cp-out { margin: 0; padding: 10px 14px; background: var(--ink); color: var(--bg); font-family: var(--f-mono); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; min-height: 22px; }
   .t-cm { color: var(--ink-3); font-style: italic; }
@@ -85,7 +81,6 @@
   .t-hx { font-weight: 700; }
   @media (prefers-reduced-motion: reduce) { .fade, .cp-body li { transition: none; } }
   details.book pre.prelude { margin: 0; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-s); font-family: var(--f-mono); font-size: 12px; line-height: 1.5; overflow-x: auto; color: var(--ink); }
-  #rust-prelude[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -98,19 +93,23 @@
       <h1>The Memory Hierarchy</h1>
       <p class="lede">A register answers in the same cycle as the instruction. A disk can take tens of millions of cycles. Programs stay fast when the next byte is already waiting on a shelf near the top.</p>
       <p class="quote">“If you understand how the system moves data up and down the memory hierarchy, then you can write your application programs so that their data items are stored higher in the hierarchy.” — Bryant &amp; O’Hallaron</p>
-      <p class="first"><b>New here?</b> Every subsection below is one machine. Read the short story, then press the buttons on the picture. Under each machine is <b>the code it is running</b>: the highlighted line is the step in progress, and the small tags show live values. Press <b>C</b> or <b>Rust</b>. Assembly stays as the book shows it, and the timings are the book’s. You cannot break anything. Figure numbers and the book’s timings sit under “What the book says.”</p>
+      <p class="first"><b>New here?</b> Every subsection below is one machine. Read the short story, then press the buttons on the picture. Under each machine is <b>the code it is running</b>, written in Rust: the highlighted line is the step in progress, and the small tags show live values. The book’s own listings are C; each scene here explains the Rust it uses the first time it appears, and “Rust setup” below lists what every listing assumes. The instruction listing in 6.2.2 is real x86-64 output from rustc for our Rust loop. Hardware numbers (disk geometry, cache sizes, latencies) are the book’s. The speeds the book measured (row and column sums, the memory mountain, the six multiply loops) are the book’s measurements of its C programs; our Rust measurements are pending, and say so where they appear. You cannot break anything. Figure numbers sit under “What the book says.”</p>
 
-      <details class="book" id="rust-prelude" hidden>
+      <details class="book" id="rust-prelude">
         <summary>Rust setup: what the listings assume</summary>
         <div class="inner">
-          <p>The book’s C listings read memory to show cache behaviour. Rust’s optimiser is free to delete a read whose result is unused, so the Rust listings route reads through <code>black_box</code>. Two more Rust differences: every <code>a[i]</code> is bounds-checked (C’s is not), and a <code>Vec</code> that grows is itself heap memory, so it is never used as a stand-in for “an access”.</p>
-          <pre class="prelude">use std::hint::black_box;
+          <p>Most listings are short fragments, and they all assume the lines below. <code>use</code> brings a name from Rust’s standard library, <code>std</code>, into scope. A cache trace has to touch memory, but the optimiser may delete a read whose value is never used, so the listings pass values through <code>black_box</code>: a std function that hands its argument straight back, while hinting to the compiler to assume the value really is used. The std docs call it best-effort: fine for traces and benchmarks, never something a program’s correctness may rely on. <code>touch(x)</code> stands for the book’s <code>use(x)</code>; <code>&lt;T: Copy&gt;</code> means it takes any value that can be copied bit for bit, such as a number.</p>
+          <p>Every <code>a[i]</code> on an array, slice or <code>Vec</code> is bounds-checked: an index past the end stops the program with a panic (run on x86-64 Linux, an 8-element array read at index 8 prints <code>index out of bounds: the len is 8 but the index is 8</code>). C makes no such check: reading past the end is undefined behaviour, and in practice it often just reads whatever memory sits there. When the compiler can prove an index is in range, it drops the check; the listing in 6.2.2 shows that happening.</p>
+          <p>The write scene’s <code>A</code> and <code>C</code> are globals: a <code>static</code> is one allocation at a fixed address for the whole run. Code cannot assign to a plain <code>static</code> (rustc refuses), and a <code>static mut</code> can be read or written only inside <code>unsafe</code>, because two threads could race on it. So these two are atomics: std types that are safe to share between threads and whose value can change through a plain <code>static</code>, with no <code>unsafe</code>. <code>A.store(1, Relaxed)</code> writes 1; <code>Relaxed</code> asks only that the store be atomic, with no promise about its order relative to other memory. With optimisation on (we checked <code>-C opt-level=1</code>), rustc on x86-64 turns each of these stores into one plain <code>mov</code> to memory; without it, each store is a call into std.</p>
+          <pre class="prelude">use std::fs::File; // an open file
+use std::hint::black_box; // "really use this value"
+use std::io::{self, Read, Seek, SeekFrom}; // reading and seeking files
+use std::sync::atomic::{AtomicI32, Ordering::Relaxed};
 
-// A cache trace has to touch memory. In Rust, `let _ = m[k];` performs no load
-// at all, so these listings read through black_box, which the optimiser cannot
-// remove. touch(x) stands for the book's use(x). Indexing is bounds-checked.
+// touch(x) stands for the book's use(x): really read x.
 fn touch&lt;T: Copy&gt;(x: T) -&gt; T { black_box(x) }
-static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scene</pre>
+static A: AtomicI32 = AtomicI32::new(0); // the write scene's globals
+static C: AtomicI32 = AtomicI32::new(0);</pre>
         </div>
       </details>
       <nav class="toc" aria-label="Scenes in this chapter">
@@ -152,7 +151,8 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <p class="story">SRAM stores a bit in a bistable cell of six transistors. Left or right, it stays there for as long as the power is on. That speed is why caches are SRAM. DRAM stores the bit as charge on a tiny capacitor, one transistor per bit. Leakage empties it in about 10 to 100 milliseconds, so the memory system must <b>refresh</b> every bit by reading it and writing it back.</p>
         <p class="story">A DRAM chip is a grid of supercells. To save pins, the controller sends the row first (<b>RAS</b>), which copies a whole row into an internal buffer, then the column (<b>CAS</b>). Several chips sit side by side on a module so one address returns a wide word. The CPU reaches that word over the memory bus: it drives an address, and the memory drives the data back.</p>
         <p class="story">Cut the power and both SRAM and DRAM forget. ROM and flash keep their bits in the dark. That is the firmware the machine can run before any disk is awake.</p>
-        <p class="imagine"><b>Try it:</b> flip the SRAM bit, watch the DRAM cup drain, then cut the power — the ROM cell is the one that remains. Step a RAS/CAS read of supercell (2, 1). Then load <code>A[2]</code> and watch eight chips return one word.</p>
+        <p class="story">In the Rust, <code>let</code> names a value and <code>mut</code> lets it change later. <code>u8</code> is a one-byte number and <code>i64</code> an eight-byte one. <code>[u8; 4]</code> is an array of four bytes, and <code>[[0u8; 4]; 4]</code> is four such rows, all zero (the <code>u8</code> after the <code>0</code> names its type). The <code>rom</code> line has no <code>mut</code>, so any write to it is refused at compile time: rustc says “cannot assign twice to immutable variable `rom`”. In the bus listing, <code>let x: i64;</code> names x without a value yet; Rust lets the load fill it in, and refuses to compile any read of x before that.</p>
+        <p class="imagine"><b>Try it:</b> flip the SRAM bit, watch the DRAM cup drain, then cut the power — the ROM cell is the one that remains. Step a RAS/CAS read of supercell (2, 1). Then load <code>a[2]</code> and watch eight chips return one word.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -180,12 +180,13 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <p class="story">A rotating disk is a stack of platters. Each surface is rings called tracks, cut into sectors of typically 512 bytes. Tracks at the same radius form a cylinder. The arm <b>seeks</b> to the right track, the platter spins until the sector arrives, then the bits stream off the head.</p>
         <p class="story">On the book’s example — 7,200 RPM, average seek 9 ms, 400 sectors per track — rotation is about 4 ms and the sector transfer is about 0.02 ms. Access time is 13.02 ms, and almost all of it is the wait before the first byte. The next sector on that track is nearly free. A random sector pays the wait again.</p>
         <p class="story">The CPU does not bit-bang the platter. It writes a command, the controller does the seek, and then <b>DMA</b> copies the sector into memory and raises an interrupt. The OS sees a sequence of logical blocks; the controller maps them to a surface, track, and sector.</p>
+        <p class="story">In the Rust, <code>fn</code> starts a function. <code>&amp;mut</code> lends it the caller’s file and buffer and lets it change them. It returns an <code>io::Result</code>: <code>Ok(value)</code> on success, or an error, and the <code>?</code> after a call hands any error straight back to the caller. <code>Ok(())</code> is success with nothing to return. <code>f.read_exact(buf)</code> calls a method, a function that belongs to the file: it fills all 512 bytes or returns an error (a plain <code>read</code> may legally return fewer bytes than asked). <code>SeekFrom::Start(n)</code> means “byte n from the start”. <code>0..4</code> counts 0 to 3, and <code>_</code> is a loop variable nobody reads. <code>&amp;[u64]</code> is a slice, a borrowed view of some numbers, and <code>for &amp;block in at</code> copies each one out.</p>
         <p class="imagine"><b>Try it:</b> step one sector through seek, rotation, transfer, and DMA. Then read four sectors in order, and four sectors at random, and compare the clocks.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
             <p>Average seek is typically 3 to 9 ms. Average rotation is half a turn. Transfer of one sector is a thin slice of a turn. Tavg rotation at 7,200 RPM is about 4 ms; Tavg transfer for 512 bytes at 400 sectors/track is about 0.02 ms. Twice the seek time is a handy estimate of a random access.</p>
-            <p>A 64-bit word is roughly 4 ns in SRAM and 60 ns in DRAM. A disk access of about 10 ms is tens of thousands of times a DRAM access. After the command, the controller can DMA the sector and interrupt the CPU.</p>
+            <p>A 64-bit word is roughly 4 ns in SRAM and 60 ns in DRAM. Reading a 512-byte block takes about 256 ns from SRAM and 4,000 ns from DRAM, so a disk access of about 10 ms is about 40,000 times the SRAM time and 2,500 times the DRAM time. After the command, the controller can DMA the sector and interrupt the CPU.</p>
             <p class="cite">p.&nbsp;625 · §6.1.2 Disk Storage</p>
           </div>
         </details>
@@ -208,7 +209,8 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <h2>Write a page; to change it, erase the block</h2>
         <p class="story">Flash is not a platter. Data moves in <b>pages</b> (often 512 bytes to 4 KB), and pages are grouped into <b>blocks</b> of 32 to 128 pages. A read fetches a page. A write can program a page only after that whole block has been erased, which sets every bit to 1.</p>
         <p class="story">A second write to a live page copies any neighbours worth keeping into a fresh erased block, then erases the old one. Erase is on the order of a millisecond. A block wears out after roughly 100,000 repeated writes, so the drive spreads erases around. The flash translation layer still presents ordinary logical blocks to the operating system.</p>
-        <p class="imagine"><b>Try it:</b> tap a page. Write an erased page, then write a live page and watch the block erase first. The code panel follows the same branch.</p>
+        <p class="story">In the Rust, each page is an <code>Option&lt;char&gt;</code>: <code>Some(c)</code> holds the letter c, and <code>None</code> means erased. <code>.is_some()</code> asks whether a page holds data. <code>usize</code> is the integer type Rust uses for indexes, and <code>page / 4</code> on integers drops the remainder. <code>&amp;pages[first..first + 4]</code> is a slice, a view of the block’s four pages, and <code>spare</code> is a <code>Vec</code>, a list that can grow, standing in for the fresh block. <code>spare.extend_from_slice(…)</code> copies those four pages onto its end, and <code>.fill(None)</code> sets every page of the block back to erased.</p>
+        <p class="imagine"><b>Try it:</b> tap a page. Write an erased page, then write a live page: its block’s pages are copied into the spare block, then the block is erased, then the page is programmed. The code panel follows the same branch.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -235,6 +237,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <h2>Density got cheap. Latency did not keep up.</h2>
         <p class="story">From 1985 to 2015, SRAM access time and SRAM cost each improved by about 100×. DRAM cost per megabyte fell by about 44,000×, while DRAM access time improved by only about 10×. Disk cost per gigabyte fell by millions of times; minimum seek time improved by about 25×.</p>
         <p class="story">CPU cycle time over that same stretch improved by about 500×, and the effective cycle time — one core’s cycle, divided by the number of cores — by about 2,000×. The gap those bars open is why a hierarchy exists: the processor raced ahead of DRAM and disk, and caches are the bridge.</p>
+        <p class="story">In the Rust, <code>f64</code> is a 64-bit floating-point number, <code>i as f64</code> converts the counter to one, and <code>(0..n).step_by(stride)</code> counts 0, stride, 2 × stride, and so on, while below n.</p>
         <p class="imagine"><b>Try it:</b> drag the year. The bars are “how many times better than 1985,” on a log scale. The code under the picture is a compute loop beside a memory loop — the second one is where the gap shows up.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -261,7 +264,8 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <span class="eyebrow">6.2.1 · locality of references to program data</span>
         <h2>Come back soon, or knock on the next door</h2>
         <p class="story"><b>Temporal</b> locality: a location you just used is likely to be used again soon. A running total in a scalar has it. Each element of a vector, visited once, does not.</p>
-        <p class="story"><b>Spatial</b> locality: a neighbour is likely to be next. Walking <code>v[i]</code> with <code>i++</code> is stride-1, the order the ints occupy in memory. Walking a two-dimensional array down a column hops <code>N</code> ints each time. Same additions, a worse stride.</p>
+        <p class="story"><b>Spatial</b> locality: a neighbour is likely to be next. Walking <code>v[i]</code> one index at a time is stride-1, the order the ints occupy in memory. Walking a two-dimensional array down a column hops <code>N</code> ints each time. Same additions, a worse stride.</p>
+        <p class="story">In the Rust, <code>&amp;[i32; 8]</code> borrows an array of eight 4-byte ints (<code>i32</code>) without copying it, and <code>&amp;[[i32; 3]; 2]</code> borrows two rows of three, stored row after row. The last line, <code>sum</code> with no semicolon, is the value the function returns. Everyday Rust would write <code>v.iter().sum()</code>. This chapter’s listings keep the index on purpose: the lesson is the order of memory accesses, which an iterator would hide. Clippy, Rust’s linter, flags such loops (its <code>needless_range_loop</code> lint) and suggests an iterator; here that advice is a deliberate exception.</p>
         <p class="imagine"><b>Try it:</b> step <code>sumvec</code>, then the row walk, then the column walk. The highlighted line is the reference, and the tag says which kind of locality just paid off.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -289,7 +293,9 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <h2>The loop body is fetched again, in order</h2>
         <p class="story">Instructions are data too. The program counter walks them in address order, so a straight-line basic block has excellent spatial locality. A loop then jumps back and fetches that same block again. That is temporal locality in the instruction stream.</p>
         <p class="story">Code is rarely rewritten while it runs, so the instruction working set of a loop is small and stable. An instruction cache can keep it hot even while data is thrashing.</p>
-        <p class="imagine"><b>Try it:</b> step the program counter around the five-instruction loop. Watch the jump return to <code>cmp</code>, and the fetch counts climb.</p>
+        <p class="story">The listing is real. rustc 1.100.0 compiled the Rust <code>sumvec</code> (tab <code>sumvec.rs</code>) for x86-64 Linux with <code>-C opt-level=s</code>, which optimises for size. At <code>-C opt-level=1</code> and <code>2</code>, rustc unrolled or vectorised this loop, which hides the one-instruction-at-a-time pattern; <code>s</code> keeps the plain loop. <code>#[no_mangle]</code> keeps the function’s plain name in the output, and <code>pub</code> lets code outside this file call it. <code>v.len()</code> is the number of elements in <code>v</code>. Here rustc passed <code>v</code> in two registers: <code>%rdi</code> holds the address of <code>v[0]</code> and <code>%rsi</code> its length. The loop body is four instructions: add <code>v[i]</code> into sum (<code>%eax</code>), add 1 to i (<code>%rcx</code>), compare i with the length, and <code>jne</code>, “jump if not equal”, back to the add.</p>
+        <p class="story">Notice what is missing: a bounds check. i runs from 0 up to <code>v.len() − 1</code>, so LLVM, rustc’s optimiser, proved every <code>v[i]</code> is in range and dropped the check. In <code>checked.s</code> the count n comes from the caller, so nothing proves it fits; the compiler keeps one check and moves it in front of the loop, panicking before the first add if n − 1 is not below <code>v.len()</code>. And with optimisation on, overflow checks are off by default, so <code>sum += v[i]</code> is one plain <code>addl</code> that wraps on overflow instead of panicking.</p>
+        <p class="imagine"><b>Try it:</b> step the program counter around the four-instruction loop. Watch <code>jne</code> return to <code>addl</code>, and the fetch counts climb, while the four lines above the loop stay at one fetch.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -300,9 +306,9 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
       </div>
       <div class="stage">
         <div class="stage-head"><span class="stage-title">One loop, fetched over and over</span><span class="pill" id="insn-pill">PC</span></div>
-        <div class="stage-scroll"><svg id="insn-svg" viewBox="0 0 680 200" role="img" aria-label="Program counter walking a five-instruction loop and jumping back"></svg></div>
+        <div class="stage-scroll"><svg id="insn-svg" viewBox="0 0 680 200" role="img" aria-label="Program counter walking a four-instruction loop and jumping back"></svg></div>
         <div class="controls" id="insn-controls"></div>
-        <div class="caption" aria-live="polite" id="insn-cap">Each step fetches the next instruction. The jump fetches the top again.</div>
+        <div class="caption" aria-live="polite" id="insn-cap">Each step fetches the next instruction. jne fetches the top of the loop again.</div>
         <div id="insn-code"></div>
       </div>
     </div>
@@ -313,7 +319,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
       <div class="copy">
         <span class="eyebrow">6.2.3 · summary of locality</span>
         <h2>Two questions about the next reference</h2>
-        <p class="story">Every reference pattern in this chapter answers the same pair of questions. Will this address be used again soon? Will the next address be nearby? Loops give both answers to the instruction stream. Stride-1 data gives the second. A scalar accumulator gives the first. A large stride gives neither.</p>
+        <p class="story">Every reference pattern in this chapter answers the same pair of questions. Will this address be used again soon? Will the next address be nearby? Loops give both answers to the instruction stream. Stride-1 data gives the second. A scalar accumulator gives the first. A large stride gives neither. (In the Rust, <code>v.len()</code> is the number of elements in <code>v</code>.)</p>
         <p class="story">Programs that say yes to at least one of those questions draw more of their bytes from the fast shelves. That is the whole reason a hierarchy can feel as quick as its top and as roomy as its bottom.</p>
         <p class="imagine"><b>Try it:</b> tap a pattern. The meters are temporal and spatial locality, and the code panel switches to the snippet that produces them.</p>
         <details class="book">
@@ -346,7 +352,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
           <summary>What the book says</summary>
           <div class="inner">
             <p>From the top: registers, L1–L3 SRAM, DRAM main memory, local disks, then remote storage such as network file systems. “The overall effect is a large pool of memory that costs as much as the cheap storage near the bottom of the hierarchy but that serves data to programs at the rate of the fast storage near the top.”</p>
-            <p>Sample hit times in the book’s survey: registers 0 cycles, L1 about 4, L2 about 10, L3 about 50, main memory about 200, disk cache about 100,000, network or browser cache on the order of millions to billions of cycles. SSDs sit between DRAM and rotating disk.</p>
+            <p>Typical hit times in the book’s survey: registers 0 cycles, L1 about 4, L2 about 10, L3 about 50, main memory about 200, disk cache about 100,000, network or browser cache on the order of millions to billions of cycles. SSDs sit between DRAM and rotating disk.</p>
             <p class="cite">p.&nbsp;645 · §6.3 The Memory Hierarchy</p>
           </div>
         </details>
@@ -367,12 +373,13 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <span class="eyebrow">6.3.1 · caching in the memory hierarchy</span>
         <h2>A small shelf of copies, indexed by block number</h2>
         <p class="story">Level k is smaller and faster than level k+1. It holds a subset of the blocks from below. Ask level k first. The block is there: a <b>hit</b>, served at the fast time. The block is absent: a <b>miss</b>. The level fetches the block from below, which may evict a victim, and then the request is a hit.</p>
-        <p class="story">In the simple picture, block i is placed in slot i mod 4. Adjacent blocks land in different slots. Blocks 4 and 8 both want slot 0, so one of them has to leave even though other slots are full of unrelated blocks. That fight, with room still left in the cache, is a <b>conflict</b> miss. The very first touch of a block is a <b>cold</b> miss. A working set bigger than the shelf is a <b>capacity</b> miss.</p>
+        <p class="story">In the simple picture, block i is placed in slot i mod 4. Adjacent blocks land in different slots. Blocks 4 and 8 both want slot 0, so one of them has to leave, while the other slots hold unrelated blocks. A miss that comes only from that fight, when a cache that could put any block in any slot would have kept both, is a <b>conflict</b> miss. The very first touch of a block is a <b>cold</b> miss. A working set bigger than the shelf is a <b>capacity</b> miss.</p>
+        <p class="story">In the Rust, <code>%</code> is the remainder, <code>&amp;&amp;</code> means “and”, and <code>return true</code> leaves early with a hit. The last line, <code>false</code>, reports the miss once the slot is filled.</p>
         <p class="imagine"><b>Try it:</b> step the book’s shelf — blocks 4, 9, 14, 3 — then 4 hits, 8 evicts that copy, and the next 4 is the conflict on slot 0. Or tap any block yourself.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
-            <p>The cache at level k holds copies of blocks from level k+1. Hits are served from k. A miss copies the block in, possibly replacing another. Placement of the form “block i lives in slot i mod n” is the direct-mapped idea in miniature. The book’s picture holds blocks 4, 9, 14, and 3 in a four-slot cache above a sixteen-block memory.</p>
+            <p>The cache at level k holds copies of blocks from level k+1. Hits are served from k. A miss copies the block in, possibly replacing another. Placing block i in slot i mod n is the direct-mapped idea in miniature. The book’s picture holds blocks 4, 9, 14, and 3 in a four-slot cache above a sixteen-block memory.</p>
             <p>Cold misses fill an empty cache. Conflict misses happen when placement piles live blocks onto one slot while other slots sit idle. Capacity misses happen when the working set is simply larger than the cache. The block size is the transfer unit between that pair of levels: words near the registers, cache lines in the SRAM caches, pages between disk and memory.</p>
             <p class="cite">p.&nbsp;646 · §6.3.1 Caching in the Memory Hierarchy</p>
           </div>
@@ -394,7 +401,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <span class="eyebrow">6.3.2 · summary of memory hierarchy concepts</span>
         <h2>Somebody has to decide what stays</h2>
         <p class="story">The shape is the same at every level: a smaller store caches a larger one, in blocks, with a hit time and a miss penalty. What changes is who manages it. The compiler chooses registers. Hardware chooses the SRAM caches and the TLB. The operating system and the MMU choose which pages stay in DRAM. Client software chooses which remote files stay on the local disk. A browser chooses which pages stay on that disk.</p>
-        <p class="story">Your C source looks the same in every row. The highlighted line is served by a different manager, with a different latency, depending on which shelf actually holds the bytes.</p>
+        <p class="story">The source line looks the same in every row. The highlighted line is served by a different manager, with a different latency, depending on which shelf actually holds the bytes.</p>
         <p class="imagine"><b>Try it:</b> tap a row. The code panel retargets the same kind of reference at that shelf.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -422,6 +429,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <h2>Sets, lines, blocks, and three fields in the address</h2>
         <p class="story">A cache has S = 2<sup>s</sup> <b>sets</b>. Each set has E <b>lines</b>. Each line holds one <b>block</b> of B = 2<sup>b</sup> bytes, plus a valid bit and a tag. The data capacity, ignoring tags and valid bits, is C = S × E × B.</p>
         <p class="story">An m-bit address splits into t tag bits, s set-index bits, and b block-offset bits, with t = m − (s + b). Finding a byte is three steps: the index selects the set, the tag is compared with the valid lines in that set, and the offset picks the byte inside the block.</p>
+        <p class="story">In the Rust, <code>&gt;&gt;</code> and <code>&lt;&lt;</code> shift bits right and left. Between two numbers, <code>&amp;</code> keeps only the bits set in both, which masks off a field. <code>1u32</code> is the number 1 as a 32-bit unsigned integer.</p>
         <p class="imagine"><b>Try it:</b> change S, E, B, and the address. The colored bits are the live split, and the code panel’s tags show the set, tag, and offset the hardware would compute.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -450,8 +458,9 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <span class="eyebrow">6.4.2 · direct-mapped caches</span>
         <h2>One line per set, so the tag must match</h2>
         <p class="story">E = 1. The set index chooses exactly one line. If the valid bit is set and the tag matches, the offset byte is returned. Otherwise the line is replaced with the block from memory. There is no choice of victim: the resident block leaves.</p>
-        <p class="story">The book’s toy is (S, E, B, m) = (4, 1, 2, 4). Reads of 0, then 1, hit the same block. 13 fills another set. 8 lands in set 0 and evicts block 0. Reading 0 again misses even though three sets are empty. That second miss is a conflict. The first touch of 8 was still cold.</p>
+        <p class="story">The book’s toy is (S, E, B, m) = (4, 1, 2, 4). Reads of 0, then 1, hit the same block. 13 fills another set. 8 lands in set 0 and evicts block 0. Reading 0 again misses even though two sets are still empty. That second miss is a conflict. The first touch of 8 was still cold.</p>
         <p class="story">The index uses the middle bits, not the high bits. High bits would park neighbouring blocks in the same set, and a stride-1 scan would thrash a cache that still had empty sets.</p>
+        <p class="story">In the Rust trace, byte k of the 16-byte array <code>m</code> stands for address k, and each <code>black_box(m[k])</code> is one read of it; <code>black_box</code> asks the compiler not to drop a read whose value nobody uses. In the index listing, <code>block &amp; 3</code> keeps the low two bits and <code>block &gt;&gt; 1</code> keeps the high ones.</p>
         <p class="imagine"><b>Try it:</b> step the toy trace, or press an address from 0 to 15. Then switch to index bits and scan blocks 0–3 with the low bits, then with the high bits.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -479,7 +488,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <span class="eyebrow">6.4.3 · set associative caches</span>
         <h2>E lines in the set, so two rivals can both stay</h2>
         <p class="story">A set-associative cache gives each set E lines, with 1 &lt; E. The index still picks one set. Inside the set, every valid tag is checked. Any of the E lines may hold the block. When they are all full, a replacement policy — often least recently used — picks the victim.</p>
-        <p class="story">Addresses 0 and 8 both mapped to set 0 in the direct-mapped toy, and they kicked each other out. Give that set two lines and both blocks sit there. The reread of 0 hits. A third block that wants the same set, such as 4, is the one that finally evicts somebody.</p>
+        <p class="story">Addresses 0 and 8 both mapped to set 0 in the direct-mapped toy, and they kicked each other out. Give that set two lines and both blocks sit there. The reread of 0 hits. A third block that wants the same set, such as the one at address 4, is the one that finally evicts somebody.</p>
         <p class="imagine"><b>Try it:</b> step 0, 8, 0, 4 on a two-way cache with two sets. The code tags say hit, fill, or which line LRU dropped.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -507,6 +516,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <h2>One set. Any line can hold any block.</h2>
         <p class="story">A fully associative cache is the case E = C/B: a single set, and every line is a candidate. There is no index field. The tag is everything above the block offset, and a lookup compares it with every line.</p>
         <p class="story">Conflicts of the “wrong slot” kind disappear. Misses that remain after the cache is warm are capacity misses: the working set has more blocks than there are lines. The machine below holds four lines. The fifth distinct block evicts the least recently used one. Small fully associative memories show up in real chips as things like a TLB, where E is tiny enough that searching every line is cheap.</p>
+        <p class="story">In the Rust, <code>mem</code> is nine 64-byte blocks, and <code>mem[b][0]</code> is the first byte of block b, so each <code>touch</code> reads one block.</p>
         <p class="imagine"><b>Try it:</b> step blocks 0, 2, 4, 6 into an empty cache, then block 8. The last step is the capacity miss. Reading 0 afterward misses too, because 0 was the victim.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -534,6 +544,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <h2>Update downstairs now, or pin a dirty note</h2>
         <p class="story">A write hit updates the cache’s copy. <b>Write-through</b> also writes the word to the next level immediately. Simple, and every store uses the bus. <b>Write-back</b> marks the line <b>dirty</b> and writes the block downstairs only when the line is evicted. Locality makes that a large saving in bus traffic, at the cost of the dirty bit and a flush on replacement.</p>
         <p class="story">A write miss has a second choice. <b>Write-allocate</b> loads the block, then updates it, hoping the program will touch that block again. <b>No-write-allocate</b> writes the word straight to the next level and leaves the cache alone. Write-through caches are usually no-write-allocate. Write-back caches are usually write-allocate. When you write cache-friendly code, assume write-back plus write-allocate: it tries to exploit the same locality as a read.</p>
+        <p class="story">In the Rust, <code>A</code> and <code>C</code> are two globals in memory (see “Rust setup” at the top), and <code>.store(v, Relaxed)</code> writes v into one of them.</p>
         <p class="imagine"><b>Try it:</b> store to A (a hit) and to C (a miss) under both pairings, then evict. Only the dirty line travels on eviction.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -615,13 +626,14 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <span class="eyebrow">6.5 · writing cache-friendly code</span>
         <h2>Walk the row the array already lives in</h2>
         <p class="story">Miss rate follows locality, and running time follows miss rate. The references that matter are the ones in the inner loop. A stride-k scan of words, with block size B, misses about min(1, word size × k / B) times per reference. Stride 1 is the friendly end of that formula: one miss, then B/4 − 1 hits, for 4-byte ints.</p>
-        <p class="story">C stores a row-major array so that <code>a[i][j]</code> and <code>a[i][j+1]</code> are neighbours. An inner loop on <code>j</code> is stride-1. An inner loop on <code>i</code> is stride-N. If the array is larger than the cache, the column walk misses on every access. The book measured the row version about 25× faster than the column version for large arrays.</p>
+        <p class="story">Rust lays out a nested fixed-size array row-major, just as the book’s C does. <code>[[i32; 4]; 4]</code> is an array of four rows, and each row is four <code>i32</code>s back to back, so <code>a[i][j]</code> and <code>a[i][j + 1]</code> are neighbours and row <code>i + 1</code> starts right where row <code>i</code> ends. (A <code>Vec&lt;Vec&lt;i32&gt;&gt;</code> is different: each row is its own heap allocation, so rows need not sit next to each other.) An inner loop on <code>j</code> is stride-1. An inner loop on <code>i</code> is stride-N. If the array is larger than the cache, the column walk misses on every access. For large arrays the book’s row version ran 25 times faster than its column version: that is the book’s measurement of its C version; our Rust measurement is pending. The <code>layout.rs</code> tab prints real addresses from both kinds of grid: <code>println!</code> prints a line, <code>{:p}</code> in it prints the address a reference points at, and <code>vec![x; n]</code> builds a <code>Vec</code> of n copies of x. In the array, row 1 starts 4 bytes after the last int of row 0; in the <code>Vec&lt;Vec&lt;i32&gt;&gt;</code>, it starts 20 bytes on, past a gap.</p>
+        <p class="story">One twist we found in rustc’s output: at <code>-C opt-level=3</code>, rustc 1.100.0 swapped the two loops of our benchmark’s plain integer column sum and walked the rows anyway (it shows in the x86-64 assembly). An optimiser is allowed to do that, not obliged to, so write the loop in memory order yourself.</p>
         <p class="imagine"><b>Try it:</b> walk the 4 × 4 grid by rows, then by columns. The cache holds one 16-byte block, exactly one row of ints. The highlighted statement is the access, tagged hit or miss.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
             <p>Focus on the inner loops of the core functions. For a stride-1 <code>sumvec</code> of ints with B = 16 and a cold cache, the pattern is miss, hit, hit, hit. <code>sumarrayrows</code> repeats that per row. <code>sumarraycols</code> is stride-N. When the array fits, even the column walk can warm up; when it does not, every <code>a[i][j]</code> misses.</p>
-            <p>On the authors’ desktop, the row-wise sum ran about 25 times faster than the column-wise sum once the arrays were large.</p>
+            <p>On the authors’ desktop, the row-wise sum ran 25 times faster than the column-wise sum for large array sizes.</p>
             <p class="cite">p.&nbsp;669 · §6.5 Writing Cache-Friendly Code</p>
           </div>
         </details>
@@ -642,7 +654,8 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <span class="eyebrow">6.6.1 · the memory mountain</span>
         <h2>Throughput is a mountain, not a number</h2>
         <p class="story">Read throughput depends on two things at once: how big the working set is, and the stride you walk it with. Plot them and you get a mountain. High ridges are working sets that fit in L1, L2, or L3. The slope down the side is spatial locality getting worse as the stride grows. The floor is main memory.</p>
-        <p class="story">On the Haswell Core i7 in the book, the L1 peak is over 14 GB/s and the memory floor is about 900 MB/s — more than an order of magnitude on the same machine, same load instruction. A stride-1 scan stays near 12 GB/s even past L2, because the prefetcher recognizes the pattern and pulls the next line early. At a stride of one cache line, that help runs out.</p>
+        <p class="story">On the book’s Haswell Core i7, the L1 peak is over 14 GB/s and the memory floor is 900 MB/s — more than an order of magnitude on the same machine, same load instruction. A stride-1 scan stays near 12 GB/s even past L2, because the prefetcher recognizes the pattern and pulls the next line early. At a stride of one cache line, that help runs out. Every throughput on this stage is the book’s measurement of its C version; our Rust measurement is pending.</p>
+        <p class="story">The listing is our benchmark’s <code>test</code>, exactly as it is timed. In the Rust, <code>///</code> starts a doc comment, and <code>#[inline(never)]</code> asks the compiler (a hint it may ignore) to keep <code>test</code> a real function rather than paste it into its caller. <code>&amp;[i64]</code> is a slice of 8-byte integers whose length is known only at run time, and <code>&amp;data[..elems]</code> is its first elems elements, checked once against the length. <code>let (mut acc0, …) = (0i64, …)</code> names four running sums at once. Like the book’s, it adds into four accumulators so independent loads can overlap. <code>data.chunks_exact(sx4)</code> hands out the slice in pieces of exactly 4 × stride elements, and the loop reads elements 0, stride, 2 × stride and 3 × stride of each, the same addresses the book’s <code>data[i]</code>, <code>data[i+stride]</code>, … reads. Writing <code>&amp;mut chunks</code> lends the iterator to the loop, so it can still be asked afterwards for <code>.remainder()</code>, the fewer than 4 × stride elements left over. Those are added one at a time, stride 1, as the book does. In our x86-64 output at <code>-C opt-level=3</code>, rustc checks the three indexes <code>c[stride]</code>, <code>c[2 * stride]</code> and <code>c[3 * stride]</code> once, before the loop, so the loop itself is four plain loads and adds.</p>
         <p class="imagine"><b>Try it:</b> slide the working-set size and the stride. The highlighted loop is the one being timed; the tags show which ridge you are on.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -654,7 +667,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         </details>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-title">Size × stride · a sketch of the Haswell mountain</span><span class="pill info" id="mt-pill"><i></i>L1</span></div>
+        <div class="stage-head"><span class="stage-title">Size × stride · the book’s Haswell mountain (C)</span><span class="pill info" id="mt-pill"><i></i>L1</span></div>
         <div class="stage-scroll"><svg id="mt-svg" viewBox="0 0 680 250" role="img" aria-label="Memory-mountain ridges selected by working-set size and stride"></svg></div>
         <div class="controls" id="mt-controls"></div>
         <div class="caption" aria-live="polite" id="mt-cap">Size picks a ridge. Stride picks how far down the spatial slope you are.</div>
@@ -668,8 +681,9 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
       <div class="copy">
         <span class="eyebrow">6.6.2 · rearranging loops to increase spatial locality</span>
         <h2>Six multiply loops, one arithmetic, three miss rates</h2>
-        <p class="story">All six matrix products compute <code>C[i][j] += A[i][k] * B[k][j]</code>. They differ only in which index is in the inner loop. With 8-byte doubles and 32-byte blocks, a stride-1 reference misses about 0.25 times per iteration, a stride-n reference misses every time, and a reference that does not change in the inner loop can live in a register.</p>
-        <p class="story">Inner <code>k</code> (ijk, jik) is class AB: A by rows, B by columns, 1.25 misses. Inner <code>i</code> (jki, kji) is class AC: two column scans, 2.00 misses. Inner <code>j</code> (kij, ikj) is class BC: B and C by rows, 0.50 misses. For large n the fastest pair ran almost 40× faster than the slowest pair, with the same floating-point work. Miss rate predicted that better than the raw number of memory operations did.</p>
+        <p class="story">All six matrix products compute <code>c[i][j] += a[i][k] * b[k][j]</code>. They differ only in which index is in the inner loop. With 8-byte doubles and 32-byte blocks, a stride-1 reference misses about 0.25 times per iteration, a stride-n reference misses every time, and a reference that does not change in the inner loop can live in a register.</p>
+        <p class="story">Inner <code>k</code> (ijk, jik) is class AB: A by rows, B by columns, 1.25 misses. Inner <code>i</code> (jki, kji) is class AC: two column scans, 2.00 misses. Inner <code>j</code> (kij, ikj) is class BC: B and C by rows, 0.50 misses. In the book’s measurement of its C version, for large n the fastest pair ran almost 40 times faster than the slowest, with the same floating-point work, and miss rate predicted speed better than the raw number of memory operations did. Our Rust measurement is pending.</p>
+        <p class="story">In the Rust, <code>N</code> is a constant (<code>const</code>, a value fixed when the program is compiled) and <code>[[f64; N]; N]</code> is an N × N array of 8-byte floats (<code>f64</code>, the book’s doubles), stored row by row. The book’s versions keep the element that does not move in a local variable (<code>sum</code> or <code>r</code>); the compact form here makes the same array references.</p>
         <p class="imagine"><b>Try it:</b> pick a permutation. The picture colors each array by how the inner loop touches it, and the code panel highlights that inner statement.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -697,7 +711,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <h2>Finish the work while the bytes are still here</h2>
         <p class="story">The mountain says the effective memory rate is not one number. It swings by orders of magnitude with locality, on every memory system, not just one cache geometry. Three habits follow. Spend your attention on the inner loop, where the references actually happen. Read objects in memory order, stride 1, so each block you pay for yields its neighbours. Once a block is in, use it as many times as you can before it is evicted.</p>
         <p class="story">Blocking is that third habit made structural. The array is cut into tiles that fit in the cache. The program finishes every use of a tile, then moves on. A straight triple pass over eight items, with a four-line cache, never reuses a line in time: every reference misses. The tiled pass misses eight times and hits sixteen.</p>
-        <p class="imagine"><b>Try it:</b> play the straight scan, then the tiled scan. The cache holds four items. The highlighted <code>use</code> is tagged hit or miss as it runs.</p>
+        <p class="imagine"><b>Try it:</b> play the straight scan, then the tiled scan. The cache holds four items. The highlighted <code>touch</code> is tagged hit or miss as it runs. (<code>ii..ii + 4</code> counts ii up to ii + 3: one tile.)</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -727,7 +741,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <div class="tradeoff"><div class="side"><h4><a href="#direct">Direct-mapped</a></h4><p>E = 1. One home slot. Easy to thrash.</p></div><div class="vs">vs</div><div class="side"><h4><a href="#setasc">Set-associative</a></h4><p>E &gt; 1. Rivals share a set. Heavier hit logic.</p></div></div>
         <div class="tradeoff"><div class="side"><h4><a href="#writes">Write-through</a></h4><p>Memory updated on the store.</p></div><div class="vs">vs</div><div class="side"><h4><a href="#writes">Write-back</a></h4><p>Dirty bit. Memory updated on eviction.</p></div></div>
         <div class="tradeoff"><div class="side"><h4><a href="#friendly">Row-major walk</a></h4><p>Stride-1. About one miss per block.</p></div><div class="vs">vs</div><div class="side"><h4><a href="#friendly">Column walk</a></h4><p>Stride-N. Can miss on every access.</p></div></div>
-        <div class="tradeoff"><div class="side"><h4><a href="#loops">Class AC multiply</a></h4><p>2.00 misses per inner iteration.</p></div><div class="vs">vs</div><div class="side"><h4><a href="#loops">Class BC multiply</a></h4><p>0.50 misses. Almost 40× faster for large n.</p></div></div>
+        <div class="tradeoff"><div class="side"><h4><a href="#loops">Class AC multiply</a></h4><p>2.00 misses per inner iteration.</p></div><div class="vs">vs</div><div class="side"><h4><a href="#loops">Class BC multiply</a></h4><p>0.50 misses. Almost 40× faster for large n, in the book’s measurement of its C version; our Rust measurement is pending.</p></div></div>
       </div>
     </div>
   </section>
@@ -744,7 +758,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <div class="word"><dt>temporal locality</dt><dd>The same address is used again soon.</dd></div>
         <div class="word"><dt>spatial locality</dt><dd>A nearby address is used next. Stride-1 is the friendly case.</dd></div>
         <div class="word"><dt>hit / miss</dt><dd>The block is in this cache, or it must be fetched from the level below.</dd></div>
-        <div class="word"><dt>cold / conflict / capacity</dt><dd>First touch; the home slot is busy while the cache still has room; the working set does not fit.</dd></div>
+        <div class="word"><dt>cold / conflict / capacity</dt><dd>First touch; two blocks fight over one home slot though the cache could hold both; the working set does not fit.</dd></div>
         <div class="word"><dt>set / line / block</dt><dd>A set holds E lines. A line holds a valid bit, a tag, and one block of B bytes.</dd></div>
         <div class="word"><dt>C = S × E × B</dt><dd>Data capacity. Tag bits and valid bits are overhead, not part of C.</dd></div>
         <div class="word"><dt>direct / set / full</dt><dd>E = 1, or several lines per set, or one set that can hold every block.</dd></div>
@@ -753,6 +767,8 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
         <div class="word"><dt>i-cache / d-cache</dt><dd>Split L1 so an instruction and a data word can be read together.</dd></div>
         <div class="word"><dt>miss rate / miss penalty</dt><dd>Misses per reference, and the extra cycles a miss costs.</dd></div>
         <div class="word"><dt>memory mountain</dt><dd>Read throughput against working-set size and stride.</dd></div>
+        <div class="word"><dt>row-major</dt><dd>Row 0, then row 1, back to back. A Rust <code>[[T; N]; M]</code> is laid out this way; a <code>Vec&lt;Vec&lt;T&gt;&gt;</code> keeps each row in its own allocation.</dd></div>
+        <div class="word"><dt>bounds check</dt><dd>Rust’s test that an index is inside the array, slice or Vec; a failed check panics. The compiler drops it when it can prove the index is in range.</dd></div>
         <div class="word"><dt>blocking</dt><dd>Finish every use of a tile that fits in cache, then load the next tile.</dd></div>
       </dl>
     </div>
@@ -760,7 +776,7 @@ static mut A: i32 = 0; static mut C: i32 = 0;   // the globals of the write scen
 
   <section class="scene" id="quiz">
     <div class="wrap" style="max-width:820px">
-      <div class="section-title"><h2>Check yourself</h2><p>Twelve questions, one pass over the chapter. Answer all twelve to mark it explored.</p></div>
+      <div class="section-title"><h2>Check yourself</h2><p>Thirteen questions, one pass over the chapter. Answer all thirteen to mark it explored.</p></div>
       <div class="quiz" id="quiz-root"></div>
     </div>
   </section>
@@ -813,22 +829,13 @@ function pill(id, text, tone) {
 }
 
 const TOKENS = {
-  c: [
-    [/\/\/.*|\/\*.*?\*\//, "cm"],
-    [/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/, "st"],
-    [/^\s*#\s*\w+/, "pp"],
-    [/\b(?:int|long|short|char|float|double|void|unsigned|signed|const|static|extern|struct|typedef|size_t|ssize_t|volatile)\b/, "ty"],
-    [/\b(?:return|for|while|if|else|do|break|sizeof|NULL)\b/, "kw"],
-    [/\b(?:0x[0-9a-fA-F]+|\d+(?:\.\d+)?)\b/, "nu"],
-    [/\b[A-Za-z_]\w*(?=\s*\()/, "fn"],
-  ],
   rust: [
     [/\/\/.*|\/\*.*?\*\//, "cm"],
     [/[bc]?"(?:[^"\\]|\\.)*"|b?'(?:[^'\\]|\\.)'/, "st"],
     [/#!?\[[^\]]*\]/, "pp"],
     [/\b[a-z_]\w*!/, "pp"],
     [/\b(?:i8|i16|i32|i64|isize|u8|u16|u32|u64|usize|f32|f64|bool|char|str)\b/, "ty"],
-    [/\b(?:fn|let|mut|for|in|while|loop|if|else|return|pub|static|const|unsafe|extern|as|true|false|Some|None)\b/, "kw"],
+    [/\b(?:fn|let|mut|for|in|while|loop|if|else|return|pub|static|const|unsafe|extern|as|use|match|true|false|Some|None|Ok|Err)\b/, "kw"],
     [/\b(?:0x[0-9a-fA-F_]+|\d[\d_]*(?:\.\d+)?(?:e[+-]?\d+)?(?:f32|f64|i32|i64|u32|u8|usize)?)\b/, "nu"],
     [/\b[A-Za-z_]\w*(?=\s*\()/, "fn"],
   ],
@@ -856,37 +863,11 @@ function highlight(line, lang) {
   }
   return out + esc(line.slice(last));
 }
-const CODE_LANG = (() => {
-  let v = "c";
-  try { if (new URLSearchParams(location.search).get("code") === "rust") v = "rust"; } catch (e) {}
-  const subs = [];
-  return {
-    get v() { return v; },
-    get rust() { return v === "rust"; },
-    on(fn) { subs.push(fn); },
-    set(nv) {
-      if (nv === v) return;
-      v = nv;
-      try { const u = new URL(location.href); if (v === "rust") u.searchParams.set("code", "rust"); else u.searchParams.delete("code"); history.replaceState(null, "", u); } catch (e) {}
-      subs.forEach((fn) => fn(v));
-    },
-  };
-})();
-function langToggle() {
-  const wrap = h("div", { class: "cp-lang", role: "group", "aria-label": "Show the code in C or Rust" });
-  [["c", "C"], ["rust", "Rust"]].forEach(([k, label]) => {
-    const b = h("button", { type: "button", "data-lang": k, "aria-pressed": String(CODE_LANG.v === k) }, label);
-    b.addEventListener("click", () => CODE_LANG.set(k));
-    wrap.appendChild(b);
-  });
-  CODE_LANG.on((nv) => wrap.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === nv))));
-  return wrap;
-}
-document.querySelector(".first").appendChild(langToggle());
-{ const pre = document.getElementById("rust-prelude"); const sync = () => { pre.hidden = !CODE_LANG.rust; }; CODE_LANG.on(sync); sync(); }
-function fileC(name, csrc, rsrc, cmd, rsCmd) {
-  const f = { name, lang: "c", src: csrc, rs: { name: name.replace(/\.c$/, ".rs"), src: rsrc, map: "same", cmd: rsCmd != null ? rsCmd : (cmd || "") } };
-  if (cmd) f.cmd = cmd;
+// The listings are Rust only. CODE_LANG stays as a fixed value for any engine that asks.
+const CODE_LANG = { v: "rust", rust: true, on() {}, set() {} };
+function rs(name, src, map) {
+  const f = { name, lang: "rust", src };
+  if (map) f.map = map;
   return f;
 }
 function code(sel, o) {
@@ -894,41 +875,32 @@ function code(sel, o) {
   root.className = "codepane";
   const tabs = h("div", { class: "cp-tabs" });
   const cmd = h("span", { class: "cp-cmd" });
-  root.appendChild(h("div", { class: "cp-head" }, h("span", { class: "cp-k" }, o.label || "The code"), tabs, langToggle(), cmd));
+  root.appendChild(h("div", { class: "cp-head" }, h("span", { class: "cp-k" }, o.label || "The code"), tabs, cmd));
   const body = h("div", { class: "cp-body", tabindex: "0", role: "region", "aria-label": (o.label || "The code") + " listing" });
   const ol = h("ol");
   body.appendChild(ol);
   const out = h("pre", { class: "cp-out", hidden: true, "aria-live": "polite" });
   root.append(body, out);
-  const clone = (f) => { const c = Object.assign({}, f); if (f.rs) c.rs = Object.assign({}, f.rs); return c; };
+  const clone = (f) => Object.assign({}, f);
   let files = o.files.map(clone);
   let cur = null, lis = [];
-  let req = { marks: {}, notes: null, out: [null, null] };
-  function labelOf(f) { return CODE_LANG.rust && f.rs ? f.rs.name : f.name; }
-  function noteFor(f) {
-    if (f.rsNote) return f.rsNote;
-    if (f.lang === "asm") return "the book’s instructions. The machine steps these lines";
-    return "the same in C and Rust";
-  }
+  let req = { marks: {}, notes: null, out: null };
   function view() {
-    if (CODE_LANG.rust && cur.rs) return { lang: "rust", src: cur.rs.src, cmd: cur.rs.cmd || cur.cmd || "" };
-    if (CODE_LANG.rust) {
-      const note = noteFor(cur);
-      const base = cur.cmd || "";
-      return { lang: cur.lang, src: cur.src, cmd: base ? base + "  ·  " + note : note };
-    }
-    return { lang: cur.lang, src: cur.src, cmd: cur.cmd || "" };
+    const note = cur.rsNote || "";
+    const base = cur.cmd || "";
+    return { lang: cur.lang, src: cur.src, cmd: base && note ? base + "  ·  " + note : base || note };
   }
+  // Engines name lines by number; a file's optional map moves those numbers onto its listing.
   function tr(n) {
-    if (!CODE_LANG.rust || !cur.rs || !cur.rs.map || cur.rs.map === "same") return n;
-    const hit = cur.rs.map[n];
+    if (!cur.map) return n;
+    const hit = cur.map[n];
     return hit == null ? null : hit;
   }
   function drawTabs() {
     K.clear(tabs);
-    if (files.length === 1 && !o.tabs) { tabs.appendChild(h("span", { class: "cp-file" }, labelOf(files[0]))); return; }
+    if (files.length === 1 && !o.tabs) { tabs.appendChild(h("span", { class: "cp-file" }, files[0].name)); return; }
     files.forEach((f) => {
-      const b = h("button", { type: "button", class: "cp-tab", "aria-pressed": String(f === cur) }, labelOf(f));
+      const b = h("button", { type: "button", class: "cp-tab", "aria-pressed": String(f === cur) }, f.name);
       b.addEventListener("click", () => show(f.name));
       tabs.appendChild(b);
     });
@@ -955,9 +927,8 @@ function code(sel, o) {
     });
   }
   function paintOut() {
-    const text = CODE_LANG.rust ? req.out[1] : req.out[0];
-    out.hidden = text == null;
-    out.textContent = text || "";
+    out.hidden = req.out == null;
+    out.textContent = req.out || "";
   }
   function render() {
     K.clear(ol);
@@ -983,19 +954,13 @@ function code(sel, o) {
   }
   const api = {
     show,
-    setFiles(list) { files = list.map(clone); cur = null; req = { marks: {}, notes: null, out: [null, null] }; show(files[0].name); },
+    setFiles(list) { files = list.map(clone); cur = null; req = { marks: {}, notes: null, out: null }; show(files[0].name); },
     src(name, text, extra) {
       const f = files.find((x) => x.name === name);
       if (!f) return;
       f.src = text;
-      if (extra && extra.rs) {
-        const kept = f.rs && f.rs.cmd;
-        f.rs = Object.assign({ name: name.replace(/\.c$/, ".rs"), map: "same", cmd: kept || "" }, extra.rs);
-      }
-      if (extra && extra.cmd != null) {
-        f.cmd = extra.cmd;
-        if (f.rs) f.rs.cmd = extra.rs && extra.rs.cmd != null ? extra.rs.cmd : extra.cmd;
-      }
+      if (extra && "map" in extra) f.map = extra.map;
+      if (extra && extra.cmd != null) f.cmd = extra.cmd;
       if (f === cur) { req.marks = {}; req.notes = null; render(); }
     },
     at(lines, cls = "on", scroll = true, keep = false) {
@@ -1014,9 +979,8 @@ function code(sel, o) {
       if (scroll && li) scrollTo(li);
     },
     notes(map) { req.notes = map || {}; paintNotes(); },
-    out(text, rustText) { req.out = [text, rustText == null ? text : rustText]; paintOut(); },
+    out(text) { req.out = text; paintOut(); },
   };
-  CODE_LANG.on(() => { if (cur) { render(); drawTabs(); } });
   show(files[0].name);
   return api;
 }
@@ -1086,45 +1050,29 @@ function code(sel, o) {
   const buf = box(gRas, 360, 116, 290, 64, "sv-db", "row buffer", "empty");
   const pins = box(gRas, 360, 196, 290, 56, "sv-panel", "data pins", "8 bits");
 
-  const cpu = box(gBus, 24, 36, 180, 80, "sv-server", "CPU", "x = A[2]");
+  const cpu = box(gBus, 24, 36, 180, 80, "sv-server", "CPU", "x = a[2]");
   const chips = [];
   for (let i = 0; i < 8; i++) chips.push(box(gBus, 20 + i * 82, 160, 74, 52, "sv-panel", "chip " + i, "8 bits", 12));
   const word = box(gBus, 240, 36, 200, 80, "sv-db", "x", "waiting");
   gBus.append(draw.label(340, 146, "DIMM · 8 chips answer together as one word", "sv-label"));
 
-  const CELL = `static mut SRAM: i32 = 0; // bistable while power is on
-static mut DRAM: i32 = 1; // charge on a capacitor
-static mut ROM: i32 = 1; // keeps its bit in the dark
-unsafe fn refresh() { unsafe { *std::ptr::addr_of_mut!(DRAM) = 1; } }
-unsafe fn power_off() {
-    unsafe { *std::ptr::addr_of_mut!(SRAM) = 0; }
-    unsafe { *std::ptr::addr_of_mut!(DRAM) = 0; } // rom is unchanged
-}`;
-  const CELL_RS = CELL;
-  const CELL_C = `int sram = 0;   /* bistable while power is on */
-int dram = 1;   /* charge on a capacitor */
-int rom  = 1;   /* keeps its bit in the dark */
-void refresh(void) { dram = 1; }
-void power_off(void) {
-    sram = 0;
-    dram = 0;   /* rom is unchanged */
-}`;
-  const ROW = `/* 4 x 4 supercells, 8 bits each */
-row_buffer = RAS(2);  /* copy all of row 2 */
-byte out = CAS(1);    /* column 1 leaves on the pins */`;
-  const ROW_RS = `// 4 x 4 supercells, 8 bits each
-let row_buffer: [u8; 4] = grid[2]; // copy all of row 2
-let out: u8 = row_buffer[1]; // column 1 leaves on the pins`;
-  const BUS = `long A[4];
-long x;
-x = A[2];   /* address on the bus, eight chips reply */`;
-  const BUS_RS = `let a: [i64; 4] = [10, 20, 30, 40];
-let x: i64;
+  const CELL = `let mut sram: u8 = 0; // bistable while power is on
+let mut dram: u8 = 1; // charge on a capacitor
+let rom: u8 = 1; // no mut: nothing may write it
+dram = 1; // refresh: read the charge, write it back
+// power off:
+sram = 0;
+dram = 0; // rom is unchanged`;
+  const ROW = `let grid = [[0u8; 4]; 4]; // 4 x 4 supercells, 8 bits each
+let row_buffer: [u8; 4] = grid[2]; // RAS = 2: copy all of row 2
+let out: u8 = row_buffer[1]; // CAS = 1: column 1 leaves on the pins`;
+  const BUS = `let a: [i64; 4] = [10, 20, 30, 40]; // four 8-byte words in DRAM
+let x: i64; // declared now, filled in by the load
 x = a[2]; // address on the bus, eight chips reply`;
   const cv = code("#ram-code", { tabs: true, files: [
-    fileC("cells.c", CELL_C, CELL_RS),
-    fileC("row.c", ROW, ROW_RS),
-    fileC("bus.c", BUS, BUS_RS),
+    rs("cells.rs", CELL),
+    rs("row.rs", ROW),
+    rs("bus.rs", BUS),
   ]});
 
   let mode = 0, sramBit = 0, charge = 100, power = true, phase = 0, busy = false, gen = 0, vis = false;
@@ -1145,7 +1093,7 @@ x = a[2]; // address on the bus, eight chips reply`;
     setCls(rom.r, "sv-good");
     fact.textContent = power ? "Power is on. SRAM holds its bit. DRAM is leaking." : "Power is off. SRAM and DRAM forgot. ROM still reads 1.";
     if (mode !== 0) return;
-    cv.show("cells.c");
+    cv.show("cells.rs");
     cv.at(power ? [2] : [5, 6, 7], power ? "on" : "bad", false);
     cv.notes(power
       ? { 1: "sram = " + sramBit, 2: "charge " + charge + "%" }
@@ -1168,12 +1116,12 @@ x = a[2]; // address on the bus, eight chips reply`;
       ctrl.t.textContent = "controller"; ctrl.u.textContent = "idle";
       buf.t.textContent = "row buffer"; buf.u.textContent = "empty";
       pins.t.textContent = "data pins"; setCls(pins.r, "sv-panel");
-      cv.show("row.c"); cv.at([2]); cv.notes({});
+      cv.show("row.rs"); cv.at([2]); cv.notes({});
       cap("#ram-cap", "RAS = 2 copies row 2 into the row buffer. CAS = 1 then selects supercell (2, 1).");
     } else {
       chips.forEach((c) => setCls(c.r, "sv-panel"));
       word.t.textContent = "x"; word.u.textContent = "waiting"; setCls(word.r, "sv-db");
-      cv.show("bus.c"); cv.at([3]); cv.notes({ 3: "not started" });
+      cv.show("bus.rs"); cv.at([3]); cv.notes({ 3: "not started" });
       cap("#ram-cap", "A load drives an address. Eight DRAM chips on the module each return 8 bits of the word.");
     }
   }
@@ -1198,8 +1146,7 @@ x = a[2]; // address on the bus, eight chips reply`;
   });
   btn("Cut / restore power", 0, "", () => {
     power = !power;
-    if (!power) charge = 0;
-    else charge = 0;
+    charge = 0; sramBit = 0; // both forget; SRAM powers up as 0 here
     paintCell();
     cap("#ram-cap", power
       ? "Power is back. SRAM woke up as 0, DRAM is empty, and <b>ROM still holds 1</b>. That is why firmware can live in ROM."
@@ -1239,11 +1186,11 @@ x = a[2]; // address on the bus, eight chips reply`;
     }
     busy = false;
   });
-  btn("Load A[2]", 2, "primary", async () => {
+  btn("Load a[2]", 2, "primary", async () => {
     if (mode !== 2 || busy) return;
     busy = true; const my = gen;
     cv.at([3]); cv.notes({ 3: ["address", "warn"] });
-    const p = draw.tag("addr 2"); svg.appendChild(p);
+    const p = draw.tag("address"); svg.appendChild(p);
     await fly(p, [cpu.cx, cpu.cy], [chips[3].cx, chips[3].cy - 30], 450);
     if (my !== gen) { p.remove(); return; }
     p.remove();
@@ -1256,9 +1203,9 @@ x = a[2]; // address on the bus, eight chips reply`;
     if (my !== gen) { q.remove(); return; }
     q.remove();
     chips.forEach((c) => setCls(c.r, "sv-good"));
-    word.t.textContent = "A[2]"; word.u.textContent = "in the register"; setCls(word.r, "sv-good");
-    cv.at([3], "good"); cv.notes({ 3: ["x = A[2]", "good"] });
-    cap("#ram-cap", "Eight chips answered together. <b>x</b> now holds A[2]. The same bus carries stores in the other direction.");
+    word.t.textContent = "a[2]"; word.u.textContent = "in the register"; setCls(word.r, "sv-good");
+    cv.at([3], "good"); cv.notes({ 3: ["x = a[2]", "good"] });
+    cap("#ram-cap", "Eight chips answered together. <b>x</b> now holds a[2]. The same bus carries stores in the other direction.");
     busy = false;
   });
   K.$("#ram-seg").appendChild(seg(["Cells", "RAS / CAS", "Bus load"], 0, show, "ram-mode"));
@@ -1315,48 +1262,31 @@ x = a[2]; // address on the bus, eight chips reply`;
     wedge.setAttribute("d", `M${p0[0]},${p0[1]} A${r1},${r1} 0 0 1 ${p1[0]},${p1[1]} L${p2[0]},${p2[1]} A${r0},${r0} 0 0 0 ${p3[0]},${p3[1]} Z`);
     wedge.setAttribute("opacity", on ? "0.95" : "0.15");
   }
-  const ONE = `void read_one(int fd, char buf[512]) {
-    seek_arm();         /* 9 ms */
-    wait_rotation();    /* 4 ms */
-    transfer_sector();  /* 0.02 ms */
-    dma_to_memory(buf); /* then an interrupt */
+  const ONE = `fn read_one(f: &mut File, buf: &mut [u8; 512]) -> io::Result<()> {
+    // inside the drive: move the arm to the track, ~9 ms
+    // wait for the sector to spin round, ~4 ms
+    f.read_exact(buf)?; // transfer 512 bytes, ~0.02 ms
+    Ok(()) // DMA filled memory, then an interrupt woke us
 }`;
-  const ONE_RS = `fn read_one(file: &mut std::fs::File, buf: &mut [u8; 512]) -> std::io::Result<usize> {
-    // the drive does these, invisibly: seek_arm() ~9 ms
-    // ... wait_rotation() ~4 ms
-    // ... transfer_sector() ~0.02 ms
-    std::io::Read::read(file, buf) // dma_to_memory, then an interrupt wakes this thread
-}`;
-  const SEQ = `void read_seq(int fd, char buf[512]) {
-    for (i = 0; i < 4; i++)
-        read(fd, buf, 512);
-    /* sector 0 paid seek + rotation */
-    /* sectors 1..3 pay transfer only */
-}`;
-  const SEQ_RS = `fn read_seq(file: &mut std::fs::File, buf: &mut [u8; 512]) -> std::io::Result<()> {
-    for _i in 0..4
-        { std::io::Read::read_exact(file, buf)?; }
-    // sector 0 paid seek + rotation
-    // sectors 1..3 pay transfer only
+  const SEQ = `fn read_seq(f: &mut File, buf: &mut [u8; 512]) -> io::Result<()> {
+    for _ in 0..4 {
+        f.read_exact(buf)?; // the next sector on the track
+        // sector 0 paid seek + rotation
+        // sectors 1..3 pay transfer only
+    }
     Ok(())
 }`;
-  const RAND = `void read_rand(int fd, char buf[512]) {
-    for (i = 0; i < 4; i++) {
-        lseek(fd, off[i], SEEK_SET);
-        read(fd, buf, 512);
-    }
-}`;
-  const RAND_RS = `fn read_rand(file: &mut std::fs::File, buf: &mut [u8; 512], off: &[u64; 4]) -> std::io::Result<()> {
-    for i in 0..4 {
-        std::io::Seek::seek(file, std::io::SeekFrom::Start(off[i]))?;
-        std::io::Read::read(file, buf)?;
+  const RAND = `fn read_rand(f: &mut File, buf: &mut [u8; 512], at: &[u64]) -> io::Result<()> {
+    for &block in at {
+        f.seek(SeekFrom::Start(block * 512))?; // jump to that sector
+        f.read_exact(buf)?;
     }
     Ok(())
 }`;
   const cv = code("#disk-code", { tabs: true, files: [
-    fileC("one.c", ONE, ONE_RS),
-    fileC("sequential.c", SEQ, SEQ_RS),
-    fileC("random.c", RAND, RAND_RS),
+    rs("one.rs", ONE),
+    rs("sequential.rs", SEQ),
+    rs("random.rs", RAND),
   ]});
   const st = { phase: stat("phase", "idle"), t: stat("time", "0 ms") };
   const stats = K.$("#disk-stats");
@@ -1367,7 +1297,7 @@ x = a[2]; // address on the bus, eight chips reply`;
     place(-0.4, 70); setWedge(false);
     phases.forEach((p) => setCls(p.r, "sv-panel"));
     st.phase.set("idle"); st.t.set("0 ms"); step = 0;
-    cv.show("one.c"); cv.at([2]); cv.notes({});
+    cv.show("one.rs"); cv.at([2]); cv.notes({});
     cap("#disk-cap", "A 512-byte sector waits on seek, rotation, and a short transfer. Then DMA delivers it.");
   }
   function resetMany() {
@@ -1380,7 +1310,7 @@ x = a[2]; // address on the bus, eight chips reply`;
     totalT.textContent = "0 ms";
     totalS.textContent = mode === 1 ? "neighbours on one track" : "a new seek every time";
     st.phase.set("idle"); st.t.set("0 ms");
-    cv.show(mode === 1 ? "sequential.c" : "random.c");
+    cv.show(mode === 1 ? "sequential.rs" : "random.rs");
     cv.at([3]); cv.notes({});
     cap("#disk-cap", mode === 1
       ? "Four sectors in order. The first pays 13.02 ms. Each neighbour pays 0.02 ms."
@@ -1452,7 +1382,7 @@ x = a[2]; // address on the bus, eight chips reply`;
             ? "Sector 0 paid the full <b>13.02 ms</b>. The head is now on the track."
             : `Sector ${step} is the next one around. Transfer only, <b>0.02 ms</b>. Running total ${acc.toFixed(2)} ms.`);
         } else {
-          cv.at([3, 4]); cv.notes({ 3: "off = " + offs[step], 4: [pay.toFixed(2) + " ms", "bad"] });
+          cv.at([3, 4]); cv.notes({ 3: "block " + offs[step], 4: [pay.toFixed(2) + " ms", "bad"] });
           cap("#disk-cap", `Block ${offs[step]} is somewhere else on the disk. Another seek and another half-turn: <b>13.02 ms</b>. Total ${acc.toFixed(2)} ms.`);
         }
         step++;
@@ -1481,23 +1411,31 @@ x = a[2]; // address on the bus, eight chips reply`;
       cells.push({ boxel, i, b, p });
     }
   }
-  const SRC = `void program(int page, char data) {
-    int block = page / 4;
-    if (live(page)) {
-        copy_siblings(block);
-        erase(block);       /* ~1 ms */
+  // spare: the fresh block the live pages are copied into (the listing's Vec).
+  svg.append(draw.label(36, 210, "spare · the fresh block (Vec)", "sv-label", "start"));
+  const spareBoxes = [0, 1, 2, 3].map((i) => box(svg, 36 + i * 160, 218, 148, 52, "sv-panel", "—", "spare " + i, 13));
+  let spare = [];
+  function paintSpare(fresh) {
+    const last = spare.slice(-4);
+    spareBoxes.forEach((b, i) => {
+      const v = last[i];
+      b.t.textContent = v === undefined ? "—" : v == null ? "erased" : v;
+      b.u.textContent = v === undefined ? "spare " + i : "spare " + (spare.length - last.length + i);
+      setCls(b.r, v === undefined ? "sv-panel" : fresh ? "sv-data-soft" : "sv-db");
+    });
+  }
+  const SRC = `fn program(pages: &mut [Option<char>; 8], page: usize, data: char,
+           spare: &mut Vec<Option<char>>) {
+    let block = page / 4; // 4 pages per block
+    if pages[page].is_some() { // Some(c): holds c. None: erased
+        let first = block * 4;
+        spare.extend_from_slice(&pages[first..first + 4]); // copy out
+        pages[first..first + 4].fill(None); // erase the block, ~1 ms
     }
-    flash_write(page, data);
+    pages[page] = Some(data); // program the page
 }`;
-  const SRC_RS = `fn program(pages: &mut [Option<char>; 8], page: usize, data: char) {
-    let block = page / 4;
-    if pages[page].is_some() {
-        let kept = pages[block * 4..block * 4 + 4].to_vec();
-        pages[block * 4..block * 4 + 4].fill(None); // ~1 ms
-        pages[block * 4..block * 4 + 4].copy_from_slice(&kept); }
-    pages[page] = Some(data);
-}`;
-  const cv = code("#ssd-code", { files: [fileC("flash.c", SRC, SRC_RS)] });
+  // The scene names the steps 2, 3, 4, 5, 7; the map puts them on the listing's lines.
+  const cv = code("#ssd-code", { files: [rs("flash.rs", SRC, { 1: 1, 2: 3, 3: 4, 4: 6, 5: 7, 6: 8, 7: 9, 8: 10 })] });
   function paint() {
     cells.forEach((c) => {
       const v = pages[c.i];
@@ -1522,17 +1460,20 @@ x = a[2]; // address on the bus, eight chips reply`;
       cv.at([7], "good"); cv.notes({ 7: ["~60 μs", "good"], 3: ["false", "good"] });
       pages[sel] = "W";
       paint();
-      cap("#ssd-cap", "The page was erased, so flash_write ran at once. A sequential program of a page is tens of microseconds, not a millisecond.");
+      cap("#ssd-cap", "The page was erased, so it was programmed at once. A sequential program of a page is tens of microseconds, not a millisecond.");
     } else {
       cv.at([3, 4]); cv.notes({ 3: ["true", "warn"], 4: "copy" });
       cells.filter((c) => c.b === b0 && pages[c.i] != null).forEach((c) => setCls(c.boxel.r, "sv-bad"));
-      cap("#ssd-cap", `Page is live. Siblings in block ${b0} are copied to a fresh block first.`);
+      for (let i = 0; i < 4; i++) spare.push(pages[b0 * 4 + i]);
+      paintSpare(true);
+      cap("#ssd-cap", `Page is live. All four pages of block ${b0} are copied into spare, the fresh block, first, so the neighbours worth keeping survive the erase.`);
       await sleep(450);
       if (my !== gen) return;
       cv.at([5], "bad"); cv.notes({ 5: ["~1 ms", "bad"] });
       for (let i = 0; i < 4; i++) pages[b0 * 4 + i] = null;
       paint();
-      cap("#ssd-cap", `Block ${b0} is erased. Every bit is 1 again.`);
+      paintSpare(false);
+      cap("#ssd-cap", `Block ${b0} is erased. Every bit is 1 again. Its old pages live on in spare.`);
       await sleep(350);
       if (my !== gen) return;
       pages[sel] = "W";
@@ -1542,7 +1483,7 @@ x = a[2]; // address on the bus, eight chips reply`;
     }
     busy = false; wr.disabled = false;
   });
-  rst.addEventListener("click", () => { gen++; pages = [null, null, null, null, "C", "D", "E", "F"]; sel = 0; busy = false; wr.disabled = false; paint(); });
+  rst.addEventListener("click", () => { gen++; pages = [null, null, null, null, "C", "D", "E", "F"]; spare = []; paintSpare(false); sel = 0; busy = false; wr.disabled = false; paint(); });
   ctr.append(wr, rst);
   paint();
 })();
@@ -1573,20 +1514,14 @@ x = a[2]; // address on the bus, eight chips reply`;
     svg.append(lab, track, bar, num);
     return { bar, num };
   });
-  const SRC = `double acc = 0;
-for (i = 0; i < N; i++)
-    acc += i * i;          /* compute, in registers */
-
-for (i = 0; i < N; i += stride)
-    acc += A[i];           /* memory, if A is large */`;
-  const SRC_RS = `let mut acc: f64 = 0.0;
+  const SRC = `let mut acc: f64 = 0.0;
 for i in 0..n {
     acc += (i as f64) * (i as f64); // compute, in registers
 }
-for i in (0..n).step_by(stride) {
+for i in (0..n).step_by(stride) { // every stride-th i
     acc += a[i]; // memory, if a is large
 }`;
-  const cv = code("#trends-code", { files: [fileC("gap.c", SRC, SRC_RS)] });
+  const cv = code("#trends-code", { files: [rs("gap.rs", SRC)] });
   let year = 0;
   function times(base, now) {
     const f = base / now;
@@ -1611,7 +1546,8 @@ for i in (0..n).step_by(stride) {
       3: ["CPU " + times(166, SERIES[4].vals[year]), "good"],
       6: ["DRAM latency " + times(200, SERIES[1].vals[year]), dramF + 1 < cpuF ? "warn" : ""],
     });
-    cap("#trends-cap", `In <b>${YEARS[year]}</b>, effective CPU time is ${times(166, SERIES[4].vals[year])} the 1985 cycle, and DRAM latency is ${times(200, SERIES[1].vals[year])}. Cost versus 1985: SRAM ${cost(COST.sram)}, DRAM ${cost(COST.dram)}, disk ${cost(COST.disk)} cheaper per byte.`);
+    if (year === 0) { cap("#trends-cap", "In <b>1985</b> every bar is 1×: this is the baseline. Drag forward and watch CPU speed pull away from DRAM latency."); return; }
+    cap("#trends-cap", `In <b>${YEARS[year]}</b>, the effective CPU cycle is ${times(166, SERIES[4].vals[year])} faster than in 1985, and DRAM latency only ${times(200, SERIES[1].vals[year])} better. Cost versus 1985: SRAM ${cost(COST.sram)}, DRAM ${cost(COST.dram)}, disk ${cost(COST.disk)} cheaper per byte.`);
   }
   K.$("#trends-controls").appendChild(slider({
     id: "trends-year", label: "year", min: 0, max: 6, value: 0,
@@ -1627,61 +1563,45 @@ for i in (0..n).step_by(stride) {
   const gV = s("g"), gA = s("g", { visibility: "hidden" });
   svg.append(gV, gA);
   const vec = [];
-  for (let k = 0; k < 8; k++) vec.push(box(gV, 16 + (k % 8) * 82, 36, 74, 64, "sv-panel", "v" + k, String(k * 4), 13));
+  const VALS = [3, 1, 4, 1, 5, 9, 2, 6]; // v, as the caption says
+  const GRIDV = [1, 2, 3, 4, 5, 6]; // a = [[1, 2, 3], [4, 5, 6]], row by row
+  for (let k = 0; k < 8; k++) vec.push(box(gV, 16 + (k % 8) * 82, 36, 74, 64, "sv-panel", String(VALS[k]), `v[${k}] · @${k * 4}`, 13));
   const sumB = box(gV, 16, 140, 180, 64, "sv-server", "0", "sum");
   gV.append(draw.label(400, 176, "stride-1 · each v[i] once · sum every time", "sv-label"));
   const grid = [];
   for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
-    grid.push(box(gA, 24 + c * 150, 28 + r * 88, 136, 72, "sv-panel", `a[${r}][${c}]`, "addr " + ((r * 3 + c) * 4)));
+    grid.push(box(gA, 24 + c * 150, 28 + r * 88, 136, 72, "sv-panel", `a[${r}][${c}] = ${GRIDV[r * 3 + c]}`, "addr " + ((r * 3 + c) * 4)));
   }
   const sumA = box(gA, 490, 28, 160, 72, "sv-server", "0", "sum");
-  const SUM = `int sumvec(int v[8]) {
-    int i, sum = 0;
-    for (i = 0; i < 8; i++)
-        sum += v[i];
-    return sum;
-}`;
-  const SUM_RS = `fn sumvec(v: &[i32; 8]) -> i32 {
-    let mut sum = 0i32;
+  const SUM = `fn sumvec(v: &[i32; 8]) -> i32 {
+    let mut sum = 0;
     for i in 0..8 {
-        sum += v[i];
+        sum += v[i]; // the next int is the next address
     }
     sum
 }`;
-  const ROWS = `int sumarrayrows(int a[2][3]) {
-    int i, j, sum = 0;
-    for (i = 0; i < 2; i++)
-        for (j = 0; j < 3; j++)
-            sum += a[i][j];
-    return sum;
-}`;
-  const ROWS_RS = `fn sumarrayrows(a: &[[i32; 3]; 2]) -> i32 {
-    let mut sum = 0i32;
+  const ROWS = `fn sumarrayrows(a: &[[i32; 3]; 2]) -> i32 {
+    let mut sum = 0;
     for i in 0..2 {
-    for j in 0..3 {
-        sum += a[i][j];
-    }}
+        for j in 0..3 {
+            sum += a[i][j];
+        }
+    }
     sum
 }`;
-  const COLS = `int sumarraycols(int a[2][3]) {
-    int i, j, sum = 0;
-    for (j = 0; j < 3; j++)
-        for (i = 0; i < 2; i++)
-            sum += a[i][j];
-    return sum;
-}`;
-  const COLS_RS = `fn sumarraycols(a: &[[i32; 3]; 2]) -> i32 {
-    let mut sum = 0i32;
+  const COLS = `fn sumarraycols(a: &[[i32; 3]; 2]) -> i32 {
+    let mut sum = 0;
     for j in 0..3 {
-    for i in 0..2 {
-        sum += a[i][j];
-    }}
+        for i in 0..2 {
+            sum += a[i][j];
+        }
+    }
     sum
 }`;
   const cv = code("#data-code", { tabs: true, files: [
-    fileC("sumvec.c", SUM, SUM_RS),
-    fileC("rows.c", ROWS, ROWS_RS),
-    fileC("cols.c", COLS, COLS_RS),
+    rs("sumvec.rs", SUM),
+    rs("rows.rs", ROWS),
+    rs("cols.rs", COLS),
   ]});
   const ROW = [0, 1, 2, 3, 4, 5], COL = [0, 3, 1, 4, 2, 5];
   let mode = 0, step = 0, sum = 0;
@@ -1690,15 +1610,15 @@ for i in (0..n).step_by(stride) {
     vec.forEach((b) => setCls(b.r, "sv-panel"));
     grid.forEach((b) => setCls(b.r, "sv-panel"));
     sumB.t.textContent = "0"; sumA.t.textContent = "0";
-    const names = ["sumvec.c", "rows.c", "cols.c"];
+    const names = ["sumvec.rs", "rows.rs", "cols.rs"];
     cv.show(names[mode]);
     cv.at(mode === 0 ? [4] : [5], "dim", false);
     cv.notes({});
     cap("#data-cap", mode === 0
-      ? "Each step adds v[i] into sum. sum is the same address every time. v walks the next int."
+      ? "Here v holds 3, 1, 4, 1, 5, 9, 2, 6 (under each: its index, and @ its address). Each step adds v[i] into sum. sum is the same address every time. v walks the next int."
       : mode === 1
-        ? "Row-major visits a[0][0], a[0][1], a[0][2], then the next row. That is the order of the ints in memory."
-        : "Column-major visits a[0][0] then a[1][0]. The next address is N = 3 ints away.");
+        ? "Here a is [[1, 2, 3], [4, 5, 6]]. Row-major visits a[0][0], a[0][1], a[0][2], then the next row. That is the order of the ints in memory."
+        : "Here a is [[1, 2, 3], [4, 5, 6]]. Column-major visits a[0][0] then a[1][0]. The next address is N = 3 ints away.");
   }
   function show(m) {
     mode = m;
@@ -1712,12 +1632,12 @@ for i in (0..n).step_by(stride) {
   stepB.addEventListener("click", () => {
     const limit = mode === 0 ? 8 : 6;
     if (step >= limit) { cap("#data-cap", `Walk finished. sum is <b>${sum}</b>. Reset to go again.`); return; }
-    sum += 1;
+    sum += mode === 0 ? VALS[step] : GRIDV[(mode === 1 ? ROW : COL)[step]];
     if (mode === 0) {
       vec.forEach((b, k) => setCls(b.r, k === step ? "sv-good" : k < step ? "sv-data-soft" : "sv-panel"));
       sumB.t.textContent = String(sum); setCls(sumB.r, "sv-good");
       cv.at([4]); cv.notes({ 2: ["sum reused", "good"], 4: [`v[${step}] stride 1`, "good"] });
-      cap("#data-cap", `Read <b>v[${step}]</b> at address ${step * 4}. The next int is the next address — spatial. <b>sum</b> is the same location again — temporal.`);
+      cap("#data-cap", `Read <b>v[${step}] = ${VALS[step]}</b> at address ${step * 4}; sum is now ${sum}. The next int is the next address — spatial. <b>sum</b> is the same location again — temporal.`);
     } else {
       const seq = mode === 1 ? ROW : COL;
       const idx = seq[step];
@@ -1727,8 +1647,8 @@ for i in (0..n).step_by(stride) {
       cv.at([5]);
       cv.notes({ 5: mode === 1 ? [`a[${r}][${c}] next door`, "good"] : [`a[${r}][${c}] hop 12 B`, "warn"] });
       cap("#data-cap", mode === 1
-        ? `Visit <b>a[${r}][${c}]</b>. Inner index j moves one int, which is one address.`
-        : `Visit <b>a[${r}][${c}]</b>. Inner index i jumps a whole row of N = 3 ints.`);
+        ? `Visit <b>a[${r}][${c}] = ${GRIDV[idx]}</b>; sum is now ${sum}. Inner index j moves one int, which is one address.`
+        : `Visit <b>a[${r}][${c}] = ${GRIDV[idx]}</b>; sum is now ${sum}. Inner index i jumps a whole row of N = 3 ints.`);
     }
     step++;
   });
@@ -1739,28 +1659,70 @@ for i in (0..n).step_by(stride) {
 })();
 
 /* ================= 6.2.2 INSTRUCTIONS ================= */
+// Real rustc output: see SUMVEC_S below. The loop body is lines 7–10.
+const SUMVEC_S = `sumvec:
+    xorl    %eax, %eax           # sum = 0
+    testq   %rsi, %rsi           # is v.len() zero?
+    je      .LBB0_3              # yes: skip the loop
+    xorl    %ecx, %ecx           # i = 0
+.LBB0_2:
+    addl    (%rdi,%rcx,4), %eax  # sum += v[i]
+    incq    %rcx                 # i += 1
+    cmpq    %rcx, %rsi           # i == v.len()?
+    jne     .LBB0_2              # no: back to the add
+.LBB0_3:
+    retq                         # sum is in %eax`;
+const ASM_CMD = "rustc 1.100.0 --edition 2021 --crate-type lib -C opt-level=s --emit asm · x86-64 Linux";
+const ASM_NOTE = "comments ours; .cfi_* and section directives removed";
 (function insn() {
   const svg = K.$("#insn-svg");
   const OPS = [
-    { op: "cmp", sub: "i < N ?", line: 2 },
-    { op: "jge", sub: "leave", line: 3 },
-    { op: "add", sub: "sum += v[i]", line: 4 },
-    { op: "inc", sub: "i++", line: 5 },
-    { op: "jmp", sub: "back to cmp", line: 6 },
+    { op: "addl", sub: "sum += v[i]", line: 7 },
+    { op: "incq", sub: "i += 1", line: 8 },
+    { op: "cmpq", sub: "i == len?", line: 9 },
+    { op: "jne", sub: "back to addl", line: 10 },
   ];
-  const boxes = OPS.map((op, i) => box(svg, 16 + i * 132, 48, 120, 78, "sv-panel", op.op, "fetches 0"));
-  const pc = s("text", { x: 76, y: 36, class: "sv-label", "text-anchor": "middle" }, "PC");
+  const boxes = OPS.map((op, i) => box(svg, 16 + i * 166, 48, 150, 78, "sv-panel", op.op, "fetches 0"));
+  const pc = s("text", { x: 91, y: 36, class: "sv-label", "text-anchor": "middle" }, "PC");
   svg.append(pc, draw.label(340, 170, "straight-line fetch is spatial · the jump reuses the block · temporal", "sv-label"));
-  const SRC = `loop:
-    cmp  i, N
-    jge  done
-    add  sum, v[i]
-    inc  i
-    jmp  loop
-done:`;
-  const cv = code("#insn-code", { files: [{ name: "loop.s", lang: "asm", src: SRC }] });
+  const RS = `#[no_mangle] // keep the plain name sumvec in the output
+pub fn sumvec(v: &[i32]) -> i32 {
+    let mut sum = 0;
+    for i in 0..v.len() {
+        sum += v[i];
+    }
+    sum
+}`;
+  const CHECKED = `# pub fn sum_first(v: &[i32], n: usize) -> i32 { for i in 0..n { sum += v[i] } ... }
+sum_first:
+    testq   %rdx, %rdx           # is n zero?
+    je      .LBB0_5
+    leaq    -1(%rdx), %rax       # the last index, n - 1
+    cmpq    %rax, %rsi           # v.len() <= n - 1?
+    jbe     .LBB0_6              # yes: some v[i] would fail, so panic now
+    xorl    %eax, %eax           # sum = 0
+    xorl    %ecx, %ecx           # i = 0
+.LBB0_3:
+    addl    (%rdi,%rcx,4), %eax  # sum += v[i], no check in the loop
+    incq    %rcx
+    cmpq    %rcx, %rdx
+    jne     .LBB0_3
+    retq
+.LBB0_5:
+    xorl    %eax, %eax
+    retq
+.LBB0_6:
+    pushq   %rax
+    leaq    .Lanon.211be7ca625ab38bd8bc5c94f9b07b4d.1(%rip), %rdx
+    movq    %rsi, %rdi
+    callq   *_RNvNtCs8uuN1nrGffB_4core9panicking18panic_bounds_check@GOTPCREL(%rip)`;
+  const cv = code("#insn-code", { tabs: true, files: [
+    { name: "sumvec.s", lang: "asm", src: SUMVEC_S, cmd: ASM_CMD, rsNote: ASM_NOTE },
+    rs("sumvec.rs", RS),
+    { name: "checked.s", lang: "asm", src: CHECKED, cmd: ASM_CMD, rsNote: ASM_NOTE },
+  ]});
   let pcI = 0, trips = 0;
-  const fetches = [0, 0, 0, 0, 0];
+  const fetches = [0, 0, 0, 0];
   function paint() {
     boxes.forEach((b, i) => {
       setCls(b.r, i === pcI ? "sv-good" : fetches[i] ? "sv-data-soft" : "sv-panel");
@@ -1768,13 +1730,15 @@ done:`;
     });
     pc.setAttribute("x", boxes[pcI].cx);
     pill("#insn-pill", `trip ${trips + 1}`, "info");
-    cv.at([OPS[pcI].line]);
-    cv.notes({ [OPS[pcI].line]: [`fetch ${fetches[pcI]}`, fetches[pcI] > 1 ? "good" : "warn"] });
+    cv.show("sumvec.s");
+    cv.at([2, 3, 4, 5], "dim", false);
+    cv.at([OPS[pcI].line], "on", true, true);
+    cv.notes({ 5: "run once", [OPS[pcI].line]: [`fetch ${fetches[pcI]}`, fetches[pcI] > 1 ? "good" : "warn"] });
   }
   function reset() {
     pcI = 0; trips = 0; fetches.fill(0);
     paint();
-    cap("#insn-cap", "Press Step. The PC walks cmp, jge, add, inc, then jmp sends it back to cmp.");
+    cap("#insn-cap", "Press Step. The PC walks addl, incq, cmpq, then jne sends it back to addl. The four lines above the loop ran once.");
   }
   const ctr = K.$("#insn-controls");
   const stepB = h("button", { class: "btn primary", type: "button" }, "Step PC");
@@ -1784,10 +1748,10 @@ done:`;
     const op = OPS[pcI];
     const again = fetches[pcI] > 1;
     paint();
-    cap("#insn-cap", op.op === "jmp"
-      ? `jmp is the next address after inc — spatial — and it sends the PC back. <b>cmp</b> has been fetched <b>${fetches[0]}</b> time${fetches[0] === 1 ? "" : "s"}.`
-      : `${op.op} is ${pcI ? "the next address after " + OPS[pcI - 1].op : "the first instruction"}. ${again ? "Fetched again: temporal locality in the loop body." : "First fetch on this trip. The next instruction is the next address."}`);
-    if (op.op === "jmp") { pcI = 0; trips++; }
+    cap("#insn-cap", op.op === "jne"
+      ? `jne is the next address after cmpq — spatial — and while i is not yet v.len() it sends the PC back. <b>addl</b> has been fetched <b>${fetches[0]}</b> time${fetches[0] === 1 ? "" : "s"}.`
+      : `${op.op} is ${pcI ? "the next address after " + OPS[pcI - 1].op : "the top of the loop body"}. ${again ? "Fetched again: temporal locality in the loop body." : "First fetch on this trip. The next instruction is the next address."}`);
+    if (op.op === "jne") { pcI = 0; trips++; }
     else pcI++;
   });
   rst.addEventListener("click", reset);
@@ -1799,17 +1763,14 @@ done:`;
 (function locsum() {
   const svg = K.$("#loc-svg");
   const PATS = [
-    { name: "stride-1 scan", t: 1, s: 3, blurb: "Each element once, and the next address is the next int.", file: "scan.c",
-      src: `for (i = 0; i < n; i++)\n    sum += v[i]; /* next door */`,
-      rust: `for i in 0..v.len()\n    { sum += v[i]; } // next door` },
-    { name: "scalar sum", t: 3, s: 0, blurb: "One address, over and over. A scalar has no neighbour to prefetch.", file: "scalar.c",
-      src: `int sum = 0;\nfor (i = 0; i < n; i++)\n    sum += v[i]; /* sum again */`,
-      rust: `let mut sum: i32 = 0;\nfor i in 0..v.len()\n    { sum += v[i]; } // sum again` },
-    { name: "column walk", t: 1, s: 0, blurb: "Each element once, and the next address is a whole row away.", file: "column.c",
-      src: `for (j = 0; j < n; j++)\n    for (i = 0; i < n; i++)\n        sum += a[i][j];`,
-      rust: `for j in 0..n {\nfor i in 0..n {\n    sum += a[i][j];\n}}` },
-    { name: "loop body", t: 3, s: 3, blurb: "Instructions in order, then the same ones again on the next trip.", file: "loop.s", asm: true,
-      src: `loop:\n    add  sum, v[i]\n    inc  i\n    jmp  loop` },
+    { name: "stride-1 scan", t: 1, s: 3, blurb: "Each element once, and the next address is the next int.", file: "scan.rs", line: 2,
+      src: `for i in 0..v.len() {\n    sum += v[i]; // next door\n}` },
+    { name: "scalar sum", t: 3, s: 0, blurb: "One address, over and over. A scalar has no neighbour to prefetch.", file: "scalar.rs", line: 3,
+      src: `let mut sum = 0;\nfor i in 0..v.len() {\n    sum += v[i]; // sum again\n}` },
+    { name: "column walk", t: 1, s: 0, blurb: "Each element once, and the next address is a whole row away.", file: "column.rs", line: 3,
+      src: `for j in 0..n {\n    for i in 0..n {\n        sum += a[i][j]; // a whole row away\n    }\n}` },
+    { name: "loop body", t: 3, s: 3, blurb: "Instructions in order, then the same ones again on the next trip.", file: "loop.s", asm: true, line: 5,
+      src: SUMVEC_S.split("\n").slice(5, 10).join("\n") },
   ];
   const cards = PATS.map((p, i) => {
     const x = 20 + (i % 2) * 230, y = 20 + Math.floor(i / 2) * 100;
@@ -1825,7 +1786,7 @@ done:`;
   }
   const tPips = meter(500, 50, "TEMPORAL");
   const sPips = meter(500, 130, "SPATIAL");
-  const cv = code("#loc-code", { tabs: true, files: PATS.map((p) => p.asm ? { name: p.file, lang: "asm", src: p.src } : fileC(p.file, p.src, p.rust)) });
+  const cv = code("#loc-code", { tabs: true, files: PATS.map((p) => p.asm ? { name: p.file, lang: "asm", src: p.src, cmd: ASM_CMD, rsNote: "the loop body of 6.2.2’s sumvec.s" } : rs(p.file, p.src)) });
   function pick(i) {
     const p = PATS[i];
     cards.forEach((b, k) => setCls(b.r, k === i ? "sv-good" : "sv-panel"));
@@ -1833,7 +1794,7 @@ done:`;
     sPips.forEach((r, k) => setCls(r, k < p.s ? "sv-server" : "sv-panel"));
     pill("#loc-pill", p.name, "info");
     cv.show(p.file);
-    const n = p.src.split("\n").length;
+    const n = p.line;
     cv.at([n]);
     cv.notes({ [n]: `T${p.t} S${p.s}` });
     cap("#loc-cap", `<b>${p.name}.</b> ${p.blurb}`);
@@ -1863,9 +1824,7 @@ done:`;
   Object.values(st).forEach((v) => K.$("#pyr-stats").appendChild(v));
   const SRC = `let mut sum: i32 = 0; // a register, if the compiler agrees
 sum += a[i]; // a block that may miss all the way down`;
-  const SRC_C = `int sum = 0;    /* a register, if the compiler agrees */
-sum += A[i];     /* a block that may miss all the way down */`;
-  const cv = code("#pyr-code", { files: [fileC("level.c", SRC_C, SRC)] });
+  const cv = code("#pyr-code", { files: [rs("level.rs", SRC)] });
   let sel = 5, copies = { 5: true, 6: true }, busy = false, gen = 0;
   function paint() {
     boxes.forEach((b, i) => {
@@ -1925,17 +1884,14 @@ sum += A[i];     /* a block that may miss all the way down */`;
     blocks.push(b);
   }
   svg.append(draw.label(20, 100, "level k+1 · 16 blocks", "sv-label", "start"));
-  const SRC = `int slot = block % 4;
-if (valid[slot] && tag[slot] == block)
-    return hit;
-tag[slot] = block;   /* miss: copy, maybe evict */
-valid[slot] = 1;`;
-  const SRC_RS = `let slot = block % 4;
+  const SRC = `let slot = block % 4; // %: the remainder
 if valid[slot] && tag[slot] == block {
-    return true; }
+    return true; // hit
+}
 tag[slot] = block; // miss: copy, maybe evict
-valid[slot] = true;`;
-  const cv = code("#cache-code", { files: [fileC("cache.c", SRC, SRC_RS)] });
+valid[slot] = true;
+false // a miss, now filled`;
+  const cv = code("#cache-code", { files: [rs("cache.rs", SRC, { 1: 1, 2: 2, 3: 3, 4: 5, 5: 6 })] });
   let cache = [null, null, null, null], seen = new Set(), scriptI = 0, busy = false;
   const SCRIPT = [4, 9, 14, 3, 4, 8, 4];
   function paint(focus, kind) {
@@ -2001,32 +1957,23 @@ valid[slot] = true;`;
   const svg = K.$("#where-svg");
   const ROWS = [
     { name: "Registers", lat: "0", who: "compiler", what: "words", line: 1,
-      src: `int sum = 0;\nsum += x;\n/* the compiler can keep sum in a register */`,
-      rust: `let mut sum: i32 = 0;\nsum += x;\n// the compiler can keep sum in a register` },
+      src: `let mut sum: i32 = 0;\nsum += x;\n// the compiler can keep sum in a register` },
     { name: "L1 cache", lat: "4", who: "hardware", what: "64-byte blocks", line: 1,
-      src: `sum += A[i];\n/* L1 d-cache, on chip, about 4 cycles on a hit */`,
-      rust: `sum += a[i];\n// L1 d-cache, on chip, about 4 cycles on a hit` },
+      src: `sum += a[i];\n// L1 d-cache, on chip, about 4 cycles on a hit` },
     { name: "L2 cache", lat: "10", who: "hardware", what: "64-byte blocks", line: 1,
-      src: `sum += A[i];\n/* missed L1, hit L2, about 10 cycles */`,
-      rust: `sum += a[i];\n// missed L1, hit L2, about 10 cycles` },
+      src: `sum += a[i];\n// missed L1, hit L2, about 10 cycles` },
     { name: "L3 cache", lat: "50", who: "hardware", what: "64-byte blocks", line: 1,
-      src: `sum += A[i];\n/* missed L1 and L2, hit the shared L3 */`,
-      rust: `sum += a[i];\n// missed L1 and L2, hit the shared L3` },
+      src: `sum += a[i];\n// missed L1 and L2, hit the shared L3` },
     { name: "TLB", lat: "0", who: "MMU hardware", what: "page translations", line: 1,
-      src: `char *p = A + i;\n/* the TLB caches the page-table entry for p */`,
-      rust: `let p: *const u8 = a.as_ptr().wrapping_add(i);\n// the TLB caches the page-table entry for p` },
+      src: `let p = &a[i]; // &: a reference, the address of a[i]\n// the TLB caches the page-table entry for p's page` },
     { name: "Virtual memory", lat: "200", who: "OS + MMU", what: "4 KB pages", line: 1,
-      src: `sum += A[i];\n/* page is in DRAM; a miss is a page fault to disk */`,
-      rust: `sum += a[i];\n// page is in DRAM; a miss is a page fault to disk` },
+      src: `sum += a[i];\n// page is in DRAM; a miss is a page fault to disk` },
     { name: "Buffer cache", lat: "200", who: "OS", what: "file blocks", line: 1,
-      src: `read(fd, buf, 4096);\n/* the OS may already have this block in DRAM */`,
-      rust: `std::io::Read::read(&mut file, &mut buf[..4096])?;\n// the OS may already have this block in DRAM` },
+      src: `file.read_exact(&mut buf[..4096])?; // ..4096: the first 4096 bytes\n// the OS may already have this block in DRAM` },
     { name: "Disk cache", lat: "100,000", who: "disk firmware", what: "sectors", line: 1,
-      src: `read(fd, buf, 512);\n/* the drive may serve the sector from its own RAM */`,
-      rust: `std::io::Read::read(&mut file, &mut buf[..512])?;\n// the drive may serve the sector from its own RAM` },
-    { name: "Browser / network", lat: "millions", who: "client software", what: "files and pages", line: 1,
-      src: `fetch(url);\n/* a local copy, or a proxy, or the origin server */`,
-      rust: `let _bytes = std::fs::read(path)?;\n// a local copy is a file read; a proxy or the origin is not in std` },
+      src: `file.read_exact(&mut buf[..512])?;\n// the drive may serve the sector from its own RAM` },
+    { name: "Browser / network", lat: "millions of", who: "client software", what: "files and pages", line: 1,
+      src: `let bytes = std::fs::read(path)?; // the whole file\n// a local copy is a file read; a proxy or origin needs a network` },
   ];
   const boxes = ROWS.map((row, i) => {
     const y = 12 + i * 42;
@@ -2037,11 +1984,11 @@ valid[slot] = true;`;
     hitRect(svg, 16, y, 648, 36, row.name, () => pick(i));
     return b;
   });
-  const cv = code("#where-code", { files: [fileC("who.c", ROWS[0].src, ROWS[0].rust)] });
+  const cv = code("#where-code", { files: [rs("who.rs", ROWS[0].src)] });
   function pick(i) {
     boxes.forEach((b, k) => setCls(b.r, k === i ? "sv-good" : "sv-panel"));
     const row = ROWS[i];
-    cv.src("who.c", row.src, { rs: { src: row.rust } });
+    cv.src("who.rs", row.src);
     cv.at([row.line]);
     cv.notes({ [row.line]: [row.who, "good"] });
     pill("#where-pill", row.name, "info");
@@ -2061,15 +2008,11 @@ valid[slot] = true;`;
     K.$("#geom-read").appendChild(el);
     read[k] = el.querySelector(".v");
   });
-  const SRC = `unsigned set = (addr >> b) & ((1u << s) - 1);
-unsigned tag = addr >> (s + b);
-unsigned off = addr & ((1u << b) - 1);
-/* C = S * E * B data bytes */`;
-  const SRC_RS = `let set = (addr >> b) & ((1u32 << s) - 1);
+  const SRC = `let set = (addr >> b) & ((1u32 << s) - 1);
 let tag = addr >> (s + b);
 let off = addr & ((1u32 << b) - 1);
 let bytes = (1u32 << s) * e * (1u32 << b); // C = S * E * B data bytes`;
-  const cv = code("#geom-code", { files: [fileC("decode.c", SRC, SRC_RS)] });
+  const cv = code("#geom-code", { files: [rs("decode.rs", SRC)] });
   let sBits = 2, bBits = 1, eSel = 0, addr = 13;
   const EMAP = [1, 2, 4];
   function snap(id, v) {
@@ -2162,27 +2105,18 @@ let bytes = (1u32 << s) * e * (1u32 << b); // C = S * E * B data bytes`;
     K.$("#dm-read").appendChild(el);
     read[k] = el.querySelector(".v");
   });
-  const BOOK = `char m[16];
-m[0];
-m[1];   /* same block as m[0] */
-m[13];
-m[8];   /* replaces set 0 */
-m[0];   /* conflict */`;
-  const BOOK_RS = `let m = black_box([0u8; 16]);
+  const BOOK = `let m = black_box([0u8; 16]);
 black_box(m[0]);
 black_box(m[1]); // same block as m[0]
 black_box(m[13]);
 black_box(m[8]); // replaces set 0
 black_box(m[0]); // conflict`;
-  const IDX = `int set_low(int block)  { return block & 3; }
-int set_high(int block) { return block >> 1; }
-/* scan 0, 1, 2, 3, then 0 again */`;
-  const IDX_RS = `fn set_low(block: u32) -> u32 { block & 3 }
+  const IDX = `fn set_low(block: u32) -> u32 { block & 3 }
 fn set_high(block: u32) -> u32 { block >> 1 }
 // scan 0, 1, 2, 3, then 0 again`;
   const cv = code("#dm-code", { tabs: true, files: [
-    fileC("trace.c", BOOK, BOOK_RS),
-    fileC("index.c", IDX, IDX_RS),
+    rs("trace.rs", BOOK),
+    rs("index.rs", IDX),
   ]});
   const TRACE = [0, 1, 13, 8, 0];
   let mode = 0, cache = [0, 1, 2, 3].map(() => ({ v: 0, tag: 0, b: ["—", "—"] }));
@@ -2232,7 +2166,7 @@ fn set_high(block: u32) -> u32 { block >> 1 }
     cap("#dm-cap", result === "hit"
       ? `Address <b>${a}</b> (${bits(a)}) hit in set ${d.idx}. Byte offset ${d.off} is already in the line.`
       : result === "conflict"
-        ? `Address <b>${a}</b> maps to set ${d.idx}, which held tag ${old}. This block was seen before. Three other sets are idle. <b>Conflict</b> miss.`
+        ? `Address <b>${a}</b> maps to set ${d.idx}, which held tag ${old}. This block was seen before, and ${cache.filter((l) => !l.v).length} of the four sets are still empty. <b>Conflict</b> miss.`
         : `Address <b>${a}</b> (${bits(a)}) missed. ${was ? `Set ${d.idx} held tag ${old}, and this block is new — still a cold miss.` : `Set ${d.idx} was empty. Cold miss.`} Block ${d.blk} is loaded.`);
   }
   function setOf(block) { return high ? (block >> 1) : (block & 3); }
@@ -2258,7 +2192,7 @@ fn set_high(block: u32) -> u32 { block >> 1 }
     if (!hit) idxCache[set] = block;
     paintIdx(block, hit ? "hit" : "miss");
     const conflict = !hit && prev != null && seenBefore;
-    cv.show("index.c");
+    cv.show("index.rs");
     cv.at([high ? 2 : 1]);
     cv.notes({ [high ? 2 : 1]: [conflict ? "conflict" : hit ? "hit" : "cold", conflict ? "bad" : hit ? "good" : "warn"] });
     read.addr.textContent = "b" + block;
@@ -2281,13 +2215,13 @@ fn set_high(block: u32) -> u32 { block >> 1 }
     seen = new Set(); ti = 0;
     paintBook(null);
     Object.values(read).forEach((el) => { el.textContent = "—"; });
-    cv.show("trace.c"); cv.at([2], "dim", false); cv.notes({});
+    cv.show("trace.rs"); cv.at([2], "dim", false); cv.notes({});
     cap("#dm-cap", "Step the book: addresses 0, 1, 13, 8, 0. Or press any address 0–15.");
   }
   function resetIdx() {
     scan = 0; idxCache = [null, null, null, null]; seenIdx = new Set();
     paintIdx(-1);
-    cv.show("index.c"); cv.at([high ? 2 : 1]); cv.notes({});
+    cv.show("index.rs"); cv.at([high ? 2 : 1]); cv.notes({});
     cap("#dm-cap", high
       ? "High bits: block >> 1. Blocks 0 and 1 share set 0. Step the scan."
       : "Low bits: block & 3. Blocks 0, 1, 2, 3 go to four different sets. Step the scan.");
@@ -2340,17 +2274,12 @@ fn set_high(block: u32) -> u32 { block >> 1 }
       lines.push({ set, e, b: box(svg, 90 + e * 280, 40 + set * 100, 250, 70, "sv-panel", "empty", "line " + e) });
     }
   }
-  const SRC = `/* S = 2, E = 2, B = 2, m = 4 */
-m[0];   /* set 0, tag 0 */
-m[8];   /* set 0, tag 2 */
-m[0];   /* hit — both lines still live */
-m[4];   /* set 0, tag 1 — LRU victim */`;
-  const SRC_RS = `let m: [u8; 16] = black_box([0; 16]); // S = 2, E = 2, B = 2, m = 4
+  const SRC = `let m: [u8; 16] = black_box([0; 16]); // S = 2, E = 2, B = 2, m = 4
 black_box(m[0]); // set 0, tag 0
 black_box(m[8]); // set 0, tag 2
 black_box(m[0]); // hit — both lines still live
 black_box(m[4]); // set 0, tag 1 — LRU victim`;
-  const cv = code("#sa-code", { files: [fileC("twoway.c", SRC, SRC_RS)] });
+  const cv = code("#sa-code", { files: [rs("twoway.rs", SRC)] });
   let sets = [[], []], clock = 0, si = 0;
   const TRACE = [0, 8, 0, 4];
   function dec(a) { return { tag: (a >> 2) & 3, set: (a >> 1) & 1, blk: a >> 1, a }; }
@@ -2414,21 +2343,15 @@ black_box(m[4]); // set 0, tag 1 — LRU victim`;
   const svg = K.$("#fa-svg");
   const lines = [0, 1, 2, 3].map((i) => box(svg, 20 + i * 166, 36, 150, 90, "sv-panel", "empty", "line " + i));
   svg.append(draw.label(340, 170, "one set · the tag is checked against every line · LRU victim", "sv-label"));
-  const SRC = `/* fully associative, E = 4, LRU */
-touch(0);
-touch(2);
-touch(4);
-touch(6);
-touch(8);  /* capacity miss */
-touch(0);  /* 0 was the LRU victim */`;
-  const SRC_RS = `// fully associative, E = 4, LRU
-touch(0);
-touch(2);
-touch(4);
-touch(6);
-touch(8); // capacity miss
-touch(0); // 0 was the LRU victim`;
-  const cv = code("#fa-code", { files: [fileC("full.c", SRC, SRC_RS)] });
+  const SRC = `// fully associative, E = 4, LRU
+let mem = black_box([[0u8; 64]; 9]); // mem[b] is block b
+touch(mem[0][0]);
+touch(mem[2][0]);
+touch(mem[4][0]);
+touch(mem[6][0]);
+touch(mem[8][0]); // capacity miss
+touch(mem[0][0]); // 0 was the LRU victim`;
+  const cv = code("#fa-code", { files: [rs("full.rs", SRC)] });
   let cache = [], clock = 0, si = 0;
   const TRACE = [0, 2, 4, 6, 8, 0];
   function paint(focus, hit) {
@@ -2456,8 +2379,8 @@ touch(0); // 0 was the LRU victim`;
     paint(focus, result === "hit");
     const tone = result === "hit" ? "good" : result === "capacity" ? "bad" : "warn";
     pill("#fa-pill", result, tone === "good" ? "good" : tone === "bad" ? "bad" : "warn");
-    cv.at([si + 2]);
-    cv.notes({ [si + 2]: [result + (victim != null ? " evict " + victim : ""), tone] });
+    cv.at([si + 3]);
+    cv.notes({ [si + 3]: [result + (victim != null ? " evict " + victim : ""), tone] });
     cap("#fa-cap", result === "hit"
       ? `Block <b>${blk}</b> is in some line. There is no index to get wrong. Hit.`
       : result === "cold"
@@ -2467,7 +2390,7 @@ touch(0); // 0 was the LRU victim`;
   function reset() {
     cache = []; clock = 0; si = 0; paint(-1, false);
     pill("#fa-pill", "cold", "");
-    cv.at([2], "dim", false); cv.notes({});
+    cv.at([3], "dim", false); cv.notes({});
     cap("#fa-cap", "Step blocks 0, 2, 4, 6 into the four lines. Block 8 does not fit. The reread of 0 misses because it was the victim.");
   }
   const ctr = K.$("#fa-controls");
@@ -2485,19 +2408,16 @@ touch(0); // 0 was the LRU victim`;
 /* ================= 6.4.5 WRITES ================= */
 (function writes() {
   const svg = K.$("#wr-svg");
-  const line = box(svg, 24, 28, 200, 90, "sv-server", "A", "clean");
-  const memA = box(svg, 280, 28, 170, 90, "sv-db", "A", "memory A");
-  const memC = box(svg, 470, 28, 170, 90, "sv-db", "C", "memory C");
+  const line = box(svg, 24, 28, 200, 90, "sv-server", "A=0", "clean");
+  const memA = box(svg, 280, 28, 170, 90, "sv-db", "0", "memory A");
+  const memC = box(svg, 470, 28, 170, 90, "sv-db", "0", "memory C");
   const bus = box(svg, 24, 150, 616, 64, "sv-panel", "bus idle", "no transfer yet");
-  const SRC = `A = 1;   /* write hit: A's block is in the cache */
-C = 9;   /* write miss: C's block is not */
-/* evict whatever line is resident */`;
-  const SRC_RS = `unsafe { A = 1 }; // write hit: A's block is in the cache
-unsafe { C = 9 }; // write miss: C's block is not
+  const SRC = `A.store(1, Relaxed); // write hit: A's block is in the cache
+C.store(9, Relaxed); // write miss: C's block is not
 // evict whatever line is resident`;
-  const cv = code("#wr-code", { files: [fileC("store.c", SRC, SRC_RS)] });
+  const cv = code("#wr-code", { files: [rs("store.rs", SRC)] });
   let mode = 0;
-  let state = { key: "A", val: "A", dirty: false, valid: true, mem: { A: "A", C: "C" } };
+  let state = { key: "A", val: "0", dirty: false, valid: true, mem: { A: "0", C: "0" } };
   function paint(busT, busU, busCls) {
     line.t.textContent = state.valid ? state.key + "=" + state.val : "—";
     line.u.textContent = !state.valid ? "invalid" : state.dirty ? "DIRTY" : "clean";
@@ -2510,7 +2430,7 @@ unsafe { C = 9 }; // write miss: C's block is not
   }
   function policy() { return mode === 0 ? "through · no-allocate" : "back · allocate"; }
   function reset() {
-    state = { key: "A", val: "A", dirty: false, valid: true, mem: { A: "A", C: "C" } };
+    state = { key: "A", val: "0", dirty: false, valid: true, mem: { A: "0", C: "0" } };
     paint("bus idle", policy(), "sv-panel");
     cv.at([1], "dim", false); cv.notes({ 1: policy() });
     cap("#wr-cap", mode === 0
@@ -2518,7 +2438,7 @@ unsafe { C = 9 }; // write miss: C's block is not
       : "Write-back, write-allocate. A hit sets the dirty bit. A miss loads the block, then updates the cache. Memory changes when the dirty line is evicted.");
   }
   const ctr = K.$("#wr-controls");
-  const hitB = h("button", { class: "btn primary", type: "button" }, "Store A = B");
+  const hitB = h("button", { class: "btn primary", type: "button" }, "Store A = 1");
   const missB = h("button", { class: "btn", type: "button" }, "Store C = 9");
   const evB = h("button", { class: "btn", type: "button" }, "Evict line");
   const rst = h("button", { class: "btn", type: "button" }, "Reset");
@@ -2548,7 +2468,7 @@ unsafe { C = 9 }; // write miss: C's block is not
       cap("#wr-cap", `Write miss on <b>${key}</b>. Write-allocate ${flushed ? "wrote the dirty line back, then " : ""}loaded the block and stored ${val} in the cache. Memory’s ${key} changes when this dirty line leaves.`);
     }
   }
-  hitB.addEventListener("click", () => store("A", "B", 1));
+  hitB.addEventListener("click", () => store("A", "1", 1));
   missB.addEventListener("click", () => store("C", "9", 2));
   evB.addEventListener("click", () => {
     if (!state.valid) {
@@ -2610,12 +2530,10 @@ unsafe { C = 9 }; // write miss: C's block is not
     K.$("#real-read").appendChild(el);
     read[k] = el.querySelector(".v");
   });
-  const SRC = `for (i = 0; i < n; i++)   /* instruction from L1 i */
-    sum += A[i];            /* data from L1 d */`;
-  const SRC_RS = `for i in 0..a.len() { // instruction from L1 i
+  const SRC = `for i in 0..a.len() { // instruction from L1 i
     sum += a[i]; // data from L1 d
 }`;
-  const cv = code("#real-code", { files: [fileC("split.c", SRC, SRC_RS)] });
+  const cv = code("#real-code", { files: [rs("split.rs", SRC)] });
   let sel = "l1d", busy = false;
   function pick(id) {
     sel = id;
@@ -2634,14 +2552,14 @@ unsafe { C = 9 }; // write miss: C's block is not
     busy = true; go.disabled = true;
     cv.at([1], "on2", false); cv.at([2], "on", false, true);
     cv.notes({ 1: ["L1 i", "good"], 2: ["L1 d", "good"] });
-    const a = draw.tag("insn"); const d = draw.tag("A[i]");
+    const a = draw.tag("insn"); const d = draw.tag("a[i]");
     svg.append(a, d);
     await Promise.all([
       fly(a, [boxes.l1i.cx, boxes.l1i.cy], [boxes.regs.cx, boxes.regs.cy], 520),
       fly(d, [boxes.l1d.cx, boxes.l1d.cy], [boxes.regs.cx, boxes.regs.cy + 8], 520),
     ]);
     a.remove(); d.remove();
-    cap("#real-cap", "One iteration fetched the instruction from the i-cache and A[i] from the d-cache in the same beat. A unified L1 would have serialized those two reads.");
+    cap("#real-cap", "One iteration fetched the instruction from the i-cache and a[i] from the d-cache in the same beat. A unified L1 would have serialized those two reads.");
     busy = false; go.disabled = false;
   });
   ctr.append(go);
@@ -2658,15 +2576,13 @@ unsafe { C = 9 }; // write miss: C's block is not
   const score = s("text", { x: 340, y: 210, class: "sv-text", "text-anchor": "middle" }, "");
   svg.append(score);
   const FILES = [
-    fileC("size.c",
-      `/* 6 distinct blocks, visited twice */\nfor (pass = 0; pass < 2; pass++)\n    for (b = 0; b < 6; b++)\n        use(b); /* line = b % lines */`,
-      `// 6 distinct blocks, visited twice\nfor _pass in 0..2 {\nfor b in 0..6 {\n    touch(b); // line = b % lines\n}}`),
-    fileC("block.c",
-      `/* 8 ints, stride 1, word = 4 bytes */\nfor (i = 0; i < 8; i++)\n    sum += a[i];\n/* misses ≈ 8 / (B / 4) */`,
-      `// 8 ints, stride 1, word = 4 bytes\nfor i in 0..8\n    { sum += a[i]; }\n// misses ≈ 8 / (B / 4)`),
-    fileC("assoc.c",
-      `/* 0 and 8 map to the same set */\nfor (k = 0; k < 3; k++) {\n    use(0);\n    use(8);\n}`,
-      `// 0 and 8 map to the same set\nfor _k in 0..3 {\n    touch(0);\n    touch(8);\n}`),
+    rs("size.rs",
+      `let mem = black_box([[0u8; 16]; 6]); // 6 blocks, visited twice\nfor _pass in 0..2 { // _pass: a counter we never read\n    for b in 0..6 {\n        touch(mem[b][0]); // line = b % lines\n    }\n}`),
+    rs("block.rs",
+      `// 8 ints, stride 1, word = 4 bytes\nfor i in 0..8 {\n    sum += a[i];\n}\n// misses ≈ 8 / (B / 4)`,
+      { 1: 1, 2: 2, 3: 3, 4: 5 }),
+    rs("assoc.rs",
+      `let m = black_box([0u8; 16]); // m[0] and m[8] share a set\nfor _k in 0..3 {\n    touch(m[0]);\n    touch(m[8]);\n}`),
   ];
   const cv = code("#par-code", { tabs: true, files: FILES });
   let mode = 0, linesN = 4, blockB = 16, E = 1;
@@ -2799,27 +2715,30 @@ unsafe { C = 9 }; // write miss: C's block is not
   const cacheB = box(svg, 430, 24, 220, 70, "sv-db", "empty", "one 16-byte block");
   const score = s("text", { x: 540, y: 130, class: "sv-text", "text-anchor": "middle" }, "");
   svg.append(score, draw.label(540, 160, "a row is 4 ints · 16 bytes", "sv-label"));
-  const ROWS = `int sum = 0;
-for (i = 0; i < 4; i++)
-    for (j = 0; j < 4; j++)
-        sum += a[i][j];`;
-  const ROWS_RS = `let mut sum: i32 = 0;
+  const ROWS = `let mut sum = 0; // a: [[i32; 4]; 4], four rows of four
 for i in 0..4 {
+    for j in 0..4 {
+        sum += a[i][j]; // j + 1 is the next int in memory
+    }
+}`;
+  const COLS = `let mut sum = 0; // a: [[i32; 4]; 4], four rows of four
 for j in 0..4 {
-    sum += a[i][j];
-}}`;
-  const COLS = `int sum = 0;
-for (j = 0; j < 4; j++)
-    for (i = 0; i < 4; i++)
-        sum += a[i][j];`;
-  const COLS_RS = `let mut sum: i32 = 0;
-for j in 0..4 {
-for i in 0..4 {
-    sum += a[i][j];
-}}`;
+    for i in 0..4 {
+        sum += a[i][j]; // i + 1 is a whole row (16 bytes) later
+    }
+}`;
+  // Run with rustc 1.100.0 on x86-64 Linux; the two output lines are that run's.
+  const LAYOUT = `let a = [[0i32; 4]; 4]; // one array of four rows
+println!("a[0][3] {:p}  a[1][0] {:p}", &a[0][3], &a[1][0]);
+let v = vec![vec![0i32; 4]; 4]; // four separate rows on the heap
+println!("v[0][3] {:p}  v[1][0] {:p}", &v[0][3], &v[1][0]);
+// Output of one run:
+// a[0][3] 0x7ffffffc78fc  a[1][0] 0x7ffffffc7900   4 bytes on: back to back
+// v[0][3] 0x5555555abcfc  v[1][0] 0x5555555abd10   20 bytes on: a gap`;
   const cv = code("#fr-code", { tabs: true, files: [
-    fileC("rows.c", ROWS, ROWS_RS),
-    fileC("cols.c", COLS, COLS_RS),
+    rs("rows.rs", ROWS),
+    rs("cols.rs", COLS),
+    Object.assign(rs("layout.rs", LAYOUT), { cmd: "rustc 1.100.0 --edition 2021 · x86-64 Linux" }),
   ]});
   let mode = 0, step = 0, hits = 0, misses = 0, cached = -1;
   function seq() {
@@ -2833,7 +2752,7 @@ for i in 0..4 {
     cells.forEach((b) => { setCls(b.r, "sv-panel"); b.u.textContent = ""; });
     cacheB.t.textContent = "empty"; setCls(cacheB.r, "sv-db");
     score.textContent = "0 hit · 0 miss";
-    cv.show(mode === 0 ? "rows.c" : "cols.c");
+    cv.show(mode === 0 ? "rows.rs" : "cols.rs");
     cv.at([4], "dim", false); cv.notes({});
     cap("#fr-cap", mode === 0
       ? "Inner loop walks j. The first int of a row misses and brings the other three with it."
@@ -2876,32 +2795,38 @@ for i in 0..4 {
   const svg = K.$("#mt-svg");
   const ridges = [
     { name: "L1", sub: "≤ 32 KB", y: 28, note: "peak over 14 GB/s" },
-    { name: "L2", sub: "≤ 256 KB", y: 84, note: "unified 256 KB" },
-    { name: "L3", sub: "≤ 8 MB", y: 140, note: "shared 8 MB" },
-    { name: "DRAM", sub: "bigger", y: 196, note: "floor about 900 MB/s" },
+    { name: "L2", sub: "≤ 256 KB", y: 84, note: "falls as the stride grows" },
+    { name: "L3", sub: "≤ 8 MB", y: 140, note: "falls until stride 8, then flat" },
+    { name: "DRAM", sub: "bigger", y: 196, note: "floor 900 MB/s" },
   ];
   const rBoxes = ridges.map((R) => box(svg, 20, R.y, 180, 48, "sv-panel", R.name, R.sub));
   const bar = box(svg, 220, 28, 430, 150, "sv-panel", "ridge", "size × stride");
   const foot = s("text", { x: 435, y: 210, class: "sv-label", "text-anchor": "middle" }, "");
   svg.append(foot);
-  const SRC = `double data[N];
-double test(int elems, int stride) {
-    int i;
-    double result = 0;
-    for (i = 0; i < elems; i += stride)
-        result += data[i];
-    return result;
+  // Exactly test() from our mountain benchmark (kept with the chapter's video files).
+  const SRC = `/// Sum the first \`elems\` elements of \`data\` with a stride of \`stride\`,
+/// four elements per trip, then finish the rest one at a time.
+#[inline(never)]
+fn test(data: &[i64], elems: usize, stride: usize) -> i64 {
+    let data = &data[..elems]; // one bounds check here, not one per load
+    let (mut acc0, mut acc1, mut acc2, mut acc3) = (0i64, 0i64, 0i64, 0i64);
+    let sx4 = stride * 4;
+    // Each chunk is exactly 4 * stride elements: we read its elements
+    // 0, stride, 2*stride and 3*stride, like the book's data[i], data[i+stride], ...
+    let mut chunks = data.chunks_exact(sx4);
+    for c in &mut chunks {
+        acc0 += c[0];
+        acc1 += c[stride];
+        acc2 += c[2 * stride];
+        acc3 += c[3 * stride];
+    }
+    // The book finishes the leftover elements with a stride-1 loop; so do we.
+    for &x in chunks.remainder() {
+        acc0 += x;
+    }
+    (acc0 + acc1) + (acc2 + acc3)
 }`;
-  const SRC_RS = `// data: the slice the test walks
-fn test(data: &[f64], elems: usize, stride: usize) -> f64 {
-    let mut i: usize;
-    let mut result = 0.0;
-    i = 0; while i < elems && i < data.len() {
-        result += data[i];
-        i += stride; }
-    result
-}`;
-  const cv = code("#mt-code", { files: [fileC("mountain.c", SRC, SRC_RS)] });
+  const cv = code("#mt-code", { files: [rs("mountain.rs", SRC)] });
   let sizeExp = 5, stride = 1;
   function ridgeOf(kb) {
     if (kb <= 32) return 0;
@@ -2919,16 +2844,16 @@ fn test(data: &[f64], elems: usize, stride: usize) -> f64 {
     if (stride === 1 && kb > 32) { title = "stride-1 prefetch"; extra = "about 12 GB/s even past L2"; }
     else if (stride >= 8 && r >= 2) extra = "one access per 64-byte line";
     else if (r === 3 && stride > 1) extra = "down toward 900 MB/s";
-    else if (r === 0) extra = stride === 1 ? "over 14 GB/s at the peak" : "still high, stride is eroding it";
+    else if (r === 0) extra = stride === 1 ? "over 14 GB/s at the peak" : "still high, about 12 GB/s at stride 8";
     bar.t.textContent = title;
     bar.u.textContent = sizeLab + "  ·  stride " + stride;
     setCls(bar.r, r === 3 && stride > 1 ? "sv-bad" : stride === 1 ? "sv-good" : "sv-data-soft");
-    foot.textContent = extra;
+    foot.textContent = extra + " · book’s C run";
     const elems = Math.max(1, Math.round(kb * 1024 / 8));
     pill("#mt-pill", ridges[r].name, "info");
-    cv.at([6]);
-    cv.notes({ 5: "elems ≈ " + elems.toLocaleString("en-US"), 6: [title, stride === 1 ? "good" : "warn"] });
-    cap("#mt-cap", `Working set ${sizeLab}, stride ${stride}. That sits on the <b>${ridges[r].name}</b> ridge. ${extra}.`);
+    cv.at([12, 13, 14, 15]);
+    cv.notes({ 5: "elems ≈ " + elems.toLocaleString("en-US"), 12: [title, stride === 1 ? "good" : "warn"] });
+    cap("#mt-cap", `Working set ${sizeLab}, stride ${stride}. That sits on the <b>${ridges[r].name}</b> ridge. In the book’s measurement of its C version: ${extra}. Our Rust measurement is pending.`);
   }
   const ctr = K.$("#mt-controls");
   ctr.append(
@@ -2947,28 +2872,18 @@ fn test(data: &[f64], elems: usize, stride: usize) -> f64 {
   const miss = s("text", { x: 340, y: 190, class: "sv-text", "text-anchor": "middle", style: { fontWeight: 800, fontSize: "18px" } }, "");
   const sub = s("text", { x: 340, y: 214, class: "sv-label", "text-anchor": "middle" }, "");
   svg.append(miss, sub);
-  const MUL = "    c[i][j] += a[i][k] * b[k][j];\n}}}";
+  const HEAD = "// a, b, c: [[f64; N]; N]. Each row is N doubles, back to back.\n";
+  const MUL = "            c[i][j] += a[i][k] * b[k][j];\n        }\n    }\n}";
+  const nest = (x, y, z) => HEAD + `for ${x} in 0..N {\n    for ${y} in 0..N {\n        for ${z} in 0..N {\n` + MUL;
   const KERNS = [
-    { id: "ijk", cls: "AB", miss: "1.25", A: "row", B: "col", C: "reg",
-      src: "for (i = 0; i < n; i++)\n    for (j = 0; j < n; j++)\n        for (k = 0; k < n; k++)\n            C[i][j] += A[i][k] * B[k][j];",
-      rust: "for i in 0..n {\nfor j in 0..n {\nfor k in 0..n {\n" + MUL },
-    { id: "jik", cls: "AB", miss: "1.25", A: "row", B: "col", C: "reg",
-      src: "for (j = 0; j < n; j++)\n    for (i = 0; i < n; i++)\n        for (k = 0; k < n; k++)\n            C[i][j] += A[i][k] * B[k][j];",
-      rust: "for j in 0..n {\nfor i in 0..n {\nfor k in 0..n {\n" + MUL },
-    { id: "jki", cls: "AC", miss: "2.00", A: "col", B: "reg", C: "col",
-      src: "for (j = 0; j < n; j++)\n    for (k = 0; k < n; k++)\n        for (i = 0; i < n; i++)\n            C[i][j] += A[i][k] * B[k][j];",
-      rust: "for j in 0..n {\nfor k in 0..n {\nfor i in 0..n {\n" + MUL },
-    { id: "kji", cls: "AC", miss: "2.00", A: "col", B: "reg", C: "col",
-      src: "for (k = 0; k < n; k++)\n    for (j = 0; j < n; j++)\n        for (i = 0; i < n; i++)\n            C[i][j] += A[i][k] * B[k][j];",
-      rust: "for k in 0..n {\nfor j in 0..n {\nfor i in 0..n {\n" + MUL },
-    { id: "kij", cls: "BC", miss: "0.50", A: "reg", B: "row", C: "row",
-      src: "for (k = 0; k < n; k++)\n    for (i = 0; i < n; i++)\n        for (j = 0; j < n; j++)\n            C[i][j] += A[i][k] * B[k][j];",
-      rust: "for k in 0..n {\nfor i in 0..n {\nfor j in 0..n {\n" + MUL },
-    { id: "ikj", cls: "BC", miss: "0.50", A: "reg", B: "row", C: "row",
-      src: "for (i = 0; i < n; i++)\n    for (k = 0; k < n; k++)\n        for (j = 0; j < n; j++)\n            C[i][j] += A[i][k] * B[k][j];",
-      rust: "for i in 0..n {\nfor k in 0..n {\nfor j in 0..n {\n" + MUL },
+    { id: "ijk", cls: "AB", miss: "1.25", A: "row", B: "col", C: "reg", src: nest("i", "j", "k") },
+    { id: "jik", cls: "AB", miss: "1.25", A: "row", B: "col", C: "reg", src: nest("j", "i", "k") },
+    { id: "jki", cls: "AC", miss: "2.00", A: "col", B: "reg", C: "col", src: nest("j", "k", "i") },
+    { id: "kji", cls: "AC", miss: "2.00", A: "col", B: "reg", C: "col", src: nest("k", "j", "i") },
+    { id: "kij", cls: "BC", miss: "0.50", A: "reg", B: "row", C: "row", src: nest("k", "i", "j") },
+    { id: "ikj", cls: "BC", miss: "0.50", A: "reg", B: "row", C: "row", src: nest("i", "k", "j") },
   ];
-  const cv = code("#lp-code", { files: [fileC("ijk.c", KERNS[0].src, KERNS[0].rust)] });
+  const cv = code("#lp-code", { files: [rs("matmul.rs", KERNS[0].src)] });
   function look(kind) {
     if (kind === "row") return ["stride 1 · 0.25", "sv-good"];
     if (kind === "col") return ["stride n · 1.00", "sv-bad"];
@@ -2984,12 +2899,12 @@ fn test(data: &[f64], elems: usize, stride: usize) -> f64 {
     miss.textContent = k.cls + "  ·  " + k.miss + " misses / iteration";
     sub.textContent = k.id + "  ·  doubles, B = 32 bytes";
     pill("#lp-pill", k.id + " · " + k.cls, k.cls === "BC" ? "good" : k.cls === "AC" ? "bad" : "warn");
-    cv.src("ijk.c", k.src, { rs: { src: k.rust } });
-    cv.show("ijk.c");
-    cv.at([3], "on2", false);
-    cv.at([4], "on", true, true);
-    cv.notes({ 4: [k.miss + " misses", k.cls === "BC" ? "good" : k.cls === "AC" ? "bad" : "warn"] });
-    cap("#lp-cap", `<b>${k.id}</b> is class ${k.cls}. The inner index makes A ${k.A}, B ${k.B}, C ${k.C}. Same multiply, <b>${k.miss}</b> misses per inner iteration. For large n the 0.50 pair ran almost 40× the 2.00 pair.`);
+    cv.src("matmul.rs", k.src);
+    cv.show("matmul.rs");
+    cv.at([4], "on2", false);
+    cv.at([5], "on", true, true);
+    cv.notes({ 5: [k.miss + " misses", k.cls === "BC" ? "good" : k.cls === "AC" ? "bad" : "warn"] });
+    cap("#lp-cap", `<b>${k.id}</b> is class ${k.cls}. The inner index makes A ${k.A}, B ${k.B}, C ${k.C}. Same multiply, <b>${k.miss}</b> misses per inner iteration. In the book’s C measurement, for large n the 0.50 pair ran almost 40× faster than the 2.00 pair; our Rust measurement is pending.`);
   }
   const ctr = K.$("#lp-controls");
   KERNS.forEach((k, i) => {
@@ -3010,40 +2925,26 @@ fn test(data: &[f64], elems: usize, stride: usize) -> f64 {
   const cells = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => box(svg, 16 + i * 82, 24, 74, 56, "sv-panel", "A" + i, "", 13));
   const lines = [0, 1, 2, 3].map((i) => box(svg, 16 + i * 120, 110, 108, 52, "sv-db", "—", "line " + i, 12));
   const score = s("text", { x: 560, y: 140, class: "sv-text", "text-anchor": "middle" }, "");
-  svg.append(score, draw.label(16, 190, "cache holds 4 · each A[i] is used 3 times", "sv-label", "start"));
-  const STRAIGHT = `void straight(int A[8]) {
-    int rep, i;
-    for (rep = 0; rep < 3; rep++)
-        for (i = 0; i < 8; i++)
-            use(A[i]);
-}`;
-  const STRAIGHT_RS = `fn straight(a: &[i32; 8]) {
-    let mut rep: usize = 0;
-    while rep < 3 {
-    for i in 0..8 {
-        touch(a[i]);
-    }
-    rep += 1; }
-}`;
-  const TILED = `void tiled(int A[8]) {
-    int ii, rep, i;
-    for (ii = 0; ii < 8; ii += 4)
-        for (rep = 0; rep < 3; rep++)
-            for (i = ii; i < ii + 4; i++)
-                use(A[i]);
-}`;
-  const TILED_RS = `fn tiled(a: &[i32; 8]) {
-    let mut ii: usize = 0;
-    while ii < 8 {
+  svg.append(score, draw.label(16, 190, "cache holds 4 · each a[i] is used 3 times", "sv-label", "start"));
+  const STRAIGHT = `fn straight(a: &[i32; 8]) {
     for _rep in 0..3 {
-    for i in ii..ii + 4 {
-        touch(a[i]);
-    }}
-    ii += 4; }
+        for i in 0..8 {
+            touch(a[i]);
+        }
+    }
+}`;
+  const TILED = `fn tiled(a: &[i32; 8]) {
+    for ii in (0..8).step_by(4) { // ii = 0, then 4: one tile each
+        for _rep in 0..3 {
+            for i in ii..ii + 4 {
+                touch(a[i]);
+            }
+        }
+    }
 }`;
   const cv = code("#ex-code", { tabs: true, files: [
-    fileC("straight.c", STRAIGHT, STRAIGHT_RS),
-    fileC("tiled.c", TILED, TILED_RS),
+    rs("straight.rs", STRAIGHT),
+    rs("tiled.rs", TILED),
   ]});
   let mode = 0, seq = [], step = 0, hits = 0, misses = 0, cache = [], gen = 0, playing = false;
   function build() {
@@ -3071,8 +2972,8 @@ fn test(data: &[f64], elems: usize, stride: usize) -> f64 {
     gen++; playing = false;
     build(); step = 0; hits = 0; misses = 0; cache = [];
     paint(-1, false);
-    cv.show(mode === 0 ? "straight.c" : "tiled.c");
-    cv.at([mode === 0 ? 5 : 6], "dim", false); cv.notes({});
+    cv.show(mode === 0 ? "straight.rs" : "tiled.rs");
+    cv.at([mode === 0 ? 4 : 5], "dim", false); cv.notes({});
     cap("#ex-cap", mode === 0
       ? "Three passes over all eight items. The cache holds four, so an item is gone before the next pass needs it."
       : "Each tile of four is used three times before the cache moves on. The second and third uses hit.");
@@ -3091,7 +2992,7 @@ fn test(data: &[f64], elems: usize, stride: usize) -> f64 {
     }
     if (hit) hits++; else misses++;
     paint(i, hit);
-    const line = mode === 0 ? 5 : 6;
+    const line = mode === 0 ? 4 : 5;
     cv.at([line]);
     cv.notes({ [line]: [`A[${i}] ${hit ? "hit" : "miss"}`, hit ? "good" : "bad"] });
     const why = mode === 0
@@ -3100,8 +3001,8 @@ fn test(data: &[f64], elems: usize, stride: usize) -> f64 {
         : "The previous pass had already evicted it.")
       : "This is the first use of the item in the current tile.";
     cap("#ex-cap", hit
-      ? `use(A[${i}]) hit. ${mode === 0 ? "It is still among the four resident lines." : "The tile is still in the four lines, so this reuse was free."}`
-      : `use(A[${i}]) missed. ${why}`);
+      ? `touch(a[${i}]) hit. ${mode === 0 ? "It is still among the four resident lines." : "The tile is still in the four lines, so this reuse was free."}`
+      : `touch(a[${i}]) missed. ${why}`);
     step++;
     return true;
   }
@@ -3137,11 +3038,12 @@ K.quiz(K.$("#quiz-root"), [
   { q: "Which reference has temporal locality?", options: ["The next locker in a stride-1 scan", "A column walk that hops N ints", "A scalar sum updated on every iteration of the loop", "A block touched once and never again"], answer: 2, why: "Temporal locality is reuse of the same address soon. The stride-1 neighbour is spatial locality. sum has the first; v[i] visited once has the second." },
   { q: "Why do instruction fetches in a loop have both kinds of locality?", options: ["The compiler unrolls every loop", "Instructions sit in order, and the jump fetches that same block again", "The i-cache is fully associative", "Instructions are stored on disk"], answer: 1, why: "Sequential fetch is spatial locality. Jumping back to the same instructions is temporal locality. Code is rarely written at run time." },
   { q: "A cache has S sets, E lines per set, and B-byte blocks. What is its data capacity C?", options: ["S + E + B", "S × E × B, tags and valid bits not counted", "2^(s+b)", "m − (s + b)"], answer: 1, why: "C = S × E × B data bytes. The valid bit and tag on each line are overhead." },
-  { q: "In the (4, 1, 2, 4) cache, address 8 is read and then address 0 misses, with three sets still empty. What kind of miss is that reread of 0?", options: ["A conflict miss", "A capacity miss — 16 bytes do not fit", "Only a cold miss, because the cache started empty", "A write miss"], answer: 0, why: "The first visit to 8 is cold. The later reread of 0 is a conflict: both blocks map to set 0, and E = 1, while the rest of the cache is idle." },
+  { q: "In the (4, 1, 2, 4) cache, address 8 is read and then address 0 misses, with two sets still empty. What kind of miss is that reread of 0?", options: ["A conflict miss", "A capacity miss — 16 bytes do not fit", "Only a cold miss, because the cache started empty", "A write miss"], answer: 0, why: "The first visit to 8 is cold. The later reread of 0 is a conflict: both blocks map to set 0, and E = 1, while the rest of the cache is idle." },
   { q: "Addresses 0 and 8 map to the same set. What changes when that set has E = 2?", options: ["They still evict each other on every reference", "Both blocks can reside, so the reread hits", "The cache becomes fully associative", "The block offset disappears"], answer: 1, why: "Two lines in the set can hold both tags. A third block that wants the same set is what finally needs a victim." },
   { q: "When does a write-back cache send the block to the next lower level?", options: ["On every store", "When a dirty line is evicted", "Only on instruction fetches", "Never; DRAM is always write-through"], answer: 1, why: "The dirty bit records that the line changed. The block is written downstairs on replacement. Write-through would have written on the store itself." },
   { q: "Why does the Core i7 give each core a separate L1 i-cache and L1 d-cache?", options: ["So an instruction and a data word can be read in the same cycle", "Because instructions and data must use different block sizes by law", "So L3 can be turned off", "Because DRAM cannot hold instructions"], answer: 0, why: "The split L1 supplies an instruction and a data word at once, keeps them from conflicting, and lets the read-only i-cache stay simpler. L2 and L3 on that chip are unified." },
-  { q: "Which matrix-multiply pair has about 0.50 misses per inner iteration, and ran almost 40× faster than the worst pair for large n?", options: ["ijk and jik", "jki and kji", "kij and ikj", "Every order, once n is large"], answer: 2, why: "kij and ikj walk B and C with stride 1: 0.25 + 0.25. jki and kji walk two columns and miss twice per iteration. Same arithmetic, very different miss rates." },
+  { q: "Which matrix-multiply pair has about 0.50 misses per inner iteration, and, in the book’s measurement of its C version, ran almost 40× faster than the worst pair for large n?", options: ["ijk and jik", "jki and kji", "kij and ikj", "Every order, once n is large"], answer: 2, why: "kij and ikj walk B and C with stride 1: 0.25 + 0.25. jki and kji walk two columns and miss twice per iteration. Same arithmetic, very different miss rates. (The 40× is the book’s C measurement; our Rust measurement is pending.)" },
+  { q: "In Rust, which 4 × 4 grid of i32 is guaranteed to keep row 1 starting right where row 0 ends?", options: ["[[i32; 4]; 4], an array of four arrays", "Vec<Vec<i32>>, a vector of four vectors", "Both, because Rust always packs rows together", "Neither; Rust lays out arrays column by column"], answer: 0, why: "An array’s elements sit back to back, n × size_of::<T>() bytes from its start, so an array of rows is row-major. Each inner Vec of a Vec<Vec<i32>> owns its own heap buffer, so rows need not be neighbours." },
 ], 6);
 </script>
 </body>

@@ -16,8 +16,66 @@
     "name": "c",
     "fence": "c",
     "file": "main.c",
-    "compile": ["clang", "-target", "x86_64-linux-gnu"]
+    "compile": [
+      "clang",
+      "-target",
+      "x86_64-linux-gnu"
+    ]
   },
-  "chapters": {},
-  "videos": null
+  "chapters": {
+    "ch01": {
+      "book": "A Tour of Computer Systems"
+    },
+    "ch02": {
+      "book": "Representing and Manipulating Information"
+    },
+    "ch03": {
+      "book": "Machine-Level Representation of Programs"
+    },
+    "ch04": {
+      "book": "Processor Architecture"
+    },
+    "ch05": {
+      "book": "Optimizing Program Performance"
+    },
+    "ch06": {
+      "book": "The Memory Hierarchy"
+    },
+    "ch07": {
+      "book": "Linking"
+    },
+    "ch08": {
+      "book": "Exceptional Control Flow"
+    },
+    "ch09": {
+      "book": "Virtual Memory"
+    },
+    "ch10": {
+      "book": "System-Level I/O"
+    },
+    "ch11": {
+      "book": "Network Programming"
+    },
+    "ch12": {
+      "book": "Concurrent Programming"
+    }
+  },
+  "videos": {
+    "dir": "videos/csapp",
+    "voice": "kokoro:bm_fable",
+    "site": "https://ikram98ai.github.io/interactive_reading/books/csapp",
+    "schedule": {
+      "timezone": "Asia/Karachi",
+      "utc_offset_hours": 5
+    },
+    "long_form": {
+      "playlist": "Computer Systems: A Programmer's Perspective",
+      "title": "Chapter {cn}: {book_chapter} | Computer Systems: A Programmer's Perspective",
+      "intro": "Chapter {cn} of {book} ({short}), explained in depth, with the book's C beside Rust. Every idea is shown on an interactive page.",
+      "publish": "one chapter a week, on weekday at time, starting on the day the user picks",
+      "time": "08:00",
+      "weekday": "Saturday",
+      "language": "rust"
+    }
+  }
 }
