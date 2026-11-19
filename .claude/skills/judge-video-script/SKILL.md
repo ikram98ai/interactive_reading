@@ -22,8 +22,11 @@ script got it wrong.
 3. **Read the chapter first, in full**, from `book.json` `text` with NN filled in. If that file is missing, make it with
    `tools/authoring/extract.py` (see its header). Don't judge from memory of the book.
 4. **Go sentence by sentence.** Ignore cues and code blocks, but judge every comment typed into the editor, and every
-   label, card, board line and agenda item, since the viewer reads those. For each sentence, ask every question in
-   [judgements.md](judgements.md) that applies.
+   label, card, board line and agenda item, since the viewer reads those. A section card's heading (the last field of
+   `{goto id | kicker | heading}`) is also spoken, right before the part, so judge it as a sentence too; its kicker is
+   never shown. In a RUST part with `{side <scene>}`, the machine and its stack-and-heap strip are on screen beside the
+   editor: a sentence about what's "on the left" or "in memory" must match what that machine shows at that step. For
+   each sentence, ask every question in [judgements.md](judgements.md) that applies.
 5. **Check against the real sources, not against what seems likely:**
    - the book text, for what the book says
    - the machine's source in `books/<slug>/chNN.html`, for what the screen shows: names, counts, captions, and which

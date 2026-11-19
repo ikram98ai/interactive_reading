@@ -17,7 +17,9 @@
          label <text>  (a small heading at the top of the frame; {label} alone clears it)
          rust · pseudo  (the code panel shows the Rust program, with its stack and heap underneath, or the book's pseudocode)
          title · item <text>  (the title card, then one line of "what you'll learn" on it per item, each on its word)
-         goto <scene id | kicker | heading>  (a section card covers the switch to that scene; {scene} lifts it; each goto is a YouTube chapter)
+         goto <scene id | kicker | heading>  (a section card covers the switch to that scene; {scene} lifts it; each goto is a YouTube chapter.
+                              The card shows only the heading: the kicker, "Part 3 of 6", names the part for the tools and is
+                              never on screen. narrate.py has the voice read the heading while the card is up.)
          goto <scene id>  (a quick dip to black instead: a second scene inside the same part, and no new chapter)
    A manifest with a `part` (assemble.js) records one part of a long form: it starts under its own card, with the layers
    earlier parts hid still hidden, and ends on the next part's card instead of black, so the parts join without a seam.
@@ -29,6 +31,12 @@
                               back from an earlier video) · select <text> [#n] · unselect · run (the program's real output, or
                               its compiler error, from narrate.py) · close  (hide the run panel) · and title, item, scene,
                               label, card and check as above (the run panel is #out)
+   A page video's {goto editor} can bring the chapter page's machine along, beside the editor:
+         side <scene id> | off  (before {goto editor}, or in the editor: the scene's machine, in Rust mode with its stack-and-heap
+                              strip, fills the left of the frame while the code is typed on the right. Page cues then land on
+                              it: click, slider, speed, focus, show, hide, rust and pseudo, a {check} the editor can't answer,
+                              and {await}. The strip starts hidden: {show memory} brings it in when the narration names it.
+                              A second {side <id>} swaps the machine under a quick dip.)
    Targets: svg:x,y,w,h (viewBox units of the machine) · css:<selector> · stat:<label> · btn:<label> · code:<a[-b]> (pseudocode lines)
    · rs:<a[-b]> (Rust lines) · mem:x,y,w[,h] (viewBox units of the stack-and-heap strip) · slider:<i>
    · panel, stats, memory, stack, heap (built in) · or a name from the script's `targets:` block. */
@@ -87,6 +95,22 @@ html:not(.vid-rust) .memstrip, .stage:not(.is-full) [id$="-mem"] { display: none
 .stage.is-full .ac-v { font-size: 18px; }
 .vid-part { transition: opacity .4s ease; }
 html, body { cursor: none !important; } * { scrollbar-width: none !important; }
+`;
+// The chapter page in the editor's side panel ({side <scene>}): the machine on top, its stack-and-heap strip below, and no
+// listing (the editor beside it is the code). The page sits in an iframe SIDE_W device pixels wide and the full height.
+const SIDE_W = 820, SIDE_ZOOM = 1.22;
+const SIDE_CSS = `
+.wrap .stage.is-full, .wrap .stage.is-full.no-code, .vid-rust .wrap .stage.is-full:not(.no-code) { zoom: ${SIDE_ZOOM}; width: calc(100vw / ${SIDE_ZOOM}); height: calc(100vh / ${SIDE_ZOOM}) !important;
+  grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: auto auto auto !important; align-content: center; }
+.stage.is-full > .stage-scroll { grid-row: 1 !important; padding: 0 6px !important; transform: none !important; }
+.stage.is-full > .stage-scroll > svg { width: 100% !important; height: auto !important; max-height: 62vh; }
+.stage.is-full > .statrow { grid-row: 2 !important; transform: none !important; padding: 6px 0 0 !important; }
+.stage.is-full > .codepane { display: flex !important; grid-column: 1 !important; grid-row: 3 !important; border: 0 !important; padding: 0 10px 40px !important; justify-content: flex-start !important; }
+.stage.is-full > .codepane > :not(.memstrip) { display: none !important; }
+.stage.is-full .memstrip { margin-top: 10px !important; animation: none !important; } /* its fade-in would override {hide}: {show memory} fades it */
+.stage.is-full .memstrip .stage-scroll { overflow: visible !important; padding: 0 !important; }
+.stage.is-full .memstrip svg { width: 100% !important; height: auto !important; max-height: none !important; }
+.vid-center .stage.is-full .ac-i, .stage.is-full .ac-i { opacity: 1 !important; }
 `;
 // Pages built on assets/kit.js (CS:APP) have no full-screen button of their own. studio.js gives their stage the same
 // .is-full layout as books/clrs/algo.css (copied from there), so every cue, target and check works the same on both.
@@ -192,7 +216,7 @@ function overlayScript() {
   requestAnimationFrame(tick);
 
   window.__vid = {
-    title(show, a, b) { if (a != null) { $("vid-kicker").textContent = b; $("vid-head").textContent = a; } $("vid-list").innerHTML = ""; $("vid-title").style.opacity = show ? 1 : 0; },
+    title(show, a, b) { if (a != null) { $("vid-kicker").textContent = b; $("vid-kicker").style.display = ""; $("vid-head").textContent = a; } $("vid-list").innerHTML = ""; $("vid-title").style.opacity = show ? 1 : 0; },
     item(text) {
       const li = document.createElement("li"), n = $("vid-list").children.length + 1;
       li.innerHTML = `<span style="font:700 22px 'JetBrains Mono',monospace;color:#8ea2ff;margin-right:16px">${String(n).padStart(2, "0")}</span>`;
@@ -257,7 +281,8 @@ function overlayScript() {
       }
     },
     hideTitle() { $("vid-title").style.opacity = 0; $("vid-card").style.opacity = 0; }, // {scene}: back to the picture
-    section(kicker, head) { state.targets = []; this.label(""); $("vid-list").innerHTML = ""; $("vid-kicker").textContent = kicker; $("vid-head").textContent = head; $("vid-title").style.opacity = 1; $("vid-card").style.opacity = 0; },
+    // a part's card: its heading alone. The kicker ("Part 3 of 6") stays off screen, and so does the gap it would leave.
+    section(kicker, head) { state.targets = []; this.label(""); $("vid-list").innerHTML = ""; $("vid-kicker").textContent = ""; $("vid-kicker").style.display = "none"; $("vid-head").textContent = head; $("vid-title").style.opacity = 1; $("vid-card").style.opacity = 0; },
     card(a, b) { $("vid-card-a").textContent = a; $("vid-card-b").textContent = b || ""; $("vid-card").style.opacity = 1; },
     black() { $("vid-black").style.opacity = 1; },
     // a short's burned-in captions: a few words at a time, the word being said in the accent colour. chunks are
@@ -317,6 +342,37 @@ function overlayScript() {
   const problems = [];
   page.on("pageerror", (e) => problems.push("page error: " + e.message));
   page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource|fonts\.g/.test(m.text())) problems.push("console: " + m.text()); });
+  // The machine beside the editor ({side <scene>}): a Playwright Frame on the chapter page, or null. ui() is where a page
+  // cue lands: on the chapter page, or, once the video is in the editor with a side panel, on that panel's machine.
+  let side = null, wantSide = null;
+  const ui = () => (EDITOR && side ? side : page);
+  const widest = () => Math.max(0, ...Object.values(M.code || {}).flatMap((t) => t.split("\n").map((l) => l.length)));
+  async function sideScene(id) { // the scene's machine, fresh, in Rust mode: the picture and the (still hidden) strip, no listing
+    await side.evaluate(async (id) => {
+      const v = window.__vid; v.enter(id); if (window.K) K.speed.value = 1; window.__lastBtn = null;
+      v.fresh(); v.center(false); await v.lang(true);
+      v.show([".is-full > .codepane"], true); v.show([".is-full .memstrip"], false);
+    }, id);
+  }
+  async function openSide(id) {
+    if (side) { // a new machine in the same panel: a quick dip, so the swap isn't seen
+      await side.evaluate(() => window.__vid.dip(true)); await sleep(330);
+      await sideScene(id); await sleep(250);
+      await side.evaluate(() => window.__vid.dip(false));
+      log(`side ${id}`); return;
+    }
+    await page.evaluate(([src, w]) => window.__ed.side(src, w), ["file://" + path.join(ROOT, meta.page), SIDE_W]);
+    side = page.frames().find((f) => f !== page.mainFrame());
+    await side.evaluate(() => document.fonts.ready);
+    if (!(await side.evaluate(() => !!window.AL))) await side.addStyleTag({ content: KIT_CSS });
+    await side.addStyleTag({ content: CSS }); await side.addStyleTag({ content: SIDE_CSS });
+    await side.evaluate(overlayScript);
+    await sideScene(id);
+    await side.evaluate(() => window.__vid.hideTitle());
+    await page.addStyleTag({ content: `#vid-label { left: ${SIDE_W}px !important; }` }); // a label centres over the editor, clear of its tab
+    console.log(`side panel: ${id}, editor font ${(await page.evaluate((c) => window.__ed.fit(c), widest())).toFixed(1)} px for ${widest()} columns`);
+    await sleep(600); // the panel's own cover has faded
+  }
   async function openEditor() { // the editor (tools/video/editor.html), with the same title, label and cards as a page
     await page.goto("file://" + path.join(ROOT, "tools/video/editor.html"), { waitUntil: "load" });
     await page.evaluate(() => window.__ed.ready());
@@ -324,7 +380,7 @@ function overlayScript() {
     if (IS_SHORT) { await page.evaluate(() => window.__ed.short()); await page.addStyleTag({ content: SHORT_CSS.slice(SHORT_CSS.indexOf("#vid-label")) }); }
     else await page.addStyleTag({ content: "#vid-label { top: 14px !important; }" }); // inside the tab bar, clear of the code
     await page.evaluate((n) => window.__ed.name(n), M.file || "main.rs");
-    const cols = Math.max(0, ...Object.values(M.code || {}).flatMap((t) => t.split("\n").map((l) => l.length)));
+    const cols = widest();
     if (cols > (IS_SHORT ? 39 : 72)) console.log(`widest line is ${cols} characters: font ${(await page.evaluate((c) => window.__ed.fit(c), cols)).toFixed(1)} px`);
     if (meta.start) await page.evaluate((t) => window.__ed.set(t), M.code[meta.start]);
   }
@@ -429,6 +485,7 @@ function overlayScript() {
         if (card) { chapters.push([now(), head]); await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]); await sleep(750); }
         const last = (await page.screenshot({ type: "png" })).toString("base64"), from = Date.now() / 1000;
         await openEditor();
+        if (wantSide) await openSide(wantSide); // the machine comes along, loaded under the old frame
         if (card) await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]);
         else await page.evaluate((src) => new Promise((done) => { // the page's last frame on top, to fade away
           const t = document.getElementById("vid-title"); t.style.transition = "none"; t.style.opacity = 0;
@@ -462,33 +519,42 @@ function overlayScript() {
     }
     else if (c.op === "title") { await page.evaluate(([a, b]) => window.__vid.title(true, a, b), [meta.title, meta.kicker]); log("title"); }
     else if (c.op === "item") { await page.evaluate((v) => window.__vid.item(v), a); log(`item ${a}`); }
-    else if (c.op === "rust" || c.op === "pseudo") { await page.evaluate((r) => window.__vid.lang(r), c.op === "rust"); await sleep(60); }
-    else if (c.op === "focus") { await page.evaluate((l) => window.__vid.focus(l), a === "off" ? [] : named(a)); }
-    else if (c.op === "show" || c.op === "hide") { await page.evaluate(([l, on]) => window.__vid.show(l, on), [named(a).map((x) => x.slice(4)), c.op === "show"]); }
-    else if (c.op === "center" || c.op === "split") { await page.evaluate((on) => window.__vid.center(on), c.op === "center"); }
+    else if (c.op === "side") {
+      if (a === "off") { if (side) { await page.evaluate(() => window.__ed.side(null)); side = null; await page.evaluate((c) => window.__ed.fit(c), widest()); } wantSide = null; }
+      else if (EDITOR) await openSide(a);
+      else wantSide = a; // opened with the editor, at {goto editor}
+    }
+    else if (c.op === "rust" || c.op === "pseudo") { await ui().evaluate((r) => window.__vid.lang(r), c.op === "rust"); await sleep(60); }
+    else if (c.op === "focus") { await ui().evaluate((l) => window.__vid.focus(l), a === "off" ? [] : named(a)); }
+    else if (c.op === "show" || c.op === "hide") { await ui().evaluate(([l, on]) => window.__vid.show(l, on), [named(a).map((x) => x.slice(4)), c.op === "show"]); }
+    else if (c.op === "center" || c.op === "split") { await ui().evaluate((on) => window.__vid.center(on), c.op === "center"); }
     else if (c.op === "label") { headline = a || (IS_SHORT ? meta.title : ""); await page.evaluate((v) => window.__vid.label(v), headline); }
-    else if (c.op === "speed") { await page.evaluate((v) => { K.speed.value = v; }, +a); }
+    else if (c.op === "speed") { await ui().evaluate((v) => { K.speed.value = v; }, +a); }
     else if (c.op === "card") { const [x, y] = a.split("|").map((v) => v.trim()); await page.evaluate(([p, q]) => window.__vid.card(p, q), [x, y]); }
     else if (c.op === "click") {
       const [, label, times] = a.match(/^(.*?)(?:\s+x(\d+))?$/);
+      const pg = ui();
       for (let n = +times || 1; n > 0; n--) {
-        const ready = await page.evaluate((l) => window.__vid.enabled(l), label);
+        const ready = await pg.evaluate((l) => window.__vid.enabled(l), label);
         if (ready === null) { problems.push(`no button "${label}"`); return; }
-        for (let i = 0; i < 400 && !(await page.evaluate((l) => window.__vid.enabled(l), label)); i++) await sleep(25); // still animating: wait
-        const before = +times > 1 ? await page.evaluate(() => window.__vid.caption()) : null;
-        if (!(await page.evaluate((l) => window.__vid.press(l), label))) problems.push(`could not press "${label}"`);
+        for (let i = 0; i < 400 && !(await pg.evaluate((l) => window.__vid.enabled(l), label)); i++) await sleep(25); // still animating: wait
+        const before = +times > 1 ? await pg.evaluate(() => window.__vid.caption()) : null;
+        if (!(await pg.evaluate((l) => window.__vid.press(l), label))) problems.push(`could not press "${label}"`);
         await sleep(30);
         // a burst (xN): let each step land before the next press, or a press can fall between the steps
-        for (let i = 0; before !== null && i < 60 && (await page.evaluate(() => window.__vid.caption())) === before; i++) await sleep(25);
+        for (let i = 0; before !== null && i < 60 && (await pg.evaluate(() => window.__vid.caption())) === before; i++) await sleep(25);
       }
-      log(`click ${a}  → ${(await page.evaluate(() => window.__vid.caption())).slice(0, 90)}`);
+      log(`click ${a}  → ${(await pg.evaluate(() => window.__vid.caption())).slice(0, 90)}`);
     } else if (c.op === "slider") {
       const [i, v] = a.split(/\s+/).map(Number);
-      await page.evaluate(([i, v]) => window.__vid.slideTo(i, v), [i, v]);
+      await ui().evaluate(([i, v]) => window.__vid.slideTo(i, v), [i, v]);
       log(`slider ${i} = ${v}`);
     } else if (c.op === "check") {
       const [sel, want] = a.split("~").map((v) => v.trim());
-      const got = await page.evaluate((s) => [...document.querySelectorAll(s)].map((e) => e.textContent).join(" "), sel);
+      const read = (pg) => pg.evaluate((s) => { const els = [...document.querySelectorAll(s)]; return els.length ? els.map((e) => e.textContent).join(" ") : null; }, sel);
+      let got = await read(page);
+      if (got === null && side) got = await read(side); // the editor has no such element: the machine beside it does
+      got = got || "";
       const ok = got.replace(/\s+/g, "").includes(want.replace(/\s+/g, ""));
       if (!ok) problems.push(`CHECK FAILED: ${sel} should show "${want}" but shows: ${got.replace(/\s+/g, " ").slice(0, 200)}`);
       log(`check ${ok ? "ok " : "FAILED "} "${want}"`);
@@ -521,13 +587,14 @@ function overlayScript() {
     if (s.then && s.then.await) {
       const w0 = now();
       await sleep(250);
-      while ((await page.evaluate(() => window.__vid.busy())) && now() - w0 < 120) await sleep(60);
+      while ((await ui().evaluate(() => window.__vid.busy())) && now() - w0 < 120) await sleep(60);
       await sleep(350);
       log(`animation took ${(now() - w0).toFixed(1)} s`);
     } else if (s.then && s.then.pause != null) await sleep(s.then.pause * 1000);
     else if (s.gap) await sleep(s.gap * 1000);
   }
   await finishTyping("the end");
+  if (EDITOR) for (const t of await page.evaluate(() => window.__ed.slips)) problems.push(`typing left the editor different from its snapshot, then jumped to it:\n${t}`);
   if (P && P.exit) { // the next part's card fades in, as the next {goto} would: the next part starts on that same frame
     await page.evaluate(([k, h]) => window.__vid.section(k, h), P.exit);
     await sleep(750);

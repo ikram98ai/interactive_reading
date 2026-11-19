@@ -77,6 +77,7 @@
         <div class="controls" id="s1-controls"></div>
         <div class="statrow" id="s1-stats"></div>
         <div class="caption" id="s1-cap" aria-live="polite">Nothing has run yet.</div>
+        <div id="s1-mem"></div>
         <div id="s1-code"></div>
       </div>
     </div>
@@ -108,8 +109,8 @@ fn insertion_sort<T: Ord + Copy>(a: &mut [T]) {
 }
 
 fn main() {
-    let mut cards = [5, 2, 4, 6, 1, 3]; // the book's Figure 2.2
-    insertion_sort(&mut cards);          // T = i32
+    let mut cards = vec![5, 2, 4, 6, 1, 3]; // Figure 2.2, on the heap
+    insertion_sort(&mut cards);              // T = i32
     println!("{:?}", cards);
 
     let mut letters = ['s', 'o', 'r', 't'];
@@ -1037,7 +1038,7 @@ fn main() {
         <p class="story">MERGE-SORT(<i>A</i>, <i>p</i>, <i>r</i>) sorts the subarray <i>A</i>[<i>p</i> : <i>r</i>]. If it holds zero or one element it is already sorted: that is the base case, where the recursion <b>bottoms out</b>. Otherwise it <b>divides</b> at the midpoint <i>q</i> = ⌊(<i>p</i> + <i>r</i>)/2⌋, <b>conquers</b> by calling itself on <i>A</i>[<i>p</i> : <i>q</i>] and then on <i>A</i>[<i>q</i> + 1 : <i>r</i>], and <b>combines</b> the two sorted halves with MERGE.</p>
         <p class="story">So the calls cut the array into halves, halves of halves, and so on down to single elements, and then the merges build sorted runs of 2, 4 and 8 on the way back up. The first call, MERGE-SORT(<i>A</i>, 1, <i>n</i>), sorts the whole array. When <i>n</i> is not a power of 2 the two halves differ by one: <i>A</i>[<i>p</i> : <i>q</i>] gets ⌈<i>n</i>/2⌉ elements and <i>A</i>[<i>q</i> + 1 : <i>r</i>] gets ⌊<i>n</i>/2⌋.</p>
         <p class="story">Every call that is waiting for its halves to come back is a frame on the <b>call stack</b>. There are 2<i>n</i> − 1 calls of MERGE-SORT in all, but at any moment only one chain of them is open, from the first call down to the current one, so the stack never holds more than one frame per level of halving.</p>
-        <p class="imagine"><b>Try it:</b> press <b>Step</b> to follow Figure 2.4's array ⟨12, 3, 7, 9, 14, 6, 11, 2⟩ call by call, or <b>Play</b>. Dashed boxes are calls not made yet, the yellow box is running, blue boxes wait for their halves, and lilac ones are sorted. In each MERGE, cards rise from the two halves into the parent, smallest first. Pick <b>Random n</b> and set <i>n</i> to 5, 7 or 10 to see uneven halves. The memory strip shows the stack growing and unwinding, and how <code>split_at_mut</code> hands each Rust call two halves of one buffer that cannot overlap.</p>
+        <p class="imagine"><b>Try it:</b> press <b>Step</b> to follow Figure 2.4's array ⟨12, 3, 7, 9, 14, 6, 11, 2⟩ call by call, or <b>Play</b>. Dashed boxes are calls not made yet, the yellow box is running, blue boxes wait for their halves, and lilac ones are sorted. In each MERGE, cards rise from the two halves into the parent, smallest first. Pick <b>Random n</b> and set <i>n</i> to 5, 7 or 10 to see uneven halves. The memory strip shows the stack growing and unwinding, and each Rust call borrowing its own half of the one buffer, <code>&amp;mut a[..q]</code> and then <code>&amp;mut a[q..]</code>.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -1076,12 +1077,11 @@ fn merge_sort(a: &mut [i32]) {
         return; // zero or one element: already sorted
     }
     let q = (a.len() + 1) / 2; // the left half gets ⌈n/2⌉ items
-    // split_at_mut: two &mut halves of one slice. They can't overlap,
-    // so the borrow checker lets both be alive at once.
-    let (left, right) = a.split_at_mut(q);
-    merge_sort(left); // recursively sort a[..q]
-    merge_sort(right); // recursively sort a[q..]
-    merge(a, q); // the halves' borrows have ended, so `a` is usable again
+    // Each call borrows one half for as long as it runs; once it returns,
+    // the next line can borrow the other half, and merge can use all of a.
+    merge_sort(&mut a[..q]); // recursively sort a[..q]
+    merge_sort(&mut a[q..]); // recursively sort a[q..]
+    merge(a, q); // merge the two sorted halves
 }
 
 // Merge the sorted runs a[..q] and a[q..] (scene 2.3.1 has the book's MERGE).
@@ -1831,7 +1831,7 @@ merge count:    5 inversions, sorted [1, 2, 3, 6, 8]
         <div class="word"><dt>[T; N] on the stack</dt><dd>A fixed-size array lives right in the function's stack frame; a <code>Vec</code> keeps its items on the heap.</dd></div>
         <div class="word"><dt>iterators and closures</dt><dd><code>windows(2)</code>, <code>rev()</code>, <code>fold</code>, <code>collect</code> chain steps over a sequence; <code>|w| w[0] &lt;= w[1]</code> is a closure.</dd></div>
         <div class="word"><dt>to_vec and drop</dt><dd><code>to_vec()</code> copies a slice into a new heap <code>Vec</code>. When its owner goes out of scope, the buffer is freed automatically.</dd></div>
-        <div class="word"><dt>split_at_mut</dt><dd>Splits one <code>&amp;mut</code> slice into two that don't overlap, so both halves can be changed at once.</dd></div>
+        <div class="word"><dt>&amp;mut a[..q]</dt><dd>A mutable borrow of part of a slice. One call borrows the left half, and once it returns, the next borrows the right.</dd></div>
       </dl>
     </div>
   </section>
@@ -1982,6 +1982,7 @@ K.page(2);
   const ctr = K.$("#s1-controls"), stats = K.$("#s1-stats");
   const stC = stat("comparisons", 0), stS = stat("shifts", 0), stP = stat("inserted", "0 of 5");
   stats.append(stC, stS, stP);
+  const m = mem("#s1-mem");
   const cv = code("#s1-code", { files: [{ name: "INSERTION-SORT", src: src("ps-s1"), rs: { name: "insertion_sort.rs", src: src("rs-s1"), out: src("rs-s1-out"), map: { "INSERTION-SORT": 3, 1: 4, 2: 5, 3: 6, 4: 7, 5: 8, 6: 9, 7: 10, 8: 12 } } }] });
   let mode = 0, field = "age", st, events, busy = [];
   const S = session((b) => busy.forEach((x) => (x.disabled = b)));
@@ -2013,7 +2014,7 @@ K.page(2);
     return ev;
   }
   function fresh() {
-    st = { a: input(), i: null, j: null, key: null, hole: null, ghost: null, cmpAt: null, done: false, cmp: 0, shifts: 0, placed: 0, k: 0, line: null, ok: null, aj: null };
+    st = { a: input(), i: null, j: null, key: null, kv: null, hole: null, ghost: null, cmpAt: null, done: false, cmp: 0, shifts: 0, placed: 0, k: 0, line: null, ok: null, aj: null };
     events = trace(st.a);
   }
 
@@ -2046,7 +2047,9 @@ K.page(2);
     if (mode === 1) [["name", 22], ["age", 46], ["courses", 70]].forEach(([f, ry]) =>
       txt(gHead, 16, AY + ry + 4, f, { anchor: "start", cls: "sv-label", fill: f === field ? "var(--ink)" : null }));
     // the array: hand, gap, pile
-    const handEnd = st.done ? N : st.i != null ? st.i : 1; // hand + gap occupy slots 1..handEnd
+    // the hand (and, once the key is lifted, its gap) occupies slots 1..handEnd: at line 1 the next card is still the
+    // pile's top card, so it turns sorted only once line 2 has picked it up
+    const handEnd = st.done ? N : st.i != null ? (st.line === 1 ? st.i - 1 : st.i) : 1;
     for (let k = 0; k < N; k++) {
       const x = cx(k);
       if (k === st.hole || k === st.ghost) {
@@ -2075,7 +2078,41 @@ K.page(2);
     }
     stC.set(st.cmp); stS.set(st.shifts);
     stP.set(`${st.placed} of ${N - 1}`, st.done ? "good" : undefined);
-    renderCode();
+    renderCode(); renderMem();
+  }
+  // The Rust run's memory: main's Vec owns the cards on the heap, and insertion_sort borrows that one buffer. The heap
+  // shows what memory really holds, so a card that has just slid right is in two slots until something overwrites one.
+  function renderMem() {
+    const inCall = st.i != null && !st.done, L = st.line;
+    if (mode === 1) {
+      m.set({
+        note: "The records are tuples in an array inside <code>main</code>'s own frame, so this run needs no heap at all.",
+        stack: [{ fn: "main", vars: [{ n: "students", t: "[(i32, &str, i32); 6]", v: "in this frame" }] }].concat(inCall ? [{ fn: "insertion_sort(&mut students)", top: true, vars: [
+          { n: "a", t: "&mut [(i32, &str, i32)]", v: "len 6" }, { n: "i", t: "usize", v: st.i - 1 }] }] : []),
+      });
+      return;
+    }
+    const mk = {};
+    if (inCall && L === 2) mk[st.i - 1] = "on2";
+    if (inCall && L === 5 && st.cmpAt != null) mk[st.cmpAt] = "on2";
+    if (inCall && (L === 6 || L === 8) && st.j != null) mk[st.j] = "on";
+    const frames = [{ fn: "main", vars: [{ n: "cards", t: "Vec<i32>", v: `len ${N} · cap ${N}`, ptr: "buf" }] }];
+    if (inCall) frames.push({ fn: "insertion_sort(&mut cards)", top: true, vars: [
+      { n: "a", t: "&mut [i32]", v: `len ${N}`, ptr: "buf" },
+      { n: "i", t: "usize", v: st.i - 1, hot: L === 1 },
+      { n: "key", t: "i32", v: st.kv == null ? "–" : st.kv, hot: L === 2 },
+      { n: "j", t: "usize", v: st.j == null || L === 1 ? "–" : st.j, hot: L === 4 || L === 7 },
+    ] });
+    m.set({
+      note: !inCall && !st.done ? "Before the call: <code>cards</code> owns the six numbers, in one buffer on the heap."
+        : st.done ? "The call has returned and its borrow has ended: <code>cards</code> owns its buffer again, now sorted. Nothing was allocated or copied."
+        : L === 2 ? "<code>let key = a[i]</code> copies the card into <code>key</code>, on the stack. Its slot on the heap still holds the old value."
+        : L === 6 ? "<code>a[j] = a[j - 1]</code> copies one card a place right. For a moment the same value is in two slots, until the next write covers one."
+        : L === 8 ? "<code>a[j] = key</code> writes the held card into its slot. The hand <code>a[..=i]</code> is sorted again."
+        : "<code>insertion_sort</code> borrows the buffer as <code>a: &amp;mut [i32]</code>: it changes the cards in place, and nothing is copied.",
+      stack: frames,
+      heap: [{ id: "buf", label: `cards' buffer · ${N} × i32`, cells: st.a.map((it) => it.v), marks: mk, cw: 40 }],
+    });
   }
   function renderCode() {
     if (st.line == null) { cv.clear(); cv.out(null); return; }
@@ -2110,12 +2147,12 @@ K.page(2);
   const keyX = (k) => cx(k), card0 = (it, cls) => { const g = s("g"); card(g, 0, 0, it, cls); return g; };
   async function apply(e, w) {
     st.line = e.line;
-    if (e.line === 1) { st.i = e.done ? null : e.i; st.j = null; st.cmpAt = null; st.done = !!e.done; }
+    if (e.line === 1) { st.i = e.done ? null : e.i; st.j = null; st.kv = null; st.cmpAt = null; st.done = !!e.done; }
     if (e.line === 2) {
       st.cmpAt = null; const it = st.a[e.i - 1]; st.hole = e.i - 1; render();
       const g = card0(it, "on"); layer.appendChild(g);
       await w(fly(g, [cx(e.i - 1), AY], [cx(e.i - 1), KY], 380));
-      g.remove(); st.key = it;
+      g.remove(); st.key = it; st.kv = keyOf(it);
     }
     if (e.line === 4) st.j = e.j;
     if (e.line === 5) { st.ok = e.ok; st.aj = e.aj; st.cmpAt = e.j > 0 ? e.j - 1 : null; if (e.j > 0) st.cmp++; }
@@ -3854,7 +3891,7 @@ K.page(2);
   const stCalls = stat("calls after the first", 0), stDepth = stat("stack depth", 0), stMoves = stat("values merged", 0);
   stats.append(stCalls, stDepth, stMoves);
   const cv = code("#s9-code", { files: [{ name: "MERGE-SORT", src: src("ps-s9"), rs: { name: "merge_sort.rs", src: src("rs-s9"), out: src("rs-s9-out"),
-    map: { "MERGE-SORT": 2, 1: 3, 2: 4, 3: 6, 4: [9, 10], 5: 11, 7: 12 } } }] });
+    map: { "MERGE-SORT": 2, 1: 3, 2: 4, 3: 6, 4: 9, 5: 10, 7: 11 } } }] });
   const m = mem("#s9-mem");
   let mode = 0, n = 8, input = FIG.slice(), T, events, st, busy = [];
   const S = session((b) => busy.forEach((x) => (x.disabled = b)));
@@ -3963,15 +4000,15 @@ K.page(2);
     const e = st.e;
     if (!e) { cv.clear(); cv.out(null); return; }
     const x = e.node, len = x.r - x.p + 1;
-    if (st.done) { cv.at([]); cv.at([], "on2", false); cv.notes({ 7: ["A[1 : n] sorted", "good"] }, { 33: ["sorted", "good"] }); cv.out(`⟨${st.vals[T.root.id].join(", ")}⟩`); return; }
+    if (st.done) { cv.at([]); cv.at([], "on2", false); cv.notes({ 7: ["A[1 : n] sorted", "good"] }, { 32: ["sorted", "good"] }); cv.out(`⟨${st.vals[T.root.id].join(", ")}⟩`); return; }
     cv.at(e.lines);
-    cv.at(e.move ? [e.from.kid === 0 ? "rs:21" : "rs:24"] : [], "on2", false);
+    cv.at(e.move ? [e.from.kid === 0 ? "rs:20" : "rs:23"] : [], "on2", false);
     const nt = { 1: `p = ${x.p}, r = ${x.r}` }, rt = { 3: `a = v[${x.p - 1}..${x.r}], len ${len}` };
     if (e.leaf) { nt[2] = ["p = r: return", "good"]; rt[4] = ["len 1: return", "good"]; }
     if (x.q != null && e.lines[0] >= 3) { nt[3] = `q = ${x.q}`; rt[6] = `q = ${x.q - x.p + 1}`; }
-    if (e.lines[0] === 4) { nt[4] = `→ (A, ${x.p}, ${x.q})`; rt[9] = `v[${x.p - 1}..${x.q}] | v[${x.q}..${x.r}]`; }
-    if (e.lines[0] === 5) nt[5] = `→ (A, ${x.q + 1}, ${x.r})`;
-    if (e.lines[0] === 7) { nt[7] = `MERGE(A, ${x.p}, ${x.q}, ${x.r})`; rt[12] = `merge(a, ${x.q - x.p + 1})`; }
+    if (e.lines[0] === 4) { nt[4] = `→ (A, ${x.p}, ${x.q})`; rt[9] = `a[..q] = v[${x.p - 1}..${x.q}]`; }
+    if (e.lines[0] === 5) { nt[5] = `→ (A, ${x.q + 1}, ${x.r})`; rt[10] = `a[q..] = v[${x.q}..${x.r}]`; }
+    if (e.lines[0] === 7) { nt[7] = `MERGE(A, ${x.p}, ${x.q}, ${x.r})`; rt[11] = `merge(a, ${x.q - x.p + 1})`; }
     cv.notes(nt, rt);
     cv.out(null);
   }
@@ -3986,10 +4023,6 @@ K.page(2);
       const vars = [];
       if (isTop) {
         vars.push({ n: "a", t: "&mut [i32]", v: `len ${x.r - x.p + 1}`, ptr: `buf:${x.p - 1}` });
-        if (x.q != null && e.node === x && (e.lines[0] === 4 || e.lines[0] === 5)) {
-          vars.push({ n: "left", t: "&mut [i32]", v: `len ${x.q - x.p + 1}`, ptr: `buf:${x.p - 1}`, hot: e.lines[0] === 4 });
-          vars.push({ n: "right", t: "&mut [i32]", v: `len ${x.r - x.q}`, ptr: `buf:${x.q}`, hot: e.lines[0] === 5 });
-        }
       }
       frames.push({ fn: "merge_sort", sub: `a = v[${x.p - 1}..${x.r}]`, top: isTop, vars });
     });
@@ -4009,7 +4042,7 @@ K.page(2);
     if (!e) note = "Before the first call: one heap buffer owned by <code>v</code>.";
     else if (st.done) note = "Every call has returned and the stack is back to <code>main</code>. All the sorting happened inside <code>v</code>'s one buffer; only the merges made short-lived copies.";
     else if (inMerge) note = "<code>merge</code> copied the two sorted halves into new heap Vecs and writes the merged run back through <code>a</code>. They are freed when it returns.";
-    else if (e.lines[0] === 4 || e.lines[0] === 5) note = "<code>split_at_mut</code> gave this frame two <code>&amp;mut</code> slices into the same buffer, side by side. They cannot overlap, so Rust allows both at once.";
+    else if (e.lines[0] === 4 || e.lines[0] === 5) note = "The recursive call borrows one half of this frame's slice, <code>&amp;mut a[..q]</code> or <code>&amp;mut a[q..]</code>, for as long as it runs. Only one borrow that can change the buffer is alive at a time.";
     else note = `Each <code>merge_sort</code> frame holds a slice of <code>v</code>'s buffer. ${st.stack.length} frame${st.stack.length === 1 ? " is" : "s are"} open now.`;
     m.set({ note, stack: frames, heap });
   }
@@ -5251,7 +5284,7 @@ K.page(2);
       if (e && e.done) vals = input.slice().sort((x, y) => x - y);
       inversions(vals).forEach((pr) => arc(pr[0], pr[1], st.flash && has([st.flash], pr) ? MINT : CORAL));
       if (e && !e.done) {
-        for (let k = 0; k <= e.i; k++) if (k !== e.hole) marks[k] = "sorted";
+        for (let k = 0; k < (e.line === 1 ? e.i : e.i + 1); k++) if (k !== e.hole) marks[k] = "sorted"; // the key joins the hand once line 2 lifts it
         if (e.hole != null && e.line !== 1) marks[e.hole] = "on";
         if (e.line === 5 && e.j >= 0) marks[e.j] = "on2";
         if (e.line === 8) marks[e.hole] = "good";

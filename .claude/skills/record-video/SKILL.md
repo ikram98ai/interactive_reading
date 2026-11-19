@@ -43,7 +43,8 @@ parts that don't show them. Run QA on the joined video as always, and look at th
 
 Its pilot is one
 part: `make video-part SCRIPT=<script> ONLY="Part 4 of"` narrates and records just that part.
-`ONLY` picks the first `{goto}` whose text contains it (here, the card "Part 4 of 15"), and names the output after it
+`ONLY` picks the first `{goto}` whose text contains it (here, the card "Part 4 of 15"; the kicker is never on screen, but
+it still names the part), records through to the next card (a RUST part's `{goto editor}` included), and names the output after it
 (`chNN-part-4-of-…mp4`).
 
 A silent pass (`--silent`) needs no verdict and estimates timing at 150 words a minute. Real narration runs faster, so
@@ -51,7 +52,10 @@ a cue that only just made it in the silent pass can still fail in the pilot.
 
 **Looking at a video.** Pull frames with `ffmpeg -ss <t> -i <video> -frames:v 1` and read them, at the title card, on
 each kind of scene, and at the end. Check that nothing is clipped, the focus ring sits on what the voice names, and the
-code panel and stats appear only once they're named.
+code panel and stats appear only once they're named. In a RUST part, check the machine beside the editor: it is on the
+step the voice is explaining, its stack-and-heap strip appears only once memory is named, and the names in the strip are
+the editor's. The editor types brackets and quotes as an IDE does (the closer appears with the opener, and is stepped
+over); a typing that ends different from its snapshot fails the recording ("typing left the editor different").
 
 ## When a check fails
 

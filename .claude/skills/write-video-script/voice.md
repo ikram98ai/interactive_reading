@@ -2,6 +2,13 @@
 
 - **Pace by video kind:** concepts at about 175 words a minute, code videos at about 150, boards in between (the
   reference course's pace, slowed about 7% by choice). `narrate.py` sets Kokoro's speed and the gaps for each `kind`; don't add `{pause}` to slow it down.
+- **One pace per video.** A page video's RUST part keeps the page's pace: the voice never slows down for the editor,
+  because a viewer hears a change of speed as a different speaker. Where the code is really dense, give it a breath the
+  viewer won't notice: an `{await}` on the machine beside the editor, or a short `{pause}` after the hardest line.
+- **Section cards are read aloud.** A card (`{goto id | Part 3 of 6 | How does the book write it?}`) shows only its
+  question; "Part 3 of 6" names the part for the tools and is never on screen. `narrate.py` has the voice read the
+  question while the card is up, then breathe before the scene, so write the question to be heard: short, plain, no
+  digits or symbols (the lint checks it like speech).
 - **Person:** say "we" for the work you're doing together, and keep "you" for the viewer's own code.
 - **Sentences:** short and declarative, with the occasional longer one that carries a "because" or a "so".
 - **Show, then name:** "That's called the sorting problem." Then give the definition, in the book's words when it has

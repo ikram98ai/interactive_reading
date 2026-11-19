@@ -22,6 +22,14 @@ plan's ledger names. Its hook leads into the next section's video.
   the walk's own input (`{run}`, with a `{check}` on the output), and comes back (`{goto page}`). It explains each
   core Rust concept the first time a program needs it, and only there: `videos/clrs/plan.md` has the series' Rust
   concept ledger (which video owns each concept) and every RUST part's program, concepts and efficiency note.
+  **The machine comes along.** Put `{side <scene>}` before `{goto editor}`: the algorithm's machine sits on the left of
+  the editor, in Rust mode (0-based indices) with its stack-and-heap strip, and the page cues (`{click Step}`,
+  `{speed}`, `{focus heap}`, `{check .is-full .caption ~ …}`, `{await}`) drive it while the code is typed on the right.
+  Step it on the line being explained (the key lifted on `let key = a[i];`, a card sliding on `a[j] = a[j - 1];`), bring
+  the strip in with `{show memory}` when the narration first talks about memory, and `{click Play}` the rest while
+  `main` is explained, so the picture shows what the program is doing at every moment. The machine's Rust must be the
+  editor's program: the same function signatures and variable names (rename one side if they differ), or the strip shows
+  names the code doesn't have. `{side <other scene>}` swaps machines under a dip.
   Anywhere else in the video, Rust stays out: the page parts, the agenda and the recap talk about the algorithm.
 
 ## Depth follows the book
@@ -86,6 +94,6 @@ the book says little, the machine does the showing and the voice stays brief (se
 `{check .is-full .caption ~ …}`.
 
 **Everything else is the same:** the cold open, the title card with an agenda, parts as questions with a `{goto}` card
-each, the voice and its pace, one change at a time, cues on the noun, no silent motion, recap cards, and the hook into
+each (the card shows the question alone, and the voice reads it), the voice and its pace, one change at a time, cues on the noun, no silent motion, recap cards, and the hook into
 the next video (the next section, or the next chapter). Reuse the long forms' running examples (for CLRS: 31, 41, 59, 26, 41, 58, the cards, the race) and keep each lint
 rule: no digits or symbols in speech, at most two numbers a sentence, at most 34 words.

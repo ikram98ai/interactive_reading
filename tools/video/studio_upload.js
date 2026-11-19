@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* studio_upload.js <book dir> --long-form chNN [--day YYYY-MM-DD | --now] [--replaces <video id>] [--plan]
+/* studio_upload.js <book dir> --long-form chNN|chNN/sMM [--day YYYY-MM-DD | --now] [--replaces <video id>] [--plan]
    Uploads one chapter's long form (chNN/chNN-<chapter>.mp4, such as ch06-heapsort.mp4) through YouTube Studio's web UI: the title (videos.long_form.title),
    a description of the intro line, the chapter page's link and the chapter timestamps (.chapters.txt), the large-title
    thumbnail, "not made for kids", English, the .srt captions, the playlist (videos.long_form.playlist), and a publish time
@@ -8,6 +8,15 @@
    record on disk, or one in the videos/ repo's history even if it was deleted. --replaces <id> uploads a new video in
    place of that one (its record moves to <video>.retired.youtube.json; unlisting the old video is done by hand).
    --plan prints all of it, problems included, and uploads nothing.
+   A section video (CLRS: one per section, videos/<book>/chNN/sMM/) is --long-form chNN/sMM: named chNN-sMM-<section>.mp4
+   as narrate.py names it, titled by videos.section (title, intro, playlist, time) and book.json sections.
+
+   studio_upload.js <book dir> --long-form chNN[/sMM] --thumb [--plan]
+   Makes the video's thumbnail again (thumb.js) and sets it on the video already up, on its Studio edit page, after reading
+   the title back and finding it is the one on record. Nothing else changes, the schedule included.
+
+   studio_upload.js <book dir> --delete <video id> --title "<its exact title>" [--plan]
+   Deletes a video forever, after reading its title back from its Studio page and finding it matches --title.
 
    studio_upload.js <book dir> --titles [--from ch04] [--to ch05] [--plan] [--limit N]
    Updates the title and the description's first line (videos.long_form.intro) of every long form already up, and never
@@ -22,7 +31,7 @@ const { chromium } = require("playwright-core");
 
 const args = process.argv.slice(2);
 const opt = (k) => { const i = args.indexOf(k); return i < 0 ? null : args[i + 1]; };
-const VALUED = ["--from", "--to", "--limit", "--long-form", "--day", "--replaces"];
+const VALUED = ["--from", "--to", "--limit", "--long-form", "--day", "--replaces", "--delete", "--title"];
 const BOOK = path.resolve(args.find((a, i) => !a.startsWith("--") && !VALUED.includes(args[i - 1])) || "videos/clrs");
 const ROOT = path.join(__dirname, "../..");
 const PROFILE = JSON.parse(fs.readFileSync(path.join(ROOT, "books", path.basename(BOOK), "book.json"), "utf8"));
@@ -68,10 +77,10 @@ const fresh = (file, cache) => { const s = fs.statSync(file); return cache && ca
 
 // The publish time: `day` at the long form's time, in the channel's time zone (no DST), as Studio's dialog wants it.
 const LONG_TIME = V.long_form.time;
-function slot(day) {
-  const [y, mo, d] = day.split("-").map(Number), [h, mi] = hm(LONG_TIME);
+function slot(day, time = LONG_TIME) {
+  const [y, mo, d] = day.split("-").map(Number), [h, mi] = hm(time);
   const utc = new Date(Date.UTC(y, mo - 1, d, h - UTC_OFFSET, mi));
-  return { date: `${MONTHS[mo - 1]} ${d}, ${y}`, time: `${((h + 11) % 12) + 1}:${String(mi).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`,
+  return { date: `${MONTHS[mo - 1]} ${d}, ${y}`, clock: `${((h + 11) % 12) + 1}:${String(mi).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`,
     publish_at: utc.toISOString().replace(".000", ""), utc };
 }
 
@@ -85,27 +94,34 @@ function chapterLines(file) {
   return { text: lines.join("\n"), count: lines.length, bad };
 }
 
-function longFormPlan(ch) {
-  if (!/^ch\d\d$/.test(ch || "")) throw new Error(`--long-form takes a chapter folder such as ch06, not ${ch}`);
-  const folder = path.join(BOOK, ch), stem = longFormStem(ch), f = (ext) => path.join(folder, stem + ext);
-  const it = { id: `${ch}/long-form`, kind: "long-form", ch, folder, stem, video: f(".mp4"), srt: f(".srt"), chapters: f(".chapters.txt"),
+function longFormPlan(arg) {
+  const m = (arg || "").match(/^(ch\d\d)(?:\/(s\d\d))?$/);
+  if (!m) throw new Error(`--long-form takes a chapter folder such as ch06, or a section folder such as ch06/s02, not ${arg}`);
+  const [, ch, sec] = m, S = sec ? V.section : V.long_form; // a section video, or a chapter's long form
+  if (sec && !S) throw new Error(`books/${PROFILE.slug}/book.json has no videos.section block`);
+  const secTitle = sec && ((PROFILE.sections || {})[ch] || {})[sec];
+  const folder = sec ? path.join(BOOK, ch, sec) : path.join(BOOK, ch);
+  const stem = sec ? `${ch}-${sec}-${secTitle ? longFormName(secTitle) : VOICE_TAG}` : longFormStem(ch), f = (ext) => path.join(folder, stem + ext);
+  const it = { id: sec ? `${ch}/${sec}` : `${ch}/long-form`, kind: sec ? "section" : "long-form", ch, sec, folder, stem, video: f(".mp4"), srt: f(".srt"), chapters: f(".chapters.txt"),
     thumb: f(".thumb.jpg"), record: f(".youtube.json"), qaFile: f(".qa.json"), script: path.join(folder, "script.md"),
-    playlist: V.long_form.playlist, problems: [], notes: [] };
+    playlist: S.playlist, time: S.time || LONG_TIME, problems: [], notes: [] };
   const P = (s) => it.problems.push(s), N = (s) => it.notes.push(s);
   for (const k of ["script", "video", "srt", "chapters"]) if (!fs.existsSync(it[k])) P(`missing ${path.relative(BOOK, it[k])}`);
-  if (!PROFILE.chapters[ch]) P(`books/${PROFILE.slug}/book.json has no chapters.${ch}.book (the book's chapter title)`);
+  if (!sec && !PROFILE.chapters[ch]) P(`books/${PROFILE.slug}/book.json has no chapters.${ch}.book (the book's chapter title)`);
+  if (sec && !secTitle) P(`books/${PROFILE.slug}/book.json has no sections.${ch}.${sec} (the book's section title)`);
 
-  const cn = Number(ch.slice(2));
-  it.title = fill(V.long_form.title, { cn, book_chapter: PROFILE.chapters[ch] ? PROFILE.chapters[ch].book : "?" });
+  const cn = Number(ch.slice(2)), sn = sec ? Number(sec.slice(1)) : null;
+  it.title = sec ? fill(S.title, { cn, sn, book_section: secTitle || "?" }) : fill(S.title, { cn, book_chapter: PROFILE.chapters[ch] ? PROFILE.chapters[ch].book : "?" });
   if (it.title.length > 100) P(`title is ${it.title.length} characters (Studio allows 100)`);
-  it.intro = fill(V.long_form.intro, { cn, book: PROFILE.title, short: PROFILE.short });
+  it.intro = fill(S.intro, { cn, sn, book: PROFILE.title, short: PROFILE.short });
+  it.part = sec ? `Section ${cn}.${sn}` : null; // the thumbnail's line above the title
   const chap = fs.existsSync(it.chapters) ? chapterLines(it.chapters) : { text: "", count: 0, bad: [] };
   chap.bad.forEach((b) => P(`${path.basename(it.chapters)}: ${b}`));
   it.chapterCount = chap.count;
   // the playlist's link is kept out of the main repo: <book dir>/playlists.json, {"<playlist name>": "<url>"}
   const lists = path.join(BOOK, "playlists.json"), listUrl = fs.existsSync(lists) ? readJSON(lists)[it.playlist] : null;
   if (!listUrl) N(`no link for the "${it.playlist}" playlist in ${path.relative(ROOT, lists)}: the description won't end with it`);
-  it.description = `${it.intro}\n\nInteractive page for this chapter: ${SITE}/${ch}.html\n\nChapters:\n${chap.text}` +
+  it.description = `${it.intro}\n\nInteractive page for this ${sec ? "section's chapter" : "chapter"}: ${SITE}/${ch}.html\n\nChapters:\n${chap.text}` +
     (listUrl ? `\n\nWatch the full playlist at ${listUrl}` : "");
   if (it.description.length > 5000 || /[<>]/.test(it.description)) P("the description is one Studio would reject (over 5000 characters, or < >)");
   it.meta = crypto.createHash("sha1").update(it.title + "\n" + it.description).digest("hex").slice(0, 12);
@@ -115,10 +131,10 @@ function longFormPlan(ch) {
   else if (DAY) {
     if (!/^\d{4}-\d\d-\d\d$/.test(DAY)) P(`--day takes YYYY-MM-DD, not ${DAY}`);
     else {
-      Object.assign(it, slot(DAY));
-      if (it.utc < new Date(Date.now() + 15 * 60000)) P(`${DAY} at ${LONG_TIME} has passed or is under 15 minutes away`);
+      Object.assign(it, slot(DAY, it.time));
+      if (it.utc < new Date(Date.now() + 15 * 60000)) P(`${DAY} at ${it.time} has passed or is under 15 minutes away`);
       const wd = new Date(`${DAY}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
-      if (V.long_form.weekday && wd !== V.long_form.weekday) P(`${DAY} is a ${wd}; long forms go out on ${V.long_form.weekday}s`);
+      if (S.weekday && wd !== S.weekday) P(`${DAY} is a ${wd}; these videos go out on ${S.weekday}s`);
     }
   }
 
@@ -134,7 +150,7 @@ function longFormPlan(ch) {
   if (it.qa && it.qa.status !== 0) P("QA has a FAIL (see the QA lines)");
 
   // nothing already up for this chapter: the record on disk, or any version of it in the videos/ repo's history
-  const rel = `./${ch}/${stem}.youtube.json`;
+  const rel = `./${path.relative(BOOK, folder)}/${stem}.youtube.json`;
   const onDisk = fs.existsSync(it.record) ? readJSON(it.record) : null;
   let prior = onDisk && !onDisk.incomplete ? onDisk : null;
   if (onDisk && onDisk.incomplete) { it.resume = onDisk.video_id; N(`resumes the unfinished upload https://youtu.be/${onDisk.video_id}`); }
@@ -142,7 +158,7 @@ function longFormPlan(ch) {
     const rev = git("log", "--all", "--format=%h", "--diff-filter=AM", "--", rel).split("\n")[0];
     if (rev) {
       prior = JSON.parse(git("show", `${rev}:${rel}`));
-      N(`its upload record was deleted from disk but is in the videos/ history (${rev}): restore it with git -C videos checkout ${rev} -- ${path.basename(BOOK)}/${ch}/${stem}.youtube.json`);
+      N(`its upload record was deleted from disk but is in the videos/ history (${rev}): restore it with git -C videos checkout ${rev} -- ${path.basename(BOOK)}/${path.relative(BOOK, folder)}/${stem}.youtube.json`);
     }
   }
   if (prior) {
@@ -152,7 +168,7 @@ function longFormPlan(ch) {
       it.replaces = prior.video_id;
       N(`replaces https://youtu.be/${prior.video_id} (${state})${state === "public" ? ": the new video gets a new URL, and the old one keeps its views and comments" : ""}; unlist it and take it out of the playlist by hand`);
     }
-  } else if (REPLACES) P(`--replaces ${REPLACES}, but nothing is on record for ${ch}`);
+  } else if (REPLACES) P(`--replaces ${REPLACES}, but nothing is on record for ${it.id}`);
   return it;
 }
 
@@ -170,7 +186,7 @@ function printLong(it) {
   console.log(`${it.id}`);
   console.log(`  title      ${it.title}  (${it.title.length}/100)`);
   console.log(`  playlist   ${it.playlist}`);
-  console.log(`  publish    ${it.now ? "now: public as soon as Studio has it" : it.publish_at ? `${it.date} ${it.time} ${tz} (${it.publish_at})` : `not set: ask the user which day, then --day YYYY-MM-DD (goes out at ${LONG_TIME} ${tz})`}`);
+  console.log(`  publish    ${it.now ? "now: public as soon as Studio has it" : it.publish_at ? `${it.date} ${it.clock} ${tz} (${it.publish_at})` : `not set: ask the user which day, then --day YYYY-MM-DD (goes out at ${it.time} ${tz})`}`);
   console.log(`  files      ${it.stem}.mp4, .srt, .chapters.txt (${it.chapterCount} chapters); thumbnail made by thumb.js`);
   if (it.judgement) console.log(`  judgement  ${it.judgement}`);
   if (!it.qa) console.log("  QA         not run on this MP4 yet: the upload run runs it first");
@@ -184,7 +200,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // The thumbnail: the video's chapter and title in large type, from its script's front matter (thumb.js). THUMB names this
 // design in each upload record.
 const THUMB = "large-title";
-const makeThumb = (it) => cp.execFileSync("node", [path.join(__dirname, "thumb.js"), path.join(path.dirname(it.video), "script.md"), it.thumb], { stdio: "ignore" });
+const makeThumb = (it) => cp.execFileSync("node", [path.join(__dirname, "thumb.js"), path.join(path.dirname(it.video), "script.md"), it.thumb, ...(it.part ? [it.part] : [])], { stdio: "ignore" });
 
 const shot = (page, it, step) => STEPS && page.screenshot({ path: path.join(STEPS, `${it.id.replace("/", "-")}-${step}.png`) });
 const DIALOG = "ytcp-uploads-dialog"; // everything below is inside it; the edit page behind has its own title box
@@ -362,14 +378,14 @@ async function upload(page, it) {
   await sleep(1000);
   const timeInput = dlg.locator("#time-of-day-container input").first();
   await timeInput.click();
-  await timeInput.fill(it.time);
+  await timeInput.fill(it.clock);
   await timeInput.press("Enter");
   await sleep(1000);
   const shownDate = (await dlg.locator("#datepicker-trigger").first().innerText()).trim();
   const shownTime = await timeInput.inputValue();
   await shot(page, it, "visibility");
-  if (!shownDate.includes(it.date) || shownTime.replace(/\s/g, "") !== it.time.replace(/\s/g, ""))
-    throw new Error(`schedule reads back as ${shownDate} ${shownTime}, wanted ${it.date} ${it.time}`);
+  if (!shownDate.includes(it.date) || shownTime.replace(/\s/g, "") !== it.clock.replace(/\s/g, ""))
+    throw new Error(`schedule reads back as ${shownDate} ${shownTime}, wanted ${it.date} ${it.clock}`);
   }
 
   // let the file finish uploading before closing, or the upload is lost
@@ -428,7 +444,100 @@ async function retitle(page, it, rec) {
   return changed;
 }
 
+// --thumb: set a new thumbnail on a video already up. It reads the title back first, so a wrong record can't touch another video.
+async function rethumb(page, it, rec) {
+  await page.goto(`https://studio.youtube.com/video/${rec.video_id}/edit`, { waitUntil: "domcontentloaded" });
+  const titleBox = page.locator("#title-textarea #textbox").first();
+  await titleBox.waitFor({ timeout: 60000 });
+  await sleep(4000); // the edit page fills its boxes after it appears
+  const got = (await titleBox.innerText()).trim();
+  if (got !== rec.title) throw new Error(`video ${rec.video_id} is titled "${got}", not "${rec.title}" as on record: not touching it`);
+  makeThumb(it);
+  const input = page.locator("ytcp-thumbnails-compact-editor-uploader input#file-loader, input#file-loader").first();
+  await input.setInputFiles(it.thumb);
+  await sleep(5000);
+  const thumbErr = await page.locator("ytcp-thumbnails-compact-editor-uploader .error, #thumbnail-error").first().innerText().catch(() => "");
+  if (thumbErr.trim()) throw new Error(`thumbnail refused: ${thumbErr.trim()}`);
+  await shot(page, it, "thumb");
+  const save = page.locator("ytcp-button#save").first();
+  await save.click();
+  let saved = false;
+  for (let i = 0; i < 30 && !saved; i++) {
+    await sleep(1000);
+    saved = (await save.getAttribute("aria-disabled").catch(() => null)) === "true" || !(await save.isEnabled().catch(() => true));
+  }
+  if (!saved) throw new Error("Studio did not save the new thumbnail");
+  rec.thumbnail = THUMB; rec.thumbnail_set = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+  fs.writeFileSync(it.record, JSON.stringify(rec, null, 2) + "\n");
+}
+
+// --delete: remove one video forever, through its Studio page. It reads the title back first and stops unless it matches
+// --title exactly, so a wrong id can't delete the wrong video. Every step before the final click only looks.
+async function deleteVideo(page, id, title) {
+  await page.goto(`https://studio.youtube.com/video/${id}/edit`, { waitUntil: "domcontentloaded" });
+  const titleBox = page.locator("#title-textarea #textbox").first();
+  await titleBox.waitFor({ timeout: 60000 });
+  await sleep(4000); // the edit page fills its boxes after it appears
+  const got = (await titleBox.innerText()).trim();
+  if (got !== title) throw new Error(`video ${id} is titled "${got}", not "${title}": not deleting it`);
+  await shot(page, { id: `delete/${id}` }, "before");
+  const more = page.locator("#overflow-menu-button, ytcp-icon-button[aria-label='Options'], ytcp-icon-button[aria-label='More actions'], [aria-label='Options'], [aria-label='More actions']").first();
+  await more.click({ timeout: 30000 });
+  await sleep(1200);
+  await page.locator("tp-yt-paper-item, [role=menuitem], ytcp-text-menu tp-yt-paper-item").filter({ hasText: /^\s*Delete( forever)?\s*$/ }).first().click({ timeout: 15000 });
+  await sleep(1500);
+  const dlg = page.locator("ytcp-confirmation-dialog, ytcp-dialog, tp-yt-paper-dialog, [role=dialog]").filter({ hasText: /delet/i }).last();
+  await dlg.waitFor({ state: "visible", timeout: 15000 });
+  const box = dlg.locator("ytcp-checkbox-lit, tp-yt-paper-checkbox, [role=checkbox]").first();
+  if (await box.isVisible().catch(() => false)) { await box.click(); await sleep(600); }
+  await shot(page, { id: `delete/${id}` }, "confirm");
+  await dlg.getByRole("button", { name: /^\s*Delete( forever)?\s*$/i }).last().click({ timeout: 15000 });
+  await sleep(6000);
+  await shot(page, { id: `delete/${id}` }, "after");
+  // the video's Studio page should now be gone
+  await page.goto(`https://studio.youtube.com/video/${id}/edit`, { waitUntil: "domcontentloaded" });
+  await sleep(6000);
+  const still = await page.locator("#title-textarea #textbox").first().isVisible().catch(() => false);
+  if (still) throw new Error(`video ${id} still has a Studio page after the delete`);
+}
+
 (async () => {
+  const DEL = opt("--delete");
+  if (DEL) {
+    const title = opt("--title");
+    if (!/^[\w-]{11}$/.test(DEL) || !title) { console.error("studio_upload: --delete <11-character video id> --title \"<its exact title>\""); process.exitCode = 2; return; }
+    console.log(`delete forever  https://youtu.be/${DEL}\n  only if its Studio title reads exactly: ${title}`);
+    if (PLAN) return;
+    const ctx = await launch();
+    const page = ctx.pages()[0] || (await ctx.newPage());
+    try { await deleteVideo(page, DEL, title); console.log(`  deleted https://youtu.be/${DEL}`); }
+    catch (e) {
+      const shotPath = path.join(SHOTS, "studio-delete-error.png");
+      await page.screenshot({ path: shotPath }).catch(() => {});
+      fs.writeFileSync(shotPath.replace(/\.png$/, ".html"), await page.content().catch(() => ""));
+      console.log(`STOPPED: ${e.message.split("\n")[0]}\n  screenshot: ${shotPath}`);
+      process.exitCode = 1;
+    } finally { await ctx.close(); }
+    return;
+  }
+  if (LONG && args.includes("--thumb")) {
+    let it;
+    try { it = longFormPlan(LONG); } catch (e) { console.error(`studio_upload: ${e.message}`); process.exitCode = 2; return; }
+    const rec = fs.existsSync(it.record) ? JSON.parse(fs.readFileSync(it.record, "utf8")) : null;
+    if (!rec || !rec.done) { console.error(`studio_upload: ${it.id} has no finished upload on record (${path.basename(it.record)})`); process.exitCode = 1; return; }
+    console.log(`${it.id}  new thumbnail for https://youtu.be/${rec.video_id}  ${rec.title}`);
+    if (PLAN) { makeThumb(it); console.log(`  made ${path.relative(ROOT, it.thumb)}; nothing set in Studio`); return; }
+    const ctx = await launch();
+    const page = ctx.pages()[0] || (await ctx.newPage());
+    try { await rethumb(page, it, rec); console.log(`  thumbnail set`); }
+    catch (e) {
+      const shotPath = path.join(it.folder, "studio-thumb-error.png");
+      await page.screenshot({ path: shotPath }).catch(() => {});
+      console.log(`STOPPED: ${e.message.split("\n")[0]}\n  screenshot: ${shotPath}`);
+      process.exitCode = 1;
+    } finally { await ctx.close(); }
+    return;
+  }
   if (LONG) {
     let it;
     try { it = longFormPlan(LONG); } catch (e) { console.error(`studio_upload: ${e.message}`); process.exitCode = 2; return; }
@@ -448,8 +557,8 @@ async function retitle(page, it, rec) {
     try {
       const r = await upload(page, it);
       if (r === "limit") { console.log("STOPPED: Studio's daily upload limit is reached"); process.exitCode = 1; }
-      else console.log(`  uploaded https://youtu.be/${r}  ${it.title}  → ${it.now ? "public now" : `${it.date} ${it.time} ${V.schedule.timezone}`}\n` +
-        `  commit its record: git -C videos add ${path.basename(BOOK)}/${it.ch}/${it.stem}*.youtube.json && git -C videos commit`);
+      else console.log(`  uploaded https://youtu.be/${r}  ${it.title}  → ${it.now ? "public now" : `${it.date} ${it.clock} ${V.schedule.timezone}`}\n` +
+        `  commit its record: git -C videos add ${path.basename(BOOK)}/${path.relative(BOOK, it.folder)}/${it.stem}*.youtube.json && git -C videos commit`);
     } catch (e) {
       const shotPath = path.join(it.folder, "studio-upload-error.png");
       await page.screenshot({ path: shotPath }).catch(() => {});

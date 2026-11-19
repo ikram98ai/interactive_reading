@@ -240,9 +240,15 @@
     "voice": "kokoro:bm_fable",
     "site": "https://ikram98ai.github.io/interactive_reading/books/clrs",
     "schedule": { "timezone": "Asia/Karachi", "utc_offset_hours": 5 },
+    "section": {
+      "playlist": "Introduction to Algorithms",
+      "title": "{cn}.{sn}: {book_section} | Introduction to Algorithms",
+      "intro": "Section {cn}.{sn} of {book} ({short}), explained in depth with pseudocode. Every idea is shown on an interactive page.",
+      "time": "08:00"
+    },
     "long_form": {
       "playlist": "Introduction to Algorithms",
-      "title": "Chapter {cn}: {book_chapter} | Introduction to Algorithms",
+      "title": "{cn}.{sn}: {book_chapter} | Introduction to Algorithms",
       "intro": "Chapter {cn} of {book} ({short}), explained in depth with pseudocode. Every idea is shown on an interactive page.",
       "publish": "one chapter a week, on weekday at time, starting on the day the user picks",
       "time": "08:00",

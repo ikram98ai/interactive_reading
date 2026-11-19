@@ -8,7 +8,8 @@
 <!--
   The code editor that tools/video/studio.js records for code videos (kind: code): one Rust file, typed live,
   zoomed in so about fifteen lines fill the frame, with a run panel that shows the program's real output.
-  studio.js drives it through window.__ed: fit(cols) · set(text) · to(text, { cps, paste }) · select(text, nth) · unselect() · run(cmd, out, ok) · close().
+  studio.js drives it through window.__ed: fit(cols) · set(text) · to(text, { cps, paste }) · select(text, nth) · unselect() · run(cmd, out, ok) · close()
+  · side(src, width) (the chapter page's machine in a panel on the left, the editor narrowed to the rest; side(null) closes it).
   ?board opens it empty, as the backdrop for board videos.
 -->
 <style>
@@ -47,6 +48,10 @@ body { font-family: 'JetBrains Mono', Menlo, monospace; color: var(--text); disp
 #run pre { font-variant-ligatures: none; } /* the font shorthand above resets it: >= stays >= */
 #run .dim { color: var(--cm); } #run .err { color: #ff6b68; } #run .warn { color: #e0c46c; }
 body.board #tabs, body.board #main, body.board #run { visibility: hidden; }
+/* a side panel ({side <scene>} in studio.js): the chapter page's machine on the left, the editor in the rest of the frame */
+body.side { box-sizing: border-box; }
+body.side .ln .no { width: 78px; }
+#side { position: fixed; left: 0; top: 0; height: 100vh; border: 0; z-index: 1; background: #0d1220; box-shadow: 1px 0 0 #3c3f41; }
 body.board { background: #0d1220; }
 /* a YouTube Short (1080×1920): the editor sits between the player's top bar and the burned-in captions, clear of the bottom fifth */
 body.short { box-sizing: border-box; padding: 244px 0 690px; }
@@ -65,6 +70,7 @@ body.short #run.open { height: 216px; } body.short #run:not(.open) { height: 0 !
   const content = $("content"), view = $("view"), caretEl = $("caret");
   let LEFT = 160, WIDTH = 1740, MARGIN = 3; // MARGIN: rows kept below the caret (a short has no room to spare) // the text column's left edge, and how far the text may reach in a 1920-wide frame
   let CW = 24, LH = 64, FONT = 40;
+  const slips = []; // texts that typing left different from their snapshot (a bug in the typing, shown as a jump at the end)
   let lines = [""], caret = { l: 0, c: 0 }, sel = null, scroll = 0, scrollGoal = 0, typing = false;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -138,15 +144,43 @@ body.short #run.open { height: 216px; } body.short #run:not(.open) { height: 0 !
     lines.splice(a.l, b.l - a.l + 1, head + tail); caret = { l: a.l, c: a.c };
   }
   const delay = (cps) => (1000 / cps) * (0.55 + Math.random() * 0.9);
+  // Brackets and quotes behave as in a real editor: typing ( [ { or " puts its closer in at the same moment, with the caret
+  // between them; typing the closer steps over the one already there; Enter between { and } opens an indented line with the
+  // } on the line below, and the Enter that reaches that } moves onto it instead of making a new line. Only closers this
+  // typing put in are stepped over, and an opener gets its closer only if that closer is in the same typed text: code typed
+  // into the middle of a file, whose } is already there below, neither eats a bracket nor leaves a spare one.
+  const PAIR = { "(": ")", "[": "]", "{": "}", '"': '"' }, CLOSER = /^[)\]}"]*$/;
+  function matched(text) { // the openers in text whose closer comes later in text: opener index → closer index
+    const ok = new Map(), st = [];
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i], top = st[st.length - 1];
+      if (top && text[top] === '"') { if (ch === "\\") i++; else if (ch === '"') ok.set(st.pop(), i); continue; } // inside a string
+      if (ch === '"' || ch === "(" || ch === "[" || ch === "{") st.push(i);
+      else if (top != null && PAIR[text[top]] === ch) ok.set(st.pop(), i);
+    }
+    return ok;
+  }
   async function type(text, cps) {
     typing = true; caretEl.classList.remove("blink");
+    const pairs = matched(text);
+    const auto = []; // closers this typing put ahead of the caret, innermost last; ml: moved to a line below by an Enter
     for (let i = 0; i < text.length; i++) {
-      const ch = text[i];
+      const ch = text[i], line = lines[caret.l], rest = line.slice(caret.c), next = rest[0], top = auto[auto.length - 1];
       if (ch === "\n") { // Enter, then the editor indents the new line itself
-        const ind = (text.slice(i + 1).match(/^[ \t]*/) || [""])[0];
-        insert("\n" + ind); i += ind.length; render(); await sleep(delay(cps) * 2.2); continue;
+        const ind = (text.slice(i + 1).match(/^[ \t]*/) || [""])[0], after = text[i + 1 + ind.length], below = lines[caret.l + 1];
+        if (top && top.ml && after === top.c && !rest.trim() && below != null && below.trimStart()[0] === after) {
+          caret = { l: caret.l + 1, c: below.length - below.trimStart().length }; // onto the closer waiting below
+        } else if (top && !top.ml && next === top.c && PAIR[line[caret.c - 1]] === next && next !== '"' && after !== next) {
+          const base = (text.slice(text.lastIndexOf("\n", top.at) + 1).match(/^[ \t]*/) || [""])[0]; // the } goes where its line will have it
+          insert("\n" + ind + "\n" + base); caret = { l: caret.l - 1, c: ind.length }; top.ml = true; // { | } opens up
+        } else insert("\n" + ind);
+        i += ind.length; render(); await sleep(delay(cps) * 2.2); continue;
       }
-      insert(ch); render();
+      if (top && ch === top.c && next === ch) { caret.c++; auto.pop(); } // step over the closer already there
+      else if (pairs.has(i) && CLOSER.test(rest) && rest.length <= auto.filter((x) => !x.ml).length) {
+        insert(ch + PAIR[ch]); caret.c--; auto.push({ c: PAIR[ch], ml: false, at: pairs.get(i) });
+      } else insert(ch);
+      render();
       await sleep(delay(cps) * (/[;{}(),.]/.test(ch) ? 1.6 : ch === " " ? 1.2 : 1));
     }
     typing = false; caretEl.classList.add("blink");
@@ -212,6 +246,7 @@ body.short #run.open { height: 216px; } body.short #run:not(.open) { height: 0 !
         shift += h.add.length;
       }
     }
+    if (lines.join("\n").replace(/[ \t]+$/gm, "") !== goal.join("\n").replace(/[ \t]+$/gm, "")) slips.push(lines.join("\n")); // typed ≠ goal: studio.js reports it
     lines = goal.slice(); // the typed text and the goal are the same; this keeps any whitespace slip from accumulating
     if (caret.l >= lines.length) caret = { l: lines.length - 1, c: lines[lines.length - 1].length };
     render();
@@ -238,9 +273,21 @@ body.short #run.open { height: 216px; } body.short #run:not(.open) { height: 0 !
       const r = document.documentElement.style; r.setProperty("--left", LEFT + "px"); r.setProperty("--font", FONT + "px"); r.setProperty("--lh", LH + "px");
       caretEl.style.height = "42px"; caretEl.style.marginTop = "6px"; measure(); render();
     },
+    side(src, w) { // the chapter page beside the code: the text column narrows to the rest of the frame
+      const r = document.documentElement.style, old = $("side");
+      if (old) old.remove();
+      if (!src) { document.body.classList.remove("side"); document.body.style.paddingLeft = ""; LEFT = 160; WIDTH = 1740; r.setProperty("--left", LEFT + "px"); measure(); render(); return Promise.resolve(false); }
+      document.body.classList.add("side"); document.body.style.paddingLeft = w + "px";
+      LEFT = 116; WIDTH = innerWidth - w - LEFT - 36; r.setProperty("--left", LEFT + "px"); measure(); render();
+      return new Promise((done) => {
+        const f = document.createElement("iframe"); f.id = "side"; f.style.width = w + "px";
+        f.onload = () => done(true); f.src = src; document.body.appendChild(f);
+      });
+    },
     set(text) { lines = text.replace(/\s+$/, "").split("\n"); caret = { l: lines.length - 1, c: lines[lines.length - 1].length }; sel = null; scroll = scrollGoal = 0; render(); },
     to,
     get typing() { return typing; },
+    get slips() { return slips.slice(); },
     caretTo(textToFind, nth) { const p = find(textToFind, nth); if (p) { caret = { l: p.l, c: p.c + textToFind.length }; sel = null; render(); } return !!p; },
     select(textToFind, nth) { const p = find(textToFind, nth); if (!p) return false; sel = { a: p, b: { l: p.l, c: p.c + textToFind.length } }; render(); return true; },
     selectLines(a, b) { sel = { a: { l: a - 1, c: 0 }, b: { l: b - 1, c: lines[b - 1].length } }; render(); },

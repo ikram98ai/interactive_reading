@@ -10,10 +10,13 @@ Everything a chapter's video needs stays in its folder: script.md, build/ (clips
   5. trim, level and write build/<voice>/manifest.json for studio.js
 
 --silent skips 3 and 4 and estimates timing at 150 words a minute: a fast way to check the highlights.
-A page video can switch to the editor once, at {goto editor} (a YouTube Short, kind: short, does): from there on it talks
-at code pace, and its code cues work as in a code video. A code video (kind: code) keeps the editor's text in fenced blocks, ```rust @name … ```, which are never spoken. {code name}
+A page video can switch to the editor once, at {goto editor} (a YouTube Short, kind: short, does): its code cues then work
+as in a code video, and the voice keeps the pace it had on the page, so the whole video sounds like one speaker. A code video (kind: code) keeps the editor's text in fenced blocks, ```rust @name … ```, which are never spoken. {code name}
 types the editor into that snapshot, and {run} shows the program's real output: each snapshot that is run is compiled with
 rustc here, and the build fails if it doesn't compile, unless the cue is {run error}, which shows the compiler's error instead.
+
+A section card ({goto id | kicker | heading}) shows only its heading, and the voice reads that heading while the card is
+up, then breathes before the scene opens: the viewer hears what the part will answer (see speak_headings).
 
 --only "Part 1" narrates just the section whose {goto} contains that text, into its own build folder: a fast way to judge one part.
 
@@ -86,6 +89,26 @@ def parse(path):
         s["text"] = words
         out.append(s)
     return meta, out
+
+
+CARD_LEAD = 0.2    # seconds of quiet card before its heading is read (on top of the card's own fade-in)
+CARD_HOLD = 1.0    # seconds the card stays up after its heading, before {scene} lifts it
+
+
+def speak_headings(segs):
+    """A section card is read aloud. The card's block has no words of its own (its {goto} sits in a paragraph with only
+    cues), so the voice says the card's heading in a block of its own right after it, while the card is up, and the card
+    holds a breath before the scene lifts it. The heading is already judged as screen text (judgement.py hashes {goto}),
+    so saying it adds no new words to judge. A card whose paragraph has words of its own is left to those words."""
+    out = []
+    for s in segs:
+        out.append(s)
+        g = next((c for c in s["cues"] if c["op"] == "goto" and c["arg"].count("|") >= 2), None)
+        if not g or s["text"]: continue
+        head = g["arg"].split("|")[2].strip()
+        s["then"] = {"pause": CARD_LEAD}
+        out.append({"text": head.split(), "cues": [], "then": {"pause": CARD_HOLD}, "para_end": True})
+    return out
 
 
 def long_form_name(chapter):
@@ -266,6 +289,7 @@ def main():
         if not ok and not a.skip_judgement: sys.exit(f"narrate: {a.script}: {why}\n  (--skip-judgement for a test render that won't be published)")
         if not ok: print(f"narrate: WARNING, unjudged test render: {why}", flush=True)
     meta, segs = parse(a.script)
+    segs = speak_headings(segs)
     book = book_profile(a.script)
     lang = (book.get("language") or {})
     if meta["code"]:
@@ -288,7 +312,8 @@ def main():
         if hit is None: sys.exit(f"narrate: no {{goto}} contains {a.only!r}")
         meta["scene"] = goto(hit).split("|")[0].strip()
         carded = "|" in goto(hit)
-        segs = segs[hit:next((i for i in heads if i > hit), len(segs))]
+        cards = [i for i in heads if "|" in goto(i)]   # a part runs to the next card, through any {goto editor} or dip inside it
+        segs = segs[hit:next((i for i in (cards if carded else heads) if i > hit), len(segs))]
         if not carded and not any(c["op"] == "scene" for s in segs for c in s["cues"]):
             segs[0]["cues"].insert(0, {"w": 0, "op": "scene", "arg": ""})  # a scene inside a part has no card to lift: lift the cover
         part = re.sub(r"\W+", "-", a.only.lower()).strip("-")
@@ -310,11 +335,13 @@ def main():
     speed, stretch = PACE.get(meta.get("kind"), (SPEED, 1.0))
     base = int(meta.get("seed", 1))
     res = []
-    in_editor, pace = short and not meta.get("page"), {}   # a short with no page is in the editor from the start   # a page video that switches to the editor ({goto editor}) talks at code pace from there on
+    # One pace for the whole video. A short with no page is in the editor from the start and talks at code pace; a page
+    # video keeps its page pace after {goto editor}: switching voices halfway is what a viewer hears as "slowed down".
+    # Where the code is really dense, the script gives it room with a {pause} or an {await}, not a slower voice.
+    sp, st = PACE["code"] if short and not meta.get("page") else (speed, stretch)
+    pace = {}
     for i, s in enumerate(segs):
         words = s["text"]; text = " ".join(words)
-        if any(c["op"] == "goto" and c["arg"].split("|")[0].strip() == "editor" for c in s["cues"]): in_editor = True
-        sp, st = PACE["code"] if in_editor else (speed, stretch)
         # each block's breath comes from its own words, so an edit in one part leaves every other part's timing alone
         # (assemble.js re-records only the parts whose timing changed)
         rng = random.Random(f"{base}|{text}")
