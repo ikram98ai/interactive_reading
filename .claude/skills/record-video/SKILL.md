@@ -10,12 +10,10 @@ script reaches this skill written and judged. Step 9, uploading, is the `publish
 starts. Read `books/<slug>/book.json` first: its `videos` block names the voice and the outputs.
 
 `SCRIPT` below is the video's script: `videos/clrs/chNN/sMM/script.md` for a CLRS section video, or
-`videos/<book>/chNN/script.md` for a chapter long form. **Section folders aren't wired up yet.** `narrate.py` names
-the video after its folder, so a section's would come out as `s02-<voice>.mp4` with no section title, and
-`studio_upload.js` knows only chapters. Make the section-folder change in `videos/clrs/plan.md` ("Tooling to add")
-before recording a section video for real; a silent pass works meanwhile. A section video with more than one RUST
-  part also needs the editor round trip (`{goto page}`) from the same list: today `studio.js` allows one switch to the
-  editor per video.
+`videos/<book>/chNN/script.md` for a chapter long form. A section video comes out as `chNN-sMM-<section>.mp4` in its
+folder, titled from `book.json` `sections`. A video with more than one RUST part still needs the editor round trip
+(`{goto page}`, in `videos/clrs/plan.md` "Tooling to add"): today `studio.js` allows one switch to the editor per
+video, so a section with one algorithm puts its RUST part last, before the recap.
 
 Everything here stays on this machine, so it's safe to run whenever the user asks for a video to be recorded or
 finished. It is slow: narration and recording run in real time, so start long renders in the background.

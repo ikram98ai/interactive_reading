@@ -14,10 +14,9 @@ block names the outputs, their playlists and title formats, the schedule and the
 | --- | ----------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | 9   | **Publish** | `node tools/video/studio_upload.js videos/<book> --long-form chNN --day YYYY-MM-DD --plan`, then without `--plan` | Every video is up, titled, described, captioned, scheduled and in its playlist |
 
-One video per run. **`studio_upload.js` uploads chapter long forms only today** (`--long-form chNN`). CLRS section
-videos (`videos/clrs/chNN/sMM/`) need the section-folder change in `videos/clrs/plan.md` ("Tooling to add"): a
-`--section` mode, a `videos.section` block in `book.json` with its title template, playlist and schedule, and a
-`book.json` `sections` map for the titles. Until it exists, don't upload a section video by hand; tell the user. `--plan` uploads nothing: it prints the title, playlist, publish time, description, judgement, QA
+One video per run: `--long-form chNN` for a chapter long form, `--long-form chNN/sMM` for a CLRS section video
+(`videos/clrs/chNN/sMM/chNN-sMM-<section>.mp4`, titled, described, scheduled and placed in a playlist by `book.json`
+`videos.section` and its `sections` map). `--plan` uploads nothing: it prints the title, playlist, publish time, description, judgement, QA
 and every problem, and exits 1 if there is one. The real run refuses on any problem too.
 
 **Judged and checked only.** Publish only a video narrated from a script that passes `judgement.py check`, never one
@@ -41,14 +40,18 @@ the MP4 changes). Its WARN lines are in the plan: fix each, or write down why it
   persistent, signed-in Chrome profile. Progress is written to each video's `<video>.youtube.json`, so a rerun resumes.
 - **What `studio_upload.js` can do today:**
   - `--long-form chNN` uploads `chNN/chNN-<chapter>.mp4` (the book's chapter title as a file name, such as `ch06-heapsort.mp4`) with all of the below, playlist included, and resumes an
-    unfinished upload when rerun. It can't create a playlist: one missing from Studio's list stops the run.
+    unfinished upload when rerun. `--long-form chNN/sMM` does the same for a section video. It can't create a
+    playlist: one missing from Studio's list stops the run.
+  - `--long-form chNN[/sMM] --thumb` makes a new thumbnail and sets it on a video already up. It refuses unless the
+    title Studio shows equals the one in the video's record.
   - `--titles` updates the title and description of a long-form video that's already up (it needs the video's record
     on disk).
 - **What each book publishes:** CLRS publishes one video per section for Chapters 2–35, plus Chapter 1's chapter video;
   any other book, one long form per chapter. A chapter long form goes in `videos.long_form.playlist`, titled by
-  `videos.long_form.title`: for CLRS, "Introduction to Algorithms", and a title like "Chapter 1: The Role of Algorithms
-  in Computing | Introduction to Algorithms". The section videos' playlist (one per chapter, or the series playlist)
-  and release rhythm are still the author's to decide (`videos/clrs/plan.md`, "Still for the author to decide").
+  `videos.long_form.title`: for CLRS, "Introduction to Algorithms", and a title like "1: The Role of Algorithms in
+  Computing | Introduction to Algorithms". A CLRS section video goes in `videos.section.playlist` (the same series
+  playlist), titled by `videos.section.title`, like "2.1: Insertion sort | Introduction to Algorithms", at
+  `videos.section.time` on the day the user picks.
 - Studio allows 100 characters in a title.
 - **Descriptions:**
   - A long-form description opens with `videos.long_form.intro`, then the chapter's page link (`videos.site`) and the

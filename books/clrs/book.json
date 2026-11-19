@@ -248,7 +248,7 @@
     },
     "long_form": {
       "playlist": "Introduction to Algorithms",
-      "title": "{cn}.{sn}: {book_chapter} | Introduction to Algorithms",
+      "title": "{cn}: {book_chapter} | Introduction to Algorithms",
       "intro": "Chapter {cn} of {book} ({short}), explained in depth with pseudocode. Every idea is shown on an interactive page.",
       "publish": "one chapter a week, on weekday at time, starting on the day the user picks",
       "time": "08:00",
