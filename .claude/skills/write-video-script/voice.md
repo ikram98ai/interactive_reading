@@ -5,10 +5,15 @@
 - **One pace per video.** A page video's RUST part keeps the page's pace: the voice never slows down for the editor,
   because a viewer hears a change of speed as a different speaker. Where the code is really dense, give it a breath the
   viewer won't notice: an `{await}` on the machine beside the editor, or a short `{pause}` after the hardest line.
-- **Section cards are read aloud.** A card (`{goto id | Part 3 of 6 | How does the book write it?}`) shows only its
-  question; "Part 3 of 6" names the part for the tools and is never on screen. `narrate.py` has the voice read the
-  question while the card is up, then breathe before the scene, so write the question to be heard: short, plain, no
-  digits or symbols (the lint checks it like speech).
+- **One lesson, not a run of titles.** A new part (`{goto id | Part 3 of 6 | How does the book write it?}`) is a
+  dissolve through the page's background into its scene while the voice goes on. Nothing of the card is on screen or
+  spoken: "Part 3 of 6" names the part for the tools, and the heading is the chapter's title in the YouTube timeline
+  (short, plain, no digits or symbols). The move to the new topic is the script's own words, the way a teacher at a
+  board moves on: the part's first sentence, spoken over the dissolve, picks up what the last part just found and
+  turns it toward the new question ("Arithmetic and loads are one step each. Raising to a power is less clear-cut."),
+  then the part answers it. Never read the heading, never open on a bare "Now let's look at …", and don't ask the
+  question twice. Put the card at the head of the part's first paragraph: `{goto id | … | …}{scene} First words …`.
+  `narrate.py` fails a card with no words over its dissolve, and a part that opens with its own heading.
 - **Person:** say "we" for the work you're doing together, and keep "you" for the viewer's own code.
 - **Sentences:** short and declarative, with the occasional longer one that carries a "because" or a "so".
 - **Show, then name:** "That's called the sorting problem." Then give the definition, in the book's words when it has

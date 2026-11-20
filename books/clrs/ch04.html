@@ -230,14 +230,31 @@ for i = 1 to n              // compute entries in each of n rows
             cᵢⱼ = cᵢⱼ + aᵢₖ · bₖⱼ  // add in another term of equation (4.1)
 </script>
 <script type="text/x-rust" id="rs-s2">
-// C = C + A·B for n × n matrices, each stored row-major in one flat
-// slice: entry (i, j) sits at index i * n + j.
-fn matrix_multiply(a: &[i64], b: &[i64], c: &mut [i64], n: usize) {
+struct Matrix {
+    n: usize,
+    data: Vec<i64>, // row after row: (i, j) is data[i * n + j]
+}
+
+impl Matrix {
+    fn new(n: usize) -> Matrix {
+        Matrix { n, data: vec![0; n * n] }
+    }
+    fn at(&self, i: usize, j: usize) -> i64 {
+        self.data[i * self.n + j]
+    }
+    fn add_at(&mut self, i: usize, j: usize, v: i64) {
+        self.data[i * self.n + j] += v;
+    }
+}
+
+// MATRIX-MULTIPLY: C = C + A · B
+fn matrix_multiply(a: &Matrix, b: &Matrix, c: &mut Matrix) {
+    let n = a.n;
     for i in 0..n {          // compute entries in each of n rows
         for j in 0..n {      // compute n entries in row i
             for k in 0..n {
                 // add in another term of equation (4.1)
-                c[i * n + j] += a[i * n + k] * b[k * n + j];
+                c.add_at(i, j, a.at(i, k) * b.at(k, j));
             }
         }
     }
@@ -245,25 +262,25 @@ fn matrix_multiply(a: &[i64], b: &[i64], c: &mut [i64], n: usize) {
 
 fn main() {
     let n = 4;
-    // vec! puts all n² numbers in one contiguous heap buffer, row by row.
-    let a: Vec<i64> = vec![
+    // Each Vec is one contiguous heap buffer of n² numbers, row by row.
+    let a = Matrix { n, data: vec![
         1, 2, 0, 3,
         2, 1, 3, 0,
         0, 3, 1, 2,
         3, 0, 2, 1,
-    ];
-    let b: Vec<i64> = vec![
+    ] };
+    let b = Matrix { n, data: vec![
         2, 0, 1, 3,
         1, 3, 0, 2,
         3, 1, 2, 0,
         0, 2, 3, 1,
-    ];
-    let mut c = vec![0i64; n * n]; // just A·B: zero C first, Θ(n²)
-    // Shared borrows for A and B, an exclusive one for C, so C can't
-    // alias A or B: the compiler rejects matrix_multiply(&a, &a, &mut a, n).
-    matrix_multiply(&a, &b, &mut c, n);
+    ] };
+    let mut c = Matrix::new(n); // just A·B: C starts at zero, Θ(n²)
+    // Shared borrows of a and b, an exclusive one of c, so c can't
+    // alias a or b: the compiler rejects matrix_multiply(&a, &a, &mut a).
+    matrix_multiply(&a, &b, &mut c);
     for i in 0..n {
-        println!("{:?}", &c[i * n..(i + 1) * n]); // a row is one slice
+        println!("{:?}", &c.data[i * n..(i + 1) * n]); // a row is one slice
     }
 }
 </script>
@@ -2408,16 +2425,17 @@ K.page(4);
   const ctr = K.$("#s2-controls"), stats = K.$("#s2-stats");
   const A4 = [[1, 2, 0, 3], [2, 1, 3, 0], [0, 3, 1, 2], [3, 0, 2, 1]];
   const B4 = [[2, 0, 1, 3], [1, 3, 0, 2], [3, 1, 2, 0], [0, 2, 3, 1]];
+  const AX = [[1, 3], [7, 5]], BX = [[6, 8], [4, 2]]; // the book's Exercise 4.2-1 (also Strassen's worksheet in 4.2)
   const CW = 38, CH = 30, GAP = 4, SEP = 18;
   const CX0 = 250, CY0 = 184; // C's top-left corner: B sits above C, A to its left, so row i and column j meet at c_ij
   const RX = 470;             // the arithmetic column
   const SUB = "₀₁₂₃₄₅₆₇₈₉";
   const sub = (v) => String(v).split("").map((d) => SUB[d]).join("");
-  let n = 4, initI = false, st, busy = [];
+  let n = 4, book = false, initI = false, st, busy = [];
   const S = session((b) => busy.forEach((x) => (x.disabled = b)));
   const stMul = stat("multiplications", "0"), stDone = stat("entries of C done", "0");
   stats.append(stMul, stDone);
-  const cv = code("#s2-code", { files: [{ name: "MATRIX-MULTIPLY", src: src("ps-s2"), rs: { name: "matrix_multiply.rs", src: src("rs-s2"), out: src("rs-s2-out"), map: { "MATRIX-MULTIPLY": 3, 1: 4, 2: 5, 3: 6, 4: 8 } } }] });
+  const cv = code("#s2-code", { files: [{ name: "MATRIX-MULTIPLY", src: src("ps-s2"), rs: { name: "matrix_multiply.rs", src: src("rs-s2"), out: src("rs-s2-out"), map: { "MATRIX-MULTIPLY": 19, 1: 21, 2: 22, 3: 23, 4: 25 } } }] });
   const m = mem("#s2-mem", { aria: "The Rust program's stack frames on the left and the three matrices' row-major heap buffers on the right" });
   const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
   const gGrid = part("matrices"), gSide = part("side"), layer = s("g");
@@ -2431,7 +2449,7 @@ K.page(4);
   const base = () => (CODE_LANG.rust ? 0 : 1);
 
   function fresh() {
-    const A = A4.slice(0, n).map((r) => r.slice(0, n)), B = B4.slice(0, n).map((r) => r.slice(0, n));
+    const A = (book ? AX : A4).slice(0, n).map((r) => r.slice(0, n)), B = (book ? BX : B4).slice(0, n).map((r) => r.slice(0, n));
     const C = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (initI && i === j ? 1 : 0)));
     st = { A, B, C, t: 0, i: null, j: null, k: null, before: null, done: false };
   }
@@ -2472,13 +2490,16 @@ K.page(4);
     });
     txt(gSide, LX, 146, `${n}³ = ${total()} runs of line 4`, { anchor: "start", cls: "sv-label" });
     // the arithmetic, right
-    txt(gSide, RX, 58, "equation (4.1)", { anchor: "start", cls: "sv-label" });
+    const gEq = s("g", { "data-part": "eqref" }); gSide.appendChild(gEq);
+    txt(gEq, RX, 58, "equation (4.1)", { anchor: "start", cls: "sv-label" });
     txt(gSide, RX, 82, "cᵢⱼ = Σₖ aᵢₖ · bₖⱼ", { anchor: "start", mono: true, bold: true, size: 14 });
     if (live) {
       const a = st.A[i][k], b = st.B[k][j];
       const I = i + base(), J = j + base(), Kk = k + base();
-      const line1 = CODE_LANG.rust ? `c[${i * n + j}] += a[${i * n + k}] * b[${k * n + j}]` : `c${sub(I)}${sub(J)} = c${sub(I)}${sub(J)} + a${sub(I)}${sub(Kk)} · b${sub(Kk)}${sub(J)}`;
-      txt(gSide, RX, 214, line1, { anchor: "start", mono: true, size: 13 });
+      if (CODE_LANG.rust) { // the program's line 25, split over two rows
+        txt(gSide, RX, 196, `c.add_at(${i}, ${j},`, { anchor: "start", mono: true, size: 12 });
+        txt(gSide, RX, 214, `  a.at(${i}, ${k}) * b.at(${k}, ${j}))`, { anchor: "start", mono: true, size: 12 });
+      } else txt(gSide, RX, 214, `c${sub(I)}${sub(J)} = c${sub(I)}${sub(J)} + a${sub(I)}${sub(Kk)} · b${sub(Kk)}${sub(J)}`, { anchor: "start", mono: true, size: 13 });
       txt(gSide, RX, 240, `= ${st.before} + ${a} · ${b}`, { anchor: "start", mono: true, size: 13 });
       txt(gSide, RX, 266, `= ${st.C[i][j]}`, { anchor: "start", mono: true, bold: true, size: 15 });
     }
@@ -2490,11 +2511,11 @@ K.page(4);
   function renderCode() {
     if (st.t === 0) { cv.clear(); return; }
     const { i, j, k } = st;
-    if (st.done) { cv.at([]); cv.notes({ 3: [`done: ${total()} products`, "good"] }, { 6: [`done: ${total()} products`, "good"] }); return; }
+    if (st.done) { cv.at([]); cv.notes({ 3: [`done: ${total()} products`, "good"] }, { 23: [`done: ${total()} products`, "good"] }); return; }
     cv.at([4]);
     const a = st.A[i][k], b = st.B[k][j];
     cv.notes({ 1: `i = ${i + 1}`, 2: `j = ${j + 1}`, 3: `k = ${k + 1}: ${st.before} + ${a}·${b}`, 4: `→ ${st.C[i][j]}` },
-      { 4: `i = ${i}`, 5: `j = ${j}`, 6: `k = ${k}`, 8: `c[${i * n + j}] = ${st.before} + ${a}*${b} = ${st.C[i][j]}` });
+      { 21: `i = ${i}`, 22: `j = ${j}`, 23: `k = ${k}`, 25: `c.data[${i * n + j}] = ${st.before} + ${a}*${b} = ${st.C[i][j]}` });
   }
   function renderMem() {
     const { i, j, k } = st, live = i != null && !st.done;
@@ -2508,19 +2529,19 @@ K.page(4);
     const cw = Math.min(30, Math.floor(288 / (n * n)));
     const buf = (id, name, M, marks) => ({ id, label: `${name} · ${n * n} × i64, row-major`, cells: M.flat(), marks, cw });
     const frames = [{ fn: "main", vars: [
-      { n: "a", t: "Vec<i64>", v: `len ${n * n}`, ptr: "A" },
-      { n: "b", t: "Vec<i64>", v: `len ${n * n}`, ptr: "B" },
-      { n: "c", t: "Vec<i64>", v: `len ${n * n}`, ptr: "C" }] }];
-    if (st.t > 0 && !st.done) frames.push({ fn: "matrix_multiply(&a, &b, &mut c, n)", top: true, vars: [
-      { n: "a", t: "&[i64]", v: `len ${n * n}`, ptr: "A", weak: true },
-      { n: "b", t: "&[i64]", v: `len ${n * n}`, ptr: "B", weak: true },
-      { n: "c", t: "&mut [i64]", v: `len ${n * n}`, ptr: "C", weak: true },
+      { n: "a", t: "Matrix", v: `n ${n}`, ptr: "A" },
+      { n: "b", t: "Matrix", v: `n ${n}`, ptr: "B" },
+      { n: "c", t: "Matrix", v: `n ${n}`, ptr: "C" }] }];
+    if (st.t > 0 && !st.done) frames.push({ fn: "matrix_multiply(&a, &b, &mut c)", top: true, vars: [
+      { n: "a", t: "&Matrix", v: "", ptr: "A", weak: true },
+      { n: "b", t: "&Matrix", v: "", ptr: "B", weak: true },
+      { n: "c", t: "&mut Matrix", v: "", ptr: "C", weak: true },
       { n: "i, j, k", t: "usize", v: `${i}, ${j}, ${k}`, hot: true }] });
     let note;
-    if (st.t === 0) note = `main owns three <code>Vec</code>s. Each is one heap buffer of ${n * n} numbers, row after row.`;
+    if (st.t === 0) note = `<code>main</code> owns three <code>Matrix</code> values. Each one's <code>data</code> is one heap buffer of ${n * n} numbers, row after row.`;
     else if (st.done) note = "The call returned and its borrows ended. <code>c</code>'s buffer now holds the result.";
-    else note = `Row ${i} of A is one run, <code>a[${i * n}..${i * n + n}]</code>. Column ${j} of B is every ${n}th slot: <code>b[${j}]</code>, <code>b[${j + n}]</code>, …  Now <code>a[${i}·${n}+${k}] = a[${i * n + k}]</code>, <code>b[${k}·${n}+${j}] = b[${k * n + j}]</code>.`;
-    m.set({ note, stack: frames, heap: [buf("A", "a's buffer", st.A, mA), buf("B", "b's buffer", st.B, mB), buf("C", "c's buffer", st.C, mC)] });
+    else note = `Row ${i} of A is one run of its buffer. Column ${j} of B is every ${n === 2 ? "second" : n + "th"} slot. Now <code>a.at(${i}, ${k})</code> reads slot ${i}·${n} + ${k} = ${i * n + k}, and <code>b.at(${k}, ${j})</code> reads slot ${k}·${n} + ${j} = ${k * n + j}.`;
+    m.set({ note, stack: frames, heap: [buf("A", "a.data", st.A, mA), buf("B", "b.data", st.B, mB), buf("C", "c.data", st.C, mC)] });
   }
 
   /* ---------- the run: one press = one execution of line 4 ---------- */
@@ -2562,7 +2583,7 @@ K.page(4);
   busy = [button(ctr, "Step", "", step), button(ctr, "Play", "primary", play)];
   button(ctr, "Reset", "", reset);
   ctr.appendChild(seg(["C = 0 first", "C = I first"], 0, (q) => { initI = q === 1; reset(); }));
-  K.$("#s2-seg").appendChild(seg(["2 × 2", "3 × 3", "4 × 4"], 2, (q) => { n = q + 2; reset(); }));
+  K.$("#s2-seg").appendChild(seg(["Exercise 4.2-1", "2 × 2", "3 × 3", "4 × 4"], 3, (q) => { book = q === 0; n = q ? q + 1 : 2; reset(); }));
   CODE_LANG.on(() => render());
   redraw();
 })();
@@ -4263,7 +4284,7 @@ K.page(4);
     if (done && c !== 2 && showP) {
       const x1 = ax(Math.min(pp, w)), x2 = ax(Math.max(pp, w)), y = AY - 12;
       svg.appendChild(s("path", { d: `M${x1},${y + 5} V${y} H${x2} V${y + 5}`, class: "sv-wire-solid", style: { strokeWidth: 1.5 } }));
-      const lab = `ε ${c === 1 && k > 0 ? "<" : "="} ${num(Math.abs(pp - w))}`, lw = lab.length * 6.9;
+      const lab = `ε ${c === 1 && k > 0 ? "<" : "≤"} ${num(Math.floor(Math.abs(pp - w) * 100 + 1e-9) / 100)}`, lw = lab.length * 6.9;
       if (x2 - x1 >= lw + 10) txt(svg, clampX((x1 + x2) / 2, lw), y - 6, lab, { mono: true, size: 11, bold: true });
       else if (pp < w) txt(svg, Math.max(14 + lw, x1 - 12), AY - 10, lab, { anchor: "end", mono: true, size: 11, bold: true }); // beside the dot, clear of the line
       else txt(svg, Math.min(646 - lw, x2 + 12), AY - 10, lab, { anchor: "start", mono: true, size: 11, bold: true });
@@ -4292,7 +4313,8 @@ K.page(4);
     // the verdict
     svg.appendChild(s("rect", { x: 14, y: 308, width: 632, height: 30, rx: 9, class: done ? "sv-good" : "sv-panel" }));
     if (done) {
-      const det = c === 1 ? `ε ${k > 0 ? "<" : "="} ${num(w - pp)}` : c === 2 ? `k = ${k}` : `ε = ${num(pp - w)}, c = ${num(ratio(), 3)} < 1`;
+      const down = (v) => num(Math.floor(v * 100 + 1e-9) / 100); // an ε shown rounded up would be too big to work
+      const det = c === 1 ? `ε ${k > 0 ? "<" : "≤"} ${down(w - pp)}` : c === 2 ? `k = ${k}` : `ε ≤ ${down(pp - w)}, c = ${num(ratio(), 3)} < 1`;
       mt(svg, 330, 328, `Case ${c} (${det})  →  T(n) = ${answer()}`, { size: 14, bold: true });
     } else txt(svg, 330, 328, st.at === 0 ? "press Play to apply the theorem" : "…", { cls: "sv-label" });
     stW.set(num(w, 3));
@@ -4450,11 +4472,12 @@ K.page(4);
     const c = CARDS[idx], w = W(c), kc = classify(c), fin = done();
     // the card
     svg.appendChild(s("rect", { x: 14, y: 14, width: 632, height: 86, rx: 12, class: "sv-box" }));
-    txt(svg, 30, 36, `card ${idx + 1} of ${CARDS.length} · ${c.src}`, { anchor: "start", cls: "sv-label" });
+    const gSrc = s("g", { "data-part": "source" }), gQuiz = s("g", { "data-part": "quiz" }); svg.append(gSrc, gQuiz); // the video hides these
+    txt(gSrc, 30, 36, `card ${idx + 1} of ${CARDS.length} · ${c.src}`, { anchor: "start", cls: "sv-label" });
     mt(svg, 330, 78, c.rec, { mono: true, size: 22, bold: true });
     if (!st.revealed) {
-      txt(svg, 330, 150, "Which case of the master theorem applies?", { size: 15, bold: true });
-      txt(svg, 330, 176, "pick one with the buttons below, or press Reveal", { cls: "sv-label" });
+      txt(gQuiz, 330, 150, "Which case of the master theorem applies?", { size: 15, bold: true });
+      txt(gQuiz, 330, 176, "pick one with the buttons below, or press Reveal", { cls: "sv-label" });
     }
     // the reasoning, line by line as the classifier gets there
     const X = 30;
@@ -4467,7 +4490,7 @@ K.page(4);
     if (st.revealed && st.at >= 2) {
       const f = `f(n) = ${fNames[idx]}`;
       let line = "";
-      if (kc === 1) line = `${f}: polynomially smaller, ε ${c.k > 0 ? "<" : "="} ${num(w - c.p)}`;
+      if (kc === 1) line = `${f}: polynomially smaller, ε ${c.k > 0 ? "<" : "≤"} ${num(Math.floor((w - c.p) * 100 + 1e-9) / 100)}`;
       else if (kc === 2) line = `${f} = Θ(n^{${wName(c)}} lg^{${c.k}} n): the same, with k = ${c.k}`;
       else if (kc === 3) line = reached(9) ? `${f}: polynomially larger, ε ≈ ${num(c.p - w)}; a f(n/b) ≤ ${num(c.a / Math.pow(c.b, c.p))} f(n)` : `${f}: polynomially larger, ε ≈ ${num(c.p - w)}`;
       else line = `${f}: below n, but only by lg n; case 2 would need k = −1`;
@@ -4476,7 +4499,7 @@ K.page(4);
     if (fin) {
       const ok = st.picked == null ? null : st.picked === kc;
       mt(svg, X, 190, kc ? `Case ${kc}  →  T(n) = ${c.ans}` : "No case applies  →  use substitution or Akra-Bazzi", { anchor: "start", size: 16, bold: true, fill: kc ? "var(--mint)" : "var(--coral)" });
-      txt(svg, X, 216, st.picked == null ? "revealed without a pick" : ok ? `your pick, ${CASE[st.picked]}: right` : `your pick, ${CASE[st.picked]}: not this time`, { anchor: "start", size: 13, bold: true, fill: ok == null ? "var(--ink-3)" : ok ? "var(--mint)" : "var(--coral)" });
+      txt(gQuiz, X, 216, st.picked == null ? "revealed without a pick" : ok ? `your pick, ${CASE[st.picked]}: right` : `your pick, ${CASE[st.picked]}: not this time`, { anchor: "start", size: 13, bold: true, fill: ok == null ? "var(--ink-3)" : ok ? "var(--mint)" : "var(--coral)" });
     }
     // the level costs
     const BX0 = 46, BX1 = 614, BY = 314, BH = 58, pitch = (BX1 - BX0) / (L + 1);
@@ -5004,7 +5027,8 @@ K.page(4);
     const by = 262;
     svg.appendChild(s("rect", { x: 24, y: by, width: 612, height: 60, rx: 10, class: G.lim ? "sv-good" : "sv-bad" }));
     const l1 = G.lim ? `✓ ${G.name} passes: d = ${worst.toFixed(2)} works for every n ≥ n̂ = 2` : "✗ 2ⁿ fails: the d it needs grows without bound";
-    const l2 = G.lim ? `as n grows, the d it needs sinks toward ${G.limName()} = ${G.lim().toFixed(2)}` : `f(φn)/f(n) = 2^((φ − 1)n): no constant d works for all large n`;
+    const flat = G.lim && Math.abs(neededD(f, NMIN) - neededD(f, NMAX)) < 1e-9; // n²: f(φn)/f(n) = φ² exactly, at every n
+    const l2 = flat ? `the d it needs is ${G.limName()} = ${G.lim().toFixed(2)} at every n` : G.lim ? `as n grows, the d it needs sinks toward ${G.limName()} = ${G.lim().toFixed(2)}` : `f(φn)/f(n) = 2^((φ − 1)n): no constant d works for all large n`;
     txt(svg, 38, by + 24, l1, { anchor: "start", mono: true, size: 12, bold: true });
     txt(svg, 38, by + 44, l2, { anchor: "start", mono: true, size: 12 });
     stD.set(big(d)); stW.set(G.lim ? worst.toFixed(2) : "none", G.lim ? "good" : "bad");
@@ -5014,8 +5038,8 @@ K.page(4);
     cv.notes({ "NEEDED-D:2": "i = 100", "NEEDED-D:3": `ψ = ${phi}`, "NEEDED-D:4": `d = ${v}`, "NEEDED-D:5": [`d = ${v}`, G.lim ? "good" : "bad"] },
       { 6: "i = 100", 7: `psi = ${phi}`, 8: `d = ${v}`, 10: [`d = ${v}`, G.lim ? "good" : "bad"] });
     cap("#s13-cap", G.lim
-      ? `For f(n) = ${G.name}, stretching n by φ = ${phi} multiplies f by ${big(f(phi * gn) / f(gn))} at n = ${gn}, and never by more than ${worst.toFixed(2)} for n ≥ 2. One constant d serves every n, so by Theorem 4.5 floors and ceilings in the recurrence don't change its Θ.`
-      : `For f(n) = 2ⁿ, stretching n by φ = ${phi} multiplies f by 2^${((phi - 1) * gn).toFixed(gn % 2 && phi % 1 ? 1 : 0)} = ${big(d)} at n = ${gn}. The factor grows with n, so no constant d exists: exponentials fail the polynomial-growth condition, and Theorem 4.5 makes no promise about floors and ceilings.`);
+      ? `For f(n) = ${G.name}, stretching n by φ = ${phi} multiplies f by ${big(f(phi * gn) / f(gn))} at n = ${gn}, and never by more than ${worst.toFixed(2)} for n ≥ 2. One constant d serves every n, so, by the book's theorem, floors and ceilings in the recurrence don't change its Θ.`
+      : `For f(n) = 2ⁿ, stretching n by φ = ${phi} multiplies f by 2^${((phi - 1) * gn).toFixed(gn % 2 && phi % 1 ? 1 : 0)} = ${big(d)} at n = ${gn}. The factor grows with n, so no constant d exists: exponentials fail the polynomial-growth condition, and the book's theorem makes no promise about floors and ceilings.`);
   }
 
   /* ---------- controls ---------- */
@@ -5029,7 +5053,7 @@ K.page(4);
       busy = [button(ctr, "Step", "", () => S.run(async (w) => { await stepOnce(w); })),
         button(ctr, "Play", "primary", () => S.run(async (w) => { while (await stepOnce(w)) await w(sleep(st.e && st.e.ref === "FIND-P:7" ? 90 : 170)); }))];
       button(ctr, "Reset", "", reset0);
-      ctr.appendChild(seg(["(4.24)", "4.7-5(a)", "4.7-5(e)"], pre, (i) => { pre = i; if (sInput) sInput.disabled = pre !== 0; reset0(); }));
+      ctr.appendChild(seg(["The book's example", "Three pieces", "Thirds, squared"], pre, (i) => { pre = i; if (sInput) sInput.disabled = pre !== 0; reset0(); }));
       const sl = slider({ id: "s13-s", label: "s", min: 10, max: 18, value: s20, format: (v) => (v / 20).toFixed(2), onInput: (v) => { s20 = v; showAll0(); } });
       ctr.appendChild(sl);
       sInput = sl.querySelector("input"); sInput.disabled = pre !== 0;

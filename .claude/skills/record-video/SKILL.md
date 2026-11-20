@@ -28,10 +28,14 @@ Each step has a gate. Don't start the next step until the gate passes.
 | 7   | **Pilot**            | `make video-part SCRIPT=… ONLY="Part 4 of"`                                  | You've looked at one part at full size                                                 |
 | 8   | **Render and QA**    | `make video-long SCRIPT=…`, then `make video-qa VIDEO=…`                     | No FAIL. Fix every WARN, or write down why it stays ([quality-bar.md](quality-bar.md))  |
 
+**Keep the Mac awake while it records** (`caffeinate -i`, or `caffeinate -i -w <pid>` for a queue): a recording runs
+in real time, and a sleep in the middle stretches that part with dead air. `assemble.js` refuses to cache a part that
+runs more than twice its speech plus a minute, and says so; record it again once the machine stays awake.
+
 **The video** is recorded with `make video-long SCRIPT=<script>`: `narrate.py`, then
 `assemble.js` on the manifest it prints. That records each part (the intro, and each section card on) on its own, caches
-it under `build/<voice>/parts/`, and joins the parts without a seam: a part ends on the next part's card, and the next
-starts under it.
+it under `build/<voice>/parts/`, and joins the parts without a seam: a part ends by fading to the page's own background (the middle of the dissolve into
+the next part), and the next starts from that same flat frame.
 
 **Fixing part of a recorded video.** Edit the script, judge it again, and run `make video-long` again: only the parts
 whose words or cues changed are re-recorded (a few minutes, not the whole video), and the join takes about a minute.

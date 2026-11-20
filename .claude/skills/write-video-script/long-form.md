@@ -93,7 +93,7 @@ the book says little, the machine does the showing and the voice stays brief (se
 ([picture.md](picture.md)), so each `{click Step xN}` lands on the line you name and each value you say has a
 `{check .is-full .caption ~ …}`.
 
-**Everything else is the same:** the cold open, the title card with an agenda, parts as questions with a `{goto}` card
-each (the card shows the question alone, and the voice reads it), the voice and its pace, one change at a time, cues on the noun, no silent motion, recap cards, and the hook into
+**Everything else is the same:** the cold open, the title card with an agenda, parts as questions with a `{goto}` each
+(a dissolve, never shown or read: the part's first sentence carries the viewer over, see voice.md), the voice and its pace, one change at a time, cues on the noun, no silent motion, recap cards, and the hook into
 the next video (the next section, or the next chapter). Reuse the long forms' running examples (for CLRS: 31, 41, 59, 26, 41, 58, the cards, the race) and keep each lint
 rule: no digits or symbols in speech, at most two numbers a sentence, at most 34 words.

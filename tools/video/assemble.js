@@ -15,8 +15,8 @@
    page (or a script or stylesheet it loads, or studio.js) has changed since a part was recorded, the part is recorded
    again, unless --page-scenes names the scenes the page edit changed: then only the parts that show one of them are.
 
-   How parts join without a seam: a part ends by fading in the next part's card, exactly as the next {goto} would, and
-   the next part starts under that same card. The video is joined without re-encoding, and the narration of all parts
+   How parts join without a seam: a part ends by fading in the veil (a flat frame of the page's background), exactly as
+   the next {goto} would, and the next part starts under it and dissolves into its scene while the voice goes on. The video is joined without re-encoding, and the narration of all parts
    is levelled together, as one, so the loudness doesn't step at a join.
 
    --dry-run  list which parts would be recorded, and record nothing
@@ -134,7 +134,12 @@ for (const p of todo) {
   fs.writeFileSync(pm, JSON.stringify(p.manifest, null, 1));
   console.log(`\n=== part ${p.part.index} of ${parts.length - 1}: ${p.title}`);
   const r = cp.spawnSync("node", [STUDIO, pm], { stdio: "inherit" });
-  if (r.status === 0) stampDone(p);
+  // a part far longer than its speech was recorded across a sleep: the clock kept running and the gap became dead air
+  let len = 0;
+  try { len = +cp.execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path.join(p.dir, "part.mp4")]).toString(); } catch {}
+  const stretched = r.status === 0 && len > 2 * speech(p) + 60;
+  if (stretched) console.error(`part ${p.part.index} runs ${len.toFixed(0)} s against about ${speech(p).toFixed(0)} s of speech: the machine likely slept while recording it (keep it awake with caffeinate -i). Not cached.`);
+  if (r.status === 0 && !stretched) stampDone(p);
   else failed.push(p);
 }
 if (failed.length) {

@@ -15,8 +15,9 @@ as in a code video, and the voice keeps the pace it had on the page, so the whol
 types the editor into that snapshot, and {run} shows the program's real output: each snapshot that is run is compiled with
 rustc here, and the build fails if it doesn't compile, unless the cue is {run error}, which shows the compiler's error instead.
 
-A section card ({goto id | kicker | heading}) shows only its heading, and the voice reads that heading while the card is
-up, then breathes before the scene opens: the viewer hears what the part will answer (see speak_headings).
+A new part ({goto id | kicker | heading}) is a dissolve to its scene, and its heading is only the chapter's title in the
+YouTube timeline: it is never shown and never spoken. The script's own words make the move from one idea to the next
+(see bridge_lint), so the video sounds like one lesson rather than a run of read-out titles.
 
 --only "Part 1" narrates just the section whose {goto} contains that text, into its own build folder: a fast way to judge one part.
 
@@ -91,24 +92,22 @@ def parse(path):
     return meta, out
 
 
-CARD_LEAD = 0.2    # seconds of quiet card before its heading is read (on top of the card's own fade-in)
-CARD_HOLD = 1.0    # seconds the card stays up after its heading, before {scene} lifts it
-
-
-def speak_headings(segs):
-    """A section card is read aloud. The card's block has no words of its own (its {goto} sits in a paragraph with only
-    cues), so the voice says the card's heading in a block of its own right after it, while the card is up, and the card
-    holds a breath before the scene lifts it. The heading is already judged as screen text (judgement.py hashes {goto}),
-    so saying it adds no new words to judge. A card whose paragraph has words of its own is left to those words."""
-    out = []
-    for s in segs:
-        out.append(s)
+def bridge_lint(segs):
+    """A part's first words carry the viewer over from the last idea: they never read out the part's heading (the
+    YouTube chapter title), and a {goto} card never sits alone with a silent pause, since the dissolve then plays with
+    nobody talking. Write the card at the head of the part's first paragraph: {goto id | Part 3 of 6 | heading}{scene} …"""
+    bad = []
+    norm_ = lambda t: re.sub(r"[^a-z ]", "", t.lower()).split()
+    for i, s in enumerate(segs):
         g = next((c for c in s["cues"] if c["op"] == "goto" and c["arg"].count("|") >= 2), None)
-        if not g or s["text"]: continue
-        head = g["arg"].split("|")[2].strip()
-        s["then"] = {"pause": CARD_LEAD}
-        out.append({"text": head.split(), "cues": [], "then": {"pause": CARD_HOLD}, "para_end": True})
-    return out
+        if not g: continue
+        head = norm_(g["arg"].split("|")[2])
+        if not s["text"]:
+            bad.append(f"a new part with no words over its dissolve (put the card at the head of the part's first paragraph): {{goto {g['arg']}}}")
+        first = next((x for x in segs[i:i + 2] if x["text"]), None)
+        if first and head and norm_(" ".join(first["text"]))[:len(head)] == head:
+            bad.append(f"a part that opens by reading its own heading aloud; open with a sentence that carries on from the last part: {' '.join(first['text'])[:90]!r}")
+    return bad
 
 
 def long_form_name(chapter):
@@ -289,7 +288,6 @@ def main():
         if not ok and not a.skip_judgement: sys.exit(f"narrate: {a.script}: {why}\n  (--skip-judgement for a test render that won't be published)")
         if not ok: print(f"narrate: WARNING, unjudged test render: {why}", flush=True)
     meta, segs = parse(a.script)
-    segs = speak_headings(segs)
     book = book_profile(a.script)
     lang = (book.get("language") or {})
     if meta["code"]:
@@ -318,7 +316,7 @@ def main():
             segs[0]["cues"].insert(0, {"w": 0, "op": "scene", "arg": ""})  # a scene inside a part has no card to lift: lift the cover
         part = re.sub(r"\W+", "-", a.only.lower()).strip("-")
         name += "-" + part; build /= part
-    problems = lint(segs) + [f"unfinished front matter: {k}: {v}" for k, v in meta.items() if isinstance(v, str) and "TODO" in v]
+    problems = lint(segs) + bridge_lint(segs) + [f"unfinished front matter: {k}: {v}" for k, v in meta.items() if isinstance(v, str) and "TODO" in v]
     # a code video: every {code} names a snapshot, and every {run} gets its program's real output
     runs, current = {}, meta.get("start")
     if current and current not in meta["code"]: problems.append(f"start: @{current} is not a snapshot")

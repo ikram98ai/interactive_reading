@@ -5189,9 +5189,9 @@ K.page(3);
   function caption0() {
     const x = xOf(), fl = Math.floor(x), ce = Math.ceil(x), tr = trunc(x);
     if (Number.isInteger(x)) return cap("#s12-cap", `x = ${num(x)} is an integer, so ⌊x⌋ = x = ⌈x⌉ (3.1): both staircases touch the line y = x here, and truncation agrees with both.`);
-    cap("#s12-cap", `x = ${num(x)}: the floor ⌊x⌋ = <b>${num(fl)}</b> sits in the blue strip under y = x, the ceiling ⌈x⌉ = <b>${num(ce)}</b> in the lilac strip above it. ` + (tr !== fl
-      ? `<b>x as i64 = ${num(tr)}</b> rounds toward zero, which for a negative x is the ceiling, not the floor.`
-      : `For x ≥ 0, x as i64 = ${num(tr)} truncates to the floor.`));
+    cap("#s12-cap", `x = ${num(x)}: the floor ⌊x⌋ = <b>${num(fl)}</b> sits in the blue strip under y = x, the ceiling ⌈x⌉ = <b>${num(ce)}</b> in the lilac strip above it.` + (!CODE_LANG.rust ? "" : tr !== fl // Rust's truncation only in the Rust view
+      ? ` <b>x as i64 = ${num(tr)}</b> rounds toward zero, which for a negative x is the ceiling, not the floor.`
+      : ` For x ≥ 0, x as i64 = ${num(tr)} truncates to the floor.`));
   }
   // FLOOR(x), then CEILING(x) = −FLOOR(−x), as a list of steps
   function trace0() {
@@ -5380,6 +5380,7 @@ K.page(3);
     }
   }
   K.$("#s12-seg").appendChild(seg(["Staircase", "Boxes and crates"], 0, (m) => { mode = m; setup(); }));
+  CODE_LANG.on(() => { if (mode === 0 && !S.busy) caption0(); }); // the truncation note is Rust's, so it shows only in the Rust view
   setup();
 })();
 
@@ -6259,7 +6260,7 @@ K.page(3);
     const L0 = render1();
     mark([], []); cv.notes({});
     const dig = Math.floor(L0 * Math.log10(2)) + 1;
-    cap("#s16-cap", `x is lg n, so n doubles with every step right. lg${sup(pb)} n = ${pb} lg(lg n) bends; n<sup>${+pa.toFixed(2)}</sup> = ${+pa.toFixed(2)}·lg n is a straight line. The power wins from <b>n₀ = 2${sup(L0)}</b>, a number with ${fmt(dig)} digits${dig > 80 ? ": more than the 10⁸⁰ atoms the book says the universe holds" : ""}. Press <b>Find n₀</b>.`);
+    cap("#s16-cap", `x is lg n, so n doubles with every step right, and the height is lg of each function: lg(lg${sup(pb)} n) = ${pb} lg(lg n) bends, while lg(n<sup>${+pa.toFixed(2)}</sup>) = ${+pa.toFixed(2)}·lg n is a straight line. The power wins from <b>n₀ = 2${sup(L0)}</b>, a number with ${fmt(dig)} digits${dig > 80 ? ": far more than the roughly 10⁸⁰ atoms estimated to be in the observable universe" : ""}. Press <b>Find n₀</b>.`);
   }
   function find1() {
     S.run(async (w) => {
@@ -6676,7 +6677,7 @@ K.page(3);
   }
   function caption0() {
     const p = PRESETS[pi], c = chainOf(p), total = c.length - 1;
-    if (steps === 0) return cap("#s18-cap", `n = ${p.name}${p.lgv ? ": too big for any float, so the machine starts from lg n = " + fmt(p.lgv) + ", exactly as the Rust program does" : ""}. Press <b>Step</b> to apply lg once.`);
+    if (steps === 0) return cap("#s18-cap", `n = ${p.name}${p.lgv ? ": too big to write out, so the machine starts from lg n = " + fmt(p.lgv) : ""}. Press <b>Step</b> to apply lg once.`);
     if (steps >= total) return cap("#s18-cap", `${fv(c[steps])} ≤ 1, so the loop stops: <b>lg* ${p.name} = ${total}</b>.${pi === 7 ? " One more step than 2⁶⁵⁵³⁶: the value after five lg's is 1.0000005, just above 1. So 2⁶⁵⁵³⁶ is the largest n with lg* n = 5, and every larger input is far beyond anything that exists." : pi === 5 ? " Even a number as big as the count of atoms in the universe needs only five." : ""}`);
     return cap("#s18-cap", `lg⁽${sup(steps)}⁾ n = lg(${valOf(c, steps - 1)}) = <b>${fv(c[steps])}</b>, still &gt; 1, so i = ${steps} and the loop goes on.${steps === 1 && p.lgv ? " One lg took a number with thousands of digits down to " + fmt(p.lgv) + ": that is how fast lg shrinks things." : ""}`);
   }

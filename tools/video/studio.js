@@ -17,12 +17,15 @@
          label <text>  (a small heading at the top of the frame; {label} alone clears it)
          rust · pseudo  (the code panel shows the Rust program, with its stack and heap underneath, or the book's pseudocode)
          title · item <text>  (the title card, then one line of "what you'll learn" on it per item, each on its word)
-         goto <scene id | kicker | heading>  (a section card covers the switch to that scene; {scene} lifts it; each goto is a YouTube chapter.
-                              The card shows only the heading: the kicker, "Part 3 of 6", names the part for the tools and is
-                              never on screen. narrate.py has the voice read the heading while the card is up.)
+         goto <scene id | kicker | heading>  (a new part: the picture dissolves through the page's own background into that
+                              scene, and back up again, while the voice goes on; each such goto is a YouTube chapter. Nothing
+                              of the card is on screen or spoken: the kicker ("Part 3 of 6") names the part for the tools, and
+                              the heading is the chapter's title in the YouTube timeline. The script's own words carry the
+                              viewer from one idea to the next, so the video reads as one lesson, not a run of title cards.)
          goto <scene id>  (a quick dip to black instead: a second scene inside the same part, and no new chapter)
-   A manifest with a `part` (assemble.js) records one part of a long form: it starts under its own card, with the layers
-   earlier parts hid still hidden, and ends on the next part's card instead of black, so the parts join without a seam.
+   A manifest with a `part` (assemble.js) records one part of a long form: it starts under the veil (the dissolve's middle,
+   one flat frame of the page's background), with the layers earlier parts hid still hidden, and ends by fading the veil
+   in instead of black, so the parts join without a seam.
    Every scene starts the same way: pseudocode, code panel and stats hidden, picture centred. The script reveals the rest.
          check <selector> ~ <text>  (fails the run if the page doesn't show what the narration claims)
    A code video (kind: code) records tools/video/editor.html instead, starting from snapshot `start` if the script sets one:
@@ -152,6 +155,7 @@ function overlayScript() {
       <div id="vid-card-b" style="font:400 38px/1.3 'Atkinson Hyperlegible',system-ui;color:#aeb9dc;text-wrap:balance"></div>
     </div>
     <div id="vid-cap" style="position:absolute;left:60px;right:150px;display:none;text-align:center;font:800 66px/1.16 ${FONT};letter-spacing:-.01em;color:#f3f5ff;text-wrap:balance;text-shadow:0 3px 14px #000c"></div>
+    <div id="vid-veil" style="position:absolute;inset:0;background:#0d1220;opacity:0;transition:opacity .4s ease"></div>
     <div id="vid-black" style="position:absolute;inset:0;background:#000;opacity:0;transition:opacity .8s linear"></div>`;
   document.body.appendChild(root);
   const $ = (id) => document.getElementById(id);
@@ -252,7 +256,7 @@ function overlayScript() {
       else if (bottom > body.scrollTop + body.clientHeight - 6) body.scrollTop = bottom - body.clientHeight + 24;
     },
     show(sels, on) {
-      const instant = $("vid-title").style.opacity !== "0" || $("vid-card").style.opacity === "1" || $("vid-black").style.opacity === "1"; // nothing below a card is visible yet
+      const instant = $("vid-title").style.opacity !== "0" || $("vid-card").style.opacity === "1" || $("vid-black").style.opacity === "1" || $("vid-veil").style.opacity === "1"; // nothing below a card is visible yet
       // a rule as well as the inline style, so a layer stays hidden when its machine redraws the whole picture
       let sheet = $("vid-hidden"); if (!sheet) { sheet = document.createElement("style"); sheet.id = "vid-hidden"; document.head.appendChild(sheet); }
       const rules = new Set(sheet.textContent.split("\n").filter(Boolean));
@@ -280,9 +284,16 @@ function overlayScript() {
         if (w > room) l.style.setProperty("font-size", (parseFloat(getComputedStyle(l).fontSize) * room / w).toFixed(1) + "px", "important");
       }
     },
-    hideTitle() { $("vid-title").style.opacity = 0; $("vid-card").style.opacity = 0; }, // {scene}: back to the picture
-    // a part's card: its heading alone. The kicker ("Part 3 of 6") stays off screen, and so does the gap it would leave.
-    section(kicker, head) { state.targets = []; this.label(""); $("vid-list").innerHTML = ""; $("vid-kicker").textContent = ""; $("vid-kicker").style.display = "none"; $("vid-head").textContent = head; $("vid-title").style.opacity = 1; $("vid-card").style.opacity = 0; },
+    hideTitle() { $("vid-title").style.opacity = 0; $("vid-card").style.opacity = 0; this.veil(false); }, // {scene}: back to the picture
+    // a new part: the veil, a flat frame of the page's own background, fades over everything (instant: already there).
+    // No heading is drawn and none is spoken; the heading is only the chapter's title in the YouTube timeline.
+    veil(on, instant) {
+      const v = $("vid-veil"); v.style.transition = instant ? "none" : on ? "opacity .4s ease" : "opacity .5s ease"; v.style.opacity = on ? 1 : 0;
+      if (instant) requestAnimationFrame(() => requestAnimationFrame(() => { v.style.transition = ""; }));
+    },
+    // under a full veil: what was on screen before (title card, a takeaway card, the label) goes, unseen
+    underVeil() { state.targets = []; this.label(""); for (const id of ["vid-title", "vid-card"]) { const e = $(id); e.style.transition = "none"; e.style.opacity = 0; requestAnimationFrame(() => requestAnimationFrame(() => { e.style.transition = ""; })); } $("vid-list").innerHTML = ""; },
+    section(kicker, head, instant) { this.veil(true, instant); },
     card(a, b) { $("vid-card-a").textContent = a; $("vid-card-b").textContent = b || ""; $("vid-card").style.opacity = 1; },
     black() { $("vid-black").style.opacity = 1; },
     // a short's burned-in captions: a few words at a time, the word being said in the accent colour. chunks are
@@ -410,7 +421,7 @@ function overlayScript() {
   const P = M.part;
   if (P) {
     for (const [op, arg] of P.prelude) await page.evaluate(([l, on]) => window.__vid.show(l, on), [named(arg).map((x) => x.slice(4)), op === "show"]);
-    if (P.enter) await page.evaluate(([k, h]) => window.__vid.section(k, h), P.enter);
+    if (P.enter) await page.evaluate(([k, h]) => { window.__vid.section(k, h, true); window.__vid.underVeil(); }, P.enter);
   }
   await sleep(900);
 
@@ -482,11 +493,11 @@ function overlayScript() {
       if (id === "editor") { // the switch to the editor: the page's last frame holds while the editor loads unseen beneath it
         // With a card ({goto editor | kicker | heading}) the card fades in first and holds until {scene}, a new chapter.
         // Without one ({goto editor}) the page crossfades straight into the editor while the voice goes on: one video.
-        if (card) { chapters.push([now(), head]); await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]); await sleep(750); }
+        if (card) { chapters.push([now(), head]); if (entered) { await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]); await sleep(450); } }
         const last = (await page.screenshot({ type: "png" })).toString("base64"), from = Date.now() / 1000;
         await openEditor();
         if (wantSide) await openSide(wantSide); // the machine comes along, loaded under the old frame
-        if (card) await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]);
+        if (card) await page.evaluate(([k, h]) => { window.__vid.section(k, h, true); window.__vid.underVeil(); }, [kicker, head]);
         else await page.evaluate((src) => new Promise((done) => { // the page's last frame on top, to fade away
           const t = document.getElementById("vid-title"); t.style.transition = "none"; t.style.opacity = 0;
           const img = document.createElement("img"); img.id = "vid-xfade"; img.src = "data:image/png;base64," + src;
@@ -495,27 +506,29 @@ function overlayScript() {
         }), last);
         if (cap) await page.evaluate(([c, top, e]) => window.__vid.subtitle(c, top, e), [cap.chunks, SHORT.cap, now() - cap.at]); // the words carry on
         await cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1, maxWidth: W, maxHeight: H }).catch(() => {});
-        await sleep(card ? 900 : 300); // the card's fade on the new page, or the old frame's first paint
+        await sleep(card ? 400 : 300); // the new page's first paint, under the veil or the old frame
         hidden.push([from, Date.now() / 1000]); EDITOR = true; entered = true;
-        if (!card) {
+        if (card) { await page.evaluate(() => window.__vid.veil(false)); await sleep(500); }
+        else {
           await page.evaluate(() => { const img = document.getElementById("vid-xfade"); img.style.opacity = 0; setTimeout(() => img.remove(), 1100); });
           await sleep(1000);
         }
         await keepHeadline();
-        log(`goto editor${card ? "" : " (crossfade)"}`);
+        log(`goto editor${card ? " (dissolve, new part)" : " (crossfade)"}`);
         return;
       }
       if (card) {
         chapters.push([now(), head]);
-        if (entered) { await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]); await sleep(750); } // the card has faded in
+        if (entered) { await page.evaluate(([k, h]) => window.__vid.section(k, h), [kicker, head]); await sleep(450); } // the veil has faded in
         entered = true;
+        await page.evaluate(() => window.__vid.underVeil());
       }
       else { await page.evaluate(() => window.__vid.dip(true)); await sleep(330); }
       await page.evaluate((id) => { window.__vid.enter(id); K.speed.value = 1; window.__lastBtn = null; window.__vid.fresh(); }, id);
-      await sleep(card ? 500 : 250);
-      if (!card) await page.evaluate(() => window.__vid.dip(false));
+      await sleep(250);
+      await page.evaluate((c) => c ? window.__vid.veil(false) : window.__vid.dip(false), card);
       await keepHeadline();
-      log(`goto ${id}`);
+      log(`goto ${id}${card ? " (dissolve, new part)" : ""}`);
     }
     else if (c.op === "title") { await page.evaluate(([a, b]) => window.__vid.title(true, a, b), [meta.title, meta.kicker]); log("title"); }
     else if (c.op === "item") { await page.evaluate((v) => window.__vid.item(v), a); log(`item ${a}`); }
@@ -530,7 +543,7 @@ function overlayScript() {
     else if (c.op === "center" || c.op === "split") { await ui().evaluate((on) => window.__vid.center(on), c.op === "center"); }
     else if (c.op === "label") { headline = a || (IS_SHORT ? meta.title : ""); await page.evaluate((v) => window.__vid.label(v), headline); }
     else if (c.op === "speed") { await ui().evaluate((v) => { K.speed.value = v; }, +a); }
-    else if (c.op === "card") { const [x, y] = a.split("|").map((v) => v.trim()); await page.evaluate(([p, q]) => window.__vid.card(p, q), [x, y]); }
+    else if (c.op === "card") { const cut = a.indexOf("|"), [x, y] = cut < 0 ? [a.trim(), undefined] : [a.slice(0, cut).trim(), a.slice(cut + 1).trim()]; /* the body may hold |x|, an absolute value */ await page.evaluate(([p, q]) => window.__vid.card(p, q), [x, y]); }
     else if (c.op === "click") {
       const [, label, times] = a.match(/^(.*?)(?:\s+x(\d+))?$/);
       const pg = ui();
@@ -595,9 +608,9 @@ function overlayScript() {
   }
   await finishTyping("the end");
   if (EDITOR) for (const t of await page.evaluate(() => window.__ed.slips)) problems.push(`typing left the editor different from its snapshot, then jumped to it:\n${t}`);
-  if (P && P.exit) { // the next part's card fades in, as the next {goto} would: the next part starts on that same frame
+  if (P && P.exit) { // the veil fades in, as the next {goto} would: the next part starts on that same flat frame
     await page.evaluate(([k, h]) => window.__vid.section(k, h), P.exit);
-    await sleep(750);
+    await sleep(500);
   } else if (IS_SHORT) await sleep(450); // a short loops: no fade to black, the last picture runs straight into the hook
   else {
     await sleep(700);

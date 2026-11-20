@@ -79,7 +79,7 @@
     </div>
 <script type="text/x-clrs" id="ps-s1">
 HIRE-ASSISTANT(n)
-best = 0              // candidate 0 is a least-qualified dummy candidate
+best = 0  // candidate 0 is a least-qualified dummy candidate
 for i = 1 to n
     interview candidate i
     if candidate i is better than candidate best
@@ -87,43 +87,42 @@ for i = 1 to n
         hire candidate i
 </script>
 <script type="text/x-rust" id="rs-s1">
-// HIRE-ASSISTANT with the book's costs: c_i per interview, c_h per hire.
-// rank[i] says how good candidate i is: higher is better.
-fn hire_assistant(rank: &[u32], c_i: u32, c_h: u32) -> (u32, u32) {
-    let mut best: Option<usize> = None; // None plays the dummy candidate 0
-    let (mut cost, mut hires) = (0, 0);
-    for (i, &r) in rank.iter().enumerate() { // (index, item) pairs
-        cost += c_i; // interview candidate i
-        // match must cover both variants: None (nobody yet) and Some(b)
+// HIRE-ASSISTANT: hire whenever a candidate beats the current assistant.
+// ranks[i] is candidate i's rank (higher is better). Returns the hires.
+fn hire_assistant(ranks: &[u32]) -> usize {
+    let mut best: Option<usize> = None; // no one hired yet
+    let mut hires = 0;
+    for i in 0..ranks.len() {
+        // interview candidate i
         let better = match best {
             None => true,
-            Some(b) => r > rank[b],
+            Some(b) => ranks[i] > ranks[b],
         };
         if better {
+            if let Some(b) = best {
+                println!("let go candidate {}", b + 1);
+            }
             best = Some(i);
-            cost += c_h; // hire candidate i (and let the old one go)
             hires += 1;
+            println!("hire candidate {} (rank {})", i + 1, ranks[i]);
         }
     }
-    (hires, cost)
+    hires
 }
 
 fn main() {
-    let orders = [
-        ("random", [3, 1, 5, 2, 7, 4, 8, 6]),
-        ("increasing", [1, 2, 3, 4, 5, 6, 7, 8]),
-        ("decreasing", [8, 7, 6, 5, 4, 3, 2, 1]),
-    ];
-    for (name, rank) in &orders {
-        let (m, cost) = hire_assistant(rank, 1, 10); // c_i = 1, c_h = 10
-        println!("{:<10} {:?} m = {}, cost = {}", name, rank, m, cost);
-    }
+    let ranks = vec![5, 2, 1, 8, 4, 7, 10, 9, 3, 6];
+    let m = hire_assistant(&ranks);
+    println!("{} hires", m);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s1-out">
-random     [3, 1, 5, 2, 7, 4, 8, 6] m = 4, cost = 48
-increasing [1, 2, 3, 4, 5, 6, 7, 8] m = 8, cost = 88
-decreasing [8, 7, 6, 5, 4, 3, 2, 1] m = 1, cost = 18
+hire candidate 1 (rank 5)
+let go candidate 1
+hire candidate 4 (rank 8)
+let go candidate 4
+hire candidate 7 (rank 10)
+3 hires
 </script>
   </section>
 
@@ -513,7 +512,7 @@ Pairs        average X = 5.000   X = n/2 in 100.0% of runs
     </div>
 <script type="text/x-clrs" id="ps-s5">
 HIRE-ASSISTANT(n)
-best = 0     // candidate 0 is a least-qualified dummy candidate
+best = 0  // candidate 0 is a least-qualified dummy candidate
 for i = 1 to n
     interview candidate i
     if candidate i is better than candidate best
@@ -611,7 +610,7 @@ randomly permute the list of candidates
 HIRE-ASSISTANT(n)
 
 HIRE-ASSISTANT(n)
-best = 0     // candidate 0 is a least-qualified dummy candidate
+best = 0  // candidate 0 is a least-qualified dummy candidate
 for i = 1 to n
     interview candidate i
     if candidate i is better than candidate best
@@ -619,80 +618,68 @@ for i = 1 to n
         hire candidate i
 </script>
 <script type="text/x-rust" id="rs-s6">
-// RANDOMIZED-HIRE-ASSISTANT: permute the candidates first, then hire.
-// Fixed-seed xorshift RNG (std has none), so the output never changes.
+// RANDOMIZED-HIRE-ASSISTANT: shuffle the candidates first, then hire.
+// std has no random-number generator, so the program carries its own.
 struct Rng(u64);
 
 impl Rng {
+    // xorshift64*: a small pseudorandom generator
     fn next(&mut self) -> u64 {
-        self.0 ^= self.0 << 13;
-        self.0 ^= self.0 >> 7;
-        self.0 ^= self.0 << 17;
-        self.0
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545_F491_4F6C_DD1D)
     }
-    fn random(&mut self, a: usize, b: usize) -> usize { // RANDOM(a, b)
-        let m = (b - a + 1) as u64;
-        let zone = u64::MAX - u64::MAX % m; // reject the uneven tail
-        loop {
-            let x = self.next();
-            if x < zone {
-                return a + (x % m) as usize;
-            }
-        }
+
+    // RANDOM(a, b): a whole number from a to b, inclusive
+    fn random(&mut self, a: usize, b: usize) -> usize {
+        a + (self.next() % (b - a + 1) as u64) as usize
     }
 }
 
-// Generic: one function shuffles a slice of any element type T.
-fn shuffle<T>(a: &mut [T], rng: &mut Rng) {
+fn randomly_permute(a: &mut [u32], rng: &mut Rng) {
     for i in 0..a.len() {
         let j = rng.random(i, a.len() - 1);
         a.swap(i, j);
     }
 }
 
-fn hire_assistant(rank: &[u32]) -> u32 {
-    let mut best = 0;             // rank 0: the dummy candidate
+fn hire_assistant(ranks: &[u32]) -> usize {
+    let mut best: Option<usize> = None; // no one hired yet
     let mut hires = 0;
-    for i in 0..rank.len() {
-        let r = rank[i];          // interview candidate i
-        if r > best {             // better than candidate best?
-            best = r;
-            hires += 1;           // hire candidate i
+    for i in 0..ranks.len() {
+        let better = match best {
+            None => true,
+            Some(b) => ranks[i] > ranks[b],
+        };
+        if better {
+            best = Some(i);
+            hires += 1;
         }
     }
     hires
 }
 
-fn randomized_hire_assistant(rank: &[u32], rng: &mut Rng) -> u32 {
-    let mut order = rank.to_vec();  // a heap copy; rank stays as given
-    shuffle(&mut order, rng);       // randomly permute the candidates
+fn randomized_hire_assistant(ranks: &[u32], rng: &mut Rng) -> usize {
+    let mut order = ranks.to_vec(); // ranks stays as given
+    randomly_permute(&mut order, rng);
     hire_assistant(&order)
-} // order goes out of scope: Drop frees its buffer
+}
 
 fn main() {
-    let mut rng = Rng(0x2545_F491_4F6C_DD1D);
-    let inputs: [(&str, Vec<u32>); 3] = [
-        ("A1", (1..=10).collect()),       // collect() builds the Vec
-        ("A2", (1..=10).rev().collect()),
-        ("A3", vec![5, 2, 1, 8, 4, 7, 10, 9, 3, 6]),
-    ];
-    let runs = 100_000;
-    for (name, input) in &inputs {       // borrow each pair, don't move it
-        let total: u32 = (0..runs)
-            .map(|_| randomized_hire_assistant(input, &mut rng))
-            .sum();
-        println!("{}: hires = {:>2} every run; randomized: {:.3} on average",
-            name, hire_assistant(input), total as f64 / runs as f64);
+    let ranks = vec![5, 2, 1, 8, 4, 7, 10, 9, 3, 6];
+    let mut rng = Rng(2024);
+    let mut total = 0;
+    for _ in 0..1000 {
+        total += randomized_hire_assistant(&ranks, &mut rng);
     }
-    let h: f64 = (1..=10).map(|i| 1.0 / i as f64).sum();
-    println!("H_10 = {:.3}", h);
+    println!("plain: {} hires", hire_assistant(&ranks));
+    println!("randomized: {} hires in 1000 runs", total);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s6-out">
-A1: hires = 10 every run; randomized: 2.927 on average
-A2: hires =  1 every run; randomized: 2.926 on average
-A3: hires =  3 every run; randomized: 2.932 on average
-H_10 = 2.929
+plain: 3 hires
+randomized: 2910 hires in 1000 runs
 </script>
   </section>
 
@@ -1287,16 +1274,16 @@ impl Rng {
 }
 
 // Returns the (0-based) index of the applicant you hire.
-fn online_maximum(score: &[u32], k: usize) -> usize {
-    let n = score.len();
-    let mut best_score: Option<u32> = None; // None < Some(x): the book's −∞
+fn online_maximum(scores: &[u32], k: usize) -> usize {
+    let n = scores.len();
+    let mut best_score = 0; // every score is at least 1: the book's −∞
     for i in 0..k {
-        if Some(score[i]) > best_score {
-            best_score = Some(score[i]);
+        if scores[i] > best_score {
+            best_score = scores[i];
         }
     }
     for i in k..n {
-        if Some(score[i]) > best_score {
+        if scores[i] > best_score {
             return i; // the first one better than all before: hire now
         }
     }
@@ -1307,16 +1294,16 @@ fn main() {
     let mut rng = Rng(0x2545_F491_4F6C_DD1D);
     let n = 100;
     let trials = 20_000;
-    let mut score: Vec<u32> = (1..=n as u32).collect();
+    let mut scores: Vec<u32> = (1..=n as u32).collect();
     println!(" k  success  (k/n)(1/k + ... + 1/(n-1))");
     for k in [5, 20, 37, 60, 90] {
         let mut wins = 0;
         for _ in 0..trials {
             for i in (1..n).rev() {
-                score.swap(i, rng.below(i + 1)); // a fresh random order
+                scores.swap(i, rng.below(i + 1)); // a fresh random order
             }
-            let hired = online_maximum(&score, k);
-            wins += (score[hired] == n as u32) as u32;
+            let hired = online_maximum(&scores, k);
+            wins += (scores[hired] == n as u32) as u32;
         }
         let tail: f64 = (k..n).map(|i| 1.0 / i as f64).sum();
         let exact = k as f64 / n as f64 * tail;
@@ -1766,9 +1753,12 @@ K.page(5);
 (function s1() {
   const svg = K.$("#s1-svg");
   const ctr = K.$("#s1-controls"), stats = K.$("#s1-stats");
-  const N = 8, CI = 1, CH = 10, MAXC = N * (CI + CH);
-  const ORDERS = [[3, 1, 5, 2, 7, 4, 8, 6], [1, 2, 3, 4, 5, 6, 7, 8], [8, 7, 6, 5, 4, 3, 2, 1]];
-  const CW = 64, GAP = 12, X0 = 32, CY = 84, CHT = 38;
+  const CI = 1, CH = 10;
+  // the last order is the book's A3 (Section 5.3), ten candidates: hires on ranks 5, 8 and 10
+  const ORDERS = [[3, 1, 5, 2, 7, 4, 8, 6], [1, 2, 3, 4, 5, 6, 7, 8], [8, 7, 6, 5, 4, 3, 2, 1], [5, 2, 1, 8, 4, 7, 10, 9, 3, 6]];
+  let N = 8, MAXC = N * (CI + CH), CW = 64, GAP = 12;
+  const X0 = 32, CY = 84, CHT = 38;
+  function sizeFor(r) { N = r.length; MAXC = N * (CI + CH); CW = N > 8 ? 50 : 64; GAP = N > 8 ? (596 - N * CW) / (N - 1) : 12; }
   const cx = (k) => X0 + k * (CW + GAP) + CW / 2; // k counts from 0
   const OFF = { x: 32, y: 182, w: 290, h: 58 }, TRAY = { x: 338, y: 182, w: 290, h: 58 };
   const BAR = { x: 80, y: 262, w: 480, h: 20 };
@@ -1777,7 +1767,7 @@ K.page(5);
   svg.append(gTop, gPeople, gCells, gPtr, gOffice, gCost, layer);
   const stI = stat("interviews", 0), stM = stat("hires m", 0), stC = stat("cost", 0);
   stats.append(stI, stM, stC);
-  const cv = code("#s1-code", { files: [{ name: "HIRE-ASSISTANT", src: src("ps-s1"), rs: { name: "hire.rs", src: src("rs-s1"), out: src("rs-s1-out"), map: { "HIRE-ASSISTANT": 3, 1: 4, 2: 6, 3: 7, 4: [9, 13], 5: 14, 6: [15, 16] } } }] });
+  const cv = code("#s1-code", { files: [{ name: "HIRE-ASSISTANT", src: src("ps-s1"), rs: { name: "hire.rs", src: src("rs-s1"), out: src("rs-s1-out"), map: { "HIRE-ASSISTANT": 3, 1: 4, 2: 6, 3: 7, 4: [8, 12], 5: 16, 6: [17, 18] } } }] });
   let mode = 0, rank = ORDERS[0].slice(), st, events, busy = [];
   const S = session((b) => busy.forEach((x) => (x.disabled = b)));
 
@@ -1865,19 +1855,18 @@ K.page(5);
   function renderCode() {
     if (st.line == null) { cv.clear(); cv.out(null); return; }
     const refs = st.done ? [] : [st.line];
-    if (st.line === 4 && !st.done) refs.push(st.prev === 0 ? "rs:10" : "rs:11");
+    if (st.line === 4 && !st.done) refs.push(st.prev === 0 ? "rs:9" : "rs:10");
     cv.at(refs, "on");
     const n = {}, r = {};
     if (st.line === 1) { n[1] = "best = 0"; r[4] = "best = None"; }
-    if (st.best) { n[5] = `best = ${st.best}`; r[14] = `best = Some(${st.best - 1})`; }
-    if (st.i != null && !st.done) { n[2] = `i = ${st.i}`; r[6] = `i = ${st.i - 1}, r = ${rank[st.i - 1]}`; }
-    if (st.interviews) r[7] = `cost = ${cost()}`;
+    if (st.best) { n[5] = `best = ${st.best}`; r[16] = `best = Some(${st.best - 1})`; }
+    if (st.i != null && !st.done) { n[2] = `i = ${st.i}`; r[6] = `i = ${st.i - 1}, ranks[i] = ${rank[st.i - 1]}`; }
     if (st.line === 4 && !st.done) {
       const rb = st.prev ? rank[st.prev - 1] : null, ri = rank[st.i - 1];
       n[4] = [st.prev === 0 ? "beats the dummy" : `${ri} > ${rb}? ${st.ok ? "yes" : "no"}`, st.ok ? "good" : "warn"];
-      r[9] = [st.prev === 0 ? "None => true" : `${ri} > ${rb}: ${st.ok}`, st.ok ? "good" : "warn"];
+      r[st.prev === 0 ? 9 : 10] = [st.prev === 0 ? "None => true" : `${ri} > ${rb}: ${st.ok}`, st.ok ? "good" : "warn"];
     }
-    if (st.hires) { n[6] = `m = ${st.hires}`; r[16] = `hires = ${st.hires}`; }
+    if (st.hires) { n[6] = `m = ${st.hires}`; r[17] = `hires = ${st.hires}`; }
     cv.notes(n, r);
     cv.out(st.done ? `m = ${st.hires}, cost = ${cost()}` : null);
   }
@@ -1895,7 +1884,8 @@ K.page(5);
         ? `All ${N} interviewed: <b>m = ${st.hires}</b> hires, cost ${N}·c<sub>i</sub> + ${st.hires}·c<sub>h</sub> = <b>${cost()}</b>. ` + [
           "A random order lands somewhere in between. Section 5.2 shows that for a random order you expect only about ln <i>n</i> hires.",
           "Quality kept rising, so every candidate was the best so far and you paid the hiring fee <i>n</i> times: the worst case, O(c<sub>h</sub><i>n</i>).",
-          "The best came first, so nobody after could beat that candidate: one hire, the cheapest possible run."][mode]
+          "The best came first, so nobody after could beat that candidate: one hire, the cheapest possible run.",
+          "Only the candidates with ranks 5, 8 and 10 were each the best so far when they arrived."][mode]
         : `Line 2: day ${e.i}, and candidate ${e.i} walks in.`);
       return;
     }
@@ -1957,8 +1947,8 @@ K.page(5);
     for (let k = N - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); [a[k], a[j]] = [a[j], a[k]]; }
     rank = a; reset();
   });
-  K.$("#s1-seg").appendChild(seg(["Random order", "Increasing (worst)", "Decreasing (best)"], 0, (k) => {
-    mode = k; rank = ORDERS[k].slice(); shuffleBtn.hidden = k !== 0; reset();
+  K.$("#s1-seg").appendChild(seg(["Random order", "Increasing (worst)", "Decreasing (best)", "A3"], 0, (k) => {
+    mode = k; rank = ORDERS[k].slice(); sizeFor(rank); shuffleBtn.hidden = k !== 0; reset();
   }));
   CODE_LANG.on(() => render());
   redraw();
@@ -2237,8 +2227,9 @@ K.page(5);
   function render0() {
     K.clear(gA);
     const z = r0;
-    txt(gA, 30, 26, `RANDOM(${A}, ${B}) · ${R} outcomes · k = ⌈lg ${R}⌉ = ${KB} fair bit${KB > 1 ? "s" : ""}`, { anchor: "start", cls: "sv-label" });
-    if (z.t) txt(gA, 630, 26, `try ${z.t}`, { anchor: "end", mono: true, size: 12, bold: true });
+    const gBits = s("g", { "data-part": "bits" }); gA.appendChild(gBits); // the coin-flip construction (Exercise 5.1-2): the video hides it
+    txt(gBits, 30, 26, `RANDOM(${A}, ${B}) · ${R} outcomes · k = ⌈lg ${R}⌉ = ${KB} fair bit${KB > 1 ? "s" : ""}`, { anchor: "start", cls: "sv-label" });
+    if (z.t) txt(gBits, 630, 26, `try ${z.t}`, { anchor: "end", mono: true, size: 12, bold: true });
     // the coins: RANDOM(0, 1) once per bit
     for (let j = 0; j < KB; j++) {
       const cxp = 70 + j * 62, has = j < z.bits.length;
@@ -2246,11 +2237,11 @@ K.page(5);
       const inner = s("g", { transform: j === z.bits.length - 1 ? `scale(${z.spin},1)` : "" });
       inner.appendChild(s("circle", { cx: 0, cy: 0, r: 22, class: has ? "sv-server" : "sv-panel" }));
       inner.appendChild(s("text", { x: 0, y: 6, "text-anchor": "middle", class: "sv-text", style: { fontFamily: "var(--f-mono)", fontWeight: 700, fontSize: "17px" } }, has ? String(z.bits[j]) : "?"));
-      g.appendChild(inner); gA.appendChild(g);
+      g.appendChild(inner); gBits.appendChild(g);
     }
     if (z.x != null) {
       const bin = z.bits.join("");
-      txt(gA, 70 + KB * 62 + 6, 72, `x = ${bin}₂ = ${z.x}`, { anchor: "start", mono: true, size: 16, bold: true });
+      txt(gBits, 70 + KB * 62 + 6, 72, `x = ${bin}₂ = ${z.x}`, { anchor: "start", mono: true, size: 16, bold: true });
     }
     // the 2^k values the bits can make; values ≥ r are thrown away
     const n = 1 << KB, x0 = slotX0(), marks = {}, vals = [];
@@ -2259,11 +2250,11 @@ K.page(5);
       marks[x] = x >= R ? "bad" : "";
     }
     if (z.slot != null) marks[z.slot] = z.ok == null ? "on" : z.ok ? "good" : "bad";
-    const g = s("g"); gA.appendChild(g);
+    const g = s("g"); gBits.appendChild(g);
     cells(g, { x: x0, y: SY, vals, cw: SCW, ch: SCH, gap: SGAP, marks, base: 0, size: 15 });
-    txt(gA, x0 - 10, SY + SCH / 2 + 5, "a + x", { anchor: "end", cls: "sv-label" });
-    txt(gA, x0 - 10, SY + SCH + 14, "x", { anchor: "end", cls: "sv-label" });
-    if (z.slot != null && z.ok === false) txt(gA, slotCx(z.slot), SY - 8, "reject", { mono: true, size: 11, bold: true, fill: "var(--coral)" });
+    txt(gBits, x0 - 10, SY + SCH / 2 + 5, "a + x", { anchor: "end", cls: "sv-label" });
+    txt(gBits, x0 - 10, SY + SCH + 14, "x", { anchor: "end", cls: "sv-label" });
+    if (z.slot != null && z.ok === false) txt(gBits, slotCx(z.slot), SY - 8, "reject", { mono: true, size: 11, bold: true, fill: "var(--coral)" });
     // the histogram of results, each bar under its slot
     const freq = z.counts.map((c) => (z.calls ? c / z.calls : 0));
     const H = HMAX / Math.max(1.5 / R, ...freq);
@@ -3085,8 +3076,8 @@ K.page(5);
   svg.append(gTop, gIn, gOut, gHist, layer);
   const stR = stat("runs", 0), stP = stat("plain hires", "–"), stAvg = stat("randomized avg", "–"), stH = stat("H10", "2.929");
   stats.append(stR, stP, stAvg, stH);
-  const MAP = { "RANDOMIZED-HIRE-ASSISTANT": 45, "RANDOMIZED-HIRE-ASSISTANT:1": [46, 47], "RANDOMIZED-HIRE-ASSISTANT:2": 48,
-    "HIRE-ASSISTANT": 32, "HIRE-ASSISTANT:1": 33, "HIRE-ASSISTANT:2": 35, "HIRE-ASSISTANT:3": 36, "HIRE-ASSISTANT:4": 37, "HIRE-ASSISTANT:5": 38, "HIRE-ASSISTANT:6": 39 };
+  const MAP = { "RANDOMIZED-HIRE-ASSISTANT": 43, "RANDOMIZED-HIRE-ASSISTANT:1": [44, 45], "RANDOMIZED-HIRE-ASSISTANT:2": 46,
+    "HIRE-ASSISTANT": 27, "HIRE-ASSISTANT:1": 28, "HIRE-ASSISTANT:2": 30, "HIRE-ASSISTANT:3": 31, "HIRE-ASSISTANT:4": [32, 33], "HIRE-ASSISTANT:5": 36, "HIRE-ASSISTANT:6": 37 };
   const cv = code("#s6-code", { files: [{ name: "RANDOMIZED-HIRE-ASSISTANT", src: src("ps-s6"), rs: { name: "randomized_hire.rs", src: src("rs-s6"), out: src("rs-s6-out"), map: MAP } }] });
   const m = mem("#s6-mem");
 
@@ -3189,41 +3180,41 @@ K.page(5);
     const nt = {}, rt = {};
     if (st.shown) nt["RANDOMIZED-HIRE-ASSISTANT:1"] = `⟨${st.order.slice(0, 4).join(", ")}, …⟩`;
     if (st.kind !== "perm" && st.kind !== "call") {
-      nt["HIRE-ASSISTANT:1"] = `best = ${st.best}`; rt[33] = `best = ${st.best ? st.order[st.best - 1] : 0}`;
-      if (st.i != null) { nt["HIRE-ASSISTANT:2"] = `i = ${st.i}`; rt[35] = `i = ${st.i - 1}`; }
+      nt["HIRE-ASSISTANT:1"] = `best = ${st.best}`; rt[28] = `best = ${st.best ? `Some(${st.best - 1})` : "None"}`;
+      if (st.i != null) { nt["HIRE-ASSISTANT:2"] = `i = ${st.i}`; rt[30] = `i = ${st.i - 1}`; }
       if (st.kind === "test") {
         const e = st.e;
         nt["HIRE-ASSISTANT:4"] = [`${st.order[e.i - 1]} > ${e.rb}? ${e.ok ? "yes" : "no"}`, e.ok ? "good" : "warn"];
-        rt[37] = [`${st.order[e.i - 1]} > ${e.rb}: ${e.ok}`, e.ok ? "good" : "warn"];
+        rt[33] = [`${st.order[e.i - 1]} > ${e.rb}: ${e.ok}`, e.ok ? "good" : "warn"];
       }
     }
     if (st.done) { const x = count(st.X.map((v) => v || 0)); nt["RANDOMIZED-HIRE-ASSISTANT"] = [`${x} hire${x === 1 ? "" : "s"}`, "good"]; }
     cv.notes(nt, rt);
   }
   function renderMem() {
-    const main = { fn: "main", vars: [{ n: "input", t: "Vec<u32>", v: "len 10", ptr: "in" }] };
-    const heap = [{ id: "in", label: `input's buffer (${INPUTS[inp].name}) · 10 × u32`, cells: input, cw: 26 }];
+    const main = { fn: "main", vars: [{ n: "ranks", t: "Vec<u32>", v: "len 10", ptr: "in" }, { n: "rng", t: "Rng", v: "u64 state" }] };
+    const heap = [{ id: "in", label: `ranks' buffer (${INPUTS[inp].name}) · 10 × u32`, cells: input, cw: 26 }];
     const ordCells = st.shown ? st.order : input;
     const k = st.kind;
     if (k == null || st.done) {
       if (st.done) heap.push({ id: "ord", label: "order's buffer · freed", cells: st.order, cw: 26, free: true });
-      m.set({ note: st.done ? "The call returned: <code>order</code> went out of scope, so <code>Drop</code> freed the copy. <code>input</code> is untouched, ready for the next run."
-        : "<code>input</code> owns the candidates' ranks on the heap. The randomized algorithm will only borrow it.", stack: [main], heap });
+      m.set({ note: st.done ? "The call returned: <code>order</code> went out of scope, so the copy was freed. <code>ranks</code> is untouched, ready for the next run."
+        : "<code>ranks</code> owns the candidates' ranks on the heap. The randomized algorithm will only borrow it.", stack: [main], heap });
       return;
     }
-    const rha = { fn: "randomized_hire_assistant", vars: [{ n: "rank", t: "&[u32]", v: "len 10", ptr: "in" }, { n: "order", t: "Vec<u32>", v: "len 10", ptr: "ord", hot: k === "perm" }] };
+    const rha = { fn: "randomized_hire_assistant", vars: [{ n: "ranks", t: "&[u32]", v: "len 10", ptr: "in" }, { n: "order", t: "Vec<u32>", v: "len 10", ptr: "ord", hot: k === "perm" }] };
     const om = {};
     if (st.i != null && k !== "perm") om[st.i - 1] = "on2";
     st.X.forEach((v, j) => { if (v === 1) om[j] = "good"; });
     heap.push({ id: "ord", label: st.shown ? "order's buffer · shuffled copy" : "order's buffer · a copy", cells: ordCells, cw: 26, marks: om });
     const frames = [main, rha];
-    if (k === "perm") frames.push({ fn: "shuffle::<u32>", top: true, vars: [{ n: "a", t: "&mut [u32]", v: "len 10", ptr: "ord" }] });
+    if (k === "perm") frames.push({ fn: "randomly_permute", top: true, vars: [{ n: "a", t: "&mut [u32]", v: "len 10", ptr: "ord" }] });
     else {
       rha.top = k === "call";
-      if (k !== "call") frames.push({ fn: "hire_assistant", top: true, vars: [{ n: "rank", t: "&[u32]", v: "len 10", ptr: "ord" }, { n: "best", t: "u32", v: st.best ? st.order[st.best - 1] : 0, hot: k === "best" }, { n: "hires", t: "u32", v: st.X.filter((v) => v === 1).length, hot: k === "hire" }] });
+      if (k !== "call") frames.push({ fn: "hire_assistant", top: true, vars: [{ n: "ranks", t: "&[u32]", v: "len 10", ptr: "ord" }, { n: "best", t: "Option<usize>", v: st.best ? `Some(${st.best - 1})` : "None", hot: k === "best" }, { n: "hires", t: "usize", v: st.X.filter((v) => v === 1).length, hot: k === "hire" }] });
     }
     m.set({
-      note: k === "perm" ? "<code>to_vec()</code> copied the ranks into a new heap buffer, and <code>shuffle</code> borrows that copy mutably. The caller's list never changes."
+      note: k === "perm" ? "<code>to_vec()</code> copied the ranks into a new heap buffer, and <code>randomly_permute</code> borrows that copy mutably. The caller's list never changes."
         : "<code>hire_assistant</code> borrows the shuffled copy read-only (<code>&amp;[u32]</code>). Two borrows of different buffers, no copies of the ranks.",
       stack: frames, heap,
     });
@@ -4569,13 +4560,13 @@ K.page(5);
     const ok = st.done && order[st.hired - 1] === n;
     cv.at(st.done ? [] : e.lines, "on");
     cv.at(st.done ? e.lines.slice(-1) : [], ok ? "good" : "bad");
-    if (e.lines[0] === 1) { pn[1] = "best-score = −∞"; rn[20] = "None"; }
+    if (e.lines[0] === 1) { pn[1] = "best-score = −∞"; rn[20] = "best_score = 0"; }
     else if (e.i && !e.last) {
-      const first = e.i <= k, prev = e.prev == null ? "−∞" : e.prev, rprev = e.prev == null ? "None" : `Some(${e.prev})`;
+      const first = e.i <= k, prev = e.prev == null ? "−∞" : e.prev, rprev = e.prev == null ? 0 : e.prev;
       pn[first ? 2 : 5] = `i = ${e.i}`; rn[first ? 21 : 26] = `i = ${e.i - 1}`;
       pn[first ? 3 : 6] = [`${e.sc} > ${prev}? ${e.gt ? "yes" : "no"}`, e.gt ? "warn" : ""];
-      rn[first ? 22 : 27] = [`Some(${e.sc}) > ${rprev}: ${e.gt}`, e.gt ? "warn" : ""];
-      if (first && e.gt) { pn[4] = `best-score = ${e.sc}`; rn[23] = `Some(${e.sc})`; }
+      rn[first ? 22 : 27] = [`${e.sc} > ${rprev}: ${e.gt}`, e.gt ? "warn" : ""];
+      if (first && e.gt) { pn[4] = `best-score = ${e.sc}`; rn[23] = `best_score = ${e.sc}`; }
       if (e.hire) { pn[7] = [`return ${e.i}`, ok ? "good" : "bad"]; rn[28] = [`return ${e.i - 1}`, ok ? "good" : "bad"]; }
     } else if (e.last) { pn[8] = [`return ${n}`, ok ? "good" : "bad"]; rn[31] = [`${n - 1}`, ok ? "good" : "bad"]; }
     cv.notes(pn, rn);
