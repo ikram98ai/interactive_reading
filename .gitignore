@@ -1,5 +1,8 @@
 .DS_Store
 
+# the book PDFs are copyrighted: they stay local, never on GitHub or the site
+books/*/*.pdf
+
 # tools/: dependencies, screenshots, and extracted book text (copyrighted, like the PDFs)
 node_modules/
 .venv/
