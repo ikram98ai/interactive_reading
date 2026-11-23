@@ -253,7 +253,11 @@
       "publish": "one chapter a week, on weekday at time, starting on the day the user picks",
       "time": "08:00",
       "weekday": "Saturday",
-      "language": true
+      "language": false
+    },
+    "shorts": {
+      "dir": "videos/shorts/clrs",
+      "playlist": "Algorithms in Rust"
     }
   }
 }

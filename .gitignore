@@ -1,4 +1,4 @@
-.DS_Store
+/.DS_Store
 
 # the book PDFs are copyrighted: they stay local, never on GitHub or the site
 books/*/*.pdf

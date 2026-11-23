@@ -1,6 +1,6 @@
 ---
 name: judge-video-script
-description: Judge whether a video script (videos/<book>/**/script.md, such as a CLRS section video or a chapter's long form) is true — to the book, the arithmetic, the screen and the code — and record a pass or fail verdict that narrate.py requires. Use after writing or editing any script and before narrating it; run it as the script-judge agent, never in the writer's own context.
+description: Judge whether a video script (videos/<book>/**/script.md, such as a chapter's video or a CLRS Short) is true — to the book, the arithmetic, the screen and the code — and record a pass or fail verdict that narrate.py requires. Use after writing or editing any script and before narrating it; run it as the script-judge agent, never in the writer's own context.
 ---
 
 # Judge a video script
@@ -25,8 +25,10 @@ script got it wrong.
    label, card, board line and agenda item, since the viewer reads those. A part's heading (the last field of
    `{goto id | kicker | heading}`) is neither shown nor spoken, but it is the chapter's title in the YouTube timeline,
    so judge it as a sentence too; its kicker is never shown. Flag a part whose first sentence only restates the heading
-   instead of carrying on from the last part (Imprecise). In a RUST part with `{side <scene>}`, the machine and its stack-and-heap strip are on screen beside the
-   editor: a sentence about what's "on the left" or "in memory" must match what that machine shows at that step. For
+   instead of carrying on from the last part (Imprecise). Wherever the editor is on screen (a Short, a CS:APP RUST part), the machine and its stack-and-heap strip are
+   beside it: a sentence about what's "below", "on the left" or "in memory" must match what that machine shows at that
+   step. A CLRS chapter video shows no code language (`videos/clrs/plan.md` rule 13): Rust on screen or in speech there
+   is Wrong. For
    each sentence, ask every question in [judgements.md](judgements.md) that applies.
 5. **Check against the real sources, not against what seems likely:**
    - the book text, for what the book says
@@ -44,10 +46,11 @@ script got it wrong.
 | **Wrong**      | Contradicts the book, a source, the arithmetic or the screen              | Fix before narrating       |
 | **Misleading** | Each word is true, but a viewer will come away believing something false  | Fix before narrating       |
 | **Imprecise**  | A careful expert would flag it, though a learner wouldn't be misled       | Fix, or write down why not |
+| **Hard to follow** | True, but a first-year student hearing it once won't get it (judgements.md, 12) | Fix, or write down why not |
 | **Omission**   | The chapter covers something the script skips                             | List it in the report      |
 
-The verdict is **pass** when no Wrong or Misleading finding is left, and every Imprecise finding is fixed or has a reason
-written beside it. Otherwise it is **fail**.
+The verdict is **pass** when no Wrong or Misleading finding is left, and every Imprecise and Hard to follow finding is
+fixed or has a reason written beside it. Otherwise it is **fail**.
 
 ## The report
 

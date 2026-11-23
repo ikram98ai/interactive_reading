@@ -20,14 +20,15 @@ Dark mode only, at 1920×1080. Studio sets this.
 
 ## The editor (code videos)
 
-`studio.js` records the editor, both in a code video (`kind: code`) and in a page video's RUST part (`{goto editor}`),
-with the `{code}`, `{select}`, `{unselect}`, `{run}` and `{close}` cues below.
+`studio.js` records the editor in a CLRS Short (`kind: short`: the editor on top, the page's machine below,
+`videos/shorts/clrs/plan.md`), in a code video (`kind: code`) and in a CS:APP chapter video's RUST part
+(`{goto editor}`). A CLRS chapter video never shows it. All of them use the `{code}`, `{select}`, `{unselect}`, `{run}` and `{close}` cues below.
 
 `tools/video/editor.html`: one file in the book's language, zoomed so about fifteen lines fill the frame. Its tab shows
 the file's name (`main.rs`), with the Rust logo in front of a `.rs` file.
 
 - **Snapshots:** the script keeps each state of the file as a fenced block, ` ```<language> @name ` (` ```rust @name ` for
-  CLRS), which is never spoken. `{code name}` types from the current text to that snapshot while the voice goes on;
+  Rust), which is never spoken. `{code name}` types from the current text to that snapshot while the voice goes on;
   `{code name fast}` is for long blocks the narration summarises.
 - **Pointing:** `{select text}` highlights code while you talk about it, the way you'd select it with a mouse;
   `{unselect}` clears it.

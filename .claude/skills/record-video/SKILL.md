@@ -1,6 +1,6 @@
 ---
 name: record-video
-description: Narrate, record and QA judged video scripts (a CLRS section video or a chapter's long form) into finished MP4s with captions, all local — silent pass, pilot, full render, quality bar. Use when the user asks to record, render, narrate or finish a video. Not for uploading (publish-video) or writing and judging scripts (write-video-script, judge-video-script).
+description: Narrate, record and QA judged video scripts (a chapter's video, or a CLRS Short) into finished MP4s with captions, all local — silent pass, pilot, full render, quality bar. Use when the user asks to record, render, narrate or finish a video. Not for uploading (publish-video) or writing and judging scripts (write-video-script, judge-video-script).
 ---
 
 # Record a video
@@ -9,11 +9,11 @@ This is steps 6–8 of a video. Steps 1–5 are the `write-video-script` and `ju
 script reaches this skill written and judged. Step 9, uploading, is the `publish-video` skill, which only the user
 starts. Read `books/<slug>/book.json` first: its `videos` block names the voice and the outputs.
 
-`SCRIPT` below is the video's script: `videos/clrs/chNN/sMM/script.md` for a CLRS section video, or
-`videos/<book>/chNN/script.md` for a chapter long form. A section video comes out as `chNN-sMM-<section>.mp4` in its
-folder, titled from `book.json` `sections`. A video with more than one RUST part still needs the editor round trip
-(`{goto page}`, in `videos/clrs/plan.md` "Tooling to add"): today `studio.js` allows one switch to the editor per
-video, so a section with one algorithm puts its RUST part last, before the recap.
+`SCRIPT` below is the video's script: `videos/<book>/chNN/script.md` for a chapter video, which comes out as
+`chNN-<chapter>.mp4` in its folder. A CLRS Short is recorded as one part (`make video-part`, step 5 of
+`videos/shorts/clrs/plan.md`). A CLRS chapter video has no editor; a CS:APP one with more than one RUST part still
+needs the editor round trip (`{goto page}`): today `studio.js` allows one switch to the editor per video. Retired
+section scripts (`chNN/sMM/`) still record, as `chNN-sMM-<section>.mp4`, but no new ones are made.
 
 Everything here stays on this machine, so it's safe to run whenever the user asks for a video to be recorded or
 finished. It is slow: narration and recording run in real time, so start long renders in the background.
@@ -25,7 +25,7 @@ Each step has a gate. Don't start the next step until the gate passes.
 | #   | Step                 | Command                                                                      | Gate                                                                                   |
 | --- | -------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | 6   | **Silent pass**      | `make video-silent SCRIPT=<script>`                                          | No `CHECK FAILED`, `no button`, `could not press` or unknown target                    |
-| 7   | **Pilot**            | `make video-part SCRIPT=… ONLY="Part 4 of"`                                  | You've looked at one part at full size                                                 |
+| 7   | **Pilot**            | `make video-part SCRIPT=… ONLY="Part 4 of"`                                  | You've looked at one part at full size, and listened to it through                     |
 | 8   | **Render and QA**    | `make video-long SCRIPT=…`, then `make video-qa VIDEO=…`                     | No FAIL. Fix every WARN, or write down why it stays ([quality-bar.md](quality-bar.md))  |
 
 **Keep the Mac awake while it records** (`caffeinate -i`, or `caffeinate -i -w <pid>` for a queue): a recording runs
@@ -46,7 +46,7 @@ parts that don't show them. Run QA on the joined video as always, and look at th
 Its pilot is one
 part: `make video-part SCRIPT=<script> ONLY="Part 4 of"` narrates and records just that part.
 `ONLY` picks the first `{goto}` whose text contains it (here, the card "Part 4 of 15"; the kicker is never on screen, but
-it still names the part), records through to the next card (a RUST part's `{goto editor}` included), and names the output after it
+it still names the part), records through to the next card, and names the output after it
 (`chNN-part-4-of-…mp4`).
 
 A silent pass (`--silent`) needs no verdict and estimates timing at 150 words a minute. Real narration runs faster, so
@@ -54,7 +54,8 @@ a cue that only just made it in the silent pass can still fail in the pilot.
 
 **Looking at a video.** Pull frames with `ffmpeg -ss <t> -i <video> -frames:v 1` and read them, at the title card, on
 each kind of scene, and at the end. Check that nothing is clipped, the focus ring sits on what the voice names, and the
-code panel and stats appear only once they're named. In a RUST part, check the machine beside the editor: it is on the
+code panel and stats appear only once they're named. Wherever the editor is on screen (a Short, a CS:APP RUST part),
+check the machine beside it: it is on the
 step the voice is explaining, its stack-and-heap strip appears only once memory is named, and the names in the strip are
 the editor's. The editor types brackets and quotes as an IDE does (the closer appears with the opener, and is stepped
 over); a typing that ends different from its snapshot fails the recording ("typing left the editor different").
@@ -79,6 +80,13 @@ the `script-judge` agent before it's recorded.
 
 - The voice is `book.json` `videos.voice` — `kokoro:bm_fable` for CLRS, for every video.
   (`kokoro:am_liam` was compared and rejected; don't render or offer it unless the user asks.)
+- The voice talks at Kokoro's speed 0.95 for every kind of video, and `narrate.py` opens the stops a person makes at
+  the script's punctuation and `{beat}`s (`breathe`): it says each sentence on its own, and opens a stop only inside a
+  silence the voice really leaves, so no cut clips a sound. Never lower the speed to slow a video down: that is what sounds
+  like a computer. If a video feels rushed, the script needs more commas and beats (write-video-script voice.md).
+- **Listen to the pilot.** Step 7's gate is listening, not only looking: play the part's audio through once. Where it
+  runs on without a breath, or a result goes by with no moment to land, the fix is in the script (a comma, a split
+  sentence, a `{beat}`), and a `{beat}` needs no new judgement.
 - Narration is cached per block, so re-running after an edit only redoes what changed.
 - Everything a render makes, test renders included, stays in the video's folder under `videos/`.
 
