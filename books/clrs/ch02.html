@@ -29,6 +29,7 @@
         <a href="#insertion"><span class="n">2.1</span>Insertion sort</a>
         <a href="#invariant"><span class="n">2.1</span>Loop invariants</a>
         <a href="#conventions"><span class="n">2.1</span>Pseudocode rules</a>
+        <a href="#sum-array"><span class="n">2.1-2</span>Summing an array</a>
         <a href="#ram"><span class="n">2.2</span>The RAM model</a>
         <a href="#analysis"><span class="n">2.2</span>Counting steps</a>
         <a href="#cases"><span class="n">2.2</span>Worst and average</a>
@@ -538,6 +539,63 @@ Some(3) None
 </script>
   </section>
 
+  <!-- Exercise 2.1-2 · SUM-ARRAY and its loop invariant -->
+  <section class="scene" id="sum-array">
+    <div class="wrap scene-grid">
+      <div class="copy">
+        <span class="eyebrow">exercise 2.1-2 · a loop invariant for SUM-ARRAY</span>
+        <h2>A running total you can trust</h2>
+        <p class="story">To add up a column of numbers, you keep a running total. Start at 0, then add the numbers one at a time, top to bottom. <b>SUM-ARRAY</b> does exactly that to the array <i>A</i>[1 : <i>n</i>]: <i>sum</i> starts at 0, and each pass of the loop adds <i>A</i>[<i>i</i>].</p>
+        <p class="story">How do you know the total is right? Find the sentence that is true every time the loop is about to start a pass: <b><i>sum</i> holds <i>A</i>[1] + ⋯ + <i>A</i>[<i>i</i> − 1]</b>, the numbers before <i>i</i>. Before the first pass, <i>i</i> = 1 and there are no numbers before it, so <i>sum</i> = 0 is right (<b>initialization</b>). Each pass adds <i>A</i>[<i>i</i>] and then moves <i>i</i> on, so the sentence stays true (<b>maintenance</b>). The loop stops when <i>i</i> = <i>n</i> + 1, and then the sentence says <i>sum</i> holds all of <i>A</i>[1 : <i>n</i>] (<b>termination</b>).</p>
+        <p class="imagine"><b>Try it:</b> press <b>Step</b> and watch each number fly into the total while the check underneath stays green. Pick <b>Empty</b>: the loop never runs, and the answer is still right, because of initialization. In the Rust view, the stack-and-heap strip shows <code>x</code> pointing at one number at a time, and nothing being copied.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>“Consider the procedure SUM-ARRAY on the facing page. It computes the sum of the <i>n</i> numbers in array <i>A</i>[1 : <i>n</i>]. State a loop invariant for this procedure, and use its initialization, maintenance, and termination properties to show that the SUM-ARRAY procedure returns the sum of the numbers in <i>A</i>[1 : <i>n</i>].”</p>
+            <p class="cite">p.&nbsp;24–25 · Exercise 2.1-2</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">SUM-ARRAY and its loop invariant</span><span id="s16-seg"></span></div>
+        <div class="stage-scroll"><svg id="s16-svg" viewBox="0 0 660 320" role="img" aria-label="Six array cells added one at a time into a running total, with the loop invariant checked underneath"></svg></div>
+        <div class="controls" id="s16-controls"></div>
+        <div class="statrow" id="s16-stats"></div>
+        <div class="caption" id="s16-cap" aria-live="polite">Nothing has run yet.</div>
+        <div id="s16-mem"></div>
+        <div id="s16-code"></div>
+      </div>
+    </div>
+<script type="text/x-clrs" id="ps-s16">
+SUM-ARRAY(A, n)
+sum = 0
+for i = 1 to n
+    sum = sum + A[i]
+return sum
+</script>
+<script type="text/x-rust" id="rs-s16">
+// SUM-ARRAY: add the numbers in a, left to right.
+fn sum_array(a: &[i32]) -> i32 {
+    let mut sum = 0;
+    for x in a { // x borrows each number in turn
+        sum += x; // adds the number x points at
+    }
+    sum // no semicolon: this is the value the function returns
+}
+
+fn main() {
+    let nums = vec![31, 41, 59, 26, 41, 58];
+    let total = sum_array(&nums);
+    println!("{}", total);
+    println!("{}", sum_array(&[])); // an empty slice: the loop never runs
+}
+</script>
+<script type="text/x-rust-out" id="rs-s16-out">
+256
+0
+</script>
+  </section>
+
   <!-- 2.2 · analyzing algorithms: the RAM model -->
   <section class="scene" id="ram">
     <div class="wrap scene-grid flip">
@@ -1019,7 +1077,8 @@ fn merge(a: &mut [i32], p: usize, q: usize, r: usize) {
 
 fn main() {
     let mut a = vec![0; 17]; // 17 slots; the zeros play the figure's "…"
-    a[8..16].copy_from_slice(&[2, 4, 6, 7, 1, 2, 3, 5]); // Figure 2.3
+    let cards = [2, 4, 6, 7, 1, 2, 3, 5]; // Figure 2.3, on main's stack
+    a[8..16].copy_from_slice(&cards);
     merge(&mut a, 8, 11, 15); // the book's MERGE(A, 9, 12, 16)
     println!("{:?}", &a[8..16]);
 }
@@ -1977,8 +2036,8 @@ K.page(2);
     { name: "Amara", age: 21, courses: 4 }, { name: "Kenji", age: 19, courses: 6 }, { name: "Lucía", age: 23, courses: 3 },
     { name: "Omar", age: 20, courses: 5 }, { name: "Priya", age: 18, courses: 2 }, { name: "Sven", age: 22, courses: 7 },
   ];
-  const gHead = s("g"), gZone = s("g"), gArr = s("g"), gKey = s("g"), layer = s("g");
-  svg.append(gHead, gZone, gArr, gKey, layer);
+  const gHead = s("g"), gRef = s("g", { "data-part": "figref" }), gZone = s("g"), gArr = s("g"), gKey = s("g"), layer = s("g");
+  svg.append(gHead, gRef, gZone, gArr, gKey, layer); // gRef: the Figure 2.2 panel label, which a video hides
   const ctr = K.$("#s1-controls"), stats = K.$("#s1-stats");
   const stC = stat("comparisons", 0), stS = stat("shifts", 0), stP = stat("inserted", "0 of 5");
   stats.append(stC, stS, stP);
@@ -2014,7 +2073,7 @@ K.page(2);
     return ev;
   }
   function fresh() {
-    st = { a: input(), i: null, j: null, key: null, kv: null, hole: null, ghost: null, cmpAt: null, done: false, cmp: 0, shifts: 0, placed: 0, k: 0, line: null, ok: null, aj: null };
+    st = { a: input(), i: null, j: null, key: null, kv: null, keyAt: null, hole: null, ghost: null, cmpAt: null, done: false, cmp: 0, shifts: 0, placed: 0, k: 0, line: null, ok: null, aj: null };
     events = trace(st.a);
   }
 
@@ -2035,14 +2094,15 @@ K.page(2);
   }
   const PANEL = "abcde";
   function render() {
-    K.clear(gHead); K.clear(gZone); K.clear(gArr); K.clear(gKey);
+    K.clear(gHead); K.clear(gRef); K.clear(gZone); K.clear(gArr); K.clear(gKey);
     const rust = CODE_LANG.rust;
-    // header: which panel of Figure 2.2 this is
+    // header: the loop's state on the left, and (Figure 2.2 mode) which panel of the figure this is, in the middle
     let head;
-    if (st.done) head = mode === 0 ? "Figure 2.2 (f) · sorted" : `sorted by ${field}`;
-    else if (st.i != null) head = (mode === 0 ? `Figure 2.2 (${PANEL[st.i - 2]}) · ` : `key = ${field} · `) + (rust ? `i = ${st.i - 1}` : `i = ${st.i}`);
-    else head = mode === 0 ? "Figure 2.2 · before the loop" : `records · key = ${field}`;
+    if (st.done) head = mode === 0 ? "sorted" : `sorted by ${field}`;
+    else if (st.i != null) head = (mode === 0 ? "" : `key = ${field} · `) + (rust ? `i = ${st.i - 1}` : `i = ${st.i}`);
+    else head = mode === 0 ? "before the loop" : `records · key = ${field}`;
     txt(gHead, 24, 26, head, { anchor: "start", mono: true, bold: true, size: 13 });
+    if (mode === 0) txt(gRef, 330, 26, st.done ? "Figure 2.2 (f)" : st.i != null ? `Figure 2.2 (${PANEL[st.i - 2]})` : "Figure 2.2", { anchor: "middle", mono: true, size: 13 });
     txt(gHead, 636, 26, `n = ${N}`, { anchor: "end", mono: true, size: 13 });
     if (mode === 1) [["name", 22], ["age", 46], ["courses", 70]].forEach(([f, ry]) =>
       txt(gHead, 16, AY + ry + 4, f, { anchor: "start", cls: "sv-label", fill: f === field ? "var(--ink)" : null }));
@@ -2060,10 +2120,10 @@ K.page(2);
       }
       txt(gArr, x + CW / 2, AY + CH + 16, String(rust ? k : k + 1), { cls: "ac-i" });
     }
-    // the key, held above its gap
+    // the key, held above slot j: it moves left only on line 7, after the card below has slid out of the way
     if (st.key != null) {
-      card(gKey, cx(st.hole), KY, st.key, "on");
-      txt(gKey, cx(st.hole) + CW + 6, KY + 14, "key", { anchor: "start", cls: "sv-label" });
+      card(gKey, cx(st.keyAt), KY, st.key, "on");
+      txt(gKey, cx(st.keyAt) + CW + 6, KY + 14, "key", { anchor: "start", cls: "sv-label" });
     }
     // zones under the array
     const zone = (k0, k1, label, cls) => {
@@ -2144,36 +2204,37 @@ K.page(2);
     7: (e) => `Line 7: <b>j = ${e.j}</b>, look one card further left.`,
     8: (e) => `Line 8: put the key down in the gap at A[${e.j + 1}]. The hand A[1 : ${e.i}] is sorted again.`,
   };
-  const keyX = (k) => cx(k), card0 = (it, cls) => { const g = s("g"); card(g, 0, 0, it, cls); return g; };
+  // a card to fly, already standing at its start point: until fly() has run once it would sit at the corner (0, 0)
+  const card0 = (it, cls, at) => { const g = s("g", { transform: `translate(${at[0]},${at[1]})` }); card(g, 0, 0, it, cls); return g; };
   async function apply(e, w) {
     st.line = e.line;
     if (e.line === 1) { st.i = e.done ? null : e.i; st.j = null; st.kv = null; st.cmpAt = null; st.done = !!e.done; }
     if (e.line === 2) {
       st.cmpAt = null; const it = st.a[e.i - 1]; st.hole = e.i - 1; render();
-      const g = card0(it, "on"); layer.appendChild(g);
+      const g = card0(it, "on", [cx(e.i - 1), AY]); layer.appendChild(g);
       await w(fly(g, [cx(e.i - 1), AY], [cx(e.i - 1), KY], 380));
-      g.remove(); st.key = it; st.kv = keyOf(it);
+      g.remove(); st.key = it; st.kv = keyOf(it); st.keyAt = e.i - 1;
     }
     if (e.line === 4) st.j = e.j;
     if (e.line === 5) { st.ok = e.ok; st.aj = e.aj; st.cmpAt = e.j > 0 ? e.j - 1 : null; if (e.j > 0) st.cmp++; }
     if (e.line === 6) {
       const from = e.j - 1, to = e.j, it = st.a[from];
       st.cmpAt = null; st.hole = from; st.ghost = to; render();
-      const g = card0(it, "sorted"); layer.appendChild(g);
+      const g = card0(it, "sorted", [cx(from), AY]); layer.appendChild(g);
       await w(fly(g, [cx(from), AY], [cx(to), AY], 360));
       g.remove(); st.a[to] = it; st.ghost = null; st.shifts++;
     }
     if (e.line === 7) {
       const keep = st.key; st.key = null; render();
-      const g = card0(keep, "on"); layer.appendChild(g);
-      await w(fly(g, [keyX(e.j + 1), KY], [keyX(e.j), KY], 240));
-      g.remove(); st.j = e.j; st.key = keep;
+      const g = card0(keep, "on", [cx(st.keyAt), KY]); layer.appendChild(g);
+      await w(fly(g, [cx(st.keyAt), KY], [cx(e.j), KY], 240));
+      g.remove(); st.j = e.j; st.key = keep; st.keyAt = e.j;
     }
     if (e.line === 8) {
       const keep = st.key, k = e.j; st.key = null; st.cmpAt = null; render();
-      const g = card0(keep, "on"); layer.appendChild(g);
-      await w(fly(g, [cx(k), KY], [cx(k), AY], 360));
-      g.remove(); st.a[k] = keep; st.hole = null; st.placed++;
+      const g = card0(keep, "on", [cx(st.keyAt), KY]); layer.appendChild(g);
+      await w(fly(g, [cx(st.keyAt), KY], [cx(k), AY], 360));
+      g.remove(); st.a[k] = keep; st.hole = null; st.keyAt = null; st.placed++;
     }
     render();
     cap("#s1-cap", CAP[e.line](e));
@@ -3717,7 +3778,7 @@ K.page(2);
     });
     txt(gTop, 306, 29, "← MERGE is merge sort's combine step", { anchor: "start", cls: "sv-label" });
     // A[p : r] inside a longer array
-    txt(gA, 28, AY + CH / 2 + 5, "A", { anchor: "start", bold: true });
+    txt(gA, 28, AY + CH / 2 + 5, rs ? "a" : "A", { anchor: "start", bold: true });
     txt(gA, ax(P - 1), AY + CH / 2 + 5, "…", { cls: "sv-label", size: 16 });
     txt(gA, ax(R + 1), AY + CH / 2 + 5, "…", { cls: "sv-label", size: 16 });
     const mA = {};
@@ -3733,7 +3794,7 @@ K.page(2);
     if (st.alloc) {
       [["L", st.L, NL, st.i], ["R", st.R, NR, st.j]].forEach(([side, vals, len, idx]) => {
         const x0 = side === "L" ? LX : RX;
-        txt(gLR, x0 - 12, LY + CH / 2 + 5, side, { anchor: "end", bold: true });
+        txt(gLR, x0 - 12, LY + CH / 2 + 5, rs ? (side === "L" ? "left" : "right") : side, { anchor: "end", bold: true });
         const mk = {};
         for (let t = 0; t < len; t++) {
           if (merging() && idx != null && t < idx) mk[t] = "dim";
@@ -3757,9 +3818,9 @@ K.page(2);
     else if (cj != null) ptr(px("R", cj), LY + CH + 6, `j = ${cj}`, "sv-fill-blue");
     // what the current line decided
     let badge = null, tone = "sv-panel";
-    if (e && e.cmp) { badge = `L[${st.i}] = ${e.cmp.li} ≤ R[${st.j}] = ${e.cmp.rj}?  ${e.cmp.takeL ? "yes: take L[i]" : "no: take R[j]"}`; tone = "sv-data-soft"; }
-    else if (e && e.test === false) { badge = e.lines[0] === 12 ? (st.i === NL ? "i = nL: L is used up" : "j = nR: R is used up") : e.tail === "L" ? "i = nL: nothing left in L" : "j = nR: nothing left in R"; tone = "sv-good"; }
-    else if (st.done) { badge = `A[${P} : ${R}] is sorted · ${st.basic} basic steps, ${N} copies back`; tone = "sv-good"; }
+    if (e && e.cmp) { badge = rs ? `left[${st.i}] = ${e.cmp.li} <= right[${st.j}] = ${e.cmp.rj}?  ${e.cmp.takeL ? "yes: take left[i]" : "no: take right[j]"}` : `L[${st.i}] = ${e.cmp.li} ≤ R[${st.j}] = ${e.cmp.rj}?  ${e.cmp.takeL ? "yes: take L[i]" : "no: take R[j]"}`; tone = "sv-data-soft"; }
+    else if (e && e.test === false) { badge = rs ? (e.lines[0] === 12 ? (st.i === NL ? "i = n_l: left is used up" : "j = n_r: right is used up") : e.tail === "L" ? "i = n_l: nothing left in left" : "j = n_r: nothing left in right") : e.lines[0] === 12 ? (st.i === NL ? "i = nL: L is used up" : "j = nR: R is used up") : e.tail === "L" ? "i = nL: nothing left in L" : "j = nR: nothing left in R"; tone = "sv-good"; }
+    else if (st.done) { badge = rs ? `a[${P - 1}..=${R - 1}] is sorted · ${st.basic} comparisons, ${N} copies back` : `A[${P} : ${R}] is sorted · ${st.basic} basic steps, ${N} copies back`; tone = "sv-good"; }
     if (badge) {
       const w = badge.length * 7.3 + 28;
       gBadge.appendChild(s("rect", { x: 330 - w / 2, y: 268, width: w, height: 28, rx: 14, class: tone }));
@@ -3794,8 +3855,8 @@ K.page(2);
     const mk = {};
     for (let x = 0; x < 17; x++) if (x < P - 1 || x > R - 1) mk[x] = "dim";
     if (e && e.put != null) mk[e.put - 1] = "on";
-    const heap = [{ id: "buf", label: "a's buffer · 17 × i32 (A[9 : 16] at 8..=15)", cells: buf, cw: 17, marks: mk }];
-    const frames = [{ fn: "main", vars: [{ n: "a", t: "Vec<i32>", v: "len 17", ptr: "buf" }] }];
+    const heap = [{ id: "buf", label: "a's buffer · 17 × i32 · merging a[8..=15]", cells: buf, cw: 17, marks: mk }];
+    const frames = [{ fn: "main", vars: [{ n: "a", t: "Vec<i32>", v: "len 17", ptr: "buf" }, { n: "cards", t: "[i32; 8]", v: "8 values" }] }];
     if (st.alloc) {
       const lv = Array.from({ length: NL }, (_, t) => (st.L[t] == null ? "" : st.L[t]));
       const rv = Array.from({ length: NR }, (_, t) => (st.R[t] == null ? "" : st.R[t]));
@@ -3806,7 +3867,7 @@ K.page(2);
       { n: "a", t: "&mut [i32]", v: "len 17", ptr: "buf" },
       { n: "left", t: "Vec<i32>", v: st.alloc ? `len ${NL}` : "–", ptr: st.alloc ? "Lb" : null, hot: e.lines[0] === 3 || e.lines[0] === 4 },
       { n: "right", t: "Vec<i32>", v: st.alloc ? `len ${NR}` : "–", ptr: st.alloc ? "Rb" : null, hot: e.lines[0] === 3 || e.lines[0] === 6 },
-      { n: "(i, j, k)", t: "usize", v: st.i == null ? "–" : rsTuple().slice(12), hot: e.lines[0] >= 8 },
+      { n: "(i, j, k)", t: "(usize, usize, usize)", v: st.i == null ? "–" : rsTuple().slice(12), hot: e.lines[0] >= 8 },
     ] });
     m.set({
       note: !started ? "Before the call: one heap buffer, owned by <code>a</code> in <code>main</code>."
@@ -4833,6 +4894,7 @@ K.page(2);
   }
   function innerText(e) {
     const r = R(), v = e.A[e.j - 1], jj = r ? e.j - 1 : e.j, at = r ? `a[${jj}]` : `A[${jj}]`;
+    if (e.end && r) return `loop ends after j = ${e.j}: ${at} = ${v} is the smallest of ${win(e.j)}`;   // Rust's for j stops at i + 1
     return e.end ? `j = i = ${jj}: loop ends, ${at} = ${v} is the smallest of ${win(e.j)}` : `j = ${jj}: ${at} = ${v} is the smallest of ${win(e.j)}`;
   }
   const okOuter = (e) => { const a = e.A, lim = e.done ? N - 1 : e.i - 1, sorted = input.slice().sort((x, y) => x - y); for (let k = 0; k < lim; k++) if (a[k] !== sorted[k]) return false; return true; };
@@ -4867,7 +4929,7 @@ K.page(2);
     };
     const shown = (v) => (R() ? v - 1 : v);
     if (e && !e.done) {
-      if (e.j === e.i) ptr(e.i - 1, `i = j = ${shown(e.i)}`, "sv-fill-sun");
+      if (e.j === e.i) ptr(e.i - 1, R() ? `i = ${shown(e.i)}` : `i = j = ${shown(e.i)}`, "sv-fill-sun");
       else {
         ptr(e.i - 1, `i=${shown(e.i)}`, "sv-fill-sun");
         if (e.j != null) ptr(e.j - 1, `j=${shown(e.j)}`, "sv-fill-blue");
@@ -4956,8 +5018,8 @@ K.page(2);
   const COEF = [3, 1, 4, 1, 5, 9, 2, 6, 5]; // a0, a1, … : the digits of π
   let mode = 0, n = 4, x = 2, st, busy = [];
   const S = session((b) => busy.forEach((y) => (y.disabled = b)));
-  const gHead = s("g"), gArr = s("g"), gPtr = s("g"), gMid = s("g"), gBars = s("g"), layer = s("g");
-  svg.append(gHead, gArr, gPtr, gMid, gBars, layer);
+  const gHead = s("g"), gArr = s("g"), gPtr = s("g"), gMid = s("g"), gInv = s("g", { "data-part": "invariant" }), gBars = s("g"), layer = s("g");
+  svg.append(gHead, gArr, gPtr, gMid, gInv, gBars, layer);
   const stP = stat("p", 0), stM = stat("multiplications", 0), stH = stat("Horner", "–"), stNv = stat("naive", "–");
   stats.append(stP, stM, stH, stNv);
   const SUP = "⁰¹²³⁴⁵⁶⁷⁸⁹", SUB = "₀₁₂₃₄₅₆₇₈₉";
@@ -5022,7 +5084,7 @@ K.page(2);
       for (let k = 0; k <= n - (e.i + 1); k++) list.push([k + e.i + 1, k]);
       if (!list.length) return { text: `start of i = ${e.i}: the sum has no terms, so p = 0`, ok: e.p === 0 };
       const val = list.reduce((acc, [i, k]) => acc + COEF[i] * x ** k, 0);
-      return { text: `${e.end ? "i = −1, the loop is over" : "start of i = " + e.i}: p = ${sumText(list)} = ${fmt(val)}`, ok: val === e.p };
+      return { text: `${e.end ? (R() ? "the range is used up, the loop is over" : "i = −1, the loop is over") : "start of i = " + e.i}: p = ${sumText(list)} = ${fmt(val)}`, ok: val === e.p };
     }
     if (e.line !== 2) return null;
     const list = [];
@@ -5032,7 +5094,7 @@ K.page(2);
     return { text: `${e.end ? "k = n + 1, the loop is over" : "start of k = " + e.k}: p = ${sumText(list)} = ${fmt(val)}`, ok: val === e.p };
   }
   function render() {
-    K.clear(gHead); K.clear(gArr); K.clear(gPtr); K.clear(gMid); K.clear(gBars);
+    K.clear(gHead); K.clear(gArr); K.clear(gPtr); K.clear(gMid); K.clear(gInv); K.clear(gBars);
     const e = st.e, a = A();
     const poly = a.map((c, k) => (k === 0 ? `${c}` : `${c}x${k === 1 ? "" : sup(k)}`)).join(" + ");
     txt(gHead, 14, 26, `P(x) = ${poly}`, { anchor: "start", mono: true, size: 13 });
@@ -5058,7 +5120,7 @@ K.page(2);
       if (mode === 0) {
         if (e.line === 1) step = "p = 0";
         else if (e.line === 3) step = `p = ${nm(e.i)} + x · p = ${a[e.i]} + ${x} · ${e.old} = ${fmt(e.p)}`;
-        else if (e.line === 2) step = e.end ? "i = −1: the loop stops" : `i = ${e.i}`;
+        else if (e.line === 2) step = e.end ? (R() ? "the range is used up: the loop stops" : "i = −1: the loop stops") : `i = ${e.i}`;
         else step = `return p = ${fmt(e.p)} = P(${x})`;
         line2 = e.expr ? `p = ${e.expr}` : "";
       } else {
@@ -5074,8 +5136,8 @@ K.page(2);
     if (line2) txt(gMid, 14, 234, line2.length > 84 ? line2.slice(0, 82) + "…" : line2, { anchor: "start", mono: true, size: 12, fill: "var(--ink-2)" });
     // the loop invariant, checked at the top of every iteration
     const inv = st.inv, now = e && e.line === 2;
-    gMid.appendChild(s("rect", { x: 14, y: 246, width: 632, height: 34, rx: 9, class: now ? "sv-data-soft" : inv ? (inv.ok ? "sv-good" : "sv-bad") : "sv-panel" }));
-    txt(gMid, 26, 268, inv ? `${inv.ok ? "✓" : "✗"} ${inv.text}` : (mode === 0 ? "invariant: p = Σ A[k + i + 1] · xᵏ for k = 0 … n − (i + 1)" : "invariant: p = Σ A[m] · xᵐ for m = 0 … k − 1"), { anchor: "start", mono: true, size: 12 });
+    gInv.appendChild(s("rect", { x: 14, y: 246, width: 632, height: 34, rx: 9, class: now ? "sv-data-soft" : inv ? (inv.ok ? "sv-good" : "sv-bad") : "sv-panel" }));
+    txt(gInv, 26, 268, inv ? `${inv.ok ? "✓" : "✗"} ${inv.text}` : (mode === 0 ? `invariant: p = Σ ${nm("k + i + 1")} · xᵏ for k = 0 … n − (i + 1)` : `invariant: p = Σ ${nm("m")} · xᵐ for m = 0 … k − 1`), { anchor: "start", mono: true, size: 12 });
     // multiplication bars: this n, both methods
     const hT = n + 1, nT = (n * (n + 1)) / 2, unit = 470 / 36;
     const doneH = mode === 0 ? (e ? e.mults : 0) : null, doneN = mode === 1 ? (e ? e.mults : 0) : null;
@@ -5452,6 +5514,152 @@ K.page(2);
   K.$("#s15-seg").appendChild(seg(["Brute force", "Insertion sort", "Merge count"], 0, setMode));
   CODE_LANG.on(() => render());
   setMode(0);
+})();
+/* ================= exercise 2.1-2 · SUM-ARRAY: a running total and the loop invariant that proves it ================= */
+(function s16() {
+  const svg = K.$("#s16-svg");
+  const ctr = K.$("#s16-controls"), stats = K.$("#s16-stats");
+  const cv = code("#s16-code", { files: [{ name: "SUM-ARRAY", src: src("ps-s16"), rs: { name: "sum_array.rs", src: src("rs-s16"), out: src("rs-s16-out"), map: { "SUM-ARRAY": 2, 1: 3, 2: 4, 3: 5, 4: 7 } } }] });
+  const m = mem("#s16-mem");
+  const INST = [[31, 41, 59, 26, 41, 58], []];
+  const CW = 64, CH = 52, GAP = 12, AY = 62, SY = 168, IY = 258;
+  let input = INST[0].slice(), st, busy = [];
+  const N = () => input.length;
+  const X0 = () => 330 - (Math.max(N(), 1) * (CW + GAP) - GAP) / 2;
+  const cx = (k) => X0() + k * (CW + GAP) + CW / 2;
+  const S = session((b) => busy.forEach((x) => (x.disabled = b)));
+  const part = (name) => s("g", { "data-part": name });
+  const gHead = part("input"), gArr = part("input"), gPtr = part("pointer"), gSum = part("sum"), gInv = part("invariant"), layer = s("g");
+  svg.append(gHead, gArr, gPtr, gSum, gInv, layer);
+  const stA = stat("additions", 0), stS = stat("sum", 0);
+  stats.append(stA, stS);
+  const R = () => CODE_LANG.rust;
+  const total = (a, k) => a.slice(0, k).reduce((x, y) => x + y, 0);
+
+  function trace(a) {
+    const ev = [], n = a.length;
+    let sum = 0, adds = 0;
+    ev.push({ line: 1, i: null, sum, adds });
+    for (let i = 1; i <= n; i++) {
+      ev.push({ line: 2, i, sum, adds });
+      const add = a[i - 1]; sum += add; adds++;
+      ev.push({ line: 3, i, sum, adds, add });
+    }
+    ev.push({ line: 2, i: n + 1, sum, adds, exit: true });
+    ev.push({ line: 4, i: n + 1, sum, adds, done: true });
+    return ev;
+  }
+  function fresh() { st = { ev: trace(input), k: 0, e: null, inv: null, hideSum: false }; }
+
+  // the invariant, in the book's 1-based slices or Rust's 0-based ones
+  const before = (i) => (R() ? `a[..${i - 1}]` : `A[1 : ${i - 1}]`);
+  function invText(e) {
+    if (e.i === 1 && !e.exit) return R() ? "before the first pass: sum = 0, the total of no numbers" : "i = 1: sum = 0, the total of no numbers (initialization)";
+    if (e.exit) return N() === 0 ? "the loop never runs: sum = 0, the total of no numbers"
+      : R() ? `loop ends: sum = ${e.sum}, the total of all of a` : `i = ${e.i}: sum = ${e.sum}, the total of all of A[1 : ${N()}] (termination)`;
+    return R() ? `next pass: sum = ${e.sum}, the total of the numbers before x` : `i = ${e.i}: sum = ${e.sum}, the total of ${before(e.i)}`;
+  }
+
+  function render() {
+    K.clear(gHead); K.clear(gArr); K.clear(gPtr); K.clear(gSum); K.clear(gInv);
+    const e = st.e, n = N();
+    txt(gHead, 630, 24, "n = " + n, { anchor: "end", mono: true, size: 13 });
+    if (n === 0) txt(gArr, 330, AY + CH / 2 + 5, R() ? "an empty slice: no numbers at all" : "an empty array: no numbers at all", { cls: "sv-label", size: 13 });
+    else {
+      const marks = {};
+      const added = !e ? 0 : e.done || e.exit ? n : e.line === 3 ? e.i : e.i == null ? 0 : e.i - 1;
+      for (let k = 0; k < n; k++) if (k < added) marks[k] = e && e.done ? "good" : "sorted";
+      if (e && e.line === 3) marks[e.i - 1] = "on";
+      if (e && e.line === 2 && !e.exit) marks[e.i - 1] = "on2";
+      cells(gArr, { x: X0(), y: AY, vals: input, cw: CW, ch: CH, gap: GAP, marks, base: "auto" });
+    }
+    // the loop's position: i in the book, x (a borrow of one number) in Rust
+    if (e && e.i != null && !e.done) {
+      const k = Math.min(e.i - 1, Math.max(n, 1)), x = n === 0 ? 330 : e.exit ? cx(n - 1) + CW / 2 + GAP + 14 : cx(k);
+      gPtr.appendChild(s("path", { d: `M${x},${AY + CH + 14} l-6,10 h12 Z`, class: e.exit ? "sv-fill-blue" : "sv-fill-sun" }));
+      txt(gPtr, x, AY + CH + 38, R() ? (e.exit ? "done" : `x → ${input[e.i - 1]}`) : `i = ${e.i}`, { mono: true, size: 12, bold: true });
+    }
+    // the running total
+    const changing = e && e.line === 3;
+    box(gSum, 230, SY, 200, 54, changing ? "sv-data-soft" : e && e.done ? "sv-good" : "sv-panel", st.hideSum ? "" : String(e ? e.sum : 0), "sum", 20);
+    if (e && e.done) txt(gSum, 330, SY + 74, R() ? `returned: ${e.sum}` : `return sum = ${e.sum}`, { mono: true, size: 12, bold: true });
+    // the loop invariant, checked at the start of every pass
+    const inv = st.inv, ok = inv ? inv.sum === total(input, Math.min(inv.i - 1, N())) : null, now = e && e.line === 2;
+    gInv.appendChild(s("rect", { x: 14, y: IY, width: 632, height: 40, rx: 9, class: now ? "sv-data-soft" : inv == null ? "sv-panel" : ok ? "sv-good" : "sv-bad" }));
+    txt(gInv, 28, IY + 25, "invariant", { anchor: "start", mono: true, bold: true, size: 12 });
+    txt(gInv, 116, IY + 25, inv ? (ok ? "✓ " : "✗ ") + invText(inv) : (R() ? "sum = the total of the numbers before x" : "sum = A[1] + ⋯ + A[i − 1]"), { anchor: "start", size: 13 });
+    stA.set(e ? e.adds : 0); stS.set(e ? e.sum : 0, e && e.done ? "good" : undefined);
+    renderCode(); renderMem();
+  }
+  function renderCode() {
+    const e = st.e;
+    if (!e) { cv.clear(); cv.out(null); return; }
+    if (e.done) { cv.at([4]); cv.notes({ 4: [`return ${e.sum}`, "good"] }, { 7: [`${e.sum}`, "good"] }); cv.out(String(e.sum)); return; }
+    cv.out(null); cv.at([e.line]);
+    const n = { 1: `sum = ${e.line === 1 ? 0 : e.sum}` }, r = { 3: `sum = ${e.line === 1 ? 0 : e.sum}` };
+    if (e.line === 2) { n[2] = e.exit ? `i = ${e.i} > n: done` : `i = ${e.i}`; r[4] = e.exit ? "no more" : `x → ${input[e.i - 1]}`; }
+    if (e.line === 3) { n[3] = `sum = ${e.sum - e.add} + ${e.add} = ${e.sum}`; r[5] = `sum = ${e.sum}`; }
+    cv.notes(n, r);
+  }
+  // The Rust run's memory: main's Vec owns the numbers on the heap; sum_array borrows them as a slice, and x borrows one
+  // number at a time. Only sum is a new value.
+  function renderMem() {
+    const e = st.e, n = N(), inCall = e && !e.done, onX = inCall && e.i != null && !e.exit && e.i <= n;
+    const mk = {}; if (onX) mk[e.i - 1] = "on";
+    const main = { fn: "main", vars: [{ n: "nums", t: "Vec<i32>", v: `len ${n} · cap ${n}`, ptr: n ? "buf" : undefined }] };
+    if (e && e.done) main.vars.push({ n: "total", t: "i32", v: e.sum, hot: true });
+    const frames = [main];
+    if (inCall) frames.push({ fn: "sum_array(&nums)", top: true, vars: [
+      { n: "a", t: "&[i32]", v: `len ${n}`, ptr: n ? "buf" : undefined },
+      { n: "sum", t: "i32", v: e.sum, hot: e.line === 1 || e.line === 3 },
+      { n: "x", t: "&i32", v: onX ? "" : "–", ptr: onX ? `buf:${e.i - 1}` : undefined, hot: e.line === 2 && !e.exit },
+    ] });
+    m.set({
+      note: !e ? (n ? "Before the call: <code>nums</code> owns the numbers, in one buffer on the heap." : "Before the call: <code>nums</code> is empty, so it has nothing on the heap.")
+        : e.done ? "The call has returned: its frame is gone, and <code>total</code> holds the answer. Nothing was copied, and nothing was allocated."
+        : n === 0 ? "An empty <code>Vec</code> has nothing on the heap, so <code>a</code> has nothing to point at, and the loop never runs."
+        : e.line === 2 && !e.exit ? "<code>for x in a</code>: <code>x</code> borrows the next number. It points at it; it doesn't copy it."
+        : e.line === 3 ? "<code>sum += x</code> adds the number <code>x</code> points at. Only <code>sum</code> changes."
+        : "<code>sum_array</code> borrows the buffer as <code>a: &amp;[i32]</code>: it can read the numbers, but not change them.",
+      stack: frames,
+      heap: n ? [{ id: "buf", label: `nums' buffer · ${n} × i32`, cells: input, marks: mk, cw: 44 }] : [],
+    });
+  }
+  function caption(e) {
+    const n = N();
+    if (!e) return "Nothing has run yet. The total starts at 0, and each pass adds the next number.";
+    if (e.done) return `Line 4: return <b>sum = ${e.sum}</b>, the total of all ${n} numbers. ${e.adds} additions, one per number.`;
+    if (e.line === 1) return "Line 1: sum = 0. No numbers have been added yet.";
+    if (e.exit) return n === 0 ? "Line 2: i = 1 &gt; n = 0, so the loop never runs. <b>sum is still 0, the total of no numbers</b>: initialization alone proves it."
+      : `Line 2: i = ${e.i} &gt; n, so the loop ends. The invariant now says <b>sum = ${e.sum} is the total of all of A[1 : ${n}]</b>: that's termination.`;
+    if (e.line === 2) return e.i === 1 ? "Line 2: i = 1. No numbers come before A[1], and sum = 0: <b>the invariant holds before the first pass</b>. That's initialization."
+      : `Line 2: i = ${e.i}. The invariant holds: <b>sum = ${e.sum} is the total of A[1 : ${e.i - 1}]</b>.`;
+    return `Line 3: sum = ${e.sum - e.add} + ${e.add} = <b>${e.sum}</b>. Now sum covers A[1 : ${e.i}], so the invariant will hold again when i becomes ${e.i + 1}: that's maintenance.`;
+  }
+  async function apply(e, w) {
+    st.e = e;
+    if (e.line === 2) st.inv = e;
+    if (e.line === 3) {
+      const k = e.i - 1;
+      st.e = Object.assign({}, e, { sum: e.sum - e.add }); st.hideSum = false; render();
+      const t = draw.tag(String(e.add), "sv-data-soft");
+      layer.appendChild(t);
+      await w(K.path(t, [[cx(k), AY + CH / 2], [(cx(k) + 330) / 2, SY - 26], [330, SY + 27]], 420));
+      t.remove(); st.e = e;
+    }
+    render();
+    cap("#s16-cap", caption(e));
+  }
+  async function stepOnce(w) { if (st.k >= st.ev.length) return false; await apply(st.ev[st.k++], w); return st.k < st.ev.length; }
+  function redraw() { K.clear(layer); fresh(); render(); cap("#s16-cap", caption(null)); }
+  function reset() { S.cancel(); redraw(); }
+
+  busy = [button(ctr, "Step", "", () => S.run(async (w) => { await stepOnce(w); })),
+    button(ctr, "Play", "primary", () => S.run(async (w) => { while (await stepOnce(w)) await w(sleep(300)); }))];
+  button(ctr, "Reset", "", reset);
+  K.$("#s16-seg").appendChild(seg(["⟨31, 41, 59, 26, 41, 58⟩", "Empty"], 0, (k) => { input = INST[k].slice(); reset(); }));
+  CODE_LANG.on(() => render());
+  redraw();
 })();
 K.quiz(K.$("#quiz-root"), [
   { q: "At the start of each iteration of INSERTION-SORT's for loop, what does A[1 : i − 1] hold?", options: ["The i − 1 smallest items of the whole array", "The items that started in A[1 : i − 1], now in sorted order", "The items still waiting in the pile", "The key and its satellite data"], answer: 1, why: "That is the loop invariant. They are not the smallest items overall: the pile A[i + 1 : n] has not even been looked at yet." },

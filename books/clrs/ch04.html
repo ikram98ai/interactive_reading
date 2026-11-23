@@ -2488,7 +2488,7 @@ K.page(4);
         gSide.appendChild(s("circle", { cx: LX + 100 + q * 14, cy: y, r: 4.5, class: now ? "sv-fill-sun" : past ? "sv-fill-ink" : "sv-fill-line", style: past ? { opacity: 0.5 } : {} }));
       }
     });
-    txt(gSide, LX, 146, `${n}³ = ${total()} runs of line 4`, { anchor: "start", cls: "sv-label" });
+    txt(gSide, LX, 146, CODE_LANG.rust ? `${n}³ = ${total()} products` : `${n}³ = ${total()} runs of line 4`, { anchor: "start", cls: "sv-label" });
     // the arithmetic, right
     const gEq = s("g", { "data-part": "eqref" }); gSide.appendChild(gEq);
     txt(gEq, RX, 58, "equation (4.1)", { anchor: "start", cls: "sv-label" });
@@ -2497,8 +2497,8 @@ K.page(4);
       const a = st.A[i][k], b = st.B[k][j];
       const I = i + base(), J = j + base(), Kk = k + base();
       if (CODE_LANG.rust) { // the program's line 25, split over two rows
-        txt(gSide, RX, 196, `c.add_at(${i}, ${j},`, { anchor: "start", mono: true, size: 12 });
-        txt(gSide, RX, 214, `  a.at(${i}, ${k}) * b.at(${k}, ${j}))`, { anchor: "start", mono: true, size: 12 });
+        txt(gSide, RX, 196, `c.add_at(${i}, ${j},`, { anchor: "start", mono: true, size: 11 });
+        txt(gSide, RX, 214, `  a.at(${i}, ${k}) * b.at(${k}, ${j}))`, { anchor: "start", mono: true, size: 11 });
       } else txt(gSide, RX, 214, `c${sub(I)}${sub(J)} = c${sub(I)}${sub(J)} + a${sub(I)}${sub(Kk)} · b${sub(Kk)}${sub(J)}`, { anchor: "start", mono: true, size: 13 });
       txt(gSide, RX, 240, `= ${st.before} + ${a} · ${b}`, { anchor: "start", mono: true, size: 13 });
       txt(gSide, RX, 266, `= ${st.C[i][j]}`, { anchor: "start", mono: true, bold: true, size: 15 });
@@ -2536,6 +2536,7 @@ K.page(4);
       { n: "a", t: "&Matrix", v: "", ptr: "A", weak: true },
       { n: "b", t: "&Matrix", v: "", ptr: "B", weak: true },
       { n: "c", t: "&mut Matrix", v: "", ptr: "C", weak: true },
+      { n: "n", t: "usize", v: n },
       { n: "i, j, k", t: "usize", v: `${i}, ${j}, ${k}`, hot: true }] });
     let note;
     if (st.t === 0) note = `<code>main</code> owns three <code>Matrix</code> values. Each one's <code>data</code> is one heap buffer of ${n * n} numbers, row after row.`;
@@ -2827,7 +2828,7 @@ K.page(4);
   function finishCap() {
     return copy
       ? `Done: ${CALLS_TOTAL} calls, ${LEAVES} multiplications and <b>144 elements copied</b>, which is 3n²(n − 1). The copying is Θ(n³) too, so T(n) = 8T(n/2) + Θ(n²) is still <b>Θ(n³)</b>: copying changes the constant, not the answer.`
-      : `Done: ${CALLS_TOTAL} calls and <b>${LEAVES} = 4³ scalar multiplications</b>, one per leaf, giving the same C as the triple loop. Each split cost Θ(1), so T(n) = 8T(n/2) + Θ(1) = <b>Θ(n³)</b>.`;
+      : `Done: ${CALLS_TOTAL} calls and <b>${LEAVES} = 4³ scalar multiplications</b>, one per leaf, giving the same C the triple loop gives on these matrices. Each split cost Θ(1), so T(n) = 8T(n/2) + Θ(1) = <b>Θ(n³)</b>.`;
   }
   const nodeAt = (e) => (e.depth === 0 ? [(childX(0) + childX(7) + CHW) / 2, RY + 12] : e.depth === 1 ? [childX(e.t) + CHW / 2, KY + 11] : [leafX(e.t, e.u) + 2.5, LY + 8]);
   async function animate(w, e, fast) {
@@ -2874,7 +2875,7 @@ K.page(4);
     K.clear(layer); evs = trace(); k = 0; render();
     cap("#s3-cap", copy
       ? "Nothing has run yet. This time every call copies its quarters into new matrices, and adds C's quarters back at the end."
-      : "Nothing has run yet. A, B and C are the same as in the triple loop; C starts at zero.");
+      : "Nothing has run yet. A and B are 4 × 4, and C starts at zero.");
   }
   function reset() { S.cancel(); redraw(); }
 

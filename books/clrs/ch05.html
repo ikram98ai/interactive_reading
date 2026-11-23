@@ -33,6 +33,7 @@
         <a href="#hiring-analysis"><span class="n">5.2</span>Expected hires</a>
         <a href="#rand-hire"><span class="n">5.3</span>Randomized hiring</a>
         <a href="#permute"><span class="n">5.3</span>Permuting</a>
+        <a href="#random-sample"><span class="n">5.3-5</span>Random sample</a>
         <a href="#birthday"><span class="n">5.4.1</span>Birthdays</a>
         <a href="#balls-bins"><span class="n">5.4.2</span>Balls and bins</a>
         <a href="#streaks"><span class="n">5.4.3</span>Streaks</a>
@@ -800,9 +801,98 @@ exact:  1/6 = 45000   4/27 = 40000, 5/27 = 50000
 </script>
   </section>
 
+  <!-- Exercise 5.3-5 · RANDOM-SAMPLE: a random m-subset with only m calls to RANDOM -->
+  <section class="scene" id="random-sample">
+    <div class="wrap scene-grid flip">
+      <div class="copy">
+        <span class="eyebrow">5.3 · a random sample</span>
+        <h2>Three numbers out of five, with three random calls</h2>
+        <p class="story">Sometimes you don't need a whole shuffled list, only a fair <b>random sample</b>: <i>m</i> of the numbers 1 to <i>n</i>, with every <i>m</i>-element subset equally likely. Shuffling all <i>n</i> and keeping the first <i>m</i> works, but it calls RANDOM <i>n</i> times, and <i>n</i> may be far larger than <i>m</i>. Exercise 5.3-5's RANDOM-SAMPLE calls it only <i>m</i> times.</p>
+        <p class="story">It looks only at the last <i>m</i> values of <i>k</i>, from <i>n</i> − <i>m</i> + 1 to <i>n</i>. Each round draws <i>i</i> = RANDOM(1, <i>k</i>). If <i>i</i> is new, it joins the sample. If it is already in, <i>k</i> joins instead, and <i>k</i> is always new, because every earlier round drew from 1 to <i>k</i> − 1 or less. So the round for <i>k</i> adds exactly one number, and the sample grows by one each time.</p>
+        <p class="story">Why every subset is equally likely: count the choices. For <i>n</i> = 5 and <i>m</i> = 3 the three draws have 3, 4 and 5 options, so there are 3 · 4 · 5 = 60 equally likely choice sequences, and each of the C(5, 3) = 10 subsets is reached by exactly 6 of them.</p>
+        <p class="imagine"><b>Try it:</b> press <b>Step</b> to watch RANDOM pick <i>i</i> from the shaded range, then the number that joins S; a repeat sends <i>k</i> in instead. <b>Play</b> finishes the sample. <b>Every sequence</b> walks all 60 choice sequences and counts how many land on each subset; <b>Run 6000</b> samples for real and compares the ten bars with the 1/10 line.</p>
+        <details class="book">
+          <summary>What the book says</summary>
+          <div class="inner">
+            <p>Exercise 5.3-5: Professor Gallup wants a random sample of {1, 2, 3, …, <i>n</i>}, “that is, an <i>m</i>-element subset <i>S</i>, where 0 ≤ <i>m</i> ≤ <i>n</i>, such that each <i>m</i>-subset is equally likely to be created.” Setting <i>A</i>[<i>i</i>] = <i>i</i>, calling RANDOMLY-PERMUTE(<i>A</i>) and taking the first <i>m</i> elements makes <i>n</i> calls to RANDOM, and in the professor's application <i>n</i> is much larger than <i>m</i>.</p>
+            <p>RANDOM-SAMPLE(<i>m</i>, <i>n</i>) starts with <i>S</i> = ∅ and, for <i>k</i> = <i>n</i> − <i>m</i> + 1 to <i>n</i> (it iterates <i>m</i> times), sets <i>i</i> = RANDOM(1, <i>k</i>); if <i>i</i> ∈ <i>S</i> then <i>S</i> = <i>S</i> ∪ {<i>k</i>}, else <i>S</i> = <i>S</i> ∪ {<i>i</i>}. It returns <i>S</i>. The exercise asks you to show that it returns a random <i>m</i>-subset, each equally likely, “while making only <i>m</i> calls to RANDOM.”</p>
+            <p class="cite">pp.&nbsp;139–140 · 5.3 Randomized algorithms, Exercise 5.3-5</p>
+          </div>
+        </details>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><span class="stage-title">Pick 3 of the numbers 1 to 5</span></div>
+        <div class="stage-scroll"><svg id="s14-svg" viewBox="0 0 660 330" role="img" aria-label="The numbers 1 to 5 with the range RANDOM may pick from shaded and the sample S marked, the draws made so far, and a histogram of how often each of the ten 3-element subsets came out"></svg></div>
+        <div class="controls" id="s14-controls"></div>
+        <div class="statrow" id="s14-stats"></div>
+        <div class="caption" id="s14-cap" aria-live="polite">Nothing drawn yet.</div>
+        <div id="s14-code"></div>
+      </div>
+    </div>
+<script type="text/x-clrs" id="ps-s14">
+RANDOM-SAMPLE(m, n)
+S = ∅
+for k = n − m + 1 to n    // iterates m times
+    i = RANDOM(1, k)
+    if i ∈ S
+        S = S ∪ {k}
+    else S = S ∪ {i}
+return S
+</script>
+<script type="text/x-rust" id="rs-s14">
+use std::collections::HashSet;
+
+fn main() {
+    let mut rng = Rng(2024);
+    let s = random_sample(3, 5, &mut rng);
+    let mut v: Vec<usize> = s.into_iter().collect();
+    v.sort();
+    println!("{:?}", v);
+    let big = random_sample(5, 1_000_000, &mut rng);
+    let mut v: Vec<usize> = big.into_iter().collect();
+    v.sort();
+    println!("{:?}", v);
+}
+
+fn random_sample(
+    m: usize,
+    n: usize,
+    rng: &mut Rng,
+) -> HashSet<usize> {
+    let mut s = HashSet::new();
+    for k in n - m + 1..=n {
+        let i = rng.random(1, k);
+        if !s.insert(i) {
+            s.insert(k);
+        }
+    }
+    s
+}
+
+struct Rng(u64);
+
+impl Rng {
+    fn next(&mut self) -> u64 {
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545_F491_4F6C_DD1D)
+    }
+    fn random(&mut self, a: usize, b: usize) -> usize {
+        let m = (b - a + 1) as u64;
+        a + (self.next() % m) as usize
+    }
+}
+</script>
+<script type="text/x-rust-out" id="rs-s14-out">
+[1, 2, 4]
+[279364, 307666, 356738, 654068, 674485]
+</script>
+  </section>
+
   <!-- 5.4.1 · the birthday paradox -->
   <section class="scene" id="birthday">
-    <div class="wrap scene-grid flip">
+    <div class="wrap scene-grid">
       <div class="copy">
         <span class="eyebrow">5.4.1 · the birthday paradox</span>
         <h2>Twenty-three people, even odds</h2>
@@ -922,7 +1012,7 @@ n = 669: Pr >= 1/2 at k = 31 (0.506); E >= 1 at k = 38 (1.0508)
 
   <!-- 5.4.2 · balls and bins -->
   <section class="scene" id="balls-bins">
-    <div class="wrap scene-grid">
+    <div class="wrap scene-grid flip">
       <div class="copy">
         <span class="eyebrow">5.4.2 · balls and bins</span>
         <h2>The last empty bin takes forever</h2>
@@ -1068,7 +1158,7 @@ tosses to fill:  29.28  (b H_b = 29.29)
 
   <!-- 5.4.3 · streaks -->
   <section class="scene" id="streaks">
-    <div class="wrap scene-grid flip">
+    <div class="wrap scene-grid">
       <div class="copy">
         <span class="eyebrow">5.4.3 · streaks</span>
         <h2>Double the flips, add one head</h2>
@@ -1217,7 +1307,7 @@ runs with a streak >= 2 lg n: 0, no full group: 2
 
   <!-- 5.4.4 · the online hiring problem -->
   <section class="scene" id="online-hiring">
-    <div class="wrap scene-grid">
+    <div class="wrap scene-grid flip">
       <div class="copy">
         <span class="eyebrow">5.4.4 · the online hiring problem</span>
         <h2>Look at the first 37%, then leap</h2>
@@ -1323,7 +1413,7 @@ fn main() {
 
   <!-- Problem 5-1 · probabilistic counting -->
   <section class="scene" id="p5-1">
-    <div class="wrap scene-grid flip">
+    <div class="wrap scene-grid">
       <div class="copy">
         <span class="eyebrow">problem 5-1 · probabilistic counting</span>
         <h2>Four bits that count to sixteen thousand</h2>
@@ -1440,7 +1530,7 @@ n_i = 100 i  : mean 1004.1, variance 100331
 
   <!-- Problem 5-2 · searching an unsorted array -->
   <section class="scene" id="p5-2">
-    <div class="wrap scene-grid">
+    <div class="wrap scene-grid flip">
       <div class="copy">
         <span class="eyebrow">problem 5-2 · searching an unsorted array</span>
         <h2>Three ways to find x</h2>
@@ -3362,7 +3452,7 @@ K.page(5);
     if (st.range) {
       const [lo, hi] = st.range, x1 = cx(lo) - CW / 2 - 4, x2 = cx(hi) + CW / 2 + 4;
       gArr.appendChild(s("rect", { x: x1, y: AY - 8, width: x2 - x1, height: CH + 16, rx: 12, class: "sv-server", style: { fillOpacity: 0.35 } }));
-      txt(gArr, (x1 + x2) / 2, AY - 16, `RANDOM(${lo}, ${hi})`, { mono: true, size: 12, bold: true, fill: "var(--blue)" });
+      txt(gArr, (x1 + x2) / 2, AY - 16, CODE_LANG.rust ? `random(${lo - 1}, ${hi - 1})` : `RANDOM(${lo}, ${hi})`, { mono: true, size: 12, bold: true, fill: "var(--blue)" });
     }
     const marks = {};
     for (let k = 0; k < N; k++) {
@@ -3391,15 +3481,16 @@ K.page(5);
     const X = 322;
     txt(gSide, X, 22, `choices this run`, { anchor: "start", cls: "sv-label" });
     for (let i = 1; i <= N; i++) {
-      const c = st.chosen[i - 1], lo = MODES[mode].lo(i);
-      const line = c != null ? `i = ${i}:  RANDOM(${lo}, ${N}) → ${c}` : `i = ${i}:  RANDOM(${lo}, ${N}) → ?`;
+      const c = st.chosen[i - 1], lo = MODES[mode].lo(i), z = CODE_LANG.rust ? 1 : 0; // Rust mode counts from 0, as the program does
+      const call = z ? `i = ${i - 1}:  random(${lo - 1}, ${N - 1})` : `i = ${i}:  RANDOM(${lo}, ${N})`;
+      const line = `${call} → ${c != null ? c - z : "?"}`;
       txt(gSide, X, 48 + (i - 1) * 22, line, { anchor: "start", mono: true, size: 12.5, bold: c != null, fill: c != null ? "var(--ink)" : "var(--ink-3)" });
     }
     txt(gSide, X, 124, mode === 0 ? "3 · 2 · 1 = 6 sequences, one per order" : "3 · 3 · 3 = 27 sequences for 6 orders", { anchor: "start", mono: true, size: 12, bold: true, fill: mode === 0 ? "var(--mint)" : "var(--coral)" });
     // the loop invariant, live
     let inv, inv2 = null;
     if (mode === 1) inv = "27 is not a multiple of 6: no even split";
-    else if (st.i == null && !st.done) { inv = "invariant, before iteration i:"; inv2 = "Pr{A[1 : i − 1] = a given one} = (n − i + 1)!/n!"; }
+    else if (st.i == null && !st.done) { inv = "invariant, before iteration i:"; inv2 = "Pr{a given prefix} = (n − i + 1)!/n!"; }
     else {
       const i = st.done ? N + 1 : st.i;
       const pre = st.a.slice(0, i - 1);
@@ -3414,7 +3505,7 @@ K.page(5);
   function renderHist(mix) {
     K.clear(gHist);
     const tot = runs || 1;
-    txt(gHist, 14, 194, exact ? `all ${exact.total} choice sequences, counted exactly` : runs ? `how often each order came out, ${fmt(runs)} runs` : "how often each order came out", { anchor: "start", cls: "sv-label" });
+    txt(gHist, 14, 194, exact ? `all ${exact.total} choice sequences, counted exactly` : runs ? `how often each order came out, ${fmt(runs)} run${runs === 1 ? "" : "s"}` : "how often each order came out", { anchor: "start", cls: "sv-label" });
     gHist.appendChild(s("line", { x1: 470, y1: 190, x2: 486, y2: 190, class: "sv-wire", style: { stroke: "var(--mint)", strokeWidth: 2.5, strokeDasharray: "4 3" } }));
     txt(gHist, 492, 194, "1/6", { anchor: "start", cls: "sv-label" });
     if (mode === 1) {
@@ -3565,7 +3656,214 @@ K.page(5);
   button(ctr, "Reset", "", reset);
   busy.push(button(ctr, "Run 6000", "", many), button(ctr, "Every sequence", "", every));
   K.$("#s7-seg").appendChild(seg(["RANDOMLY-PERMUTE", "PERMUTE-WITH-ALL"], 0, (k) => { mode = k; S.cancel(); cv.setFiles(files(k)); redraw(); }));
-  CODE_LANG.on(() => { renderArr(); renderCode(); });
+  CODE_LANG.on(() => { renderArr(); renderSide(); renderCode(); });
+  redraw();
+})();
+
+/* ================= Exercise 5.3-5 · RANDOM-SAMPLE: m of 1..n, every m-subset equally likely, m calls to RANDOM ================= */
+(function s14() {
+  const svg = K.$("#s14-svg");
+  const ctr = K.$("#s14-controls"), stats = K.$("#s14-stats");
+  const part = (name) => s("g", { "data-part": name }); // the video tool shows and hides these by name
+  const gSet = part("set"), gCells = part("cells"), gDraws = part("draws"), gHist = part("histogram");
+  svg.append(gSet, gCells, gDraws, gHist);
+  const stR = stat("samples", 0), stCalls = stat("calls to RANDOM", 0), stSub = stat("subsets", "C(5, 3) = 10");
+  stats.append(stR, stCalls, stSub);
+  const cv = code("#s14-code", { files: [{ name: "RANDOM-SAMPLE", src: src("ps-s14"),
+    rs: { name: "random_sample.rs", src: src("rs-s14"), out: src("rs-s14-out"), map: { "RANDOM-SAMPLE": 15, 1: 20, 2: 21, 3: 22, 4: 23, 5: 24, 6: 23, 7: 27 } } }] });
+
+  const N = 5, M = 3, K0 = N - M + 1;
+  const SUBS = []; // the 10 three-element subsets, as "124"
+  for (let a = 1; a <= N; a++) for (let b = a + 1; b <= N; b++) for (let c = b + 1; c <= N; c++) SUBS.push(`${a}${b}${c}`);
+  let st, counts, runs, exact = null, busy = [];
+  const S = session((b) => busy.forEach((x) => (x.disabled = b)));
+  const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+  const key = (set) => [...set].sort((x, y) => x - y).join("");
+  const show = (set) => `{${[...set].sort((x, y) => x - y).join(", ")}}`;
+  /** run RANDOM-SAMPLE on a whole sequence of draws; returns the sample */
+  function runSeq(is) { const set = new Set(); is.forEach((i, r) => set.add(set.has(i) ? K0 + r : i)); return set; }
+  function allSeqs() { const out = []; const rec = (k, is) => { if (k > N) { out.push(is); return; } for (let i = 1; i <= k; i++) rec(k + 1, is.concat(i)); }; rec(K0, []); return out; }
+  function fresh() {
+    const is = []; for (let k = K0; k <= N; k++) is.push(rnd(1, k));
+    const ev = [{ k: "init" }];
+    is.forEach((i, r) => { const k = K0 + r; ev.push({ k: "loop", kk: k }, { k: "rand", kk: k, i }, { k: "add", kk: k, i }); });
+    ev.push({ k: "done" });
+    st = { set: new Set(), is, ev, at: 0, kk: null, i: null, range: null, roll: null, kind: null, hit: null, done: false, log: [], calls: 0 };
+  }
+  function clearHist() { counts = Object.fromEntries(SUBS.map((p) => [p, 0])); runs = 0; exact = null; }
+
+  /* ---------- drawing ---------- */
+  const CW = 56, CH = 54, GAP = 12, AX = 30, AY = 74;
+  const cx = (v) => AX + (v - 1) * (CW + GAP) + CW / 2; // v is the number in the cell, 1..N
+  const rs = () => CODE_LANG.rust;
+  const RAND = (k) => (rs() ? `random(1, ${k})` : `RANDOM(1, ${k})`), SN = () => (rs() ? "s" : "S");
+  function render() { renderSet(); renderDraws(); renderHist(); renderStats(); renderCode(); }
+  function renderSet() {
+    K.clear(gSet);
+    txt(gSet, 14, 22, `the numbers 1 to ${N} · a sample of m = ${M}`, { anchor: "start", cls: "sv-label" });
+    if (st.range) {
+      const x1 = cx(1) - CW / 2 - 4, x2 = cx(st.range) + CW / 2 + 4;
+      gSet.appendChild(s("rect", { x: x1, y: AY - 8, width: x2 - x1, height: CH + 16, rx: 12, class: "sv-server", style: { fillOpacity: 0.35 } }));
+      txt(gSet, (x1 + x2) / 2, AY - 16, RAND(st.range), { mono: true, size: 12, bold: true, fill: "var(--blue)" });
+    }
+    const marks = {};
+    for (let v = 1; v <= N; v++) if (st.set.has(v)) marks[v - 1] = "good";
+    if (st.roll != null) marks[st.roll - 1] = "on2";
+    if (st.kind === "add" && st.hit) marks[st.i - 1] = "on";
+    cells(gCells, { x: AX, y: AY, vals: Array.from({ length: N }, (_, v) => v + 1), cw: CW, ch: CH, gap: GAP, marks, base: null, size: 18 });
+    const ptr = (v, label, cls, dx = 0) => {
+      const x = cx(v) + dx;
+      gSet.appendChild(s("path", { d: `M${x},${AY + CH + 12} l-6,10 h12 Z`, class: cls }));
+      txt(gSet, x, AY + CH + 36, label, { mono: true, size: 12, bold: true });
+    };
+    if (st.kk != null && !st.done) {
+      const same = st.i != null && st.i === st.kk;
+      ptr(st.kk, `k=${st.kk}`, "sv-fill-blue", same ? 18 : 0);
+      if (st.i != null) ptr(st.i, `i=${st.i}`, "sv-fill-sun", same ? -18 : 0);
+    }
+  }
+  function renderDraws() {
+    K.clear(gDraws);
+    const X = 384;
+    txt(gDraws, X, 22, "draws this run", { anchor: "start", cls: "sv-label" });
+    for (let r = 0; r < M; r++) {
+      const k = K0 + r, e = st.log[r];
+      let line = `k = ${k}: ${RAND(k)} → ?`;
+      if (e && e.i != null) line = `k = ${k}: ${RAND(k)} → ${e.i}`;
+      if (e && e.added != null) line += e.hit ? `, in ${SN()}: add ${k}` : `, add ${e.i}`;
+      txt(gDraws, X, 50 + r * 24, line, { anchor: "start", mono: true, size: 12, bold: !!(e && e.i != null), fill: e && e.i != null ? (e.hit ? "var(--coral)" : "var(--ink)") : "var(--ink-3)" });
+    }
+    txt(gDraws, X, 138, `${SN()} = ${show(st.set)}`, { anchor: "start", mono: true, size: 15, bold: true, fill: st.done ? "var(--mint)" : "var(--ink)" });
+  }
+  const HX0 = 40, HX1 = 640, HB = 298, HT = 200;
+  function renderHist(mix) {
+    K.clear(gHist);
+    const tot = runs || 1;
+    txt(gHist, 14, 186, exact ? `all ${exact.total} choice sequences, counted exactly` : runs ? `how often each sample came out, ${fmt(runs)} run${runs === 1 ? "" : "s"}` : "how often each sample came out", { anchor: "start", cls: "sv-label" });
+    gHist.appendChild(s("line", { x1: 560, y1: 182, x2: 576, y2: 182, class: "sv-wire", style: { stroke: "var(--mint)", strokeWidth: 2.5, strokeDasharray: "4 3" } }));
+    txt(gHist, 582, 186, "1/10", { anchor: "start", cls: "sv-label" });
+    const slot = (HX1 - HX0) / SUBS.length, bw = 38;
+    const fr = SUBS.map((p) => (mix ? mix[p] : counts[p] / tot));
+    const top = Math.max(0.16, ...fr.map((f) => f + 0.03));
+    const y = (f) => HB - ((HB - HT) * f) / top;
+    gHist.appendChild(s("line", { x1: HX0, y1: HB, x2: HX1, y2: HB, class: "sv-wire-solid" }));
+    const last = st.done ? key(st.set) : null;
+    SUBS.forEach((p, k) => {
+      const x = HX0 + slot * (k + 0.5), f = fr[k];
+      if (f > 0) gHist.appendChild(s("rect", { x: x - bw / 2, y: y(f), width: bw, height: HB - y(f), rx: 4, class: p === last ? "sv-data-soft" : "sv-server" }));
+      txt(gHist, x, HB + 18, p, { mono: true, size: 12, bold: true });
+      if (runs && HB - y(f) > 22) txt(gHist, x, y(f) + 16, exact ? `${counts[p]}` : `${(100 * f).toFixed(0)}%`, { mono: true, size: 10.5, bold: true, fill: "var(--ink)" });
+    });
+    gHist.appendChild(s("line", { x1: HX0, y1: y(1 / 10), x2: HX1, y2: y(1 / 10), class: "sv-wire", style: { stroke: "var(--mint)", strokeWidth: 2, strokeDasharray: "4 3" } }));
+  }
+  function renderStats() {
+    stR.set(fmt(runs));
+    stCalls.set(st.calls, st.done ? "good" : undefined);
+  }
+  function renderCode() {
+    if (st.kind == null) { cv.clear(); return; }
+    const lit = { init: [1], loop: [2], rand: [3], add: st.hit ? [4, 5] : [4, 6], done: [7] }[st.kind];
+    cv.at(lit, "on");
+    const nt = {}, rt = {};
+    if (st.kk != null && !st.done) { nt[2] = `k = ${st.kk}`; rt[21] = `k = ${st.kk}`; }
+    if (st.i != null && !st.done) { nt[3] = `i = ${st.i}`; rt[22] = `i = ${st.i}`; }
+    if (st.kind === "add") {
+      nt[4] = st.hit ? `${st.i} ∈ S: yes` : `${st.i} ∈ S: no`;
+      rt[23] = st.hit ? `insert(${st.i}) = false` : `insert(${st.i}) = true`;
+      if (st.hit) rt[24] = `insert(${st.kk})`;
+    }
+    if (st.done) { nt[7] = [show(st.set), "good"]; rt[27] = [show(st.set), "good"]; }
+    cv.notes(nt, rt);
+  }
+
+  /* ---------- running ---------- */
+  async function apply(e, w) {
+    st.kind = e.k;
+    if (e.k === "init") { st.set = new Set(); st.log = []; }
+    if (e.k === "loop") { st.kk = e.kk; st.i = null; st.range = null; st.roll = null; st.hit = null; st.log.push({ k: e.kk, i: null, added: null }); }
+    if (e.k === "rand") {
+      st.range = e.kk; render();
+      const spins = 5 + Math.floor(Math.random() * 3);
+      for (let t = 0; t < spins; t++) {
+        st.roll = t === spins - 1 ? e.i : 1 + ((e.i + t + spins * 7) % e.kk);
+        renderSet();
+        await w(sleep(90));
+      }
+      st.i = e.i; st.calls++; st.log[st.log.length - 1].i = e.i;
+    }
+    if (e.k === "add") {
+      st.roll = null; st.hit = st.set.has(e.i);
+      const v = st.hit ? e.kk : e.i;
+      st.set.add(v); st.log[st.log.length - 1].added = v; st.log[st.log.length - 1].hit = st.hit;
+      render();
+      await w(sleep(260));
+    }
+    if (e.k === "done") { st.done = true; st.kk = null; st.i = null; st.range = null; if (exact) clearHist(); counts[key(st.set)]++; runs++; }
+    render();
+    cap("#s14-cap", caption(e));
+  }
+  function caption(e) {
+    const Sx = show(st.set);
+    if (e.k === "init") return `Line 1: S starts empty. The loop will run k from n − m + 1 = ${K0} to n = ${N}: exactly m = ${M} rounds, one call to RANDOM each.`;
+    if (e.k === "loop") return `k = ${e.kk}: this round draws a number from 1 to ${e.kk}.`;
+    if (e.k === "rand") return `RANDOM(1, ${e.kk}) returns <b>${e.i}</b>, each of the ${e.kk} values equally likely.`;
+    if (e.k === "add") return st.hit
+      ? `${e.i} is already in S, so k = ${e.kk} joins instead. k can't be in S yet: every earlier round drew a number below ${e.kk}. S = ${Sx}.`
+      : `${e.i} is not in S yet, so ${e.i} joins it: S = ${Sx}.`;
+    if (e.k === "done") return `Done: S = ${Sx}, after only ${M} calls to RANDOM. Each of the ${SUBS.length} samples of size ${M} comes out with probability exactly 1/${SUBS.length}.`;
+    return "";
+  }
+  async function stepOnce(w) {
+    if (st.done) { fresh(); render(); }
+    await apply(st.ev[st.at++], w);
+    return !st.done;
+  }
+  const step = () => S.run(async (w) => { await stepOnce(w); });
+  const play = () => S.run(async (w) => { while (await stepOnce(w)) await w(sleep(st.kind === "add" ? 240 : 90)); });
+  const many = () => S.run(async (w) => {
+    if (exact) clearHist();
+    const before = Object.fromEntries(SUBS.map((p) => [p, runs ? counts[p] / runs : 0]));
+    let last, lastIs;
+    for (let t = 0; t < 6000; t++) {
+      const is = []; for (let k = K0; k <= N; k++) is.push(rnd(1, k));
+      last = runSeq(is); lastIs = is; counts[key(last)]++; runs++;
+    }
+    fresh(); st.is = lastIs;
+    Object.assign(st, { set: last, done: true, kind: "done", at: st.ev.length, calls: M,
+      log: lastIs.map((i, r) => { const pre = runSeq(lastIs.slice(0, r)); const hit = pre.has(i); return { k: K0 + r, i, added: hit ? K0 + r : i, hit }; }) });
+    renderSet(); renderDraws(); renderStats(); renderCode();
+    const after = Object.fromEntries(SUBS.map((p) => [p, counts[p] / runs]));
+    await w(tween(420, (t) => renderHist(Object.fromEntries(SUBS.map((p) => [p, lerp(before[p], after[p], t)])))));
+    renderHist();
+    const c = SUBS.map((p) => counts[p]), mx = Math.max(...c), mn = Math.min(...c);
+    cap("#s14-cap", `${fmt(runs)} samples: every one of the ${SUBS.length} subsets lands near 1/${SUBS.length} = 10%, from ${((100 * mn) / runs).toFixed(1)}% to ${((100 * mx) / runs).toFixed(1)}%. The wobble is sampling noise and shrinks as you add runs.`);
+  });
+  const every = () => S.run(async (w) => {
+    clearHist();
+    const seqs = allSeqs();
+    exact = { total: seqs.length };
+    for (let q = 0; q < seqs.length; q++) {
+      fresh();
+      const is = seqs[q];
+      st.set = runSeq(is); st.done = true; st.kind = "done"; st.at = st.ev.length; st.calls = M;
+      st.log = is.map((i, r) => { const pre = runSeq(is.slice(0, r)); const hit = pre.has(i); return { k: K0 + r, i, added: hit ? K0 + r : i, hit }; });
+      counts[key(st.set)]++; runs++;
+      render();
+      cap("#s14-cap", `Choice sequence ${q + 1} of ${seqs.length}: draws ${is.join(", ")} give S = ${show(st.set)}.`);
+      await w(sleep(110));
+    }
+    cap("#s14-cap", `All ${seqs.length} choice sequences, each with probability 1/${seqs.length}: every one of the ${SUBS.length} subsets is reached by exactly ${seqs.length / SUBS.length} of them, so each has probability ${seqs.length / SUBS.length}/${seqs.length} = 1/${SUBS.length}.`);
+  });
+  function redraw() {
+    clearHist(); fresh(); render();
+    cap("#s14-cap", "Nothing drawn yet. RANDOM-SAMPLE builds a 3-element sample of 1 to 5 with one call to RANDOM per element.");
+  }
+  function reset() { S.cancel(); redraw(); }
+
+  busy = [button(ctr, "Step", "", step), button(ctr, "Play", "primary", play)];
+  button(ctr, "Reset", "", reset);
+  busy.push(button(ctr, "Run 6000", "", many), button(ctr, "Every sequence", "", every));
+  CODE_LANG.on(() => { renderSet(); renderDraws(); renderCode(); });
   redraw();
 })();
 
@@ -4625,7 +4923,8 @@ K.page(5);
     sims = {}; reset();
   } }));
   CODE_LANG.on(() => render());
-  order = shuffled(); redraw();
+  // a fixed first order (New order shuffles), so a walk through it is the same however much randomness the page used before
+  order = n === 20 ? [19, 4, 9, 15, 16, 17, 2, 14, 6, 20, 13, 8, 5, 18, 11, 7, 1, 12, 10, 3] : shuffled(); redraw();
 })();
 
 /* ================= problem 5-1 · probabilistic counting: Morris's counter ================= */

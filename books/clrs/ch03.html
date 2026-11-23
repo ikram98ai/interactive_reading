@@ -6541,7 +6541,8 @@ K.page(3);
     svg.appendChild(s("polygon", { points: top.concat(bot.reverse()).map(([a, b]) => `${a.toFixed(1)},${b.toFixed(1)}`).join(" "), class: "sv-good", style: { opacity: 0.55, strokeWidth: 1 } }));
     // legend, top right
     svg.appendChild(s("rect", { x: 352, y: 38, width: 22, height: 10, rx: 3, class: "sv-good" }));
-    txt(svg, 382, 47, "e^(1/(12n+1)) to e^(1/(12n)): (3.29)", { anchor: "start", cls: "sv-label", fill: "var(--ink)" });
+    // the equation number is its own part, so a video can hide it (no book references on screen)
+    txt(svg, 382, 47, "e^(1/(12n+1)) to e^(1/(12n))", { anchor: "start", cls: "sv-label", fill: "var(--ink)" }).appendChild(s("tspan", { "data-part": "eqnum" }, ": (3.29)"));
     svg.appendChild(s("circle", { cx: 363, cy: 63, r: 5, class: "sv-fill-sun" }));
     txt(svg, 382, 67, "n! ÷ √(2πn)(n/e)ⁿ", { anchor: "start", cls: "sv-label", fill: "var(--ink)" });
     for (let n = 1; n <= m; n++) svg.appendChild(s("circle", { cx: QX(n), cy: QY(ratio(n)), r: n === m ? 6 : 3.8, class: "sv-fill-sun", style: { stroke: "var(--ink)", strokeWidth: n === m ? 1.5 : 0 } }));
