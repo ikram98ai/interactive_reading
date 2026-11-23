@@ -8,7 +8,7 @@
 //   { "hook": ["1000× slower.", "*Still wins.*"],   lines; *words* take the accent colour
 //     "accent": "green" | "red" | "yellow" | "violet",
 //     "rust": true,                                  the Rust logo in orange, for a video ending in Rust
-//     "visual": { "kind": "race" | "cards" | "curves" | "tree", ... } }   see the drawers below for each kind's fields
+//     "visual": { "kind": "race" | "cards" | "curves" | "tree" | "products" | "hires", ... } }   see the drawers below for each kind's fields
 // Without one, it is the plain title card: the chapter and title in large type.
 const fs = require("fs");
 const path = require("path");
@@ -109,10 +109,47 @@ const V = {
     }
     return s;
   },
+  // matrix products: A × B in quarters above `of` product slots; the first `keep` filled (P₁, P₂, …), the rest struck out
+  products(v) {
+    const of = v.of || 8, keep = v.keep ?? 7, perRow = Math.ceil(of / 2), q = 74;
+    const grid = (x, name) => [0, 1].flatMap((r) => [0, 1].map((c) =>
+      `<rect x="${x + c * (q + 8)}" y="${r * (q + 8)}" width="${q}" height="${q}" rx="10" fill="#2a2350" stroke="${C.violet}" stroke-width="6"/>
+       <text x="${x + c * (q + 8) + q / 2}" y="${r * (q + 8) + q / 2 + 13}" text-anchor="middle" ${mono} font-size="36" fill="${C.ink}">${name}<tspan font-size="24" dy="7">${r + 1}${c + 1}</tspan></text>`)).join("");
+    const gw = 2 * q + 8, gx = 300 - gw - 40;
+    let s = grid(gx, "A") + grid(300 + 40, "B") + `<text x="300" y="${gw / 2 + 20}" text-anchor="middle" ${mono} font-size="64" fill="${C.dim}">×</text>`;
+    s += `<path d="M300 ${gw + 22} v 46" stroke="${C.dim}" stroke-width="9" stroke-linecap="round" marker-end="url(#ahd)"/>`;
+    const gap = 16, tw = (580 - gap * (perRow - 1)) / perRow, th = 104, ty = gw + 108;
+    for (let i = 0; i < of; i++) {
+      const x = 10 + (i % perRow) * (tw + gap), y = ty + Math.floor(i / perRow) * (th + gap), kept = i < keep;
+      const col = kept ? C.green : C.red;
+      s += `<rect x="${x}" y="${y}" width="${tw}" height="${th}" rx="16" fill="${col}" fill-opacity="${kept ? 0.3 : 0.08}" stroke="${col}" stroke-width="7"${kept ? "" : ` stroke-dasharray="16 12" opacity=".8"`}/>`;
+      s += kept
+        ? `<text x="${x + tw / 2}" y="${y + th / 2 + 18}" text-anchor="middle" ${mono} font-size="52" fill="${C.ink}">P<tspan font-size="34" dy="10">${i + 1}</tspan></text>`
+        : `<path d="M${x + 26} ${y + 20} L ${x + tw - 26} ${y + th - 20} M ${x + tw - 26} ${y + 20} L ${x + 26} ${y + th - 20}" stroke="${C.red}" stroke-width="12" stroke-linecap="round"/>`;
+    }
+    return s;
+  },
+  // the hiring problem: rows of candidates drawn as bars as tall as their rank; a candidate who beats everyone before
+  // them is hired (filled in the row's colour), the rest stay grey. rows: [{ label, values, color, win }]
+  hires(v) {
+    const max = Math.max(...v.rows.flatMap((r) => r.values));
+    return v.rows.map((r, i) => {
+      const y = 50 + i * 316, col = C[r.color] || r.color, n = r.values.length, gap = 12, w = (580 - gap * (n - 1)) / n, base = y + 226;
+      let best = -Infinity, hired = 0, s = "";
+      r.values.forEach((val, k) => {
+        const hire = val > best; if (hire) { best = val; hired++; }
+        const h = 44 + (val - 1) / (max - 1) * 132, x = 10 + k * (w + gap);
+        s += `<rect x="${x}" y="${base - h}" width="${w}" height="${h}" rx="10" fill="${hire ? col : C.card}" fill-opacity="${hire ? 0.35 : 1}" stroke="${hire ? col : C.line}" stroke-width="6"/>
+          <text x="${x + w / 2}" y="${base - 12}" text-anchor="middle" ${mono} font-size="30" fill="${hire ? C.ink : "#5d6890"}">${esc(val)}</text>`;
+      });
+      return `<text x="10" y="${y}" ${mono} font-size="50" fill="${C.ink}">${esc(r.label)}</text>
+        <text x="590" y="${y}" text-anchor="end" ${mono} font-size="50" fill="${col}">${hired} hire${hired === 1 ? "" : "s"}${r.win ? " ✓" : ""}</text>${s}`;
+    }).join("");
+  },
 };
 
 const hookLine = (l) => esc(l).replace(/\*([^*]+)\*/g, '<em>$1</em>');
-const glow = { race: "62,224,143", cards: "255,210,63", curves: "255,84,104", tree: "166,142,255" };
+const glow = { race: "62,224,143", cards: "255,210,63", curves: "255,84,104", tree: "166,142,255", products: "166,142,255", hires: "62,224,143" };
 
 function hookHtml() {
   const accent = C[spec.accent] || spec.accent || C.yellow;

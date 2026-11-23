@@ -12,3 +12,5 @@
 \bRabin\b	Ra-bean	Michael Rabin, Hebrew רַבִּין, is "rah-BEEN"; Kokoro says "RAB-in"
 \brustc\b	rust see	the Rust compiler is "rust-see"; Kokoro says "rustk" (phonemized ɹˈʌstk)
 \busize\b	you size	Rust's usize is "you-size"; Kokoro says "yoozize"
+\bmut\b	mute	Rust's mut is "mute" (short for mutable); Kokoro says "mutt" (mˈʌt)
+\bprintln\b	print line	println is "print line"; Kokoro squeezes it into one word (pɹˈɪntln)

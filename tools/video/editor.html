@@ -58,6 +58,13 @@ body.board { background: #0d1220; }
 /* a YouTube Short (1080×1920): the editor sits between the player's top bar and the burned-in captions, clear of the bottom fifth */
 body.short { box-sizing: border-box; padding: 244px 0 690px; }
 body.short .ln .no { width: 64px; } body.short #caret.blink { animation: none; } /* a short: a steady caret, so an idle editor isn't flickering */
+/* a split short ({side} in a short): the editor fills the frame, and the chapter page's machine floats over its lower
+   part, sliding away ({overlay hide}) when the code or the terminal needs the whole height */
+body.short.split { transition: padding-bottom .45s ease; }
+body.short.split #side { left: 0; box-sizing: border-box; border-top: 2px solid #3c3f41; box-shadow: none; transition: transform .45s cubic-bezier(.3, .7, .2, 1), top .6s cubic-bezier(.3, .7, .2, 1), height .6s cubic-bezier(.3, .7, .2, 1); }
+body.short.split.full #side { border-top: 0; } /* the concept part: the machine alone fills the frame */
+/* nothing crosses the seam at y = 960, so the two halves can be cut apart for a landscape video */
+body.short.split.bare #side { transform: translateY(105%); }
 body.short #run.open { height: 216px; } body.short #run:not(.open) { height: 0 !important; } body.short #run pre { font-size: 28px; padding: 10px 24px; } body.short #run .head { height: 46px; font-size: 22px; }
 </style>
 </head>
@@ -275,9 +282,21 @@ body.short #run.open { height: 216px; } body.short #run:not(.open) { height: 0 !
       const r = document.documentElement.style; r.setProperty("--left", LEFT + "px"); r.setProperty("--font", FONT + "px"); r.setProperty("--lh", LH + "px");
       caretEl.style.height = "42px"; caretEl.style.marginTop = "6px"; measure(); render();
     },
-    side(src, w) { // the chapter page beside the code: the text column narrows to the rest of the frame
+    side(src, w, box) { // the chapter page beside the code: the text column narrows to the rest of the frame
+      // box ({ top, height, codeBottom }): a short's split instead, the editor above and the page below, full width
       const r = document.documentElement.style, old = $("side");
       if (old) old.remove();
+      if (src && box) {
+        this._box = box;
+        document.body.classList.add("split"); document.body.style.paddingTop = box.tabTop + "px";
+        document.body.style.paddingBottom = (innerHeight - box.top) + "px";
+        return new Promise((done) => {
+          const f = document.createElement("iframe"); f.id = "side";
+          f.style.cssText = `top:${box.top}px;height:${box.height}px;width:${innerWidth}px`;
+          f.onload = () => done(true); f.src = src; document.body.appendChild(f);
+        });
+      }
+      if (!src && document.body.classList.contains("split")) { document.body.classList.remove("split"); document.body.style.paddingBottom = ""; return Promise.resolve(false); }
       if (!src) { document.body.classList.remove("side"); document.body.style.paddingLeft = ""; LEFT = 160; WIDTH = 1740; r.setProperty("--left", LEFT + "px"); measure(); render(); return Promise.resolve(false); }
       document.body.classList.add("side"); document.body.style.paddingLeft = w + "px";
       LEFT = 116; WIDTH = innerWidth - w - LEFT - 36; r.setProperty("--left", LEFT + "px"); measure(); render();
@@ -285,6 +304,16 @@ body.short #run.open { height: 216px; } body.short #run:not(.open) { height: 0 !
         const f = document.createElement("iframe"); f.id = "side"; f.style.width = w + "px";
         f.onload = () => done(true); f.src = src; document.body.appendChild(f);
       });
+    },
+    overlay(mode, instant) { // a split short: "show" the machine over the editor's lower half, "hide" it (the whole
+      // editor), or "full": the machine alone fills the frame, for the concept part. Its state is kept in every move.
+      const b = this._box, f = $("side"); if (!b || !f) return false;
+      if (instant) { f.style.transition = "none"; requestAnimationFrame(() => requestAnimationFrame(() => { f.style.transition = ""; })); }
+      document.body.classList.toggle("bare", mode === "hide");
+      document.body.classList.toggle("full", mode === "full");
+      f.style.top = (mode === "full" ? 0 : b.top) + "px"; f.style.height = (mode === "full" ? innerHeight : innerHeight - b.top) + "px";
+      document.body.style.paddingBottom = (innerHeight - (mode === "hide" ? b.bottom : b.top)) + "px";
+      setTimeout(follow, 620); return true;
     },
     set(text) { lines = text.replace(/\s+$/, "").split("\n"); caret = { l: lines.length - 1, c: lines[lines.length - 1].length }; sel = null; scroll = scrollGoal = 0; render(); },
     to,

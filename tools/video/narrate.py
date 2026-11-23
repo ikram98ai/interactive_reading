@@ -7,9 +7,17 @@ Everything a chapter's video needs stays in its folder: script.md, build/ (clips
   3. synthesize each block (cached by text + voice) with tts_kokoro.py
   4. transcribe each clip with Whisper: word times place the cues, and a clip that does not say what the script
      says (a TTS slip) is reported
-  5. trim, level and write build/<voice>/manifest.json for studio.js
+  5. trim and level each clip, put a person's breathing back into it (breathe), and write build/<voice>/manifest.json
+     for studio.js
 
---silent skips 3 and 4 and estimates timing at 150 words a minute: a fast way to check the highlights.
+The voice talks at a person's speed, and the pace a viewer hears comes from where it stops, not from a slower voice: a
+TTS slowed down stretches every sound evenly, and that is what sounds like a computer. A teacher talks at about 230 to
+260 words a minute and pauses forty to fifty times a minute (videos/demo, measured 2026-11-22), at commas, between
+sentences, after a question, and longer after a result. {beat} asks for that longer stop where the script wants one.
+The voice says each sentence on its own, so every sentence ends whole, and a stop opens only inside a silence the voice
+really leaves (breathe): a cut anywhere else clips the word, an s or a t worst of all.
+
+--silent skips 3 and 4 and estimates timing at 150 words a minute, breaths included: a fast way to check the highlights.
 A page video can switch to the editor once, at {goto editor} (a YouTube Short, kind: short, does): its code cues then work
 as in a code video, and the voice keeps the pace it had on the page, so the whole video sounds like one speaker. A code video (kind: code) keeps the editor's text in fenced blocks, ```rust @name … ```, which are never spoken. {code name}
 types the editor into that snapshot, and {run} shows the program's real output: each snapshot that is run is compiled with
@@ -37,10 +45,21 @@ MAX_WORDS = 48          # longer blocks drift; split at a sentence end
 MAX_WER = 0.10          # above this, the clip probably misread the script
 RETRIES = 0             # Kokoro says a text the same way every time, so a clip that differs is reported, not regenerated
 SR = 48000
-SPEED = 0.86            # Kokoro's rate: about 175 words a minute (was 0.92, about 190; slowed by the author's choice, 2026-11-16)
-# Each kind of video keeps the reference tutorials' relative pace, all about 7% slower than they measured: concepts at
-# about 175 words a minute, code videos at about 150 (room between thoughts while the code is typed), boards in between.
-PACE = {"code": (0.79, 2.6), "board": (0.82, 1.6)}   # kind → (Kokoro speed, how much longer the gaps between blocks are)
+SPEED = 0.95            # Kokoro's rate while it talks, near the 1.0 it was trained at, where it sounds most like a person. Never slow it below about 0.9 to
+                        # slow a video down (0.86 and 0.79 were tried, 2026-11-16, and sounded like a computer); slow it with
+                        # breaths and beats instead, which bring the whole video to about 160.
+# Each kind of video keeps one talking speed, and gets its slower overall pace from longer stops: code videos leave
+# more room between thoughts while the code is typed, boards a little more than concepts.
+PACE = {"code": (0.95, 1.5), "board": (0.95, 1.2)}   # kind → (Kokoro speed, how much longer the gaps between blocks are)
+# How long a person stops, in seconds of silence in all, after a word ending in this mark. Each stop is drawn at random
+# from its range, so no two are the same length, and a stop the voice already leaves that long gets nothing added.
+BREATH = {",": (0.22, 0.32), ";": (0.32, 0.45), ":": (0.30, 0.42), "—": (0.30, 0.42), "–": (0.30, 0.42),
+          ".": (0.45, 0.65), "!": (0.45, 0.65), "?": (0.65, 0.85), "…": (0.50, 0.75)}
+BEAT = (1.1, 1.4)       # {beat}: the stop that lets a result land, or gives the viewer a moment to answer a question
+# A long run with no comma still breathes before the word that turns it ("…bigger than the key because…"), but only
+# where the voice already leaves a gap, so the cut never lands inside a sound.
+HINGE = {"because", "but", "so", "which", "while", "until", "unless", "although", "whereas", "since"}
+HINGE_RUN, HINGE_GAP = 8, (0.14, 0.22)
 _whisper = None
 
 NUM_WORD = r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)"
@@ -132,6 +151,21 @@ def spoken(words, cues):
     return text
 
 
+def sentences(words):
+    """The block's sentences as word ranges [(a, b), …]: each ends at a word ending in . ? ! or …"""
+    out, a = [], 0
+    for k, w in enumerate(words):
+        if re.search(r"[.?!…]$", w.rstrip("\"')]’”")) or k == len(words) - 1:
+            out.append((a, k + 1)); a = k + 1
+    return out
+
+
+def spoken_parts(words, cues):
+    """spoken(), one sentence at a time: the voice says each sentence on its own (tts_kokoro.py's parts), so each ends
+    whole instead of running into the next one."""
+    return [spoken(words[a:b], [dict(c, w=c["w"] - a) for c in cues if a <= c["w"] < b]) for a, b in sentences(words)]
+
+
 def book_profile(script):
     """books/<book>/book.json for a script under videos/<book>/…, or {} if there is none."""
     try: rel = pathlib.Path(script).resolve().relative_to(ROOT / "videos")
@@ -181,6 +215,24 @@ def lint(segs):
             if len(distinct) > 2: bad.append(f"recites {len(distinct)} numbers: {sent!r}")
             if len(sent.split()) > 34: bad.append(f"too long to say in one breath ({len(sent.split())} words): {sent!r}")
     return bad
+
+
+EAR_SENTENCE = 25       # a spoken sentence longer than this is hard to follow on one hearing
+EAR_RUN = 16            # words with no comma, colon or dash: nowhere for the voice to breathe, so it runs on
+
+
+def ear_lint(segs):
+    """Warnings, not failures: sentences written for the eye. A new script fixes every one; an older one that was
+    judged before this lint keeps working, and gets fixed the next time its words change."""
+    warn = []
+    for s in segs:
+        t = " ".join(s["text"])
+        for sent in re.split(r"(?<=[.?!])\s+", t):
+            n = len(sent.split())
+            if EAR_SENTENCE < n <= 34: warn.append(f"long for the ear ({n} words; split it): {sent!r}")
+            longest = max((len(p.split()) for p in re.split(r"[,;:—–]", sent)), default=0)
+            if longest > EAR_RUN and n <= 34: warn.append(f"{longest} words without a breath (add a comma, or split it): {sent!r}")
+    return warn
 
 
 def norm(tok):
@@ -258,15 +310,84 @@ def finish(src, dst):
 
 
 def gap_after(seg, rng):
-    """How long a person breathes here. Longer after a question or a finished thought, never metronomic."""
+    """How long a person stops after this block, on top of the air finish() leaves and the voice's own tail (together
+    about a quarter of a second). Longest after a question or a finished thought, never metronomic. A {beat} at the end
+    of the block adds its own stop."""
     if not seg["text"]: return 0.0
-    last = seg["text"][-1]
-    if seg.get("para_end"):
-        base = (0.12, 0.28)   # on top of the air finish() leaves and the voice's own tail, which together come to about 0.6 s
-    elif last.endswith("?"): base = (0.1, 0.22)
-    elif last.endswith("..."): base = (0.15, 0.3)
-    else: base = (0.04, 0.14)
-    return round(rng.uniform(*base), 3)
+    last = seg["text"][-1].rstrip("\"')]’”")
+    if last.endswith("?"): base = (0.40, 0.60)
+    elif seg.get("para_end"): base = (0.30, 0.55)
+    elif last.endswith(("...", "…")): base = (0.30, 0.50)
+    else: base = (0.22, 0.38)
+    beat = any(c["op"] == "beat" and c["w"] >= len(seg["text"]) for c in seg["cues"])
+    return round(rng.uniform(*base) + (rng.uniform(*BEAT) if beat else 0), 3)
+
+
+def breath_plan(words, cues):
+    """Where a person stops inside a block, and for how long: [(the word the stop follows, (least, most) seconds)].
+    A {beat} cue before word k stops after word k − 1 (one at the very start or end of a block is the gap's business)."""
+    beats = {c["w"] for c in cues if c["op"] == "beat" and 0 < c["w"] < len(words)}
+    plan, run = [], 0
+    for k in range(len(words) - 1):
+        run += 1
+        tail = words[k].rstrip("\"')]’”")
+        mark = "…" if tail.endswith("...") else tail[-1:] if tail else ""
+        if k + 1 in beats: want = BEAT
+        elif mark in BREATH: want = BREATH[mark]
+        elif run >= HINGE_RUN and norm(words[k + 1]) in HINGE: want = HINGE_GAP
+        else: continue
+        plan.append((k, want)); run = 0
+    return plan
+
+
+QUIET_DB = -40          # a stop opens only where the voice is this far below its loud parts (an s hisses at about −22)
+MIN_QUIET = 0.035       # for at least this long: shorter quiet is the closure inside a t or a k, not a gap between words
+CUT_FADE = 0.010        # each side of a cut fades this long, inside the quiet, so the join is silent
+
+
+def quiet_run(db, sr, lo, hi):
+    """The longest stretch of samples lo..hi quieter than QUIET_DB, as (l, r), or None if none lasts MIN_QUIET."""
+    q = db[lo:hi] < QUIET_DB
+    edges = np.flatnonzero(np.diff(np.concatenate(([0], q.astype(np.int8), [0]))))
+    if not len(edges): return None
+    l, r = max(zip(edges[::2], edges[1::2]), key=lambda x: x[1] - x[0])
+    return (lo + int(l), lo + int(r)) if (r - l) / sr >= MIN_QUIET else None
+
+
+def breathe(wav, words, start, end, cues, rng):
+    """Put a person's stops back into a clip: open a silence in the middle of a gap the voice really leaves between the
+    two words, and nowhere else. Whisper's word edges are tens of milliseconds out, so the gap is looked for between the
+    middles of the two words. A cut anywhere else is heard: in an s it chops the hiss, in a t it strands the release
+    after the pause as a click, and before a vowel ("card, | a of zero") it clips the next word's start. Each sentence was
+    spoken on its own (spoken_parts), so a sentence always ends in such a gap; a comma the voice ran straight through
+    gets no stop. Cutting, rather than synthesizing each phrase on its own, keeps the voice's own intonation across a
+    comma. Returns the clip's new length and its words' new times."""
+    w, sr = sf.read(wav, dtype="float32")
+    hop, slow = int(0.005 * sr), int(0.02 * sr)
+    x = w - np.convolve(w, np.ones(slow) / slow, mode="same")   # the level without the slow rumble under the voice
+    e = np.sqrt(np.convolve(x ** 2, np.ones(hop) / hop, mode="same") + 1e-12)
+    db = 20 * np.log10(e / float(np.percentile(e, 95)))
+    start, end, shift = list(start), list(end), [0.0] * len(words)
+    pieces, last, added = [], 0, 0.0
+    fade = int(CUT_FADE * sr)
+    for k, want in breath_plan(words, cues):
+        lo = int(max(0.0, (start[k] + end[k]) / 2) * sr); hi = int(min(len(w) / sr, (start[k + 1] + end[k + 1]) / 2) * sr)
+        if hi - lo < hop or lo <= last: continue
+        gap = quiet_run(db, sr, lo, hi)
+        if not gap: continue   # the voice leaves no gap here: a cut would be heard
+        l, r = gap; cut = (l + r) // 2
+        add = rng.uniform(*want) - (r - l) / sr   # the voice is already quiet this long
+        if add < 0.04: continue
+        piece = w[last:cut].copy()
+        if len(piece) > fade: piece[-fade:] *= np.linspace(1, 0, fade)
+        pieces += [piece, np.zeros(int(add * sr), dtype="float32")]
+        last = cut; added += add
+        if cut + fade < len(w): w[cut:cut + fade] *= np.linspace(0, 1, fade)
+        for j in range(k + 1, len(words)): shift[j] += add
+    pieces.append(w[last:])
+    out = np.concatenate(pieces)
+    sf.write(wav, out, sr, subtype="PCM_16")
+    return len(out) / sr, [s + d for s, d in zip(start, shift)], [x + d for x, d in zip(end, shift)]
 
 
 def synth(engine, voice, items, work, speed=SPEED):
@@ -328,6 +449,8 @@ def main():
             if c["op"] == "run" and current in meta["code"] and current not in runs:
                 runs[current] = rust(meta["code"][current], build, c["arg"].strip() == "error", compile_cmd, short)
     if problems and not a.no_lint: sys.exit("script lint failed:\n  " + "\n  ".join(problems))
+    ear = ear_lint(segs)
+    if ear: print(f"{name}: {len(ear)} sentences written for the eye, not the ear (write-video-script voice.md):\n  " + "\n  ".join(ear), flush=True)
     tag = "silent" if a.silent else f"{engine}-{voice}"
     out = build / tag; (out / "raw").mkdir(parents=True, exist_ok=True)
     speed, stretch = PACE.get(meta.get("kind"), (SPEED, 1.0))
@@ -337,27 +460,36 @@ def main():
     # video keeps its page pace after {goto editor}: switching voices halfway is what a viewer hears as "slowed down".
     # Where the code is really dense, the script gives it room with a {pause} or an {await}, not a slower voice.
     sp, st = PACE["code"] if short and not meta.get("page") else (speed, stretch)
-    pace = {}
+    pace, allcues = {}, {}
     for i, s in enumerate(segs):
         words = s["text"]; text = " ".join(words)
         # each block's breath comes from its own words, so an edit in one part leaves every other part's timing alone
         # (assemble.js re-records only the parts whose timing changed)
         rng = random.Random(f"{base}|{text}")
-        rec = {"i": i, "text": text, "words": words, "cues": [c for c in s["cues"] if c["op"] != "say"], "then": s["then"], "gap": round(gap_after(s, rng) * st, 3), "dur": 0.0, "wav": None}
+        rec = {"i": i, "text": text, "words": words, "cues": [c for c in s["cues"] if c["op"] not in ("say", "beat")], "then": s["then"], "gap": round(gap_after(s, rng) * st, 3), "dur": 0.0, "wav": None}
         pace[i] = sp   # kept out of the manifest, so the parts assemble.js caches keep their hashes
+        allcues[i] = s["cues"]   # {beat} included: breathe() places it, studio.js never sees it
         res.append(rec)
         if not words: continue
-        rec["say"] = spoken(words, s["cues"])
-        # a clip spoken as written keeps its old cache key; one with a respelling gets its own
-        rec["key"] = hashlib.md5((f"{tag}|{sp}|{text}" + ("" if rec["say"] == text else f"|say:{rec['say']}")).encode()).hexdigest()[:12]
+        rec["parts"] = spoken_parts(words, s["cues"])   # said a sentence at a time (breathe)
+        rec["say"] = " ".join(rec["parts"])
+        # a clip spoken as written keeps its old cache key; one with a respelling gets its own, and so does one said in
+        # several sentences (a one-sentence clip sounds just as it did in one take)
+        rec["key"] = hashlib.md5((f"{tag}|{sp}|{text}" + ("" if rec["say"] == text else f"|say:{rec['say']}")
+                                  + ("|sentences" if len(rec["parts"]) > 1 else "")).encode()).hexdigest()[:12]
     if a.silent:
         for r in res:
-            r["dur"] = len(r["words"]) * 0.4
-            r["start"] = [k * 0.4 for k in range(len(r["words"]))]; r["end"] = [(k + 1) * 0.4 for k in range(len(r["words"]))]
+            # 0.3 s a word while talking, plus the middle of each stop breathe() will open: about 150 words a minute
+            stop = [0.0] * len(r["words"])
+            for k, (lo, hi) in breath_plan(r["words"], allcues[r["i"]]): stop[k] = (lo + hi) / 2
+            t, r["start"], r["end"] = 0.0, [], []
+            for k in range(len(r["words"])):
+                r["start"].append(t); r["end"].append(t + 0.3); t += 0.3 + stop[k]
+            r["dur"] = t
     else:
         todo = [r for r in res if r["words"]]
         for attempt in range(RETRIES + 1):
-            need = [({"text": r["say"], "out": str(out / "raw" / f"{r['key']}.wav"), "seed": base + attempt * 101 + r["i"]}, pace[r["i"]]) for r in todo if not (out / "raw" / f"{r['key']}.wav").exists()]
+            need = [({"text": r["say"], "parts": r["parts"], "out": str(out / "raw" / f"{r['key']}.wav"), "seed": base + attempt * 101 + r["i"]}, pace[r["i"]]) for r in todo if not (out / "raw" / f"{r['key']}.wav").exists()]
             if need: print(f"{name}: synthesizing {len(need)} clips with {a.voice} (attempt {attempt + 1})", flush=True)
             for sp in sorted({v for _, v in need}): synth(engine, voice, [x for x, v in need if v == sp], out, sp)
             bad = []
@@ -368,6 +500,8 @@ def main():
                 heard = json.loads(cache.read_text()) if cache.exists() else transcribe(clean)
                 cache.write_text(json.dumps(heard, default=float))
                 r["start"], r["end"], r["wer"] = align(r["words"], heard)
+                # the breaths go in after the Whisper check, so the cached word times stay the voice's own
+                r["dur"], r["start"], r["end"] = breathe(clean, r["words"], r["start"], r["end"], allcues[r["i"]], random.Random(f"{base}|breath|{r['text']}"))
                 r["heard"] = " ".join(w["word"].strip() for w in heard)
                 if r["wer"] > MAX_WER: bad.append(r)
             if not bad or attempt == RETRIES: break
@@ -386,7 +520,7 @@ def main():
     if section: chapter = (book.get("sections") or {}).get(home.parent.name, {}).get(home.name)   # ch02-s01-insertion-sort.mp4
     stem = f"{name}-{'silent' if a.silent else long_form_name(chapter) if chapter and not a.only else voice}"
     if meta.get("kind") == "short" and not a.silent: stem = name   # a short is named after its folder: 001-1-the-slower-computer-wins.mp4
-    src = lang.get("file", "main.rs")   # the editor's tab, and the command its run panel shows
+    src = meta.get("file") or lang.get("file", "main.rs")   # the editor's tab, and the command its run panel shows (a short names it after its topic)
     (out / "manifest.json").write_text(json.dumps({"meta": meta, "code": meta["code"], "runs": runs, "file": src, "run_cmd": f"rustc {src} && ./{pathlib.Path(src).stem}","name": name, "out": str(home / f"{stem}.mp4"), "voice": a.voice, "silent": a.silent, "segments": res}, indent=1, default=float))
     words = sum(len(r["words"]) for r in res); dur = sum(r["dur"] + r["gap"] for r in res)
     print(f"{name}: {len(res)} blocks, {words} words, about {dur / 60:.1f} min of speech. → {out}/manifest.json")

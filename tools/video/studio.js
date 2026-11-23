@@ -52,6 +52,15 @@ let W = 1920, H = 1080; const ZOOM = 1.34; // a short (kind: short) is 1080×192
 // the bottom fifth and the right-hand buttons of the Shorts player stay clear. The code panel is never shown: a short's
 // code is typed in the editor, after {goto editor}.
 const SHORT = { top: 280, bottom: 1210, label: 168, cap: 1262 }; // device pixels: picture from top to bottom, label, captions
+// A split short (split: true) is two halves of 1080×960 that never overlap, so the same recording can be cut into a
+// landscape video by putting the halves side by side (tools/video/landscape.sh). The top half is the editor, its tab
+// named after the topic (front matter `file:`), with no headline. The bottom half is the chapter page's machine, which
+// floats over the editor: {overlay hide} slides it away so the code and the terminal get the whole height, and
+// {overlay show} brings it back as it was. While it's shown, the machine fills the whole bottom half, edge to edge, down
+// to `foot`, and the burned-in captions keep one line at `footCap` below it (author, 2026-11-23: the memory strip must
+// be big enough to read on a phone, even where the player's title and buttons cover its edge). Without it (the code and
+// the terminal alone, or the concept view), the captions sit at `cap`, below the editor (which ends at `bottom`).
+const SPLIT = { tabTop: 0, top: 960, bottom: 1510, cap: 1528, foot: 1840, footCap: 1848 }; // the seam is the frame's middle; the tab starts at the very top
 const SHORT_CSS = `
 .wrap .stage.is-full { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) auto !important;
   box-sizing: border-box; padding: ${SHORT.top / ZOOM}px 0 ${(1920 - SHORT.bottom) / ZOOM}px; }
@@ -115,6 +124,99 @@ const SIDE_CSS = `
 .stage.is-full .memstrip svg { width: 100% !important; height: auto !important; max-height: none !important; }
 .vid-center .stage.is-full .ac-i, .stage.is-full .ac-i { opacity: 1 !important; }
 `;
+// The machine in a split short's bottom half (1080 wide, SPLIT.foot - SPLIT.top high): the picture above its strip,
+// both as wide as the frame. Every box here has a fixed size, so the picture never shrinks when the strip grows (a
+// call's frame pushed on the stack) and never jumps back when it shrinks: the strip is drawn at one scale
+// (SPLIT_STRIP_K px per viewBox unit, the strip as wide as the frame) in a box SPLIT_STRIP high, enough for two frames,
+// and only a taller strip scales down inside that box; the picture gets the rest, its content zoomed to fill it
+// (__vz "split"). A hidden stat row takes no room: a short has no room to spare for it, and {show stats} brings it back.
+const H_FULL = 1920, SPLIT_STRIP_K = 1.58, SPLIT_STRIP = 340;
+const SPLIT_CSS = `
+.wrap .stage.is-full, .wrap .stage.is-full.no-code, .vid-rust .wrap .stage.is-full:not(.no-code) { zoom: 1; width: 100vw; height: 100vh !important;
+  padding: 14px 16px ${H_FULL - SPLIT.foot}px 16px; box-sizing: border-box;
+  grid-template-rows: minmax(0, 1fr) auto auto !important; align-content: stretch; }
+.stage.is-full > .stage-scroll { min-height: 0; }
+.stage.is-full > .stage-scroll > svg { height: 100% !important; width: 100% !important; max-height: none !important; }
+.stage.is-full > .statrow[style*="opacity: 0"] { display: none !important; }
+.stage.is-full .memstrip .stage-scroll { height: ${SPLIT_STRIP}px; display: flex !important; justify-content: center; align-items: flex-start; }
+.stage.is-full .memstrip svg { flex: none; width: ${660 * SPLIT_STRIP_K}px !important; height: auto !important; max-height: ${SPLIT_STRIP}px !important; }
+.stage.is-full > .codepane { padding: 0 !important; }
+/* the concept view (overlay full) zooms the picture by the script's zoom:, and the split view zooms it to fill its box */
+.stage.is-full > .stage-scroll > svg { transition: transform .6s cubic-bezier(.3, .7, .2, 1); transform-origin: 50% 50%; }
+html.vz-full .wrap .stage.is-full { padding: 18px 24px ${H_FULL - SPLIT.bottom}px 24px !important; } /* the concept view: equal margins, the captions below at SPLIT.cap */
+html.vz-full .stage.is-full .memstrip .stage-scroll { height: 220px; } html.vz-full .stage.is-full .memstrip svg { width: 759px !important; max-height: 220px !important; } /* the hidden strip keeps the room it always had in the concept view */
+
+.stage.is-full > .statrow .stat .v { font-size: 26px; } .stage.is-full > .statrow .stat .k { font-size: 11px; }
+`;
+// The picture's zoom. "full", the concept view (script front matter zoom:): the picture's content is measured, then
+// scaled up to that zoom, or less if the content would leave the frame, and centred across it. "split", the machine in
+// the bottom half: the content zoomed as far as its box allows, so it fills the half. The concept view measures the
+// content once, when it's set. The split view fits everything the machine has drawn so far in this video (the concept
+// part has usually played it all, so a row drawn only mid-algorithm, like merge's left and right, is counted before it
+// appears), and if the machine still draws outside that, the zoom glides out to take it in, so nothing is ever cut off.
+// The zoom follows the box, frame by frame, while the overlay slides between the two. "off" (or false) is the plain picture.
+function vzInstall(want) {
+  let mode = "off", content = null, seen = null, queued = false;
+  const pic = () => document.querySelector(".is-full > .stage-scroll > svg");
+  const grow = () => { // the union of every box the machine has drawn; true if it grew
+    const svg = pic(); if (!svg) return false;
+    let b; try { b = svg.getBBox(); } catch (e) { return false; }
+    const vb = svg.viewBox.baseVal; // only what the viewBox shows counts: a machine parks hidden pieces off its stage
+    if (vb && vb.width) { const x = Math.max(b.x, vb.x), y = Math.max(b.y, vb.y), r = Math.min(b.x + b.width, vb.x + vb.width), bt = Math.min(b.y + b.height, vb.y + vb.height); b = { x, y, width: r - x, height: bt - y }; }
+    if (!(b.width > 0) || !(b.height > 0)) return false;
+    if (!seen) { seen = { x: b.x, y: b.y, r: b.x + b.width, b: b.y + b.height }; return true; }
+    const n = { x: Math.min(seen.x, b.x), y: Math.min(seen.y, b.y), r: Math.max(seen.r, b.x + b.width), b: Math.max(seen.b, b.y + b.height) };
+    const more = n.x < seen.x - 0.5 || n.y < seen.y - 0.5 || n.r > seen.r + 0.5 || n.b > seen.b + 0.5; seen = n; return more;
+  };
+  const scroll = document.querySelector(".is-full > .stage-scroll");
+  if (scroll) new MutationObserver(() => {
+    if (queued) return; queued = true;
+    requestAnimationFrame(() => { queued = false; if (grow() && mode === "split") fit(); });
+  }).observe(scroll, { childList: true, subtree: true, attributes: true, characterData: true });
+  grow();
+  const fit = () => {
+    const svg = pic(); if (!svg) return;
+    if (mode === "off") { svg.style.transform = "none"; return; }
+    // measure the plain picture with the easing off (mid-glide, the rect would be the zoom's), then glide from where it was
+    const was = svg.style.transform, ease = svg.style.transition;
+    svg.style.transition = "none"; svg.style.transform = "none";
+    const box = svg.parentElement.getBoundingClientRect();   // the picture is clipped to this box, so the content must fit in it
+    if (mode === "split") grow();
+    const vb = svg.viewBox.baseVal, r = svg.getBoundingClientRect();
+    svg.style.transform = was || "none"; svg.getBoundingClientRect(); svg.style.transition = ease;
+    const b = mode === "split" && seen ? { x: seen.x, y: seen.y, width: seen.r - seen.x, height: seen.b - seen.y } : content || (content = svg.getBBox());
+    const k = Math.min(r.width / vb.width, r.height / vb.height), ox = (r.width - vb.width * k) / 2, oy = (r.height - vb.height * k) / 2;
+    const cx = ox + (b.x - vb.x + b.width / 2) * k, cy = oy + (b.y - vb.y + b.height / 2) * k;   // the content's centre, in the svg's box
+    const room = mode === "full" ? 48 : 20;
+    const z = Math.max(1, Math.min(mode === "full" ? want : 4, (box.width - room) / (b.width * k), (box.height - room) / (b.height * k)));
+    svg.style.transformOrigin = `${cx}px ${cy}px`;
+    svg.style.transform = `translate(${box.left + box.width / 2 - (r.left + cx)}px, ${box.top + box.height / 2 - (r.top + cy)}px) scale(${z})`;   // centred both ways
+  };
+  let sliding = 0;
+  addEventListener("resize", () => { // the overlay is sliding: the zoom follows the box with no easing of its own
+    if (mode === "off") return;
+    const svg = document.querySelector(".is-full > .stage-scroll > svg"); if (!svg) return;
+    svg.style.transition = "none"; fit(); clearTimeout(sliding); sliding = setTimeout(() => { svg.style.transition = ""; }, 120);
+  });
+  window.__vz = (m, instant) => {
+    const svg = document.querySelector(".is-full > .stage-scroll > svg"); if (!svg) return;
+    if (instant) { svg.style.transition = "none"; requestAnimationFrame(() => requestAnimationFrame(() => { svg.style.transition = ""; })); }
+    mode = m === true ? "full" : m || "off"; content = null;
+    document.documentElement.classList.toggle("vz-full", mode === "full");
+    fit();
+  };
+}
+// A short stands alone: the machine's own labels must not point at the book ("Figure 2.2 (a) · i = 1" becomes "i = 1").
+// Runs in the page beside the editor, and keeps rewriting the machine's SVG text as the machine redraws it.
+function standalone() {
+  const RE = /\b(?:Figure|Fig\.|Problem|Exercise)\s*\d+(?:[.-]\d+)*(?:\s*\([a-z]\))?\s*(?:[·:—–-]\s*)?|§\s*\d+(?:\.\d+)*\s*(?:[·:]\s*)?/g;
+  const fix = (root) => {
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n; (n = w.nextNode());) if (n.parentElement && n.parentElement.closest("svg") && RE.test(n.data)) { RE.lastIndex = 0; n.data = n.data.replace(RE, ""); }
+    RE.lastIndex = 0;
+  };
+  document.querySelectorAll(".stage").forEach((st) => { fix(st); new MutationObserver(() => fix(st)).observe(st, { childList: true, subtree: true, characterData: true }); });
+}
 // Pages built on assets/kit.js (CS:APP) have no full-screen button of their own. studio.js gives their stage the same
 // .is-full layout as books/clrs/algo.css (copied from there), so every cue, target and check works the same on both.
 const KIT_CSS = `
@@ -334,6 +436,9 @@ function overlayScript() {
   let EDITOR = meta.kind === "code"; // a code video records the editor, not a chapter page; a page video can switch to it once
   const IS_SHORT = meta.kind === "short"; if (IS_SHORT) { W = 1080; H = 1920; }
   if (IS_SHORT && !meta.page) EDITOR = true; // a short with no page is all code
+  const IS_SPLIT = IS_SHORT && !!meta.split; if (IS_SPLIT) EDITOR = true; // code above, the page's machine below, from the first frame
+  let overlayMode = "show"; // a split short's machine: "show" (the bottom half), "hide" or "full"
+  const capTop = () => (IS_SPLIT ? (overlayMode === "show" ? SPLIT.footCap : SPLIT.cap) : SHORT.cap);
   fs.rmSync(frames, { recursive: true, force: true }); fs.mkdirSync(frames, { recursive: true });
   const named = (t) => t.split("+").map((x) => { const k = x.trim(), v = meta.targets[k] || BUILTIN[k]; if (v) return v; if (/^(svg|css|btn|stat|code|rs|mem|slider):/.test(k)) return k; throw new Error("unknown target " + k); });
   // check every target name before spending minutes on a recording
@@ -372,15 +477,17 @@ function overlayScript() {
       await side.evaluate(() => window.__vid.dip(false));
       log(`side ${id}`); return;
     }
-    await page.evaluate(([src, w]) => window.__ed.side(src, w), ["file://" + path.join(ROOT, meta.page), SIDE_W]);
+    await page.evaluate(([src, w, box]) => window.__ed.side(src, w, box), ["file://" + path.join(ROOT, meta.page), SIDE_W,
+      IS_SPLIT ? { top: SPLIT.top, height: H - SPLIT.top, bottom: SPLIT.bottom, tabTop: SPLIT.tabTop } : null]);
     side = page.frames().find((f) => f !== page.mainFrame());
     await side.evaluate(() => document.fonts.ready);
     if (!(await side.evaluate(() => !!window.AL))) await side.addStyleTag({ content: KIT_CSS });
     await side.addStyleTag({ content: CSS }); await side.addStyleTag({ content: SIDE_CSS });
+    if (IS_SPLIT) { await side.addStyleTag({ content: SPLIT_CSS }); await side.evaluate(standalone); }
     await side.evaluate(overlayScript);
     await sideScene(id);
     await side.evaluate(() => window.__vid.hideTitle());
-    await page.addStyleTag({ content: `#vid-label { left: ${SIDE_W}px !important; }` }); // a label centres over the editor, clear of its tab
+    if (!IS_SPLIT) await page.addStyleTag({ content: `#vid-label { left: ${SIDE_W}px !important; }` }); // a label centres over the editor, clear of its tab
     console.log(`side panel: ${id}, editor font ${(await page.evaluate((c) => window.__ed.fit(c), widest())).toFixed(1)} px for ${widest()} columns`);
     await sleep(600); // the panel's own cover has faded
   }
@@ -389,6 +496,7 @@ function overlayScript() {
     await page.evaluate(() => window.__ed.ready());
     await page.evaluate(overlayScript);
     if (IS_SHORT) { await page.evaluate(() => window.__ed.short()); await page.addStyleTag({ content: SHORT_CSS.slice(SHORT_CSS.indexOf("#vid-label")) }); }
+    if (IS_SPLIT) await page.addStyleTag({ content: "#vid-cap { font-size: 50px !important; line-height: 1.12 !important; left: 40px !important; right: 140px !important; z-index: 2; transition: top .45s cubic-bezier(.3, .7, .2, 1); }" }); // one line, below the code or the picture, moving with the machine
     else await page.addStyleTag({ content: "#vid-label { top: 14px !important; }" }); // inside the tab bar, clear of the code
     await page.evaluate((n) => window.__ed.name(n), M.file || "main.rs");
     const cols = widest();
@@ -401,6 +509,12 @@ function overlayScript() {
   const hidden = []; // [from, to] on the frames' clock: frames to drop while the editor loads, when the page's last frame holds instead
   if (EDITOR) { // a code video: the editor instead of a chapter page
     await openEditor();
+    if (IS_SPLIT) { // concept first: the machine fills the frame, zoomed by the script's zoom:
+      await openSide(meta.scene);
+      await side.evaluate(vzInstall, +meta.zoom || 1);
+      if (meta.overlay === "full") { overlayMode = "full"; await page.evaluate(() => window.__ed.overlay("full", true)); await sleep(80); await side.evaluate(() => window.__vz("full", true)); }
+      else await side.evaluate(() => window.__vz("split", true));
+    }
     await page.evaluate(() => window.__vid.title(true, "", ""));
   } else {
   await page.goto("file://" + path.join(ROOT, meta.page), { waitUntil: "load" });
@@ -413,7 +527,7 @@ function overlayScript() {
   await page.evaluate((id) => { window.__vid.enter(id); if (window.K) K.speed.value = 1; window.__vid.fresh(); }, meta.scene);
   }
   // a short keeps a headline at the top of the frame: its title, until a {label} says otherwise
-  let headline = IS_SHORT ? meta.title : "";
+  let headline = IS_SHORT && !IS_SPLIT ? meta.title : ""; // a split short has no headline: its tab names the topic
   const keepHeadline = () => headline && page.evaluate((v) => window.__vid.label(v), headline);
   await keepHeadline();
   // One part of a long form (assemble.js), on a page of its own: set it up off camera as the whole video would have it
@@ -504,7 +618,7 @@ function overlayScript() {
           img.style.cssText = "position:fixed;inset:0;width:100vw;height:100vh;z-index:99999;opacity:1;transition:opacity 1s ease";
           document.body.appendChild(img); img.decode().then(() => requestAnimationFrame(() => requestAnimationFrame(done)));
         }), last);
-        if (cap) await page.evaluate(([c, top, e]) => window.__vid.subtitle(c, top, e), [cap.chunks, SHORT.cap, now() - cap.at]); // the words carry on
+        if (cap) await page.evaluate(([c, top, e]) => window.__vid.subtitle(c, top, e), [cap.chunks, capTop(), now() - cap.at]); // the words carry on
         await cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1, maxWidth: W, maxHeight: H }).catch(() => {});
         await sleep(card ? 400 : 300); // the new page's first paint, under the veil or the old frame
         hidden.push([from, Date.now() / 1000]); EDITOR = true; entered = true;
@@ -541,7 +655,18 @@ function overlayScript() {
     else if (c.op === "focus") { await ui().evaluate((l) => window.__vid.focus(l), a === "off" ? [] : named(a)); }
     else if (c.op === "show" || c.op === "hide") { await ui().evaluate(([l, on]) => window.__vid.show(l, on), [named(a).map((x) => x.slice(4)), c.op === "show"]); }
     else if (c.op === "center" || c.op === "split") { await ui().evaluate((on) => window.__vid.center(on), c.op === "center"); }
-    else if (c.op === "label") { headline = a || (IS_SHORT ? meta.title : ""); await page.evaluate((v) => window.__vid.label(v), headline); }
+    else if (c.op === "overlay") { // a split short: hide or show the machine over the editor
+      const mode = a.trim();
+      if (!["show", "hide", "full"].includes(mode)) problems.push(`{overlay ${a}}: say show, hide or full`);
+      else if (!IS_SPLIT || !(await page.evaluate((m) => window.__ed.overlay(m), mode))) problems.push(`{overlay ${a}} needs a split short with its machine open`);
+      else {
+        overlayMode = mode;
+        if (side && mode !== "hide") await side.evaluate((m) => window.__vz(m), mode === "full" ? "full" : "split"); // hidden, it stays as it was
+        await page.evaluate((top) => { const c = document.getElementById("vid-cap"); if (c) c.style.top = top + "px"; }, capTop()); // the words move with the machine
+      }
+      await sleep(80); log(`overlay ${a}`);
+    }
+    else if (c.op === "label") { headline = a || (IS_SHORT && !IS_SPLIT ? meta.title : ""); await page.evaluate((v) => window.__vid.label(v), headline); }
     else if (c.op === "speed") { await ui().evaluate((v) => { K.speed.value = v; }, +a); }
     else if (c.op === "card") { const cut = a.indexOf("|"), [x, y] = cut < 0 ? [a.trim(), undefined] : [a.slice(0, cut).trim(), a.slice(cut + 1).trim()]; /* the body may hold |x|, an absolute value */ await page.evaluate(([p, q]) => window.__vid.card(p, q), [x, y]); }
     else if (c.op === "click") {
@@ -589,7 +714,7 @@ function overlayScript() {
   };
   for (const s of M.segments) {
     const start = now(); offsets.push(start);
-    if (IS_SHORT && s.words.length) { cap = { chunks: chunk(s), at: start }; await page.evaluate(([c, top]) => window.__vid.subtitle(c, top), [cap.chunks, SHORT.cap]); }
+    if (IS_SHORT && s.words.length) { cap = { chunks: chunk(s), at: start }; await page.evaluate(([c, top]) => window.__vid.subtitle(c, top), [cap.chunks, capTop()]); }
     for (const c of s.cues.slice().sort((p, q) => p.t - q.t)) {
       const wait = start + (c.t || 0) - now();
       if (wait > 0) await sleep(wait * 1000);
