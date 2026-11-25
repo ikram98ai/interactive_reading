@@ -792,7 +792,7 @@ n 1 writes 2
         <h2>Cut in the middle, push the middle up</h2>
         <p class="story">A full shelf has no free slot. A librarian does not squeeze one more book in: she cuts the shelf in half and hangs a label between the halves. A full B-tree node holds 2<i>t</i> − 1 keys. <b>Splitting</b> it around its median key leaves two nodes with <i>t</i> − 1 keys each, and the median moves up into the parent, where it becomes the dividing key between them.</p>
         <p class="story"><b>B-TREE-SPLIT-CHILD(x, i)</b> does this for a full child <i>y</i> = <i>x</i>.c<sub><i>i</i></sub> of a node <i>x</i> that is not full. It allocates a new node <i>z</i>, gives it the <i>t</i> − 1 greatest keys of <i>y</i> (and the <i>t</i> matching children, if <i>y</i> is internal), cuts <i>y</i> down to <i>t</i> − 1 keys, makes room in <i>x</i> for the median and for <i>z</i>, and writes the three changed nodes. That is Θ(<i>t</i>) CPU time and O(1) disk operations: no reads, three writes.</p>
-        <p class="story">Splitting is also the only way a B-tree grows taller. When the root is full, <b>B-TREE-SPLIT-ROOT</b> allocates an empty node <i>s</i>, makes the old root its only child and then splits that child. The tree gains a level at the top, so every leaf stays at the same depth. In Rust, <code>y.keys.split_off(T)</code> is the whole key loop, and <code>std::mem::take</code> lets the new root take over the old one without leaving a hole behind.</p>
+        <p class="story">Splitting is also the only way a B-tree grows taller. When the root is full, <b>B-TREE-SPLIT-ROOT</b> allocates an empty node <i>s</i>, makes the old root its only child and then splits that child. The tree gains a level at the top, so every leaf stays at the same depth. In Rust, <code>y.keys.split_off(T)</code> is the whole key loop, and <code>std::mem::replace</code> lets the new root take over the old one without leaving a hole behind.</p>
         <p class="imagine"><b>Try it:</b> press <b>Play</b> on <b>Child</b> (Figure 18.5, <i>t</i> = 4): z is allocated, the three greatest keys and four subtrees move to it, the median S flies up into x, and the three nodes are written. Then try <b>Leaf child</b>: with no children to move, lines 8–9 are skipped. <b>Root</b> shows Figure 18.6: the old root gets a new parent and the tree grows one level. In <b>Rust</b>, the memory strip shows <code>split_off</code> giving z a new buffer while y keeps its own.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -848,23 +848,28 @@ B-TREE-SPLIT-CHILD(s, 1)
 return s
 </script>
 <script type="text/x-rust" id="rs-s5">
-// B-TREE-SPLIT-CHILD and B-TREE-SPLIT-ROOT with minimum degree t = 4.
-const T: usize = 4;
+// B-TREE-SPLIT-CHILD and B-TREE-SPLIT-ROOT. The minimum degree t is a const
+// generic: a number that is part of the type, fixed when the program compiles.
+struct Node<const T: usize> {
+    keys: Vec<char>, // x.n is keys.len(): the count can't go stale
+    kids: Vec<Node<T>>, // a node owns its children
+    leaf: bool,
+}
 
-#[derive(Default)]
-struct Node { keys: Vec<char>, kids: Vec<Node>, leaf: bool }
+impl<const T: usize> Node<T> {
+    // ALLOCATE-NODE. Vec::new() allocates nothing until a key arrives.
+    fn new(leaf: bool) -> Self {
+        Node {
+            keys: Vec::new(),
+            kids: Vec::new(),
+            leaf,
+        }
+    }
 
-#[derive(Default)]
-struct Disk { reads: u32, writes: u32 }
-
-struct BTree { root: Node }
-
-impl Node {
-    fn split_child(&mut self, i: usize, disk: &mut Disk) {
+    fn split_child(&mut self, i: usize) {
         let y = &mut self.kids[i]; // a &mut borrow of part of self
-        let mut z = Node::default(); // ALLOCATE-NODE
-        z.leaf = y.leaf;
-        // split_off(T) cuts the Vec at T: z gets the tail, y keeps the head.
+        let mut z = Node::new(y.leaf);
+        // split_off(T) cuts the Vec at T: z gets the tail in a new buffer.
         z.keys = y.keys.split_off(T);
         if !y.leaf {
             z.kids = y.kids.split_off(T);
@@ -872,61 +877,56 @@ impl Node {
         let median = y.keys.pop().unwrap(); // y keeps t - 1 keys
         self.kids.insert(i + 1, z); // y's borrow ended: self is free again
         self.keys.insert(i, median); // shifts the greater keys right
-        disk.writes += 1; // y
-        disk.writes += 1; // z
-        disk.writes += 1; // x
+    } // the tree is in memory, so there is no DISK-WRITE
+
+    // B-TREE-SPLIT-ROOT: a new empty root takes the old one as its only child.
+    fn split_root(root: &mut Node<T>) {
+        let old = std::mem::replace(root, Node::new(false));
+        root.kids.push(old);
+        root.split_child(0);
     }
-}
-
-impl BTree {
-    fn split_root(&mut self, disk: &mut Disk) -> &mut Node {
-        let mut s = Node::default();
-        s.leaf = false; // s.n = 0 already: keys is empty
-        // take() moves the root out and leaves an empty Node behind.
-        s.kids.push(std::mem::take(&mut self.root));
-        self.root = s;
-        self.root.split_child(0, disk);
-        &mut self.root // the result borrows the tree
-    }
-}
-
-fn node(keys: &str, kids: Vec<Node>) -> Node {
-    Node { keys: keys.chars().collect(), leaf: kids.is_empty(), kids }
-}
-
-fn show(x: &Node) -> String {
-    let keys: String = x.keys.iter().collect();
-    if x.leaf { keys } else { format!("{keys} ({} kids)", x.kids.len()) }
-}
-
-fn report(x: &Node, disk: &Disk) {
-    let kids: Vec<String> = x.kids.iter().map(show).collect();
-    println!("{}: {}", show(x), kids.join(" | "));
-    println!("  reads {} writes {}", disk.reads, disk.writes);
 }
 
 fn main() {
-    // Figure 18.5: x = [N W] has a full middle child y.
-    let mut disk = Disk::default();
-    let y = node("PQRSTUV", vec![]);
-    let kids = vec![node("GJ", vec![]), y, node("XYZ", vec![])];
-    let mut x = node("NW", kids);
-    x.split_child(1, &mut disk);
-    report(&x, &disk);
-    // Figure 18.6: the root is full and has 8 subtrees. A new counter
-    // shadows the old one.
-    let mut disk = Disk::default();
-    let r = node("ADFHLNP", (0..8).map(|_| node("", vec![])).collect());
-    let mut tree = BTree { root: r };
-    let s = tree.split_root(&mut disk);
-    report(s, &disk);
+    // Leaf child: x = [N W], with a full leaf y in the middle.
+    let mut x: Node<4> = Node::new(false);
+    x.keys = vec!['N', 'W'];
+    for keys in [
+        vec!['J', 'K', 'L'],
+        vec!['P', 'Q', 'R', 'S', 'T', 'U', 'V'],
+        vec!['X', 'Y', 'Z'],
+    ] {
+        let mut leaf = Node::new(true);
+        leaf.keys = keys;
+        x.kids.push(leaf);
+    }
+    x.split_child(1);
+    println!("x: {:?}", x.keys);
+    for c in &x.kids {
+        println!("{:?}", c.keys);
+    }
+    // Root: a full root with eight children grows one level.
+    let mut root: Node<4> = Node::new(false);
+    root.keys = "ADFHLNP".chars().collect();
+    for _ in 0..8 {
+        root.kids.push(Node::new(true));
+    }
+    Node::split_root(&mut root);
+    println!("root: {:?}", root.keys);
+    for c in &root.kids {
+        println!("{:?} with {} kids", c.keys, c.kids.len());
+    }
 }
 </script>
 <script type="text/x-rust-out" id="rs-s5-out">
-NSW (4 kids): GJ | PQR | TUV | XYZ
-  reads 0 writes 3
-H (2 kids): ADF (4 kids) | LNP (4 kids)
-  reads 0 writes 3
+x: ['N', 'S', 'W']
+['J', 'K', 'L']
+['P', 'Q', 'R']
+['T', 'U', 'V']
+['X', 'Y', 'Z']
+root: ['H']
+['A', 'D', 'F'] with 4 kids
+['L', 'N', 'P'] with 4 kids
 </script>
   </section>
 
@@ -2816,7 +2816,10 @@ K.page(18);
     if (st.started && !st.done) {
       st.path.forEach((id, j) => {
         const last = j === st.path.length - 1;
-        frames.push({ fn: "search", top: last, vars: [{ n: "x", t: "&Node", v: last && st.i != null ? `i = ${st.i}` : last ? "" : "→ child", ptr: id, hot: last }] });
+        // binary search: no i until binary_search has returned, and then it is the Ok or Err it returned
+        const probing = mode === 1 && st.e && st.e.line === 1 && !st.e.found1;
+        const v = mode === 1 ? `${st.i < T[id].keys.length && key === T[id].keys[st.i] ? "Ok" : "Err"}(${st.i})` : `i = ${st.i}`;
+        frames.push({ fn: "search", top: last, vars: [{ n: "x", t: "&Node", v: last && st.i != null && !probing ? v : last ? "" : "→ child", ptr: id, hot: last }] });
       });
     }
     if (st.done) main.vars.push({ n: "hit", t: "Option<(&Node, usize)>", v: st.ret ? "Some" : "None", ptr: st.ret ? st.ret.id : undefined, hot: true });
@@ -2859,13 +2862,20 @@ K.page(18);
         out.push({ line: 8, id, i, child: x.kids[i], path: path.slice() });
         out.push({ line: 9, id, i, child: x.kids[i], path: path.slice() });
       } else {
-        let lo = 0, hi = n;
-        while (lo < hi) {
-          const mid = (lo + hi) >> 1, cont = x.keys[mid] < key;
-          out.push({ line: 1, id, i: lo, probe: mid, cont, cmp: true, lo, hi, path: path.slice() });
-          if (cont) lo = mid + 1; else hi = mid;
+        // the probes of Rust's slice::binary_search: halve the window [base, base + size) until one key is left,
+        // keeping the middle key whenever it is not bigger than k, then compare k with that last key
+        let base = 0, size = n;
+        while (size > 1) {
+          const half = size >> 1, mid = base + half, cont = x.keys[mid] < key;
+          const nb = x.keys[mid] > key ? base : mid, ns = size - half;
+          out.push({ line: 1, id, i: base, probe: mid, cont, cmp: true, lo: base, hi: base + size, nlo: nb, nhi: nb + ns, path: path.slice() });
+          base = nb; size = ns;
         }
-        i = lo;
+        if (n) {
+          const cont = x.keys[base] < key;
+          out.push({ line: 1, id, i: base, probe: base, cont, cmp: true, lo: base, hi: base + 1, path: path.slice() });
+          i = base + (cont ? 1 : 0);
+        }
         out.push({ line: 1, id, i, found1: true, path: path.slice() });
         const eq = i < n && key === x.keys[i];
         out.push({ line: 2, id, i, eq, path: path.slice() });
@@ -2898,7 +2908,7 @@ K.page(18);
       if (e.line === 8) text = `Line 8: <b>DISK-READ(x.c[${e.i + 1}])</b>. The child <b>${nm(e.child)}</b> is on the disk, so one block is read into memory.`;
       if (e.line === 9) text = `Line 9: search the child. The recursion goes one level down.`;
     } else {
-      if (e.line === 1 && e.probe != null) { st.cmp++; st.probe = e.probe; st.tag = { text: `${key} ${e.cont ? ">" : key === keys[e.probe] ? "=" : "<"} ${keys[e.probe]}` }; text = `Line 1: binary search looks at the middle of keys ${e.lo + 1}–${e.hi}: <b>${keys[e.probe]}</b>. ${key} ${e.cont ? "is bigger, so drop the left half." : "is not bigger, so drop the right half."}`; }
+      if (e.line === 1 && e.probe != null) { st.cmp++; st.probe = e.probe; st.tag = { text: `${key} ${e.cont ? ">" : key === keys[e.probe] ? "=" : "<"} ${keys[e.probe]}` }; text = e.hi - e.lo > 1 ? `Line 1: binary search compares ${key} with <b>${keys[e.probe]}</b>, the middle of keys ${e.lo + 1}–${e.hi}. ${keys[e.probe]} is ${keys[e.probe] > key ? "bigger" : "not bigger"}, so keep ${e.nhi - e.nlo === 1 ? `key ${e.nlo + 1}` : `keys ${e.nlo + 1}–${e.nhi}`}.` : `Line 1: one key is left, <b>${keys[e.probe]}</b>: ${key} ${key === keys[e.probe] ? "equals it" : e.cont ? "goes after it" : "goes before it"}.`; }
       if (e.line === 1 && e.found1) { text = `Line 1: the search narrowed to <b>i = ${e.i + 1}</b>${e.i < keys.length ? ", key " + keys[e.i] : ", past the last key"}.`; if (e.i < keys.length) st.probe = e.i; }
       if (e.line === 2) { if (e.i < keys.length) { st.probe = e.i; if (e.eq) st.tag = { text: `${key} = ${keys[e.i]}`, eq: true }; } text = e.eq ? `Line 2: <b>${key} = ${keys[e.i]}</b>. Found it.` : `Line 2: ${e.i < keys.length ? key + " ≠ " + keys[e.i] : "i is past the last key"}, so ${key} is not in this node.`; }
       if (e.line === 3) { st.hit = e.id; st.done = true; st.ret = { id: e.id, i: e.i }; st.probe = null; text = `Line 3: return (<b>${here}</b>, ${e.i + 1}). Total: <b>${st.reads} disk read${st.reads === 1 ? "" : "s"}</b> and ${st.cmp} comparisons.`; }
@@ -3150,8 +3160,8 @@ K.page(18);
   const ctr = K.$("#s5-controls"), stats = K.$("#s5-stats");
   const stY = stat("keys in y", 7), stZ = stat("keys in z", "–"), stX = stat("keys in x", 2), stW = stat("DISK-WRITEs", 0);
   stats.append(stY, stZ, stX, stW);
-  const MAP = { "B-TREE-SPLIT-CHILD": 13, 1: 14, 2: 15, 3: 16, 4: 18, 5: 18, 6: 18, 7: 19, 8: 20, 9: 20, 10: 22, 11: 23, 12: 23, 13: 23, 14: 24, 15: 24, 16: 24, 17: 24, 18: 25, 19: 26, 20: 27,
-    "B-TREE-SPLIT-ROOT": 32, "B-TREE-SPLIT-ROOT:1": 33, "B-TREE-SPLIT-ROOT:2": 34, "B-TREE-SPLIT-ROOT:3": 34, "B-TREE-SPLIT-ROOT:4": 36, "B-TREE-SPLIT-ROOT:5": 37, "B-TREE-SPLIT-ROOT:6": 38, "B-TREE-SPLIT-ROOT:7": 39 };
+  const MAP = { "B-TREE-SPLIT-CHILD": 19, 1: 20, 2: 21, 3: 21, 4: 23, 5: 23, 6: 23, 7: 24, 8: 25, 9: 25, 10: 27, 11: 28, 12: 28, 13: 28, 14: 29, 15: 29, 16: 29, 17: 29, 18: 30, 19: 30, 20: 30,
+    "B-TREE-SPLIT-ROOT": 33, "B-TREE-SPLIT-ROOT:1": 34, "B-TREE-SPLIT-ROOT:2": 34, "B-TREE-SPLIT-ROOT:3": 34, "B-TREE-SPLIT-ROOT:4": 35, "B-TREE-SPLIT-ROOT:5": 34, "B-TREE-SPLIT-ROOT:6": 36, "B-TREE-SPLIT-ROOT:7": 37 };
   const cv = code("#s5-code", { files: [{ name: "B-TREE-SPLIT-CHILD", src: src("ps-s5"), rs: { name: "split.rs", src: src("rs-s5"), out: src("rs-s5-out"), map: MAP } }] });
   const m = mem("#s5-mem");
   let mode = 0, st, events, busyBtns = [];
@@ -3313,22 +3323,22 @@ K.page(18);
     const xl = ROOT() ? "s" : "x";
     if (e.p === "SC") {
       const i = st.i;
-      if (L >= 1) { n[1] = `i = ${i}`; r[14] = `i = ${i - 1}`; }
-      if (L === 4) { n[4] = `z.n = ${T_ - 1}`; r[18] = `z.keys has ${T_ - 1}`; }
-      if (L === 5) { n[6] = `j = ${j}`; r[18] = `moves key ${j + T_ - 1} of 7`; }
-      if (L === 8) { n[9] = `j = ${j}`; r[20] = `kid ${j}`; }
-      if (L === 10) { n[10] = `y.n = ${T_ - 1}`; r[22] = [`median ${st.y.stale[0] ? st.y.stale[0].v : "–"}`, "warn"]; }
-      if (L === 11 && !e.skip) { n[12] = `j = ${j}`; r[23] = `shift kid ${j}`; }
+      if (L >= 1) { n[1] = `i = ${i}`; r[20] = `i = ${i - 1}`; }
+      if (L === 4) { n[4] = `z.n = ${T_ - 1}`; r[23] = `z.keys gets ${T_ - 1}`; }
+      if (L === 5) { n[6] = `j = ${j}`; r[23] = `moves key ${j + T_ - 1} of 7`; }
+      if (L === 8) { n[9] = `j = ${j}`; r[25] = `kid ${j}`; }
+      if (L === 10) { n[10] = `y.n = ${T_ - 1}`; r[27] = [`median ${st.y.stale[0] ? st.y.stale[0].v : "–"}`, "warn"]; }
+      if (L === 11 && !e.skip) { n[12] = `j = ${j}`; r[28] = `shift kid ${j}`; }
       if (L === 11 && e.skip) { n[11] = ["no iterations", "good"]; }
-      if (L === 13) { n[13] = `x.c[${i + 1}] = z`; r[23] = `insert at ${i}`; }
-      if (L === 14 && !e.skip) { n[15] = `j = ${j}`; r[24] = `shift key ${j}`; }
+      if (L === 13) { n[13] = `x.c[${i + 1}] = z`; r[28] = `insert at ${i}`; }
+      if (L === 14 && !e.skip) { n[15] = `j = ${j}`; r[29] = `shift key ${j}`; }
       if (L === 14 && e.skip) { n[14] = ["no iterations", "good"]; }
-      if (L === 16) { n[16] = [`x.key[${i}] = ${st.x.cells[i - 1]}`, "warn"]; r[24] = [`keys[${i - 1}] = ${st.x.cells[i - 1]}`, "warn"]; }
+      if (L === 16) { n[16] = [`x.key[${i}] = ${st.x.cells[i - 1]}`, "warn"]; r[29] = [`keys[${i - 1}] = ${st.x.cells[i - 1]}`, "warn"]; }
       if (L === 17) { n[17] = `x.n = ${st.x.n}`; }
-      if (L >= 18) { n[L] = `writes = ${L - 17}`; r[25 + (L - 18)] = `writes = ${L - 17}`; }
+      if (L >= 18) { n[L] = `writes = ${L - 17}`; r[30] = "no disk in memory"; }
     } else {
       if (L === 6) { n["B-TREE-SPLIT-ROOT:6"] = `x = ${xl}, i = 1`; }
-      if (L === 7) { n["B-TREE-SPLIT-ROOT:7"] = ["s → the new root", "good"]; r[39] = ["&mut to the root", "good"]; }
+      if (L === 7) { n["B-TREE-SPLIT-ROOT:7"] = ["s → the new root", "good"]; r[37] = ["root is one level taller", "good"]; }
     }
     cv.notes(n, r);
     cv.out(st.done ? (ROOT() ? "s = [H] with children [A D F] and [L N P]" : "x = [N S W] with children y = [P Q R], z = [T U V]") : null);
@@ -3336,42 +3346,47 @@ K.page(18);
 
   /* ---------- memory strip ---------- */
   function renderMem() {
-    const e = st.e;
-    const mainVars = ROOT() ? [{ n: "tree", t: "BTree", v: "root: Node" }, { n: "disk", t: "Disk", v: "writes " + st.count }] : [{ n: "x", t: "Node", v: "keys N W · 3 kids" }, { n: "disk", t: "Disk", v: "writes " + st.count }];
+    const e = st.e, L = e ? e.line : 0, SC = !!e && e.p === "SC";
+    // the program's own variables (rule: the strip's names are the Rust listing's)
+    const xKeys = () => st.x.cells.filter((c) => c != null).join(" "), xKids = () => st.x.kids.filter(Boolean).length;
+    const mainVars = ROOT()
+      ? [{ n: "root", t: "Node<4>", v: st.rootPtr === "x" ? (st.done ? `keys ${xKeys()} · ${xKids()} kids` : `keys ${xKeys() || "none"} · ${xKids()} kid${xKids() === 1 ? "" : "s"}`) : "keys A D F H L N P · 8 kids" }]
+      : [{ n: "x", t: "Node<4>", v: `keys ${xKeys()} · ${xKids()} kids` }];
     if (!e) {
       m.set({ note: "Before the call: <code>main</code> owns the tree, and its keys live in heap buffers.", stack: [{ fn: "main", vars: mainVars }], heap: [yBlock()] });
       return;
     }
-    const L = e.line, SC = e.p === "SC", frames = [{ fn: "main", vars: mainVars }];
-    if (ROOT()) frames.push({ fn: "split_root(&mut tree)", top: !SC, vars: [{ n: "s", t: "Node", v: st.x.on ? (st.rootPtr === "x" ? "is the root" : "keys: len 0") : "" }] });
+    const frames = [{ fn: "main", vars: mainVars }];
+    if (ROOT()) frames.push({ fn: "split_root(&mut root)", top: !SC, vars: [
+      { n: "root", t: "&mut Node<4>", v: "→ main's root" },
+      { n: "old", t: "Node<4>", v: !SC && L < 4 ? "the old root" : "moved into root.kids" }] });
     const heap = [yBlock()];
     if (SC) {
-      const zone = L >= 2 && L < 13;
+      const zn = st.z.cells.filter((c) => c != null).length, moved = L >= 13;
       const vars = [
-        { n: "self", t: "&mut Node", v: ROOT() ? "→ s" : "→ x" },
+        { n: "self", t: "&mut Node<4>", v: ROOT() ? "→ the new root" : "→ x" },
         { n: "i", t: "usize", v: st.i - 1, hot: L === 13 || L === 14 || L === 16 },
-        { n: "y.keys", t: "Vec<char>", v: `len ${st.y.keys.length} · cap 7`, ptr: "yk", hot: L === 1 || L === 10 },
+        { n: "y", t: "&mut Node<4>", v: "→ self.kids[i]", hot: L === 1 || L === 10 },
       ];
-      if (zone) vars.push({ n: "z.keys", t: "Vec<char>", v: st.z.cells.some((c) => c != null) ? `len ${st.z.cells.filter((c) => c != null).length} · cap ${T_ - 1}` : "len 0 · cap 0", ptr: st.z.cells.some((c) => c != null) ? "zk" : undefined, hot: L === 5 });
-      if (L >= 10 && L < 13 || (L === 10)) vars.push({ n: "median", t: "char", v: st.y.stale[0] ? st.y.stale[0].v : "", hot: L === 10 });
-      if (L >= 13) vars.push({ n: "kids[i+1].keys", t: "Vec<char>", v: `len ${T_ - 1} · cap ${T_ - 1}`, ptr: "zk" });
-      frames.push({ fn: "split_child(i)", top: true, vars });
-      if (st.z.cells.some((c) => c != null)) heap.push({ id: "zk", label: L >= 13 ? "z's buffer, now owned by x.kids" : "z.keys · new buffer from split_off", cells: st.z.cells.map((c) => (c == null ? "" : c)), marks: st.flash && st.flash.nid === "z" ? { [st.flash.idx]: "on" } : {}, cw: 32 });
+      if (L >= 2) vars.push({ n: "z", t: "Node<4>", v: moved ? "moved into self.kids" : zn ? `keys: len ${zn} · cap ${T_ - 1}` : "keys: len 0 · cap 0", ptr: zn && !moved ? "zk" : undefined, hot: L === 2 || L === 5 });
+      if (L >= 10) vars.push({ n: "median", t: "char", v: (ROOT() ? "ADFHLNP" : "PQRSTUV")[T_ - 1], hot: L === 10 || L === 16 });
+      frames.push({ fn: "split_child(&mut self, i)", top: true, vars });
+      if (zn) heap.push({ id: "zk", label: moved ? "z's keys, now owned by self.kids" : "z.keys · new buffer from split_off", cells: st.z.cells.map((c) => (c == null ? "" : c)), marks: st.flash && st.flash.nid === "z" ? { [st.flash.idx]: "on" } : {}, cw: 32 });
     }
     const notes = {
       1: "<code>y</code> is a <code>&amp;mut</code> borrow of <code>self.kids[i]</code>: nothing is copied, and <code>self</code> is locked while the borrow lives.",
-      2: "<code>z</code> is a fresh <code>Node</code> on the stack with empty Vecs: no heap yet.",
-      5: "<code>split_off(T)</code> copies the tail into a new buffer for z. y's own buffer stays where it is.",
-      7: "The same <code>split_off</code> hands z the children, if y has any.",
-      10: "<code>pop()</code> shortens y.keys to 3 and returns the median. The buffer keeps its capacity of 7.",
-      11: "y's last use is over, so its borrow ended: <code>self</code> may be used again.",
-      13: "<code>kids.insert(i + 1, z)</code> moves z into x's Vec. The buffer doesn't move, only its owner.",
-      14: "<code>keys.insert</code> shifts the greater keys one place right.",
-      18: "The three writes only bump a counter in this stand-in disk.",
+      2: "<code>z</code> is a fresh <code>Node</code> on the stack. <code>Vec::new()</code> allocates nothing, so it has no heap buffer yet.",
+      4: "<code>split_off(T)</code> moves the tail into a new buffer for z. y's own buffer stays where it is, with its capacity unchanged.",
+      7: "If y has children, the same <code>split_off</code> hands z the last t of them.",
+      10: "<code>pop()</code> shortens y.keys to t − 1 and returns the median. The buffer keeps its capacity of 7.",
+      11: "y's last use is over, so its borrow ended. <code>kids.insert(i + 1, z)</code> shifts the later children right and moves z in.",
+      13: "z moved into <code>self.kids</code>. Its keys buffer doesn't move, only its owner.",
+      14: "<code>keys.insert(i, median)</code> shifts the greater keys one place right and writes the median in the gap.",
+      18: "The Rust tree lives in memory, so it has no DISK-WRITE.",
     };
     const pick = (l) => { let best = 1; for (const k of Object.keys(notes)) if (Number(k) <= l && Number(k) > best) best = Number(k); return notes[l] || notes[best]; };
-    let note = SC ? pick(L) : "<code>mem::take(&amp;mut self.root)</code> moves the old root out and leaves an empty <code>Node</code> behind, so the field is never a hole.";
-    if (ROOT() && !SC && L === 7) note = "<code>split_root</code> returns <code>&amp;mut self.root</code>: a borrow of the tree, so the tree can't be touched while it is held.";
+    let note = SC ? pick(L) : "<code>mem::replace(root, Node::new(false))</code> puts a new empty root in place and hands back the old one, so the field is never a hole.";
+    if (ROOT() && !SC && L === 7) note = "The old root is the new root's only child, now split in two: the tree is one level taller.";
     m.set({ note, stack: frames, heap });
   }
   function yBlock() {
@@ -3380,7 +3395,7 @@ K.page(18);
     for (let i = len; i < 7; i++) marks[i] = "dim";
     st.y.copied.forEach((i) => { marks[i] = "dim"; });
     if (st.e && st.e.line === 10) marks[T_ - 1] = "on";
-    return { id: "yk", label: `${ROOT() && st.phase === "SR" ? "r" : "y"}.keys · Vec<char> · cap 7`, cells, marks, cw: 32 };
+    return { id: "yk", label: `${ROOT() && st.phase === "SR" ? "old" : "y"}.keys · Vec<char> · cap 7`, cells, marks, cw: 32 };
   }
 
   /* ---------- captions ---------- */
@@ -3682,7 +3697,7 @@ K.page(18);
     const mkr = ui.marker;
     if (mkr && L.pos.has(mkr.nid)) {
       const p = L.pos.get(mkr.nid);
-      const x = mkr.kind === "gap" ? gapX(mkr.nid, mkr.idx) : p.x + 2 + mkr.idx * cs + cw / 2, y = p.y + NH + 3;
+      const x = mkr.kind === "gap" || mkr.kind === "igap" ? gapX(mkr.nid, mkr.idx) : p.x + 2 + mkr.idx * cs + cw / 2, y = p.y + NH + 3;
       gM.appendChild(s("path", { d: `M${x},${y} l-5,9 h10 Z`, class: "sv-fill-sun" }));
       txt(gM, x, y + 21, mkr.kind === "gap" ? "c" : "i", { mono: true, bold: true, size: 11 });
     }
@@ -3707,14 +3722,17 @@ K.page(18);
     }
     u.chip = x; u.hl = x;
     const pos = e.pos;
+    // i, counted as the Rust counts it (the keys left of the marker): in Rust it sits in the gap before keys[i],
+    // in the pseudocode under the book's one-based x.key[i]
+    const iM = (i) => (CODE_LANG.rust ? { nid: x, kind: "igap", idx: i } : { nid: x, kind: "cell", idx: i - 1 });
     switch (e.line) {
-      case 1: u.marker = { nid: x, kind: "cell", idx: e.n - 1 }; break;
-      case 2: u.marker = { nid: x, kind: "cell", idx: N[x].keys.length - 1 }; break;
-      case 3: u.marker = { nid: x, kind: "cell", idx: pos - 1 }; u.cells[x] = {}; for (let i = pos + 1; i <= e.n; i++) u.cells[x][i] = "on"; break;
+      case 1: u.marker = iM(e.n); break;
+      case 2: u.marker = iM(N[x].keys.length); break;
+      case 3: u.marker = iM(pos); u.cells[x] = {}; for (let i = pos + 1; i <= e.n; i++) u.cells[x][i] = "on"; break;
       case 6: u.cells[x] = { [pos]: "on" }; break;
       case 7: u.cells[x] = { [pos]: "good" }; break;
       case 8: u.cells[x] = { [pos]: "good" }; u.written = x; break;
-      case 9: u.marker = { nid: x, kind: "cell", idx: pos - 1 }; break;
+      case 9: u.marker = iM(pos); break;
       case 11: u.marker = { nid: x, kind: "gap", idx: pos }; u.edge = N[x].kids[pos]; break;
       case 12: u.marker = { nid: x, kind: "gap", idx: pos }; u.edge = e.child; u.hl = e.child; break;
       case 13: u.marker = { nid: x, kind: "gap", idx: pos }; u.edge = e.child; if (e.full) { u.hl = null; u.bad = e.child; } else u.hl = e.child; break;
@@ -3756,8 +3774,8 @@ K.page(18);
       }));
       tag.remove();
     } else if (e.p === "NF" && (e.line === 3 || e.line === 9)) {
-      const from = e.n - 1, to = e.pos - 1, steps = Math.max(1, from - to);
-      await w(tween(260 + 150 * steps, (t) => draw(e.line === 3 ? lerpL(LA, LB, t) : LB, B, Object.assign({}, ui, { marker: { nid: e.x, kind: "cell", idx: lerp(from, to, t) } }))));
+      const rs = CODE_LANG.rust, from = rs ? e.n : e.n - 1, to = rs ? e.pos : e.pos - 1, steps = Math.max(1, from - to);
+      await w(tween(260 + 150 * steps, (t) => draw(e.line === 3 ? lerpL(LA, LB, t) : LB, B, Object.assign({}, ui, { marker: { nid: e.x, kind: rs ? "igap" : "cell", idx: lerp(from, to, t) } }))));
     } else if (e.p === "NF" && e.line === 6) {
       const hole = A.nodes[e.x].keys.slice(); // the hole sits at e.pos in A
       showSnap(A, Object.assign({}, view.ui, { chip: null, cells: { [e.x]: {} } }));
@@ -3897,8 +3915,8 @@ K.page(18);
       m.set({ note: e && e.done ? "The call returned: every frame is gone and the borrows ended. The tree still owns all its nodes." : "Before the call: <code>main</code> owns the tree. The recursion will borrow one node per level, root first.", stack: [{ fn: "main", vars: [{ n: "tree", t: "BTree", v: "root: Node" }] }], heap: [] });
       return;
     }
-    const path = e.path, N = e.snap.nodes, frames = [{ fn: "main", vars: [{ n: "tree", t: "BTree", v: "root: Node" }, { n: "disk", t: "Disk", v: `r ${e.snap.reads} · w ${e.snap.writes}` }] }];
-    frames.push({ fn: `insert('${ins.key}')`, top: e.p === "INS", vars: [{ n: "r", t: "&mut Node", v: "→ root", ptr: "b0" }] });
+    const path = e.path, N = e.snap.nodes, frames = [{ fn: "main", vars: [{ n: "tree", t: "BTree", v: "root: Node" }] }];
+    frames.push({ fn: `insert('${ins.key}')`, top: e.p === "INS", vars: [{ n: "self", t: "&mut BTree", v: "→ tree" }] });
     const shown = e.p === "NF" ? path.slice(0, path.indexOf(e.line === 17 ? e.child : e.x) + 1) : [];
     shown.forEach((id, d) => frames.push({ fn: `insert_nonfull('${ins.key}')`, top: d === shown.length - 1, vars: [{ n: "self", t: "&mut Node", v: d === 0 ? "root" : `level ${d}`, ptr: "b" + d, hot: d === shown.length - 1 }] }));
     const heap = (e.p === "NF" ? shown : [e.snap.root]).map((id, d) => {
@@ -3907,7 +3925,7 @@ K.page(18);
       return { id: "b" + d, label: `${d === 0 ? "root" : "level " + d}.keys · len ${keys.length}`, cells: keys.map((c) => c || ""), marks: hl, cw: Math.min(28, Math.floor(280 / Math.max(1, keys.length))) };
     });
     const notes = {
-      I2: "<code>r</code> is a <code>&amp;mut</code> borrow of <code>self.root</code>. If the root is full, that borrow is dead on this path, so <code>self</code> can be borrowed again.",
+      I2: "<code>insert</code> borrows the whole tree with <code>&amp;mut self</code>. If the root is full, it is split first, so the walk always starts at a root with room.",
       N12: "Each call borrows one child with <code>&amp;mut self.kids[i]</code>. Only the nodes on the stack are borrowed.",
       N14: "<code>split_child</code> borrows the parent and one child at a time, then ends both borrows before the recursion goes on.",
       N17: "A new frame: the call borrows the child and the parent stays locked until it returns.",

@@ -229,15 +229,14 @@ for i = 1 to n
 return q
 </script>
 <script type="text/x-rust" id="rs-s2">
-// `p` is borrowed. `calls` is a mutable borrow: one counter shared by all.
-fn cut_rod(p: &[i64], n: usize, calls: &mut u32) -> i64 {
-    *calls += 1;           // `*` reaches the u32 behind the borrow
+// Prices are never negative, so they are u64: unsigned. `p` is borrowed.
+fn cut_rod(p: &[u64], n: usize) -> u64 {
     if n == 0 {
         return 0;
     }
-    let mut q = i64::MIN;  // i64::MIN stands in for the book's -infinity
+    let mut q = 0;         // no revenue is below 0: 0 stands in for -infinity
     for i in 1..=n {       // 1..=n includes n
-        q = q.max(p[i] + cut_rod(p, n - i, calls));
+        q = q.max(p[i] + cut_rod(p, n - i));
     }
     q                      // no `;` here: the last expression is returned
 }
@@ -245,16 +244,14 @@ fn cut_rod(p: &[i64], n: usize, calls: &mut u32) -> i64 {
 fn main() {
     let p = vec![0, 1, 5, 8, 9, 10, 17, 17, 20, 24, 30]; // Vec: heap buffer
     for n in [4, 7, 10] {
-        let mut calls = 0;
-        let r = cut_rod(&p, n, &mut calls);
-        println!("n = {:>2}: r = {:>2}, {:>4} calls", n, r, calls);
+        println!("n = {:>2}: r = {}", n, cut_rod(&p, n));
     }
 }
 </script>
 <script type="text/x-rust-out" id="rs-s2-out">
-n =  4: r = 10,   16 calls
-n =  7: r = 18,  128 calls
-n = 10: r = 30, 1024 calls
+n =  4: r = 10
+n =  7: r = 18
+n = 10: r = 30
 </script>
   </section>
 
@@ -267,7 +264,7 @@ n = 10: r = 30, 1024 calls
         <p class="story">The cure for repeated work is almost embarrassingly simple: the first time you solve a subproblem, write the answer in a table. The next time you need it, read the table instead of recomputing. That costs memory, a <b>time–memory trade-off</b>, but the saving is dramatic. There are only <i>n</i> + 1 subproblems and each takes a loop of at most <i>n</i> steps, so the work falls from 2<sup><i>n</i></sup> to Θ(<i>n</i><sup>2</sup>).</p>
         <p class="story">There are two ways to do it. <b>Top-down with memoization</b> keeps the recursion of the last scene and checks the table first: if <i>r</i>[<i>n</i>] is known, return it; otherwise compute it, save it, return it. (“Memoization” comes from <i>memo</i>, a note you write to look up later.) <b>Bottom-up</b> drops the recursion: solve the subproblems in size order, smallest first, so that when a size needs <i>r</i>[<i>j</i> − <i>i</i>] it is already in the table.</p>
         <p class="story">Both fill the same table with the same numbers in Θ(<i>n</i><sup>2</sup>) time. The order differs: top-down dives to <i>r</i>[0] first and fills the table on the way back, solving only the sizes it actually meets; bottom-up marches from 0 to <i>n</i> with no call overhead, which usually means smaller constants.</p>
-        <p class="imagine"><b>Try it:</b> in <b>Top-down</b>, press <b>Play</b>: the calls dive to <i>r</i>[0], the table fills on the way back, and a mint flash marks every lookup that hits a saved answer. Switch to <b>Bottom-up</b> and compare the order. Slide <i>n</i> to 10 and set the loop steps against the 1024 calls of CUT-ROD. In Rust the memo is a <code>Vec&lt;Option&lt;i64&gt;&gt;</code>: <code>None</code> plays the part of the book's −∞.</p>
+        <p class="imagine"><b>Try it:</b> in <b>Top-down</b>, press <b>Play</b>: the calls dive to <i>r</i>[0], the table fills on the way back, and a mint flash marks every lookup that hits a saved answer. Switch to <b>Bottom-up</b> and compare the order. Slide <i>n</i> to 10 and set the loop steps against the 1024 calls of CUT-ROD. In Rust the memo is a <code>Vec&lt;Option&lt;u64&gt;&gt;</code>: <code>None</code> plays the part of the book's −∞. Prices and revenues are never negative, so the Rust uses <code>u64</code> and starts <i>q</i> at 0, which is also the answer for size 0.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -309,43 +306,43 @@ r[n] = q                         // remember the solution value for length n
 return q
 </script>
 <script type="text/x-rust" id="rs-s3">
-// Top-down. None means "not solved yet"; Some(v) is a saved answer.
-fn memoized_cut_rod(p: &[i64], n: usize, hits: &mut u32) -> i64 {
-    let mut r: Vec<Option<i64>> = vec![None; n + 1];
-    memoized_cut_rod_aux(p, n, &mut r, hits)
+fn memoized_cut_rod(
+    p: &[u64],
+    n: usize,
+) -> u64 {
+    let mut r = vec![None; n + 1];
+    aux(p, n, &mut r)
 }
 
-fn memoized_cut_rod_aux(
-    p: &[i64],
+fn aux(
+    p: &[u64],
     n: usize,
-    r: &mut [Option<i64>], // &mut Vec<_> coerces to a &mut slice
-    hits: &mut u32,
-) -> i64 {
-    if let Some(v) = r[n] {  // already have a solution for length n?
-        *hits += 1;
-        return v;
+    r: &mut [Option<u64>],
+) -> u64 {
+    if let Some(q) = r[n] {
+        return q;
     }
-    let mut q = if n == 0 { 0 } else { i64::MIN }; // `if` is an expression
-    for i in 1..=n {         // i is the position of the first cut
-        q = q.max(p[i] + memoized_cut_rod_aux(p, n - i, r, hits));
+    let mut q = 0;
+    for i in 1..=n {
+        let v = aux(p, n - i, r);
+        q = q.max(p[i] + v);
     }
-    r[n] = Some(q);          // remember the solution value for length n
+    r[n] = Some(q);
     q
 }
 
 fn main() {
-    let p = [0, 1, 5, 8, 9, 10, 17, 17, 20, 24, 30];
-    for n in [4, 7, 10] {
-        let mut hits = 0;
-        let r = memoized_cut_rod(&p, n, &mut hits);
-        println!("n = {:>2}: r = {:>2}, {:>2} memo hits", n, r, hits);
+    let p = [0, 1, 5, 8, 9, 10,
+             17, 17, 20, 24, 30];
+    for n in [4, 10] {
+        let r = memoized_cut_rod(&p, n);
+        println!("r{} = {}", n, r);
     }
 }
 </script>
 <script type="text/x-rust-out" id="rs-s3-out">
-n =  4: r = 10,  6 memo hits
-n =  7: r = 18, 21 memo hits
-n = 10: r = 30, 45 memo hits
+r4 = 10
+r10 = 30
 </script>
 <script type="text/x-clrs" id="ps-s3-b">
 BOTTOM-UP-CUT-ROD(p, n)
@@ -359,29 +356,32 @@ for j = 1 to n                   // for increasing rod length j
 return r[n]
 </script>
 <script type="text/x-rust" id="rs-s3-b">
-// Bottom-up: no recursion, just two nested loops filling a Vec.
-fn bottom_up_cut_rod(p: &[i64], n: usize) -> i64 {
-    let mut r = vec![0; n + 1];   // r[0] = 0, and the rest is overwritten
-    for j in 1..=n {              // for increasing rod length j
-        let mut q = i64::MIN;
-        for i in 1..=j {          // i is the position of the first cut
-            // j - i can't underflow: i <= j (usize would panic below 0)
-            q = q.max(p[i] + r[j - i]);
-        }
-        r[j] = q;                 // remember the solution value for length j
+fn bottom_up_cut_rod(
+    p: &[u64],
+    n: usize,
+) -> u64 {
+    let mut r = vec![0; n + 1];
+    for j in 1..=n {
+        r[j] = (1..=j)
+            .map(|i| p[i] + r[j - i])
+            .max()
+            .unwrap();
     }
     r[n]
 }
 
 fn main() {
-    let p = [0, 1, 5, 8, 9, 10, 17, 17, 20, 24, 30];
-    // map + collect builds the whole Vec of answers in one expression.
-    let r: Vec<i64> = (1..=10).map(|n| bottom_up_cut_rod(&p, n)).collect();
-    println!("r_1 .. r_10 = {:?}", r);
+    let p = [0, 1, 5, 8, 9, 10,
+             17, 17, 20, 24, 30];
+    for n in [4, 10] {
+        let r = bottom_up_cut_rod(&p, n);
+        println!("r{} = {}", n, r);
+    }
 }
 </script>
 <script type="text/x-rust-out" id="rs-s3-b-out">
-r_1 .. r_10 = [1, 5, 8, 10, 13, 17, 18, 22, 25, 30]
+r4 = 10
+r10 = 30
 </script>
   </section>
 
@@ -755,8 +755,8 @@ else print "("
     print ")"
 </script>
 <script type="text/x-rust" id="rs-s6-x">
-// Same procedure as MATRIX-CHAIN-ORDER, kept short: only s is needed here.
-fn split_table(p: &[u64]) -> Vec<Vec<usize>> {
+// MATRIX-CHAIN-ORDER, the same as above, pasted in whole: it fills both tables.
+fn matrix_chain_order(p: &[u64]) -> (Vec<Vec<u64>>, Vec<Vec<usize>>) {
     let n = p.len() - 1;
     let mut m = vec![vec![0u64; n + 1]; n + 1];
     let mut s = vec![vec![0usize; n + 1]; n + 1];
@@ -773,7 +773,7 @@ fn split_table(p: &[u64]) -> Vec<Vec<usize>> {
             }
         }
     }
-    s
+    (m, s)
 }
 
 // `out: &mut String` is passed down every call: all the frames append
@@ -797,14 +797,14 @@ fn print_optimal_parens(
 
 fn main() {
     let p = [30, 35, 15, 5, 10, 20, 25];
-    let s = split_table(&p);
+    let (m, s) = matrix_chain_order(&p);
     let mut out = String::new();
     print_optimal_parens(&s, 1, 6, &mut out);
-    println!("{}", out);
+    println!("{} costs {}", out, m[1][6]);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s6-x-out">
-((A1(A2A3))((A4A5)A6))
+((A1(A2A3))((A4A5)A6)) costs 15125
 </script>
   </section>
 
@@ -1511,33 +1511,39 @@ fn lcs_length(x: &[char], y: &[char]) -> (Vec<Vec<usize>>, Vec<Vec<Arrow>>) {
     (c, b) // both tables move out to the caller, no copy
 }
 
-// Recurse first, push after: the letters come out in forward order.
-fn print_lcs(b: &[Vec<Arrow>], x: &[char], i: usize, j: usize,
-             out: &mut String) {
-    if i == 0 || j == 0 {
-        return;
-    }
-    match b[i][j] {
-        Arrow::Diag => {
-            print_lcs(b, x, i - 1, j - 1, out);
-            out.push(x[i - 1]);
+// A loop instead of the book's recursion: one frame, however long the walk.
+// Walking back finds the letters last to first, so push them, then reverse.
+fn print_lcs(b: &[Vec<Arrow>], x: &[char],
+             mut i: usize, mut j: usize) {
+    let mut out = Vec::new();
+    while i > 0 && j > 0 {
+        match b[i][j] {
+            Arrow::Diag => {
+                out.push(x[i - 1]);
+                i -= 1;
+                j -= 1;
+            }
+            Arrow::Up => i -= 1,
+            Arrow::Left => j -= 1,
         }
-        Arrow::Up => print_lcs(b, x, i - 1, j, out),
-        Arrow::Left => print_lcs(b, x, i, j - 1, out),
     }
+    out.reverse();
+    let s: String = out.into_iter().collect();
+    println!("LCS = {}", s);
 }
 
 fn main() {
     let x: Vec<char> = "ABCBDAB".chars().collect();
     let y: Vec<char> = "BDCABA".chars().collect();
     let (c, b) = lcs_length(&x, &y);
-    let mut out = String::new();
-    print_lcs(&b, &x, x.len(), y.len(), &mut out);
-    println!("c[7][6] = {}, LCS = {out}", c[x.len()][y.len()]);
+    let (m, n) = (x.len(), y.len());
+    println!("c[{m}][{n}] = {}", c[m][n]);
+    print_lcs(&b, &x, m, n);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s11-a-out">
-c[7][6] = 4, LCS = BCBA
+c[7][6] = 4
+LCS = BCBA
 </script>
 <script type="text/x-clrs" id="ps-s11-b">
 LCS-LENGTH-TWO-ROWS(X, Y, m, n)
@@ -2535,7 +2541,7 @@ K.page(14);
   const ctr = K.$("#s2-controls"), stats = K.$("#s2-stats");
   const stCalls = stat("calls so far", 0), stAll = stat("calls in all", 16), stSizes = stat("different sizes", 5), stRep = stat("repeat calls", 0);
   stats.append(stCalls, stAll, stSizes, stRep);
-  const MAP = { "CUT-ROD": 2, 1: [3, 4], 2: 5, 3: 7, 4: 8, 5: 9, 6: 11 };
+  const MAP = { "CUT-ROD": 2, 1: 3, 2: 4, 3: 6, 4: 7, 5: 8, 6: 10 };
   const cv = code("#s2-code", { files: [{ name: "CUT-ROD", src: src("ps-s2"), rs: { name: "cut_rod.rs", src: src("rs-s2"), out: src("rs-s2-out"), map: MAP } }] });
   const m = mem("#s2-mem");
   const TOP = 34, BOT = 236, CHIP_Y = 268;
@@ -2635,34 +2641,34 @@ K.page(14);
     cv.at([], "dim");
     if (e.t === "call") {
       lit(nd.size === 0 ? [1, 2] : [1, 3, 4]); if (e.stack.length > 1) cv.at([5], "dim");
-      cv.notes(nd.size === 0 ? { 1: "n = 0", 2: ["return 0", "good"] } : { 1: `n = ${nd.size}`, 3: "q = −∞" }, nd.size === 0 ? { 4: "n = 0", 5: ["return 0", "good"] } : { 4: `n = ${nd.size}`, 7: "q = i64::MIN" });
+      cv.notes(nd.size === 0 ? { 1: "n = 0", 2: ["return 0", "good"] } : { 1: `n = ${nd.size}`, 3: "q = −∞" }, nd.size === 0 ? { 3: "n = 0", 4: ["return 0", "good"] } : { 3: `n = ${nd.size}`, 6: "q = 0" });
     } else if (e.t === "upd") {
       lit([5]);
-      cv.notes({ 4: `i = ${e.i}`, 5: `q = ${e.q}` }, { 8: `i = ${e.i}`, 9: `q = ${e.q}` });
+      cv.notes({ 4: `i = ${e.i}`, 5: `q = ${e.q}` }, { 7: `i = ${e.i}`, 8: `q = ${e.q}` });
     } else {
       lit([6]);
-      cv.notes({ 6: [`return ${R[nd.size]}`, "good"] }, { 11: [`return ${R[nd.size]}`, "good"] });
+      cv.notes({ 6: [`return ${R[nd.size]}`, "good"] }, { 10: [`return ${R[nd.size]}`, "good"] });
     }
   }
   function renderMem(e) {
     const ids = e ? e.stack : [];
-    const frames = [{ fn: "main", vars: [{ n: "p", t: "Vec<i64>", v: "len 11", ptr: "p" }, { n: "calls", t: "u32", v: calls, hot: !!(e && e.t === "call") }] }];
+    const frames = [{ fn: "main", vars: [{ n: "p", t: "Vec<u64>", v: "len 11", ptr: "p" }] }];
     const shown = ids.slice(-3), hidden = ids.length - shown.length;
     if (hidden > 0) frames.push({ fn: `… ${hidden} more cut_rod frame${hidden > 1 ? "s" : ""}`, gone: true, vars: [] });
     shown.forEach((id, j) => {
       const nd = nodes[id], isTop = j === shown.length - 1;
-      frames.push({ fn: "cut_rod", sub: "p, calls: borrowed", top: isTop, vars: [
+      frames.push({ fn: "cut_rod", sub: "p: borrowed", top: isTop, vars: [
         { n: "n", t: "usize", v: nd.size, hot: isTop },
-        { n: "q", t: "i64", v: nd.q == null ? "i64::MIN" : nd.q },
+        { n: "q", t: "u64", v: nd.q == null ? 0 : nd.q },
       ] });
     });
     const depth = ids.length;
     m.set({
-      note: !e ? "Before the call: <code>main</code> owns the prices on the heap and a <code>calls</code> counter at 0."
-        : k >= ev.length ? `Every call has returned and every frame is gone. <code>calls</code> ended at ${calls}.`
-        : `The stack holds <b>${depth}</b> cut_rod frame${depth > 1 ? "s" : ""} now, never more than n + 1 = ${n + 1}. Each frame keeps its own <code>n</code> and <code>q</code>; <code>p</code> and <code>calls</code> are borrowed, so a call copies two pointers, not the table.`,
+      note: !e ? "Before the call: <code>main</code> owns the prices, in a buffer on the heap."
+        : k >= ev.length ? `Every call has returned and every cut_rod frame is gone, after ${calls} calls.`
+        : `The stack holds <b>${depth}</b> cut_rod frame${depth > 1 ? "s" : ""} now, never more than n + 1 = ${n + 1}. Each frame keeps its own <code>n</code> and <code>q</code>; <code>p</code> is borrowed, so a call copies a pointer and a length, not the table.`,
       stack: frames,
-      heap: [{ id: "p", label: "p's buffer · 11 × i64", cells: P, cw: 24 }],
+      heap: [{ id: "p", label: "p's buffer · 11 × u64", cells: P, cw: 24 }],
     });
   }
 
@@ -2716,18 +2722,19 @@ K.page(14);
 (function s3() {
   const svg = K.$("#s3-svg");
   const P = [0, 1, 5, 8, 9, 10, 17, 17, 20, 24, 30]; // Figure 14.1; slot 0 is padding
-  const X = (c) => 92 + c * 46, CW = 40, CH = 28, Y_P = 28, Y_R = 96, Y_C = 164;
+  const OX = () => Math.max(0, (660 - (92 + (n + 1) * 46)) / 2); // centre the rows for the current n
+  const X = (c) => OX() + 92 + c * 46, CW = 40, CH = 28, Y_P = 28, Y_R = 96, Y_C = 164;
   const gP = s("g"), gR = s("g"), gC = s("g"), gT = s("g");
   svg.append(gP, gR, gC, gT);
   const ctr = K.$("#s3-controls"), stats = K.$("#s3-stats");
-  const stSolved = stat("sizes solved", 0), stHits = stat("memo hits", 0), stSteps = stat("loop steps", 0), stNaive = stat("CUT-ROD calls", 32);
+  const stSolved = stat("sizes solved", 0), stHits = stat("memo hits", 0), stSteps = stat("loop steps", 0), stNaive = stat("calls without memo", 32);
   stats.append(stSolved, stHits, stSteps, stNaive);
   const W = "MEMOIZED-CUT-ROD:", A = "MEMOIZED-CUT-ROD-AUX:";
   const FILES = [
-    { name: "MEMOIZED-CUT-ROD", src: src("ps-s3"), rs: { name: "memoized.rs", src: src("rs-s3"), out: src("rs-s3-out"),
-      map: { "MEMOIZED-CUT-ROD": 2, [W + 1]: 3, [W + 2]: 3, [W + 3]: 3, [W + 4]: 4, "MEMOIZED-CUT-ROD-AUX": 7, [A + 1]: 13, [A + 2]: [14, 15], [A + 3]: 17, [A + 4]: 17, [A + 5]: 17, [A + 6]: 18, [A + 7]: 19, [A + 8]: 21, [A + 9]: 22 } } },
-    { name: "BOTTOM-UP-CUT-ROD", src: src("ps-s3-b"), rs: { name: "bottom_up.rs", src: src("rs-s3-b"), out: src("rs-s3-b-out"),
-      map: { "BOTTOM-UP-CUT-ROD": 2, 1: 3, 2: 3, 3: 4, 4: 5, 5: 6, 6: 8, 7: 10, 8: 12 } } },
+    { name: "MEMOIZED-CUT-ROD", src: src("ps-s3"), rs: { name: "memoized_cut_rod.rs", src: src("rs-s3"), out: src("rs-s3-out"),
+      map: { "MEMOIZED-CUT-ROD": 1, [W + 1]: 5, [W + 2]: 5, [W + 3]: 5, [W + 4]: 6, "MEMOIZED-CUT-ROD-AUX": 9, [A + 1]: 14, [A + 2]: 15, [A + 3]: 17, [A + 4]: 17, [A + 5]: 17, [A + 6]: 18, [A + 7]: [19, 20], [A + 8]: 22, [A + 9]: 23 } } },
+    { name: "BOTTOM-UP-CUT-ROD", src: src("ps-s3-b"), rs: { name: "bottom_up_cut_rod.rs", src: src("rs-s3-b"), out: src("rs-s3-b-out"),
+      map: { "BOTTOM-UP-CUT-ROD": 1, 1: 5, 2: 5, 3: 6, 4: 7, 5: [7, 8], 6: [8, 9], 7: [7, 10], 8: 12 } } },
   ];
   const cv = code("#s3-code", { files: [FILES[0]] });
   const m = mem("#s3-mem");
@@ -2788,7 +2795,7 @@ K.page(14);
     // prices p[1..n], with the one in use lit
     AL.cells(gP, { x: X(1), y: Y_P, vals: P.slice(1, n + 1), cw: CW, ch: CH, gap: 6, base: null, size: 13, marks: st.price ? { [st.price - 1]: "on" } : {} });
     for (let i = 1; i <= n; i++) txt(gP, X(i) + CW / 2, Y_P - 7, String(i), { cls: "ac-i" });
-    txt(gP, 84, Y_P + 18, "p[i]", { anchor: "end", cls: "ac-i" });
+    txt(gP, OX() + 84, Y_P + 18, "p[i]", { anchor: "end", cls: "ac-i" });
     // the table r[0..n]
     const marks = {};
     for (let c = 0; c <= n; c++) {
@@ -2800,12 +2807,12 @@ K.page(14);
       else if (st.r[c] != null) marks[c] = "sorted";
     }
     const none = CODE_LANG.rust ? "None" : "−∞";
-    AL.cells(gR, { x: X(0), y: Y_R, vals: st.r.map((v) => (v != null ? v : mode === 0 ? none : "")), cw: CW, ch: CH, gap: 6, base: 0, size: 13, marks });
-    txt(gR, 84, Y_R + 18, mode === 0 ? "r (memo)" : "r", { anchor: "end", cls: "ac-i" });
+    AL.cells(gR, { x: X(0), y: Y_R, vals: st.r.map((v) => (v != null ? v : mode === 0 ? none : CODE_LANG.rust ? 0 : "")), cw: CW, ch: CH, gap: 6, base: 0, size: 13, marks });
+    txt(gR, OX() + 84, Y_R + 18, mode === 0 ? "r (memo)" : "r", { anchor: "end", cls: "ac-i" });
     // candidates for the frame that is working: one tile per first cut i
     K.clear(gC);
     const f = st.done ? n : top;
-    txt(gC, 84, Y_C + 18, mode === 0 ? "p[i]+r[n−i]" : "p[i]+r[j−i]", { anchor: "end", cls: "ac-i" });
+    txt(gC, OX() + 84, Y_C + 18, mode === 0 ? "p[i]+r[n−i]" : "p[i]+r[j−i]", { anchor: "end", cls: "ac-i" });
     if (f != null && f > 0) {
       const vals = st.cand[f] || Array(f).fill(null), bi = st.best[f];
       const live = e && ((e.t === "upd" && e.sz === f) || (e.t === "cand" && e.j === f)) ? e.i : e && e.t === "hit" && e.from === f ? e.i : null;
@@ -2822,7 +2829,7 @@ K.page(14);
       ? (st.done ? "all calls have returned" : st.stack.length ? "calls in progress: " + st.stack.join(" → ") + (st.hit != null ? " → " + st.hit + " (hit)" : "") : "no call yet")
       : (st.j != null && !st.done ? `j = ${st.j}${e && e.t === "cand" ? " · i = " + e.i : ""}` : st.done ? "all sizes solved" : "no size solved yet");
     txt(gT, 330, 226, line, { mono: true, size: 12.5, cls: "sv-label" });
-    stSolved.set(st.solved, st.done ? "good" : undefined); stHits.set(mode === 0 ? st.hits : "–"); stSteps.set(st.steps);
+    stSolved.set(st.solved, st.done ? "good" : undefined); stHits.set(mode === 0 ? st.hits : "–"); stHits.style.display = mode === 0 ? "" : "none"; stSteps.set(st.steps);
   }
 
   /* ---- code panel ---- */
@@ -2831,23 +2838,23 @@ K.page(14);
     const e = st.ev;
     if (!e) { cv.clear(); cv.out(null); return; }
     if (mode === 0) {
-      if (e.t === "init") { lit([W + 1, W + 2, W + 3]); cv.notes({ [W + 3]: "all −∞" }, { 3: `r = [None; ${n + 1}]` }); }
+      if (e.t === "init") { lit([W + 1, W + 2, W + 3]); cv.notes({ [W + 3]: "all −∞" }, { 5: `r = [None; ${n + 1}]` }); }
       else if (e.t === "enter") {
         lit(e.sz === 0 ? [A + 1, A + 3, A + 4] : [A + 1, A + 3, A + 5]);
         cv.at(e.from == null ? [W + 4] : [A + 7], "dim");
         cv.notes(e.sz === 0 ? { [A + 1]: "r[0] = −∞", [A + 4]: "q = 0" } : { [A + 1]: `r[${e.sz}] = −∞`, [A + 5]: "q = −∞" },
-          e.sz === 0 ? { 13: "r[0] = None", 17: "q = 0" } : { 13: `r[${e.sz}] = None`, 17: "q = i64::MIN" });
+          { 14: `r[${e.sz}] = None`, 17: "q = 0" });
       } else if (e.t === "hit") {
         lit([A + 1, A + 2], "good"); cv.at([A + 7], "dim");
-        cv.notes({ [A + 1]: `r[${e.sz}] = ${e.val}`, [A + 2]: [`return ${e.val}`, "good"] }, { 13: `Some(${e.val})`, 14: `hits = ${st.hits}`, 15: [`return ${e.val}`, "good"] });
-      } else if (e.t === "upd") { lit([A + 7]); cv.notes({ [A + 6]: `i = ${e.i}`, [A + 7]: `q = ${e.q}` }, { 18: `i = ${e.i}`, 19: `q = ${e.q}` }); }
-      else if (e.t === "store") { lit([A + 8, A + 9]); cv.notes({ [A + 8]: `r[${e.sz}] = ${e.q}`, [A + 9]: `return ${e.q}` }, { 21: `r[${e.sz}] = Some(${e.q})`, 22: `return ${e.q}` }); }
-      else { lit([W + 4], "good"); cv.notes({ [W + 4]: [`return ${e.val}`, "good"] }, { 4: [`return ${e.val}`, "good"] }); cv.out(`r_${n} = ${e.val}, ${st.hits} memo hits`); }
+        cv.notes({ [A + 1]: `r[${e.sz}] = ${e.val}`, [A + 2]: [`return ${e.val}`, "good"] }, { 14: `Some(${e.val})`, 15: [`return ${e.val}`, "good"] });
+      } else if (e.t === "upd") { lit([A + 7]); cv.notes({ [A + 6]: `i = ${e.i}`, [A + 7]: `q = ${e.q}` }, { 18: `i = ${e.i}`, 19: `v = ${e.v}`, 20: `q = ${e.q}` }); }
+      else if (e.t === "store") { lit([A + 8, A + 9]); cv.notes({ [A + 8]: `r[${e.sz}] = ${e.q}`, [A + 9]: `return ${e.q}` }, { 22: `r[${e.sz}] = Some(${e.q})`, 23: `return ${e.q}` }); }
+      else { lit([W + 4], "good"); cv.notes({ [W + 4]: [`return ${e.val}`, "good"] }, { 6: [`return ${e.val}`, "good"] }); cv.out(`r_${n} = ${e.val}, ${st.hits} memo hits`); }
     } else {
-      if (e.t === "init") { lit([1, 2]); cv.notes({ 2: "r[0] = 0" }, { 3: `r = [0; ${n + 1}]` }); }
-      else if (e.t === "j") { lit([3, 4]); cv.notes({ 3: `j = ${e.j}`, 4: "q = −∞" }, { 4: `j = ${e.j}`, 5: "q = i64::MIN" }); }
-      else if (e.t === "cand") { lit([5, 6]); cv.notes({ 5: `i = ${e.i}`, 6: `q = ${e.q}` }, { 6: `i = ${e.i}`, 8: `q = ${e.q}` }); }
-      else if (e.t === "store") { lit([7]); cv.notes({ 7: `r[${e.j}] = ${e.q}` }, { 10: `r[${e.j}] = ${e.q}` }); }
+      if (e.t === "init") { lit([1, 2]); cv.notes({ 2: "r[0] = 0" }, { 5: `r = [0; ${n + 1}]` }); }
+      else if (e.t === "j") { lit([3, 4]); cv.notes({ 3: `j = ${e.j}`, 4: "q = −∞" }, { 6: `j = ${e.j}` }); }
+      else if (e.t === "cand") { lit([5, 6]); cv.notes({ 5: `i = ${e.i}`, 6: `q = ${e.q}` }, { 8: `i = ${e.i}: ${e.val}`, 9: `max so far ${e.q}` }); }
+      else if (e.t === "store") { lit([7]); cv.notes({ 7: `r[${e.j}] = ${e.q}` }, { 7: `r[${e.j}] = ${e.q}` }); }
       else { lit([8], "good"); cv.notes({ 8: [`return ${e.val}`, "good"] }, { 12: [`return ${e.val}`, "good"] }); cv.out(`r_${n} = ${e.val}`); }
     }
   }
@@ -2857,7 +2864,7 @@ K.page(14);
     const e = st.ev;
     if (!e) {
       m.set({ note: mode === 0 ? "Before the call: <code>main</code> holds the prices in an array on the stack. The memo does not exist yet." : "Before the call: <code>main</code> holds the prices in an array on the stack. The table <code>r</code> does not exist yet.",
-        stack: [{ fn: "main", vars: [{ n: "p", t: "[i64; 11]", v: "11 numbers, inline" }] }], heap: [] });
+        stack: [{ fn: "main", vars: [{ n: "p", t: "[u64; 11]", v: "11 numbers, inline" }] }], heap: [] });
       return;
     }
     const top = mode === 0 ? st.stack[st.stack.length - 1] : st.j;
@@ -2868,36 +2875,41 @@ K.page(14);
       else if (st.read === c) hm[c] = "on2";
       else if (st.r[c] != null) hm[c] = "dim";
     }
+    const cw = Math.min(46, Math.floor(290 / (n + 1)));
     if (mode === 0) {
-      const frames = [{ fn: "memoized_cut_rod", sub: "owns the memo", vars: [{ n: "r", t: "Vec<Option<i64>>", v: `len ${n + 1}`, ptr: "r" }] }];
-      const shown = st.stack.slice(-2), hidden = st.stack.length - shown.length;
-      if (hidden > 0) frames.push({ fn: `… ${hidden} more _aux frame${hidden > 1 ? "s" : ""}`, gone: true, vars: [] });
-      shown.forEach((sz, j) => {
-        const isTop = j === shown.length - 1, qv = maxOf(st.cand[sz] || []);
-        frames.push({ fn: "memoized_cut_rod_aux", top: isTop && st.hit == null, vars: [
-          { n: "n", t: "usize", v: sz, hot: isTop },
-          { n: "q", t: "i64", v: qv != null ? qv : sz === 0 ? 0 : "i64::MIN" },
-          { n: "r", t: "&mut [Option<i64>]", v: "same buffer", ptr: "r", weak: !isTop },
+      // the open aux calls, newest last; a hit is a call too, one that returns at once
+      const calls = st.stack.concat(st.hit != null ? [st.hit] : []);
+      const frames = [{ fn: "main", vars: [{ n: "p", t: "[u64; 11]", v: "inline" }] }, { fn: "memoized_cut_rod", sub: "owns the memo", vars: [{ n: "r", t: "Vec<Option<u64>>", v: `len ${n + 1}`, ptr: "r" }] }];
+      const hidden = Math.max(0, calls.length - 1);
+      if (hidden > 0) frames.push({ fn: `… ${hidden} older aux frame${hidden > 1 ? "s" : ""}`, gone: true, vars: [] });
+      calls.slice(-1).forEach((sz) => {
+        const isHit = st.hit != null, qv = maxOf(st.cand[sz] || []);
+        frames.push({ fn: "aux", top: true, vars: [
+          { n: "n", t: "usize", v: sz, hot: true },
+          { n: "q", t: "u64", v: isHit ? st.r[sz] : qv != null ? qv : 0 },
+          { n: "r", t: "&mut [Option<u64>]", v: "same buffer", ptr: "r" },
         ] });
       });
       m.set({
-        note: st.done ? `The helper frames are gone and the memo is full: ${st.hits} lookups were answered by it. <code>memoized_cut_rod</code> now returns the answer, and its frame takes the memo with it.`
-          : st.hit != null ? `Hit: <code>r[${st.hit}]</code> is <code>Some(${st.r[st.hit]})</code>, so the call returns at once, with no loop and no further recursion.`
-          : `Every frame carries the same <code>&amp;mut</code> to one buffer, and only the newest frame uses it. Blank cells are <code>None</code>: not solved yet.`,
+        note: st.done ? `The aux frames are gone and the memo is full: ${st.hits} lookups were answered by it. <code>memoized_cut_rod</code> now returns the answer, and its frame takes the memo with it.`
+          : st.hit != null ? `Hit: <code>r[${st.hit}]</code> is <code>Some(${st.r[st.hit]})</code>, so this call returns <code>q</code> at once, with no loop and no further recursion.`
+          : `Every aux frame carries the same <code>&amp;mut</code> to one buffer, and only the newest frame uses it. A number is a saved <code>Some</code>; <code>None</code> is not solved yet.`,
         stack: frames,
-        heap: [{ id: "r", label: `r's buffer · ${n + 1} × Option<i64>`, cells: st.r.map((v) => (v == null ? "" : v)), marks: hm, cw: Math.min(26, Math.floor(290 / (n + 1))) }],
+        heap: [{ id: "r", label: `r's buffer · ${n + 1} × Option<u64>`, cells: st.r.map((v) => (v == null ? "None" : v)), marks: hm, cw }],
       });
     } else {
-      const frames = [{ fn: "main", vars: [{ n: "p", t: "[i64; 11]", v: "inline" }] }, { fn: "bottom_up_cut_rod", top: !st.done, vars: [
-        { n: "r", t: "Vec<i64>", v: `len ${n + 1}`, ptr: "r" },
-        { n: "j", t: "usize", v: st.j == null ? "–" : st.j, hot: e.t === "j" },
-        { n: "i", t: "usize", v: e.t === "cand" ? e.i : "–", hot: e.t === "cand" },
-        { n: "q", t: "i64", v: e.t === "cand" ? e.q : e.t === "j" ? "i64::MIN" : "–", hot: e.t === "store" },
+      const inMap = e.t === "cand";
+      const frames = [{ fn: "main", vars: [{ n: "p", t: "[u64; 11]", v: "inline" }] }, { fn: "bottom_up_cut_rod", top: !st.done && !inMap, vars: [
+        { n: "r", t: "Vec<u64>", v: `len ${n + 1}`, ptr: "r" },
+        { n: "j", t: "usize", v: st.j == null ? "–" : st.j, hot: e.t === "j" || e.t === "store" },
       ] }];
+      if (inMap) frames.push({ fn: "the closure |i|", sub: "run by max", top: true, vars: [{ n: "i", t: "usize", v: e.i, hot: true }] });
       m.set({
-        note: st.done ? "The loop is done and <code>r[n]</code> is returned; the buffer is freed with the frame. No recursion: one frame the whole time." : "One frame, one loop. <code>vec![0; n + 1]</code> starts as all zeros, and each cell is overwritten before anything reads it.",
+        note: st.done ? "The loop is done and <code>r[n]</code> is returned; the buffer is freed with the frame. No recursion."
+          : inMap ? `The closure reads <code>r[${e.j - e.i}]</code>, already final because ${e.j - e.i} &lt; ${e.j}, and gives <code>p[${e.i}] + r[${e.j - e.i}] = ${e.val}</code>. <code>max</code> keeps the largest so far: ${e.q}.`
+          : "<code>vec![0; n + 1]</code> starts as all zeros. <code>r[0]</code> stays 0, and every other cell is overwritten before anything reads it.",
         stack: frames,
-        heap: [{ id: "r", label: `r's buffer · ${n + 1} × i64`, cells: st.r.map((v) => (v == null ? 0 : v)), marks: hm, cw: Math.min(26, Math.floor(290 / (n + 1))) }],
+        heap: [{ id: "r", label: `r's buffer · ${n + 1} × u64`, cells: st.r.map((v) => (v == null ? 0 : v)), marks: hm, cw }],
       });
     }
   }
@@ -3586,7 +3598,7 @@ K.page(14);
       }
       mm.set({ note, stack: frames, heap });
     } else {
-      const stack = st.stack, frames = [{ fn: "main", vars: [{ n: "s", t: "Vec<Vec<usize>>", v: "7 rows" }, { n: "out", t: "String", v: `len ${st.out.length} · cap ${st.cap}`, ptr: st.cap ? "obuf" : null, hot: !!e && ["leaf", "open", "close"].includes(e.t) }] }];
+      const stack = st.stack, frames = [{ fn: "main", vars: [{ n: "p", t: "[u64; 7]", v: "on the stack" }, { n: "m", t: "Vec<Vec<u64>>", v: "7 rows" }, { n: "s", t: "Vec<Vec<usize>>", v: "7 rows" }, { n: "out", t: "String", v: `len ${st.out.length} · cap ${st.cap}`, ptr: st.cap ? "obuf" : null, hot: !!e && ["leaf", "open", "close"].includes(e.t) }] }];
       const shown = stack.slice(-3);
       if (stack.length > 3) frames.push({ fn: `… ${stack.length - 3} more call${stack.length - 3 > 1 ? "s" : ""}`, vars: [] });
       shown.forEach((f, n) => frames.push({ fn: `print_optimal_parens(s, ${f.i}, ${f.j}, out)`, top: n === shown.length - 1, vars: f.i === f.j ? [] : [{ n: "k", t: "usize", v: f.k == null ? "–" : f.k }] }));
@@ -3598,9 +3610,11 @@ K.page(14);
         if (e && ["leaf", "open", "close"].includes(e.t) && st.out.length) { const w = e.t === "leaf" ? 1 + String(e.i).length : 1; for (let c = st.out.length - w; c < st.out.length; c++) marks[c] = "on"; }
         heap.push({ id: "obuf", label: `out · String buffer · len ${st.out.length} · cap ${st.cap}`, cells, marks, cw: st.cap <= 8 ? 30 : st.cap <= 16 ? 18 : 9 });
       }
+      if (e && e.t === "leaf") heap.push({ id: "tmp", label: "format!'s new String · then dropped", cells: ["A", ...String(e.i)], marks: {}, cw: 30 });
       let note = "<code>out</code> is one <code>String</code> owned by <code>main</code>; every call gets a <code>&mut</code> borrow of the same one.";
       if (st.grew) note = `<code>out</code> was full, so it grew to capacity ${st.cap}: a new buffer, the old one freed. Appending is cheap on average because capacity doubles.`;
-      else if (st.e && st.e.t === "end") note = "All the frames are gone. The only thing left is <code>out</code>, still owned by <code>main</code>.";
+      else if (st.e && st.e.t === "leaf") note = `<code>format!</code> built a new <code>String</code>, "A${st.e.i}"; <code>push_str</code> copied its text onto the end of <code>out</code>, and the new one is dropped at the end of the line.`;
+      else if (st.e && st.e.t === "end") note = "All the calls' frames are gone. <code>main</code> still owns <code>out</code>, and the tables.";
       mm.set({ note, stack: frames, heap });
     }
   }
@@ -4723,12 +4737,15 @@ K.page(14);
   const FILES = [
     { name: "LCS-LENGTH", src: src("ps-s11-a"), rs: { name: "lcs_table.rs", src: src("rs-s11-a"), out: src("rs-s11-a-out"), map: {
       "LCS-LENGTH": 11, 1: [13, 14], 2: 13, 3: 13, 4: 13, 5: 13, 6: 15, 7: 16, 8: 17, 9: 18, 10: 19, 11: 20, 12: 21, 13: 22, 14: 24, 15: 25, 16: 29,
-      "PRINT-LCS": 33, "PRINT-LCS:1": 35, "PRINT-LCS:2": 36, "PRINT-LCS:3": [38, 39], "PRINT-LCS:4": 40, "PRINT-LCS:5": 41, "PRINT-LCS:6": 43, "PRINT-LCS:7": 43, "PRINT-LCS:8": 44 } } },
+      "PRINT-LCS": 34, "PRINT-LCS:1": 37, "PRINT-LCS:2": 37, "PRINT-LCS:3": [38, 39], "PRINT-LCS:4": [41, 42], "PRINT-LCS:5": 40, "PRINT-LCS:6": 44, "PRINT-LCS:7": 44, "PRINT-LCS:8": 45 } } },
     { name: "LCS-LENGTH-TWO-ROWS (sketch)", src: src("ps-s11-b"), rs: { name: "lcs_two_rows.rs", src: src("rs-s11-b"), out: src("rs-s11-b-out"), map: {
       "LCS-LENGTH-TWO-ROWS": 2, 1: [4, 5], 2: 6, 3: 7, 4: 8, 5: 9, 6: [10, 11], 7: 16, 8: 18 } } },
   ];
   const cv = code("#s11-code", { files: [FILES[0]] });
   const mm = mem("#s11-mem");
+  const RL = ((t) => (snip) => "rs:" + (t.findIndex((l) => l.includes(snip)) + 1))(src("rs-s11-a").split("\n"));
+  const RS = { loop: RL("while i > 0 && j > 0"), match: RL("match b[i][j]"), diag: RL("Arrow::Diag => {"), push: RL("out.push(x[i - 1])"), di: RL("i -= 1;"), dj: RL("j -= 1;"), up: RL("Arrow::Up => i -= 1"), left: RL("Arrow::Left => j -= 1"), rev: RL("out.reverse()"), s: RL("let s: String"), print: RL('println!("LCS = {}"') };
+  const RUST = () => CODE_LANG.rust; // Rust mode walks back with a loop and reverses; the book's PRINT-LCS recurses
   let preset = 0, mode = 0, X, Y, M, N, C, B, EV, path, st, busyBtns = [];
   const S = session((v) => busyBtns.forEach((x) => (x.disabled = v)));
   const grid = (r, c, v) => Array.from({ length: r }, () => Array(c).fill(v));
@@ -4755,7 +4772,8 @@ K.page(14);
     }
     if (mode === 0) {
       path.forEach((_, k) => EV.push({ t: "call", k }));
-      path.map((p, k) => k).filter((k) => path[k].a === "D").reverse().forEach((k) => EV.push({ t: "print", k }));
+      if (RUST()) EV.push({ t: "rev" });
+      else path.map((p, k) => k).filter((k) => path[k].a === "D").reverse().forEach((k) => EV.push({ t: "print", k }));
       EV.push({ t: "end" });
     } else EV.push({ t: "ret" });
     fresh();
@@ -4783,6 +4801,9 @@ K.page(14);
       [st.prevBuf, st.curBuf] = [st.curBuf, st.prevBuf];
     } else if (e.t === "call") {
       st.stage = "trace"; st.cur = null; st.called = e.k;
+      if (RUST() && path[e.k].a === "D") { st.printed.add(e.k); st.out += X[path[e.k].i - 1]; }
+    } else if (e.t === "rev") {
+      st.rev = true; st.out = st.out.split("").reverse().join("");
     } else if (e.t === "print") {
       st.printed.add(e.k); st.out += X[path[e.k].i - 1];
     } else if (e.t === "end" || e.t === "ret") {
@@ -4796,7 +4817,7 @@ K.page(14);
     if (st.gone.has(r)) return "dim";
     if (st.stage === "trace" || (st.done && mode === 0)) {
       const k = path.findIndex((p) => p.i === r && p.j === c);
-      if (k >= 0 && k <= st.called) return st.printed.has(k) ? "good" : k === st.called && !st.done ? "on" : "on2";
+      if (k >= 0 && k <= st.called) return RUST() && k === st.called && !st.done && !st.rev ? "on" : st.printed.has(k) ? "good" : k === st.called && !st.done ? "on" : "on2";
     }
     if (st.cur && st.stage === "fill") {
       const { i, j } = st.cur;
@@ -4850,7 +4871,8 @@ K.page(14);
     if (mode === 0) {
       if (tr && at && at.a) { L(188, `from b: ${GLYPH[at.a]}`); L(206, `from c alone: ${GLYPH[at.a]} ✓`); }
       else if (st.cur && st.phase === 2) L(188, `stored: b[${st.cur.i}, ${st.cur.j}] = ${GLYPH[B[st.cur.i][st.cur.j]]}`);
-      if (tr) { L(244, "letters printed so far"); L(268, st.out || "–", { cls: "sv-text", mono: true, size: 17, bold: true }); }
+      if (tr && RUST()) { L(244, st.rev ? "out, reversed" : "out, last letter first"); L(268, st.out ? st.out.split("").join(" ") : "[ ]", { cls: "sv-text", mono: true, size: 17, bold: true }); }
+      else if (tr) { L(244, "letters printed so far"); L(268, st.out || "–", { cls: "sv-text", mono: true, size: 17, bold: true }); }
     } else {
       L(188, st.alloc == null ? "rows in memory: –" : `rows in memory: 2 of ${M + 1}`);
       if (st.done) {
@@ -4890,7 +4912,14 @@ K.page(14);
       }
       if (e.t === "swap") { on.push(7); n[7] = r[16] = `row ${e.i} is prev`; }
       if (e.t === "ret") { good.push(8); n[8] = r[18] = [`prev[${N}] = ${C[M][N]}`, "good"]; }
-      if (e.t === "call") {
+      if (e.t === "call" && RUST()) {
+        const p = path[e.k];
+        if (!p.a) { on.push(RS.loop); r[+RS.loop.slice(3)] = [`i = ${p.i}, j = ${p.j}: stop`, "warn"]; }
+        else if (p.a === "D") { on.push(RS.loop, RS.diag); on2.push(RS.push, RS.di, RS.dj); r[+RS.push.slice(3)] = [`push ${X[p.i - 1]}`, "good"]; r[+RS.loop.slice(3)] = `i = ${p.i}, j = ${p.j}`; }
+        else { const L2 = p.a === "U" ? RS.up : RS.left; on.push(RS.loop, L2); r[+RS.loop.slice(3)] = `i = ${p.i}, j = ${p.j}`; }
+      } else if (e.t === "rev") { good.push(RS.rev); r[+RS.rev.slice(3)] = [st.out, "good"]; }
+      else if (e.t === "end" && RUST()) { good.push(RS.print); r[+RS.print.slice(3)] = [`LCS = ${st.out}`, "good"]; }
+      else if (e.t === "call") {
         const p = path[e.k];
         if (!p.a) { on.push("PRINT-LCS:1", "PRINT-LCS:2"); n["PRINT-LCS:1"] = r[35] = `i = ${p.i}, j = ${p.j}`; }
         else if (p.a === "D") { on.push("PRINT-LCS:3", "PRINT-LCS:4"); n["PRINT-LCS:3"] = r[38] = `(${p.i}, ${p.j}): ${GLYPH.D}`; }
@@ -4901,7 +4930,7 @@ K.page(14);
     }
     cv.at(on, "on"); cv.at(on2, "on2"); cv.at(good, "good");
     cv.notes(n, r);
-    cv.out(mode === 0 && st.stage === "trace" ? (st.out || null) : null);
+    cv.out(mode === 0 && st.stage === "trace" ? (st.out || null) : null, mode === 0 && st.done ? `c[${M}][${N}] = ${C[M][N]}\nLCS = ${st.out}` : null);
   }
   function drawMem() {
     const cell = st.cur, tr = st.stage === "trace" || (st.done && mode === 0);
@@ -4916,6 +4945,15 @@ K.page(14);
           { id: "outer", label: `c · outer Vec: ${M + 1} row handles`, cells: Array.from({ length: M + 1 }, (_, r) => "r" + r), ptrs: [{ from: row, to: "row" }], marks: { [row]: "on" } },
           { id: "row", label: `\u00a0\u00a0\u00a0c[${row}] · ${N + 1} × usize (b has the same shape)`, cells: st.val[row].map((v) => (v == null ? "" : v)), marks: hot != null ? { [hot]: st.phase === 2 ? "good" : "on" } : {} },
         ];
+      } else if (RUST()) {
+        const fin = st.done;
+        frames = [{ fn: "main", vars: mainVars.concat([{ n: "c", t: "Vec<Vec<usize>>", v: `len ${M + 1}` }, { n: "b", t: "Vec<Vec<Arrow>>", v: `len ${M + 1}`, ptr: "outerb" }]) }];
+        if (!fin) frames.push({ fn: "print_lcs(&b, &x, m, n)", top: true, vars: [{ n: "b", t: "&[Vec<Arrow>]", v: `len ${M + 1}`, ptr: "outerb", weak: true }, { n: "i", t: "usize", v: pc.i, hot: !st.rev }, { n: "j", t: "usize", v: pc.j, hot: !st.rev }, { n: "out", t: "Vec<char>", v: `len ${st.out.length}`, ptr: st.out ? "outv" : undefined, hot: st.printed.has(st.called) || st.rev }] });
+        heap = [
+          { id: "outerb", label: `b · outer Vec: ${M + 1} row handles`, cells: Array.from({ length: M + 1 }, (_, r) => "r" + r), ptrs: [{ from: pc.i, to: "rowb" }], marks: { [pc.i]: "on" } },
+          { id: "rowb", label: `\u00a0\u00a0\u00a0b[${pc.i}] · ${N + 1} × Arrow`, cells: st.arr[pc.i].map((a, j) => (j === 0 ? "" : a ? GLYPH[a] : "")), marks: { [pc.j]: "on" } },
+        ];
+        if (st.out && !fin) heap.push({ id: "outv", label: `out · ${st.out.length} × char${st.rev ? ", reversed in place" : ""}`, cells: st.out.split(""), marks: st.rev ? Object.fromEntries(st.out.split("").map((_, k) => [k, "good"])) : st.printed.has(st.called) ? { [st.out.length - 1]: "good" } : {} });
       } else {
         frames = [{ fn: "main", vars: mainVars.concat([{ n: "b", t: "Vec<Vec<Arrow>>", v: `len ${M + 1}`, ptr: "outerb" }, { n: "out", t: "String", v: `"${st.out}"`, hot: st.printed.size > 0 }]) },
           { fn: "print_lcs(&b, &x, i, j, &mut out)", top: true, sub: `depth ${st.called + 1}`, vars: [{ n: "b", t: "&[Vec<Arrow>]", v: `len ${M + 1}`, ptr: "outerb", weak: true }, { n: "i", t: "usize", v: pc.i, hot: true }, { n: "j", t: "usize", v: pc.j, hot: true }] }];
@@ -4924,7 +4962,7 @@ K.page(14);
           { id: "rowb", label: `\u00a0\u00a0\u00a0b[${pc.i}] · ${N + 1} × Arrow`, cells: st.arr[pc.i].map((a, j) => (j === 0 ? "" : a ? GLYPH[a] : "")), marks: { [pc.j]: "on" } },
         ];
       }
-      mm.set({ note: !alloc ? "Before the call there is no table. Every row of <code>c</code> will be its own heap buffer." : tr ? "<code>print_lcs</code> borrows <code>b</code> as a slice (a dashed, read-only pointer) and appends to <code>out</code> through <code>&mut</code>. Each recursive call adds a frame." : "<code>c</code> is an outer <code>Vec</code> of row <code>Vec</code>s: the table lives on the heap, the frame holds just the handle. The tuple <code>(c, b)</code> will move out, not copy.", stack: frames, heap });
+      mm.set({ note: !alloc ? "Before the call there is no table. Every row of <code>c</code> will be its own heap buffer." : tr && RUST() ? "<code>print_lcs</code> borrows <code>b</code> as a slice (a dashed, read-only pointer) and walks back with a loop, in one frame. Each ↖ pushes its letter onto <code>out</code>, last letter first; <code>reverse()</code> flips them in place." : tr ? "<code>print_lcs</code> borrows <code>b</code> as a slice (a dashed, read-only pointer) and appends to <code>out</code> through <code>&mut</code>. Each recursive call adds a frame." : "<code>c</code> is an outer <code>Vec</code> of row <code>Vec</code>s: the table lives on the heap, the frame holds just the handle. The tuple <code>(c, b)</code> will move out, not copy.", stack: frames, heap });
     } else {
       const alloc = st.alloc != null;
       const nameOf = { A: "buffer A", B: "buffer B" };
@@ -4951,6 +4989,15 @@ K.page(14);
     }
     if (e.t === "swap") return `Line 7: row ${e.i} is finished. Swap <b>prev</b> and <b>cur</b>: the finished row becomes prev, and the old prev buffer, now stale, is overwritten by row ${e.i + 1}. Rows before ${e.i} no longer exist.`;
     if (e.t === "ret") return `Line 8: return prev[${N}] = <b>${C[M][N]}</b>. The length survives, but only ${M < 2 ? M + 1 : 2} rows exist and there is no b table, so the letters of an LCS can no longer be traced back.`;
+    if (e.t === "call" && RUST()) {
+      const p = path[e.k];
+      if (!p.a) return `i = ${p.i}, j = ${p.j}: the loop stops, since ${p.i === 0 ? "i" : "j"} is 0. out holds the letters last to first: <b>${st.out.split("").join(" ")}</b>.`;
+      if (p.a === "D") return `b[${p.i}][${p.j}] is Diag: x[${p.i - 1}] = y[${p.j - 1}] = ${X[p.i - 1]}. Push <b>${X[p.i - 1]}</b>, then step diagonally to (${p.i - 1}, ${p.j - 1}).`;
+      if (p.a === "U") return `b[${p.i}][${p.j}] is Up: i -= 1, to (${p.i - 1}, ${p.j}). No letter is taken.`;
+      return `b[${p.i}][${p.j}] is Left: j -= 1, to (${p.i}, ${p.j - 1}). No letter is taken.`;
+    }
+    if (e.t === "rev") return `out.reverse() flips the letters in place: <b>${st.out.split("").join(" ")}</b>.`;
+    if (e.t === "end" && RUST()) return st.out ? `print_lcs prints <b>${st.out}</b>: ${st.out.length} letters, the same as c[${M}][${N}] = ${C[M][N]}. The loop ran ${path.length - 1} times, at most m + n, since each pass lowers i or j.` : `print_lcs prints nothing: c[${M}][${N}] = 0, so the strings share no letter.`;
     if (e.t === "call") {
       const p = path[e.k];
       if (!p.a) return `Line 1: ${p.i === 0 ? "i" : "j"} = 0, so return. The recursion has reached the start of the table.`;
@@ -4994,7 +5041,10 @@ K.page(14);
   ctr.appendChild(h("span", { class: "grow" }));
   ctr.appendChild(seg(["Book", "DNA", "Identical", "Disjoint"], 0, (k) => { preset = k; reset(); }));
   K.$("#s11-seg").appendChild(seg(["Full table", "Two rows only"], 0, (k) => { S.cancel(); mode = k; cv.setFiles([FILES[k]]); setup(); draw(null); }));
-  CODE_LANG.on(() => render());
+  CODE_LANG.on(() => {
+    if (mode === 0 && (st.stage === "trace" || st.done)) { reset(); return; }
+    const keep = st; setup(); st = keep; render();
+  });
   setup(); draw(null);
 })();
 

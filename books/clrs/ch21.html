@@ -510,78 +510,96 @@ for each edge (u, v) taken from the sorted list in order
 return A
 </script>
 <script type="text/x-rust" id="rs-s4">
-use std::mem::swap;
-
-type Edge = (usize, usize, u32); // (u, v, weight)
-
-// Chapter 19's disjoint-set forest: p[x] is x's parent, a root owns its set.
-struct Dsu {
-    p: Vec<usize>,
-    size: Vec<usize>,
+struct DisjointSet {
+    parent: Vec<usize>,
+    rank: Vec<u8>,
 }
 
-impl Dsu {
-    fn new(n: usize) -> Dsu {
-        // MAKE-SET for every vertex: each one is its own parent
-        Dsu { p: (0..n).collect(), size: vec![1; n] }
+impl DisjointSet {
+    fn make_set(&mut self) {
+        let x = self.parent.len();
+        self.parent.push(x);
+        self.rank.push(0);
     }
-    fn find(&mut self, x: usize) -> usize {
-        if self.p[x] != x {
-            let root = self.find(self.p[x]);
-            self.p[x] = root; // path compression
+
+    fn find_set(&mut self, mut x: usize) -> usize {
+        let mut root = x;
+        while root != self.parent[root] {
+            root = self.parent[root];
         }
-        self.p[x]
+        while x != root {
+            let next = self.parent[x];
+            self.parent[x] = root;
+            x = next;
+        }
+        root
     }
+
     fn union(&mut self, x: usize, y: usize) {
-        let (mut a, mut b) = (self.find(x), self.find(y));
-        if self.size[a] < self.size[b] {
-            swap(&mut a, &mut b); // swap two locals: the bigger root wins
+        let rx = self.find_set(x);
+        let ry = self.find_set(y);
+        if rx != ry {
+            self.link(rx, ry);
         }
-        self.p[b] = a;
-        self.size[a] += self.size[b];
+    }
+
+    fn link(&mut self, x: usize, y: usize) {
+        if self.rank[x] > self.rank[y] {
+            self.parent[y] = x;
+        } else {
+            self.parent[x] = y;
+            if self.rank[x] == self.rank[y] {
+                self.rank[y] += 1;
+            }
+        }
     }
 }
 
-// `&[Edge]` only borrows the caller's list; to_vec() copies it so that
-// sorting never reorders the caller's edges.
-fn mst_kruskal(n: usize, edges: &[Edge], sorted: bool) -> Vec<Edge> {
-    let mut a = Vec::new();
-    let mut sets = Dsu::new(n);
-    let mut list = edges.to_vec();
-    if sorted {
-        list.sort_by_key(|e| e.2); // stable: equal weights keep list order
+type Edge = (usize, usize, u32);
+
+fn mst_kruskal(
+    n: usize,
+    edges: &mut [Edge],
+) -> Vec<Edge> {
+    let mut tree = Vec::new();
+    let mut sets = DisjointSet {
+        parent: Vec::new(),
+        rank: Vec::new(),
+    };
+    for _ in 0..n {
+        sets.make_set();
     }
-    for &(u, v, w) in &list {
-        if sets.find(u) != sets.find(v) {
-            a.push((u, v, w));
+    edges.sort_unstable_by_key(|&(_, _, w)| w);
+    for &(u, v, w) in edges.iter() {
+        if sets.find_set(u) != sets.find_set(v) {
+            tree.push((u, v, w));
             sets.union(u, v);
         }
     }
-    a
+    tree
 }
 
 fn main() {
-    let names = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'];
-    // Figure 21.1, in the order the list happens to hold the edges
-    let edges: Vec<Edge> = vec![
-        (0, 1, 4), (1, 2, 8), (2, 3, 7), (3, 4, 9), (4, 5, 10), (2, 8, 2),
-        (5, 6, 2), (6, 7, 1), (0, 7, 8), (1, 7, 11), (2, 5, 4), (3, 5, 14),
+    // a to i are 0 to 8
+    let mut edges = vec![
+        (0, 1, 4), (1, 2, 8), (2, 3, 7),
+        (3, 4, 9), (4, 5, 10), (2, 8, 2),
+        (5, 6, 2), (6, 7, 1), (0, 7, 8),
+        (1, 7, 11), (2, 5, 4), (3, 5, 14),
         (6, 8, 6), (7, 8, 7),
     ];
-    for sorted in [true, false] {
-        let tree = mst_kruskal(names.len(), &edges, sorted);
-        let total: u32 = tree.iter().map(|e| e.2).sum();
-        let text: Vec<String> = tree
-            .iter()
-            .map(|&(u, v, _)| format!("{}{}", names[u], names[v]))
-            .collect();
-        println!("sorted {sorted}: weight {total}: {}", text.join(" "));
+    let tree = mst_kruskal(9, &mut edges);
+    let mut total = 0;
+    for &(_, _, w) in &tree {
+        total += w;
     }
+    println!("{:?}", tree);
+    println!("weight: {}", total);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s4-out">
-sorted true: weight 37: gh ci fg ab cf cd bc de
-sorted false: weight 43: ab bc cd de ef ci fg gh
+[(6, 7, 1), (2, 8, 2), (5, 6, 2), (0, 1, 4), (2, 5, 4), (2, 3, 7), (1, 2, 8), (3, 4, 9)]
+weight: 37
 </script>
   </section>
 
@@ -638,64 +656,57 @@ while Q ≠ ∅
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
-const INF: u32 = u32::MAX; // the book's key = ∞
+type Adj = Vec<Vec<(usize, u32)>>;
 
-// adj[u] holds (neighbour, weight) pairs; r is the root.
-fn mst_prim(adj: &[Vec<(usize, u32)>], r: usize) -> Vec<Option<usize>> {
+fn mst_prim(adj: &Adj, r: usize)
+    -> (Vec<Option<usize>>, u32) {
     let n = adj.len();
-    let mut key = vec![INF; n];
-    let mut pi: Vec<Option<usize>> = vec![None; n]; // None plays NIL
-    let mut in_q = vec![true; n]; // one bit per vertex answers "v ∈ Q"
+    let mut key = vec![u32::MAX; n];
+    let mut pi = vec![None; n];
     key[r] = 0;
-    // std's heap has no DECREASE-KEY. Instead push a fresh (key, v) entry,
-    // and skip the stale one when it pops. Reverse makes it a min-heap.
+    let mut in_tree = vec![false; n];
     let mut q = BinaryHeap::new();
     q.push(Reverse((0, r)));
-    while let Some(Reverse((_, u))) = q.pop() {
-        if !in_q[u] {
-            continue; // stale entry: u already joined the tree
+    let mut total = 0;
+    while let Some(Reverse((k, u))) = q.pop() {
+        if in_tree[u] {
+            continue;
         }
-        in_q[u] = false;
+        in_tree[u] = true;
+        total += k;
         for &(v, w) in &adj[u] {
-            if in_q[v] && w < key[v] {
+            if !in_tree[v] && w < key[v] {
                 pi[v] = Some(u);
                 key[v] = w;
                 q.push(Reverse((w, v)));
             }
         }
     }
-    pi
+    (pi, total)
 }
 
 fn main() {
-    let names = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'];
+    // a to i are 0 to 8
     let edges = [
-        (0, 1, 4), (0, 7, 8), (1, 2, 8), (1, 7, 11), (2, 3, 7), (2, 5, 4),
-        (2, 8, 2), (3, 4, 9), (3, 5, 14), (4, 5, 10), (5, 6, 2), (6, 7, 1),
+        (0, 1, 4), (0, 7, 8), (1, 2, 8),
+        (1, 7, 11), (2, 3, 7), (2, 5, 4),
+        (2, 8, 2), (3, 4, 9), (3, 5, 14),
+        (4, 5, 10), (5, 6, 2), (6, 7, 1),
         (6, 8, 6), (7, 8, 7),
     ];
-    let mut adj = vec![Vec::new(); names.len()];
+    let mut adj: Adj = vec![Vec::new(); 9];
     for &(u, v, w) in &edges {
-        adj[u].push((v, w)); // an undirected edge is two list entries
+        adj[u].push((v, w));
         adj[v].push((u, w));
     }
-    for root in [0, 4] {
-        let pi = mst_prim(&adj, root);
-        let mut total = 0;
-        let mut text = Vec::new();
-        for (v, p) in pi.iter().enumerate() {
-            if let Some(u) = *p {
-                total += adj[v].iter().find(|e| e.0 == u).unwrap().1;
-                text.push(format!("{}{}", names[v], names[u]));
-            }
-        }
-        println!("root {}: weight {total}: {}", names[root], text.join(" "));
-    }
+    let (pi, total) = mst_prim(&adj, 0);
+    println!("pi: {:?}", pi);
+    println!("weight: {}", total);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s5-out">
-root a: weight 37: ba cb dc ed fc gf hg ic
-root e: weight 37: ah ba cd de fc gf hg ic
+pi: [None, Some(0), Some(1), Some(2), Some(3), Some(2), Some(5), Some(6), Some(2)]
+weight: 37
 </script>
   </section>
 
@@ -2050,11 +2061,11 @@ K.page(21);
   const RSL = src("rs-s4").split("\n");
   const RL = (needle, after) => RSL.findIndex((l, i) => i >= (after || 0) && l.includes(needle)) + 1;
   const kr = RL("fn mst_kruskal");
-  const RX = { hdr: kr, a: RL("let mut a = Vec::new()", kr), sets: RL("let mut sets = Dsu::new", kr), list: RL("let mut list = edges.to_vec()", kr), ifs: RL("if sorted {", kr),
-    sort: RL("list.sort_by_key", kr), loop: RL("for &(u, v, w) in &list", kr), test: RL("if sets.find(u) != sets.find(v)", kr), push: RL("a.push((u, v, w))", kr), union: RL("sets.union(u, v)", kr),
-    ret: RSL.findIndex((l, i) => i > kr && l.trim() === "a") + 1 };
+  const RX = { hdr: kr, a: RL("let mut tree = Vec::new()", kr), sets: RL("let mut sets = DisjointSet {", kr), mkloop: RL("for _ in 0..n", kr), mk: RL("sets.make_set()", kr), list: RL("edges: &mut [Edge]", kr),
+    sort: RL("edges.sort_unstable_by_key", kr), loop: RL("for &(u, v, w) in edges.iter()", kr), test: RL("if sets.find_set(u) != sets.find_set(v)", kr), push: RL("tree.push((u, v, w))", kr), union: RL("sets.union(u, v)", kr),
+    ret: RSL.findIndex((l, i) => i > kr && l.trim() === "tree") + 1 };
   const cv = code("#s4-code", { files: [{ name: "MST-KRUSKAL", src: src("ps-s4"), rs: { name: "kruskal.rs", src: src("rs-s4"), out: src("rs-s4-out"), map: {
-    "MST-KRUSKAL": RX.hdr, 1: RX.a, 2: RX.sets, 3: RX.sets, 4: RX.list, 5: [RX.ifs, RX.sort], 6: RX.loop, 7: RX.test, 8: RX.push, 9: RX.union, 10: RX.ret } } }] });
+    "MST-KRUSKAL": RX.hdr, 1: RX.a, 2: [RX.sets, RX.mkloop], 3: RX.mk, 4: RX.list, 5: RX.sort, 6: RX.loop, 7: RX.test, 8: RX.push, 9: RX.union, 10: RX.ret } } }] });
   const m = mem("#s4-mem");
 
   let mode = 0, st, stepBtn, playBtn;
@@ -2063,15 +2074,17 @@ K.page(21);
   const sortedOrder = (md) => {
     const base = LIST.slice();
     if (md === 1) { const i = base.findIndex((e) => e.id === "bc"), j = base.findIndex((e) => e.id === "ah"); [base[i], base[j]] = [base[j], base[i]]; } // flip the tie of the two 8s
-    return base.map((e, k) => ({ e, k })).sort((p, q) => p.e.w - q.e.w || p.k - q.k).map((x) => x.e.id); // stable, like sort_by_key
+    // stable; on this list the Rust program's sort_unstable_by_key gives the same order (rustc 1.99)
+    return base.map((e, k) => ({ e, k })).sort((p, q) => p.e.w - q.e.w || p.k - q.k).map((x) => x.e.id);
   };
   function fresh() {
-    st = { stage: 0, sub: 0, made: 0, order: LIST.map((e) => e.id), idx: 0, cur: null, es: {}, p: NAMES.map((_, i) => i), size: NAMES.map(() => 1), col: {}, A: [], weight: 0, finds: 0, status: "", hot: {}, hotRep: {}, showRow: false, head: "", returned: false,
-      rowPos: {} };
+    const rs = CODE_LANG.rust; // Rust: the edges already sit in main's Vec when mst_kruskal is called, so the row shows from the start
+    st = { stage: 0, sub: 0, made: 0, order: LIST.map((e) => e.id), idx: 0, cur: null, es: {}, p: NAMES.map((_, i) => i), rank: NAMES.map(() => 0), size: NAMES.map(() => 1), col: {}, A: [], weight: 0, finds: 0, status: "", hot: {}, hotRep: {},
+      showRow: rs, head: rs ? "edges, in the order main lists them" : "", returned: false, rowPos: {} };
     LIST.forEach((e, k) => { st.rowPos[e.id] = k; });
   }
   const root = (x) => { while (st.p[x] !== x) x = st.p[x]; return x; };
-  const find = (x) => { if (st.p[x] !== x) st.p[x] = find(st.p[x]); return st.p[x]; }; // path compression, like the Rust Dsu
+  const find = (x) => { if (st.p[x] !== x) st.p[x] = find(st.p[x]); return st.p[x]; }; // full path compression: the same parents as the Rust find_set's two loops
   const ix = (n) => NAMES.indexOf(n);
   const more = () => !st.returned;
   const setsCount = () => st.p.filter((p, i) => p === i).length;
@@ -2116,31 +2129,36 @@ K.page(21);
   }
   function refresh() {
     if (!stepBtn) return;
-    stepBtn.disabled = playBtn.disabled = S.busy || !more();
+    // disabled only while busy: a finished run leaves them enabled (and inert), so a video's {await} sees it as done
+    stepBtn.disabled = playBtn.disabled = S.busy;
   }
 
   /* ---- the Rust program's memory ---- */
   function memSet() {
-    const ids = LIST.map((e) => e.id);
-    const stack = [{ fn: "main", vars: [{ n: "edges", t: "Vec<Edge>", v: "len 14", ptr: "edges" }] }];
-    const vars = [{ n: "edges", t: "&[Edge]", v: "len 14", ptr: "edges" }];
-    const heap = [{ id: "edges", label: "edges · the caller's Vec, never reordered", cells: ids, x: 0, y: 0 }];
-    if (st.stage >= 1 || st.made) {
-      vars.push({ n: "a", t: "Vec<Edge>", v: `len ${st.A.length}`, ptr: "a" }, { n: "sets.p", t: "Vec<usize>", v: "len 9", ptr: "p" }, { n: "sets.size", t: "Vec<usize>", v: "len 9", ptr: "size" });
-      heap.push({ id: "p", label: "sets.p · each vertex's parent", cells: st.p.map((q) => NAMES[q]), cw: 18, x: 0, y: 98, marks: Object.fromEntries(st.p.map((q, i) => [i, q !== i ? "on2" : ""]).filter((x) => x[1])) });
-      heap.push({ id: "size", label: "sets.size · vertices under each root", cells: st.size, cw: 18, x: 0, y: 147 });
-      heap.push({ id: "a", label: `a · the tree so far, ${st.A.length} of 8`, cells: st.A, x: 0, y: 196, cw: 20 });
+    const wts = st.order.map((id) => BY[id].w), cells = (xs) => xs.map(String);
+    const marks = {};
+    st.order.forEach((id, k) => { const e = st.es[id]; if (e === "cur") marks[k] = "on"; else if (e === "acc") marks[k] = "on2"; else if (e === "rej" || e === "rejhot") marks[k] = "dim"; });
+    const sorted = st.stage >= 3 && mode !== 2;
+    const heap = [{ id: "edges", label: sorted ? "edges · sorted in place, by weight" : "edges · each (u, v, w) drawn as its weight", cells: cells(wts), marks, x: 0, y: 0 }];
+    const tw = st.A.map((id) => BY[id].w);
+    const treeBlk = () => heap.push({ id: "tree", label: `tree · its edges' weights · ${st.A.length} so far`, cells: cells(tw), x: 0, y: 147, cw: 20 });
+    if (st.returned) { // mst_kruskal returned tree to main; sets was dropped, which freed its two vectors
+      treeBlk();
+      m.set({ note: "mst_kruskal returned tree to main; sets was dropped, freeing parent and rank.", stack: [{ fn: "main", top: true, vars: [{ n: "edges", t: "Vec<Edge>", v: "len 14", ptr: "edges" }, { n: "tree", t: "Vec<Edge>", v: `len ${st.A.length}`, ptr: "tree", hot: true }] }], heap });
+      return;
     }
-    if (st.stage >= 2) {
-      vars.push({ n: "list", t: "Vec<Edge>", v: "len 14", ptr: "list" });
-      const marks = {};
-      st.order.forEach((id, k) => { const e = st.es[id]; if (e === "cur") marks[k] = "on"; else if (e === "acc") marks[k] = "on2"; else if (e === "rej" || e === "rejhot") marks[k] = "dim"; });
-      heap.push({ id: "list", label: st.stage >= 3 && mode !== 2 ? "list · to_vec() copy, now sorted" : "list · to_vec() copy", cells: st.order, marks, x: 0, y: 49 });
+    const vars = [{ n: "n", t: "usize", v: "9" }, { n: "edges", t: "&mut [Edge]", v: "len 14", ptr: "edges" }];
+    if (st.made) {
+      vars.push({ n: "tree", t: "Vec<Edge>", v: `len ${st.A.length}`, ptr: st.A.length ? "tree" : null },
+        { n: "sets.parent", t: "Vec<usize>", v: `len ${st.made}`, ptr: "parent" }, { n: "sets.rank", t: "Vec<u8>", v: `len ${st.made}`, ptr: "rank" });
+      const made = (xs) => xs.slice(0, st.made);
+      heap.push({ id: "parent", label: "sets.parent · a to i are 0 to 8", cells: cells(made(st.p)), cw: 20, x: 0, y: 49, marks: Object.fromEntries(made(st.p).map((q, i) => [i, q !== i ? "on2" : ""]).filter((x) => x[1])) });
+      heap.push({ id: "rank", label: "sets.rank", cells: cells(made(st.rank)), cw: 20, x: 0, y: 98 });
+      if (st.A.length) treeBlk();
     }
-    if (st.cur && !st.returned) { const e = BY[st.cur]; vars.push({ n: "(u, v, w)", v: `(${e.u}, ${e.v}, ${e.w})`, hot: true }); }
-    stack.push({ fn: "mst_kruskal", top: true, vars });
-    const note = st.stage === 2 ? "line 4: to_vec() copies the edges, so sorting never reorders the caller's Vec." : "";
-    m.set({ note, stack, heap });
+    if (st.cur) { const e = BY[st.cur]; vars.push({ n: "(u, v, w)", v: `(${ix(e.u)}, ${ix(e.v)}, ${e.w})`, hot: true }); }
+    const stack = [{ fn: "main", vars: [{ n: "edges", t: "Vec<Edge>", v: "len 14", ptr: "edges" }] }, { fn: "mst_kruskal", top: true, vars }];
+    m.set({ note: st.stage === 3 && mode !== 2 ? "sort_unstable_by_key sorted main's Vec in place, through the &mut borrow: nothing was copied." : "", stack, heap });
   }
 
   /* ---- helpers for code highlights ---- */
@@ -2152,14 +2170,14 @@ K.page(21);
     lines([1, 2, 3]);
     for (let v = 0; v < NAMES.length; v++) {
       st.made = v + 1; st.hot = { [v]: 1 };
-      cv.notes({ 2: `v = ${NAMES[v]}`, 3: `MAKE-SET(${NAMES[v]})` }, { [RX.sets]: `${st.made} sets of one` });
+      cv.notes({ 2: `v = ${NAMES[v]}`, 3: `MAKE-SET(${NAMES[v]})` }, { [RX.mk]: `${st.made} sets of one` });
       render();
       await w(sleep(110));
     }
-    st.hot = {}; st.stage = 1; st.status = "";
-    cv.notes({ 1: "A = { }", 3: "9 sets" }, { [RX.a]: "a = [ ]", [RX.sets]: "9 sets" });
+    st.hot = {}; st.stage = CODE_LANG.rust ? 2 : 1; st.status = ""; // Rust has no line 4: the list is main's Vec, already there
+    cv.notes({ 1: "A = { }", 3: "9 sets" }, { [RX.a]: "tree = [ ]", [RX.mk]: "9 sets" });
     render();
-    cap("#s4-cap", "Lines 1–3: <b>A</b> is empty and MAKE-SET gives each of the nine vertices a set of its own: nine one-vertex trees. In the Rust twin that is a parent array where every vertex is its own parent.");
+    cap("#s4-cap", CODE_LANG.rust ? "<b>tree</b> starts empty, and make_set gives each of the nine vertices a set of its own: nine one-vertex trees. Every vertex is its own parent, with rank 0." : "Lines 1–3: <b>A</b> is empty and MAKE-SET gives each of the nine vertices a set of its own: nine one-vertex trees. In the Rust twin that is a parent array where every vertex is its own parent.");
   }
   async function phaseList(w) {
     lines([4]);
@@ -2173,8 +2191,8 @@ K.page(21);
     st.stage = 3;
     if (mode === 2) {
       lines([5], { bad: [5] }); cv.at([], "on", false);
-      st.head = "G.E, left unsorted: line 5 is skipped";
-      cv.notes({ 5: ["skipped!", "bad"] }, { [RX.ifs]: ["sorted = false", "bad"] });
+      st.head = CODE_LANG.rust ? "edges, left unsorted: the sort is skipped" : "G.E, left unsorted: line 5 is skipped";
+      cv.notes({ 5: ["skipped!", "bad"] }, { [RX.sort]: ["skipped!", "bad"] });
       render();
       cap("#s4-cap", "<b>Line 5 is skipped on purpose.</b> The loop will meet the edges in list order, so it will happily take a weight-10 edge before a weight-2 edge. Nothing in lines 6–9 knows about weights.");
       await w(sleep(300));
@@ -2183,8 +2201,8 @@ K.page(21);
     lines([5]);
     const from = Object.assign({}, st.rowPos), order = sortedOrder(mode), to = {};
     order.forEach((id, k) => { to[id] = k; });
-    st.head = "sorted by weight (line 5)";
-    cv.notes({ 5: "lowest first" }, { [RX.sort]: "stable sort" });
+    st.head = CODE_LANG.rust ? "edges, sorted by weight, lowest first" : "sorted by weight (line 5)";
+    cv.notes({ 5: "lowest first" }, { [RX.sort]: "key = weight" });
     cap("#s4-cap", mode === 0 ? "Line 5: sort by weight, lowest first. Two pairs of edges tie (4 and 4, 7 and 7) and so do the weight-8 edges <b>b–c</b> and <b>a–h</b>. The sort keeps the list's order for ties, so b–c comes first." : "Line 5: sort by weight, lowest first, but this time the tie between the two weight-8 edges goes the other way: <b>a–h</b> before b–c. Both orders are legitimate sorts.");
     await w(tween(1000, (t) => { LIST.forEach((e) => { st.rowPos[e.id] = lerp(from[e.id], to[e.id], t); }); drawRow(); }));
     st.order = order; order.forEach((id, k) => { st.rowPos[id] = k; });
@@ -2203,7 +2221,8 @@ K.page(21);
     lines([7]);
     const ru = find(u), rv = find(v); st.finds += 2;
     const same = ru === rv;
-    st.status = same ? `FIND-SET(${e.u}) = FIND-SET(${e.v}) = ${NAMES[ru]}: same tree` : `FIND-SET(${e.u}) = ${NAMES[ru]}  ≠  FIND-SET(${e.v}) = ${NAMES[rv]}`;
+    st.status = CODE_LANG.rust ? (same ? `roots ${NAMES[ru]} = ${NAMES[rv]}: one tree, skip it` : `roots ${NAMES[ru]} ≠ ${NAMES[rv]}: two trees`)
+      : same ? `FIND-SET(${e.u}) = FIND-SET(${e.v}) = ${NAMES[ru]}: same tree` : `FIND-SET(${e.u}) = ${NAMES[ru]}  ≠  FIND-SET(${e.v}) = ${NAMES[rv]}`;
     st.hotRep = { [ru]: 1, [rv]: 1 };
     cv.notes({ 6: `(u, v) = (${e.u}, ${e.v}) · w = ${e.w}`, 7: `${NAMES[ru]} ≠ ${NAMES[rv]}? ${same ? "no" : "yes"}` }, { [RX.loop]: `(u, v, w) = (${u}, ${v}, ${e.w})`, [RX.test]: `${ru} != ${rv}? ${!same}` });
     if (same) {
@@ -2221,16 +2240,18 @@ K.page(21);
     const id = st.cur, e = BY[id], u = ix(e.u), v = ix(e.v);
     lines([8, 9]);
     st.A.push(id); st.weight += e.w; st.es[id] = "acc";
-    cv.notes({ 8: `A has ${st.A.length} edge${st.A.length > 1 ? "s" : ""}`, 9: `UNION(${e.u}, ${e.v})` }, { [RX.push]: `a.len() = ${st.A.length}`, [RX.union]: `union(${u}, ${v})` });
-    // UNION: the bigger tree's root stays; both trees take one colour
-    let a = find(u), b = find(v);
-    if (st.size[a] < st.size[b]) [a, b] = [b, a];
-    const ca = st.col[a], cb = st.col[b];
-    st.p[b] = a; st.size[a] += st.size[b];
-    delete st.col[b];
-    st.col[a] = ca || cb || COLS.find((c) => !Object.values(st.col).includes(c)) || COLS[0];
+    cv.notes({ 8: `A has ${st.A.length} edge${st.A.length > 1 ? "s" : ""}`, 9: `UNION(${e.u}, ${e.v})` }, { [RX.push]: `tree.len() = ${st.A.length}`, [RX.union]: `union(${u}, ${v})` });
+    // UNION(u, v) = LINK(FIND-SET(u), FIND-SET(v)), by rank, as the book and the Rust link do; both trees take one colour
+    const x = find(u), y = find(v);
+    let r, c;
+    if (st.rank[x] > st.rank[y]) { st.p[y] = x; r = x; c = y; }
+    else { st.p[x] = y; r = y; c = x; if (st.rank[x] === st.rank[y]) st.rank[y]++; }
+    const cr = st.col[r], cc = st.col[c];
+    st.size[r] += st.size[c];
+    delete st.col[c];
+    st.col[r] = cr || cc || COLS.find((k) => !Object.values(st.col).includes(k)) || COLS[0];
     st.sub = 0; st.idx++;
-    st.status = `UNION(${e.u}, ${e.v})`; st.hot = { [u]: 1, [v]: 1 }; st.hotRep = {};
+    st.status = CODE_LANG.rust ? `union(${e.u}, ${e.v}): ${NAMES[c]} goes under ${NAMES[r]}` : `UNION(${e.u}, ${e.v})`; st.hot = { [u]: 1, [v]: 1 }; st.hotRep = {};
     render();
     const total = st.weight;
     cap("#s4-cap", `Lines 8–9: <b>${e.u}–${e.v}</b> joins A (the edges in blue), and UNION merges the two trees into one set, so the number of sets drops to <b>${setsCount()}</b>. The weight of A is now ${total}.` + (st.A.length === 8 ? ` A has |V| − 1 = 8 edges, so it already spans the graph. The book's loop does not stop here, though: it still examines the rest, and every one of them will be refused.` : ""));
@@ -2259,8 +2280,8 @@ K.page(21);
     if (st.idx < st.order.length) return phaseExamine(w);
     return phaseReturn(w);
   }
-  const step = () => S.run(async (w) => { await nextPhase(w); });
-  const play = () => S.run(async (w) => { while (more()) { await nextPhase(w); await w(sleep(140)); } });
+  const step = () => { if (more()) S.run(async (w) => { await nextPhase(w); }); };
+  const play = () => { if (more()) S.run(async (w) => { while (more()) { await nextPhase(w); await w(sleep(140)); } }); };
   function reset() {
     S.cancel(); fresh(); render(); cv.clear(); cv.out(null);
     cap("#s4-cap", "Nine villages, fourteen possible roads. Press <b>Step</b>: lines 1–3 make every vertex a tree of its own.");
@@ -2270,6 +2291,7 @@ K.page(21);
   playBtn = button(ctr, "Play", "primary", play);
   button(ctr, "Reset", "", reset);
   K.$("#s4-seg").appendChild(seg(["Sorted · b–c first", "Sorted · a–h first", "Not sorted"], 0, (k) => { mode = k; reset(); }));
+  CODE_LANG.on(() => reset()); // in Rust the edge row is main's Vec from the start, so a switch starts over
   fresh(); reset();
 })();
 
@@ -2294,11 +2316,11 @@ K.page(21);
   const RSL = src("rs-s5").split("\n");
   const RL = (needle, after) => RSL.findIndex((l, i) => i >= (after || 0) && l.includes(needle)) + 1;
   const fn = RL("fn mst_prim");
-  const RX = { hdr: fn, key: RL("let mut key = vec![INF; n]", fn), pi: RL("let mut pi: Vec<Option<usize>>", fn), inq: RL("let mut in_q = vec![true; n]", fn), key0: RL("key[r] = 0;", fn), q: RL("let mut q = BinaryHeap::new()", fn),
-    push0: RL("q.push(Reverse((0, r)))", fn), pop: RL("while let Some(Reverse((_, u))) = q.pop()", fn), stale: RL("continue;", fn), out: RL("in_q[u] = false;", fn), loop: RL("for &(v, w) in &adj[u]", fn), test: RL("if in_q[v] && w < key[v]", fn),
+  const RX = { hdr: fn, key: RL("let mut key = vec![u32::MAX; n]", fn), pi: RL("let mut pi = vec![None; n]", fn), inq: RL("let mut in_tree = vec![false; n]", fn), key0: RL("key[r] = 0;", fn), q: RL("let mut q = BinaryHeap::new()", fn),
+    push0: RL("q.push(Reverse((0, r)))", fn), tot0: RL("let mut total = 0;", fn), pop: RL("while let Some(Reverse((k, u))) = q.pop()", fn), stale: RL("continue;", fn), out: RL("in_tree[u] = true;", fn), total: RL("total += k;", fn), loop: RL("for &(v, w) in &adj[u]", fn), test: RL("if !in_tree[v] && w < key[v]", fn),
     setpi: RL("pi[v] = Some(u);", fn), setkey: RL("key[v] = w;", fn), dec: RL("q.push(Reverse((w, v)))", fn) };
   const cv = code("#s5-code", { files: [{ name: "MST-PRIM", src: src("ps-s5"), rs: { name: "prim.rs", src: src("rs-s5"), out: src("rs-s5-out"), map: {
-    "MST-PRIM": RX.hdr, 1: [RX.key, RX.inq], 2: RX.key, 3: RX.pi, 4: RX.key0, 5: RX.q, 6: RX.push0, 7: RX.push0, 8: RX.pop, 9: [RX.pop, RX.out], 10: RX.loop, 11: RX.test, 12: RX.setpi, 13: RX.setkey, 14: RX.dec } } }] });
+    "MST-PRIM": RX.hdr, 1: [RX.key, RX.inq], 2: RX.key, 3: RX.pi, 4: RX.key0, 5: RX.q, 6: RX.push0, 7: RX.push0, 8: RX.pop, 9: [RX.pop, RX.out, RX.total], 10: RX.loop, 11: RX.test, 12: RX.setpi, 13: RX.setkey, 14: RX.dec } } }] });
   const m = mem("#s5-mem");
 
   let root = "a", st, stepBtn, playBtn;
@@ -2308,9 +2330,29 @@ K.page(21);
   const kstr = (v) => (st.key[v] === INF ? "∞" : String(st.key[v]));
   const qSorted = () => [...st.inQ].sort((p, q) => st.key[p] - st.key[q] || ix(p) - ix(q));
   const wOf = (u, v) => ADJ[u].find((x) => x[0] === v)[1];
+  /* the exact heap std's BinaryHeap<Reverse<(u32, usize)>> keeps (the same sift as Chapter 22's Dijkstra), so the strip is
+     honest. An entry is [key, vertex index, id]; the id only lets a cell slide. */
+  const hlt = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
+  function siftUp(h, start, pos) { const e = h[pos]; while (pos > start) { const p = (pos - 1) >> 1; if (!hlt(e, h[p])) break; h[pos] = h[p]; pos = p; } h[pos] = e; }
+  const hpush = (h, x) => { h.push(x); siftUp(h, 0, h.length - 1); };
+  function hpop(h) {
+    let item = h.pop();
+    if (item === undefined || !h.length) return item;
+    const top = h[0]; h[0] = item; item = top;
+    const end = h.length, e = h[0]; let pos = 0, child = 1;
+    while (child <= Math.max(0, end - 2)) { if (!hlt(h[child], h[child + 1])) child++; h[pos] = h[child]; pos = child; child = 2 * pos + 1; }
+    if (child === end - 1) { h[pos] = h[child]; pos = child; }
+    h[pos] = e; siftUp(h, 0, pos);
+    return item;
+  }
+  const byKey = (h) => h.slice().sort((a, b) => (hlt(a, b) ? -1 : hlt(b, a) ? 1 : 0));
+  const staleE = (a) => a[0] !== st.key[NAMES[a[1]]]; // its vertex's key has dropped since, or it already joined the tree
+  /** Rust's q in the order pop returns it: the entry pop just returned first, then the rest, smallest first */
+  const qRow = () => (st.popped ? [st.popped] : []).concat(byKey(st.heap));
+  const qIds = () => (CODE_LANG.rust ? qRow().map((a) => "e" + a[2]) : qSorted());
 
   function fresh() {
-    st = { next: "init", started: false, key: {}, pi: {}, inQ: new Set(), tree: new Set(), shown: 0, u: null, scanV: null, edgeNow: null, flash: {}, extracting: null, weight: 0, ext: 0, dec: 0, slot: {}, heap: [], popNote: "", memNote: "" };
+    st = { next: "init", started: false, key: {}, pi: {}, inQ: new Set(), tree: new Set(), shown: 0, u: null, scanV: null, edgeNow: null, flash: {}, extracting: null, weight: 0, ext: 0, dec: 0, slot: {}, heap: [], seq: 0, qMade: false, popped: null, ku: null, popNote: "", memNote: "" };
     NAMES.forEach((n) => { st.key[n] = INF; st.pi[n] = null; });
   }
   const more = () => st.next !== "end";
@@ -2331,6 +2373,7 @@ K.page(21);
   const slotX = (slot) => QX + slot * (CW + QG);
   function drawQ() {
     K.clear(gQ);
+    if (CODE_LANG.rust) { drawQRs(); return; }
     txt(gQ, 24, QY + 27, "Q", { anchor: "start", bold: true, size: 15 });
     qSorted().forEach((v, i) => {
       if (i >= st.shown) return;
@@ -2341,6 +2384,19 @@ K.page(21);
       txt(gQ, x + CW / 2, QY + 36, kstr(v), { cls: "ac-i", size: 12, bold: true });
     });
   }
+  /** Rust mode: q holds only pushed (key, vertex) entries, stale ones too; no vertex at ∞ is ever in it */
+  function drawQRs() {
+    if (!st.qMade) return;
+    txt(gQ, 24, QY + 27, "q", { anchor: "start", bold: true, size: 15 });
+    qRow().forEach((a, i) => {
+      const id = "e" + a[2], x = slotX(st.slot[id] != null ? st.slot[id] : i), old = staleE(a);
+      const cls = a === st.popped ? (old ? "dim" : "on") : old ? "dim" : "";
+      gQ.appendChild(s("rect", { x, y: QY, width: CW, height: QH, rx: 8, class: "ac-cell " + cls }));
+      txt(gQ, x + CW / 2, QY + 18, NAMES[a[1]], { cls: "ac-v", size: 15 });
+      txt(gQ, x + CW / 2, QY + 36, String(a[0]), { cls: "ac-i", size: 12, bold: true });
+    });
+    if (st.popped) txt(gQ, slotX(0) + CW / 2, QY + QH + 14, staleE(st.popped) ? "stale: skip" : "pop", { cls: "sv-label" });
+  }
   function drawRings() {
     K.clear(gRing);
     if (st.u) gRing.appendChild(s("circle", { cx: POS[st.u].x, cy: POS[st.u].y, r: R + 5, class: "s5-u" }));
@@ -2350,19 +2406,25 @@ K.page(21);
     AL.graph.draw(gG, { directed: false, nodes: POS, edges: EDGES.map((e) => ({ u: e.u, v: e.v, id: e.id, w: e.w })) }, { r: R, node: nodeCls, edge: edgeCls, sub: (id) => (id === root ? "r" : "") });
     drawRings(); drawQ();
     K.clear(gHead);
-    txt(gHead, QX, QY - 9, "the min-priority queue Q · smallest key first · cell = vertex over its key", { anchor: "start", cls: "sv-label" });
-    txt(gHead, 24, 332, "solid blue: an edge of the tree A · dashed blue: a vertex's best edge so far, (v, v.π)", { anchor: "start", cls: "sv-label" });
+    if (CODE_LANG.rust) {
+      if (st.qMade) txt(gHead, QX, QY - 9, "q · entries in the order pop returns them · vertex over key · gray = stale", { anchor: "start", cls: "sv-label" });
+      txt(gHead, 24, 332, "green: in the tree · solid blue: tree edge · dashed blue: lightest edge to tree so far", { anchor: "start", cls: "sv-label" });
+    } else {
+      txt(gHead, QX, QY - 9, "the min-priority queue Q · smallest key first · cell = vertex over its key", { anchor: "start", cls: "sv-label" });
+      txt(gHead, 24, 332, "solid blue: an edge of the tree A · dashed blue: a vertex's best edge so far, (v, v.π)", { anchor: "start", cls: "sv-label" });
+    }
     stW.set(st.weight); stT.set(`${st.tree.size} of 9`); stE.set(st.ext); stD.set(st.dec);
     memSet();
     refresh();
   }
   function refresh() {
     if (!stepBtn) return;
-    stepBtn.disabled = playBtn.disabled = S.busy || !more();
+    // disabled only while busy: a finished run leaves them enabled (and inert), so a video's {await} sees it as done
+    stepBtn.disabled = playBtn.disabled = S.busy;
   }
   /** slide the Q cells to their sorted slots */
   async function settle(w, ms) {
-    const target = {}; qSorted().forEach((v, i) => { target[v] = i; });
+    const target = {}; qIds().forEach((v, i) => { target[v] = i; });
     const from = {}; Object.keys(target).forEach((v) => { from[v] = st.slot[v] != null ? st.slot[v] : target[v]; });
     await w(tween(ms, (t) => { Object.keys(target).forEach((v) => { st.slot[v] = lerp(from[v], target[v], t); }); drawQ(); }));
     Object.keys(target).forEach((v) => { st.slot[v] = target[v]; });
@@ -2371,31 +2433,38 @@ K.page(21);
 
   /* ---- the Rust program's memory ---- */
   function memSet() {
-    const n = NAMES.length;
+    const n = NAMES.length, done = st.next === "end";
     const keyCells = NAMES.map((v) => (st.key[v] === INF ? "∞" : st.key[v]));
-    const hs = st.heap.slice().sort((p, q) => p.k - q.k || ix(p.v) - ix(q.v));
-    const frame = [{ n: "adj", t: "&[Vec<(usize, u32)>]", v: "9 lists" }, { n: "r", t: "usize", v: String(ix(root)) }];
+    const piCells = NAMES.map((v) => (st.pi[v] == null ? "–" : String(ix(st.pi[v]))));
+    const main = [{ n: "edges", t: "[(usize, usize, u32); 14]", v: "14 edges" }, { n: "adj", t: "Adj", v: "9 lists" }];
+    const frame = [{ n: "adj", t: "&Adj", v: "9 lists" }, { n: "r", t: "usize", v: String(ix(root)) }];
     const heap = [];
+    if (done) { // mst_prim returned (pi, total): pi moved out to main, and key, in_tree and q were freed
+      main.push({ n: "pi", t: "Vec<Option<usize>>", v: `len ${n}`, ptr: "pi" }, { n: "total", t: "u32", v: String(st.weight), hot: true });
+      heap.push({ id: "pi", label: "pi · a number is Some(u) · – is None", cells: piCells, cw: 30, x: 0, y: 0 });
+      m.set({ note: st.memNote, stack: [{ fn: "main", top: true, vars: main }], heap });
+      return;
+    }
     if (st.started) {
-      frame.push({ n: "key", t: "Vec<u32>", v: `len ${n}`, ptr: "key" }, { n: "pi", t: "Vec<Option<usize>>", v: `len ${n}`, ptr: "pi" }, { n: "in_q", t: "Vec<bool>", v: `len ${n}`, ptr: "inq" });
+      frame.push({ n: "n", t: "usize", v: String(n) }, { n: "key", t: "Vec<u32>", v: `len ${n}`, ptr: "key" }, { n: "pi", t: "Vec<Option<usize>>", v: `len ${n}`, ptr: "pi" }, { n: "in_tree", t: "Vec<bool>", v: `len ${n}`, ptr: "inq" });
       heap.push({ id: "key", label: "key · ∞ is u32::MAX", cells: keyCells, cw: 30, x: 0, y: 0, marks: Object.fromEntries(NAMES.map((v, i) => [i, st.tree.has(v) ? "good" : ""]).filter((x) => x[1])) });
-      heap.push({ id: "pi", label: "pi · None is the book's NIL", cells: NAMES.map((v) => (st.pi[v] == null ? "None" : st.pi[v])), cw: 30, x: 0, y: 49 });
-      heap.push({ id: "inq", label: "in_q · T = still in Q", cells: NAMES.map((v) => (st.tree.has(v) ? "F" : "T")), cw: 30, x: 0, y: 98, marks: Object.fromEntries(NAMES.map((v, i) => [i, st.tree.has(v) ? "dim" : ""]).filter((x) => x[1])) });
+      heap.push({ id: "pi", label: "pi · a number is Some(u) · – is None", cells: piCells, cw: 30, x: 0, y: 49 });
+      heap.push({ id: "inq", label: "in_tree · T = in the tree", cells: NAMES.map((v) => (st.tree.has(v) ? "T" : "F")), cw: 30, x: 0, y: 98, marks: Object.fromEntries(NAMES.map((v, i) => [i, st.tree.has(v) ? "good" : ""]).filter((x) => x[1])) });
     }
-    if (st.heap.length || st.started) {
-      frame.push({ n: "q", t: "BinaryHeap<Reverse<T>>", v: `len ${hs.length}`, ptr: "q" });
+    if (st.qMade) {
+      frame.push({ n: "q", t: "BinaryHeap<Reverse<…>>", v: `len ${st.heap.length}`, ptr: "q" }, { n: "total", t: "u32", v: String(st.weight) });
       const marks = {};
-      hs.forEach((e, i) => { if (st.tree.has(e.v)) marks[i] = "dim"; else if (i === 0) marks[i] = "on"; });
-      heap.push({ id: "q", label: "q · (key, vertex), smallest first · gray = stale", cells: hs.map((e) => `${e.k}${e.v}`), marks, x: 0, y: 147 });
+      st.heap.forEach((e, i) => { if (staleE(e)) marks[i] = "dim"; });
+      heap.push({ id: "q", label: "q · heap buffer, in heap order · gray = stale", cells: st.heap.map((e) => `${e[0]}${NAMES[e[1]]}`), marks, x: 0, y: 147 });
     }
-    if (st.u) frame.push({ n: "u", t: "usize", v: `${ix(st.u)} (${st.u})`, hot: !st.scanV });
+    if (st.ku) frame.push({ n: "k", t: "u32", v: String(st.ku[0]), hot: !st.scanV }, { n: "u", t: "usize", v: `${st.ku[1]} (${NAMES[st.ku[1]]})`, hot: !st.scanV });
     if (st.scanV) frame.push({ n: "(v, w)", v: `(${ix(st.scanV)}, ${wOf(st.u, st.scanV)})`, hot: true });
-    m.set({ note: st.memNote, stack: [{ fn: "main", vars: [{ n: "adj", t: "Vec<Vec<(usize, u32)>>", v: "9 lists" }] }, { fn: "mst_prim", top: true, vars: frame }], heap });
+    m.set({ note: st.memNote, stack: [{ fn: "main", vars: main }, { fn: "mst_prim", top: true, vars: frame }], heap });
   }
 
   /* ---- helpers ---- */
   const lines = (on, extra) => { ["on", "good", "bad", "dim"].forEach((c) => cv.at([], c, false)); cv.at(on, "on"); if (extra) Object.entries(extra).forEach(([c, l]) => cv.at(l, c, false)); };
-  const snapSlots = () => { qSorted().forEach((v, i) => { st.slot[v] = i; }); };
+  const snapSlots = () => { qIds().forEach((v, i) => { st.slot[v] = i; }); };
 
   /* ---- the phases of the book's procedure ---- */
   async function phaseInit(w) {
@@ -2412,10 +2481,17 @@ K.page(21);
     st.memNote = "";
     render();
     cap("#s5-cap", `Line 4: the root <b>${root}</b> gets key 0, the only finite key, so it will be the first vertex out of the queue.`);
+    if (CODE_LANG.rust) {
+      await w(sleep(300));
+      cv.notes({ 4: `${root}.key = 0` }, { [RX.key0]: `key[${ix(root)}] = 0`, [RX.inq]: "all false" });
+      st.next = "push0"; render();
+      cap("#s5-cap", `key, pi and in_tree are made: every key is u32::MAX (∞) but the root's, <b>key[${ix(root)}] = 0</b>; every pi is None; no vertex is in the tree yet.`);
+      return;
+    }
     await w(sleep(520));
     lines([5, 6, 7]);
     cv.notes({ 5: "Q = { }", 7: "9 INSERTs" }, { [RX.q]: "q = [ ]", [RX.push0]: "(0, r) only" });
-    st.heap = [{ k: 0, v: root }];
+    hpush(st.heap, [0, ix(root), st.seq++]); st.qMade = true;
     st.memNote = "Rust pushes only the root: the other eight keys are ∞, and a vertex enters the heap when its key first drops.";
     for (let i = 0; i < NAMES.length; i++) { st.shown = i + 1; drawQ(); await w(sleep(90)); }
     snapSlots();
@@ -2424,25 +2500,49 @@ K.page(21);
     render();
     cap("#s5-cap", `Lines 5–7: all nine vertices are INSERTed into Q. Reading left to right, Q is sorted by key: ${root} (0) first, then eight vertices at ∞. (A real binary heap only promises the minimum at the front; the row is drawn sorted so you can read it.)`);
   }
+  /** Rust mode, before lines 1–7's last part: q is made, and only the root is pushed */
+  async function phasePush0(w) {
+    lines([5, 6, 7]);
+    hpush(st.heap, [0, ix(root), st.seq++]); st.qMade = true; st.shown = NAMES.length;
+    snapSlots();
+    cv.notes({ 5: "Q = { }", 7: "only r" }, { [RX.q]: "q = [ ]", [RX.push0]: `(0, ${ix(root)})`, [RX.tot0]: "total = 0" });
+    st.memNote = "Only the root is pushed: every other key is ∞, and a vertex enters q when its key first drops.";
+    st.next = "extract";
+    render();
+    cap("#s5-cap", `q is made and gets one entry, <b>(0, ${root})</b>: the root, with key 0. total starts at 0.`);
+  }
   async function phaseExtract(w) {
-    const q = qSorted(), u = q[0];
+    const rs = CODE_LANG.rust, q = qSorted(), u = q[0];
     lines([8, 9]);
     // the Rust heap pops stale entries until a live one surfaces
-    st.heap.sort((p, q2) => p.k - q2.k || ix(p.v) - ix(q2.v));
-    let stale = 0;
-    while (st.heap.length) { const e = st.heap.shift(); if (st.tree.has(e.v)) stale++; else break; }
-    cv.notes({ 8: `Q holds ${q.length}`, 9: `u = ${u}` }, { [RX.pop]: `u = ${ix(u)}`, [RX.out]: "in_q[u] = false" });
-    if (stale) cv.at(["rs:" + RX.stale], "dim", false);
+    let stale = 0, e;
+    while ((e = hpop(st.heap)) && st.tree.has(NAMES[e[1]])) {
+      stale++;
+      if (!rs) continue;
+      st.popped = e; st.ku = e; st.u = null; st.edgeNow = null;
+      cv.at(["rs:" + RX.stale], "on", false);
+      st.memNote = `pop returned (${e[0]}, ${e[1]}), a stale entry: ${NAMES[e[1]]} is already in the tree, so continue skips it.`;
+      render();
+      cap("#s5-cap", `pop returns <b>(${e[0]}, ${NAMES[e[1]]})</b>, a stale entry: ${NAMES[e[1]]} is already in the tree, so <code>continue</code> skips it.`);
+      await w(sleep(620));
+      st.popped = null; render(); await settle(w, 260);
+      lines([8, 9]);
+    }
+    cv.notes({ 8: `Q holds ${q.length}`, 9: `u = ${u}` }, { [RX.pop]: `(k, u) = (${st.key[u]}, ${ix(u)})`, [RX.out]: "in_tree[u] = true", [RX.total]: `total = ${st.weight + st.key[u]}` });
+    if (stale && !rs) cv.at(["rs:" + RX.stale], "dim", false);
+    if (rs) { st.popped = e; st.ku = e; }
     st.extracting = u; st.edgeNow = null; st.u = null;
-    st.memNote = stale ? `popped ${stale} stale entr${stale > 1 ? "ies" : "y"} (a vertex already in the tree), then the live one for ${u}.` : "";
+    st.memNote = stale ? `The loop skipped ${stale > 1 ? stale + " stale entries" : "a stale entry"} (${stale > 1 ? "their vertices were" : "its vertex was"} already in the tree); then pop returned the live one for ${u}.` : "";
     render();
     const tie = q.length > 1 && st.key[q[1]] === st.key[u];
-    cap("#s5-cap", `Line 9: EXTRACT-MIN takes the vertex with the smallest key, <b>${u}</b> (key ${kstr(u)}${st.pi[u] ? `, parent ${st.pi[u]}` : ", the root"}). ${tie ? `<b>Tie:</b> ${q[1]} has key ${kstr(u)} too, so either could come out; this machine takes the earlier letter. ` : ""}It joins the tree${st.pi[u] ? `, and the edge ${st.pi[u]}–${u} becomes an edge of A` : ""}.`);
+    if (rs) cap("#s5-cap", `pop returns <b>(${st.key[u]}, ${u})</b>, the smallest entry${st.pi[u] ? "" : ", the root's"}. ${tie ? `<b>Tie:</b> (${kstr(u)}, ${q[1]}) is in q too; tuples compare the vertex next, and ${ix(u)} &lt; ${ix(q[1])}. ` : ""}${u} joins the tree${st.pi[u] ? ` on the edge ${st.pi[u]}–${u}` : ""}, and total grows by ${st.key[u]}.`);
+    else cap("#s5-cap", `Line 9: EXTRACT-MIN takes the vertex with the smallest key, <b>${u}</b> (key ${kstr(u)}${st.pi[u] ? `, parent ${st.pi[u]}` : ", the root"}). ${tie ? `<b>Tie:</b> ${q[1]} has key ${kstr(u)} too, so either could come out; this machine takes the earlier letter. ` : ""}It joins the tree${st.pi[u] ? `, and the edge ${st.pi[u]}–${u} becomes an edge of A` : ""}.`);
     await w(sleep(380));
     const tag = draw.tag(u, "sv-data-soft"); layer.appendChild(tag);
-    await w(fly(tag, [slotX(st.slot[u] != null ? st.slot[u] : 0) + CW / 2, QY + QH / 2], [POS[u].x, POS[u].y], 620)); tag.remove();
-    st.extracting = null; st.inQ.delete(u); st.tree.add(u); st.weight += st.key[u]; st.ext++; st.u = u;
-    cv.notes({ 8: `Q holds ${st.inQ.size}`, 9: `u = ${u}` }, { [RX.pop]: `u = ${ix(u)}`, [RX.out]: "in_q[u] = false" });
+    const fromSlot = rs ? st.slot["e" + e[2]] : st.slot[u];
+    await w(fly(tag, [slotX(fromSlot != null ? fromSlot : 0) + CW / 2, QY + QH / 2], [POS[u].x, POS[u].y], 620)); tag.remove();
+    st.extracting = null; st.popped = null; st.inQ.delete(u); st.tree.add(u); st.weight += st.key[u]; st.ext++; st.u = u;
+    cv.notes({ 8: `Q holds ${st.inQ.size}`, 9: `u = ${u}` }, { [RX.pop]: `(k, u) = (${st.key[u]}, ${ix(u)})`, [RX.out]: "in_tree[u] = true", [RX.total]: `total = ${st.weight}` });
     render();
     await settle(w, 380);
     st.next = "scan";
@@ -2459,14 +2559,14 @@ K.page(21);
       const inQ = st.inQ.has(v), better = inQ && wt < st.key[v];
       lines([], inQ && better ? { good: [11] } : { bad: [11] });
       if (!inQ) {
-        cv.notes({ 10: `v = ${v}`, 11: [`${v} ∉ Q`, "bad"] }, { [RX.loop]: `(v, w) = (${ix(v)}, ${wt})`, [RX.test]: [`in_q[${ix(v)}] = false`, "bad"] });
-        cap("#s5-cap", `Line 11: <b>${v}</b> is already in the tree (not in Q), so the edge ${u}–${v} could only close a cycle. Skip it.`);
+        cv.notes({ 10: `v = ${v}`, 11: [`${v} ∉ Q`, "bad"] }, { [RX.loop]: `(v, w) = (${ix(v)}, ${wt})`, [RX.test]: [`in_tree[${ix(v)}] = true`, "bad"] });
+        cap("#s5-cap", CODE_LANG.rust ? `<b>${v}</b> is already in the tree (in_tree[${ix(v)}] is true), so the edge ${u}–${v} could only close a cycle. Skip it.` : `Line 11: <b>${v}</b> is already in the tree (not in Q), so the edge ${u}–${v} could only close a cycle. Skip it.`);
         st.edgeNow = null; render();
         log.push(`${v}: in the tree`);
         await w(sleep(300));
       } else if (!better) {
         cv.notes({ 10: `v = ${v}`, 11: [`${wt} < ${kstr(v)}? no`, "bad"] }, { [RX.loop]: `(v, w) = (${ix(v)}, ${wt})`, [RX.test]: [`${wt} < ${kstr(v)}? no`, "bad"] });
-        cap("#s5-cap", `Line 11: ${v} is in Q, but ${wt} is not lighter than its key ${kstr(v)}: ${v} already has a cheaper way to reach the tree. Nothing changes.`);
+        cap("#s5-cap", CODE_LANG.rust ? `${v} is outside the tree, but ${wt} is not lighter than its key ${kstr(v)}: ${v} already has a cheaper way to reach the tree. Nothing changes.` : `Line 11: ${v} is in Q, but ${wt} is not lighter than its key ${kstr(v)}: ${v} already has a cheaper way to reach the tree. Nothing changes.`);
         st.edgeNow = null; render();
         log.push(`${v}: ${wt} ≥ ${kstr(v)}, no change`);
         await w(sleep(340));
@@ -2476,53 +2576,58 @@ K.page(21);
         render();
         await w(sleep(240));
         lines([12, 13, 14]);
-        st.pi[v] = u; st.key[v] = wt; st.dec++; st.heap.push({ k: wt, v });
+        st.pi[v] = u; st.key[v] = wt; st.dec++; hpush(st.heap, [wt, ix(v), st.seq++]);
         st.edgeNow = null; st.flash = { [v]: "good" };
         cv.notes({ 11: [`${wt} < ${old}? yes`, "good"], 12: `${v}.π = ${u}`, 13: `${v}.key = ${wt}`, 14: `DECREASE-KEY(${v}, ${wt})` }, { [RX.setpi]: `pi[${ix(v)}] = Some(${ix(u)})`, [RX.setkey]: `key[${ix(v)}] = ${wt}`, [RX.dec]: `push (${wt}, ${ix(v)})` });
         st.memNote = `DECREASE-KEY is a push: (${wt}, ${v}) joins the heap${old !== "∞" ? ` and the older (${old}, ${v}) is now stale` : ""}.`;
         render();
-        cap("#s5-cap", `Lines 11–14: ${v} is in Q and ${wt} &lt; ${old}, so <b>${v}.π = ${u}</b>, <b>${v}.key = ${wt}</b>, and DECREASE-KEY moves ${v} toward the front of Q.`);
+        cap("#s5-cap", CODE_LANG.rust ? `${v} is outside the tree and ${wt} &lt; ${old}, so <b>pi[${ix(v)}] = Some(${ix(u)})</b>, <b>key[${ix(v)}] = ${wt}</b>, and (${wt}, ${v}) is pushed onto q${old !== "∞" ? `; the older (${old}, ${v}) stays behind, stale` : ""}.` : `Lines 11–14: ${v} is in Q and ${wt} &lt; ${old}, so <b>${v}.π = ${u}</b>, <b>${v}.key = ${wt}</b>, and DECREASE-KEY moves ${v} toward the front of Q.`);
         await w(sleep(360));
         await settle(w, 480);
         st.flash = {}; render();
         log.push(`${v}: ${old} → ${wt}`);
       }
     }
-    st.scanV = null; st.edgeNow = null; st.u = null; st.flash = {};
+    st.scanV = null; st.edgeNow = null; st.u = null; st.ku = null; st.flash = {};
     st.next = st.inQ.size ? "extract" : "end";
     if (!st.inQ.size) { lines([], { good: [8] }); finish(log); return; }
     lines([8]);
     const q = qSorted(), nx = q[0];
-    cv.notes({ 8: `Q holds ${q.length}` }, { [RX.pop]: `${q.length} entries left` });
+    cv.notes({ 8: `Q holds ${q.length}` }, { [RX.pop]: `q holds ${st.heap.length}` });
     render();
-    cap("#s5-cap", `All of ${u}'s neighbours are done (${log.join(" · ")}). Q now holds ${q.length}; the next EXTRACT-MIN will take <b>${nx}</b>, key ${kstr(nx)}.`);
+    if (CODE_LANG.rust) cap("#s5-cap", `All of ${u}'s neighbours are done (${log.join(" · ")}). q holds ${st.heap.length} entr${st.heap.length === 1 ? "y" : "ies"}; the next live one to pop is <b>(${kstr(nx)}, ${nx})</b>.`);
+    else cap("#s5-cap", `All of ${u}'s neighbours are done (${log.join(" · ")}). Q now holds ${q.length}; the next EXTRACT-MIN will take <b>${nx}</b>, key ${kstr(nx)}.`);
   }
   function finish(log) {
     const edges = NAMES.filter((v) => st.pi[v]).map((v) => `${st.pi[v]}–${v}`);
     cv.out(`A = {${edges.join(", ")}}\nweight = ${st.weight}`);
     cv.notes({ 8: ["Q = ∅", "good"] }, { [RX.pop]: ["pop() = None", "good"] });
     const left = st.heap.length; st.heap = [];
-    st.memNote = left ? `the loop pops the last ${left} stale entr${left > 1 ? "ies" : "y"}, skips them, and pop() returns None.` : "pop() returns None: the heap is empty.";
+    st.memNote = (left ? `The loop popped the last ${left > 1 ? left + " stale entries" : "stale entry"} and skipped ${left > 1 ? "them" : "it"}; then pop() returned None. ` : "pop() returned None: the heap is empty. ") + "mst_prim returned (pi, total): pi moved out to main; key, in_tree and q were freed.";
     render();
-    cap("#s5-cap", `Q is empty, so line 8 ends the loop. The edges (v, v.π) form a tree of ${edges.length} edges and total weight <b>${st.weight}</b>${st.weight === 37 ? ", the same 37 as Kruskal found" : ""}. ${st.pi.b === "c" || st.pi.c === "b" ? "" : "This tree uses a–h instead of b–c: the other weight-8 tie, same weight."}`);
+    if (CODE_LANG.rust) cap("#s5-cap", `pop returned None, so the loop ends, and mst_prim returns (pi, total). The edges (v, pi[v]) form a tree of ${edges.length} edges and total weight <b>${st.weight}</b>.`);
+    else cap("#s5-cap", `Q is empty, so line 8 ends the loop. The edges (v, v.π) form a tree of ${edges.length} edges and total weight <b>${st.weight}</b>${st.weight === 37 ? ", the same 37 as Kruskal found" : ""}. ${st.pi.b === "c" || st.pi.c === "b" ? "" : "This tree uses a–h instead of b–c: the other weight-8 tie, same weight."}`);
   }
 
   async function nextPhase(w) {
     if (st.next === "init") return phaseInit(w);
+    if (st.next === "push0") return phasePush0(w);
     if (st.next === "extract") return phaseExtract(w);
     return phaseScan(w);
   }
-  const step = () => S.run(async (w) => { await nextPhase(w); });
-  const play = () => S.run(async (w) => { while (more()) { await nextPhase(w); await w(sleep(160)); } });
+  const step = () => { if (more()) S.run(async (w) => { await nextPhase(w); }); };
+  const play = () => { if (more()) S.run(async (w) => { while (more()) { await nextPhase(w); await w(sleep(160)); } }); };
   function reset() {
     S.cancel(); K.clear(layer); fresh(); render(); cv.clear(); cv.out(null);
-    cap("#s5-cap", `Root <b>${root}</b>. Press <b>Step</b>: lines 1–7 give every vertex a key and put them all into Q. (Pick another root in the row of letters first, if you like.)`);
+    if (CODE_LANG.rust) cap("#s5-cap", `Root <b>${root}</b>. Press <b>Step</b>: the first step makes key, pi and in_tree; the next makes q and pushes only the root. (Pick another root in the row of letters first, if you like.)`);
+    else cap("#s5-cap", `Root <b>${root}</b>. Press <b>Step</b>: lines 1–7 give every vertex a key and put them all into Q. (Pick another root in the row of letters first, if you like.)`);
   }
 
   stepBtn = button(ctr, "Step", "", step);
   playBtn = button(ctr, "Play", "primary", play);
   button(ctr, "Reset", "", reset);
   K.$("#s5-seg").appendChild(seg(NAMES, 0, (k) => { root = NAMES[k]; reset(); }));
+  CODE_LANG.on(() => reset()); // the two modes draw q differently, so a switch starts over
   fresh(); reset();
 })();
 

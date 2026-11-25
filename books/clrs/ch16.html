@@ -3207,10 +3207,11 @@ K.page(16);
       })));
       ps.forEach((p) => p.remove());
       st.nw.slots = old.slots.slice().concat(Array(sz - old.size).fill(0)); st.nb.slots = st.nw.slots; st.cost = old.size;
+      st.buf = { size: old.size, slots: Array(old.size).fill(0) }; // take() left None in every old slot: no item is in two places
       st.nwMark = Object.fromEntries(old.slots.map((_, k) => [k, "on"]));
       render(); await D(300);
       // line 7: free the old table
-      st.ph = 4; st.gone = { size: old.size, slots: old.slots.slice() }; st.buf = st.nb; st.nb = null; st.main = null;
+      st.ph = 4; st.gone = { size: old.size, slots: Array(old.size).fill(0) }; st.buf = st.nb; st.nb = null; st.main = null;
       at([7], { 7: `${old.size} slots` }, { 24: "old Vec dropped" }); say("Line 7: <b>free T.table</b>, the old storage goes back to the memory manager.");
       st.nwMark = {}; render(); await D(480);
       // line 8: the new table becomes T.table
@@ -3227,7 +3228,7 @@ K.page(16);
     st.ph = 5; st.x = i;
     at([10], { 10: `x = item ${i}` }, { 26: `slots[${st.num}]` });
     say(`Line 10: insert <b>x = item ${i}</b> into T.table. This is the one unit every insertion pays.`);
-    st.cost += 1;
+    // the Rust keeps cost at the copies and returns cost + 1, so the strip's cost doesn't count this write
     render();
     const tag = draw.tag(String(i), "sv-data-soft"); layer.appendChild(tag);
     await w(fly(tag, [scx(i - 1), Y1 - 36], [scx(i - 1), Y1 + CH / 2], fast ? 160 : 420));

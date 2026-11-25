@@ -682,9 +682,6 @@ else S.top = S.top − 1
 <script type="text/x-rust" id="rs-s4">
 const SIZE: usize = 7; // S.size: the array has room for 7 elements
 
-#[derive(Debug)]
-struct Overflow; // an error type with no fields
-
 struct Stack {
     s: [i32; SIZE], // S[1 : 7], stored inline: no heap allocation
     top: usize,     // how many elements are in the stack: S.top
@@ -694,14 +691,14 @@ impl Stack {
     fn stack_empty(&self) -> bool {
         self.top == 0
     }
-    // Result says "this can fail": Ok(()) is success with no value.
-    fn push(&mut self, x: i32) -> Result<(), Overflow> {
+    // false means overflow: the array is full, and nothing is written.
+    fn push(&mut self, x: i32) -> bool {
         if self.top == SIZE {
-            return Err(Overflow);
+            return false;
         }
         self.top += 1;
         self.s[self.top - 1] = x; // the book's S[S.top], counted from 0
-        Ok(())
+        true
     }
     // Option says "maybe no value": an empty stack gives None.
     fn pop(&mut self) -> Option<i32> {
@@ -711,45 +708,36 @@ impl Stack {
         self.top -= 1;
         Some(self.s[self.top]) // the value stays in the array, unused
     }
-    fn items(&self) -> &[i32] {
-        &self.s[..self.top] // a slice: a view of S[1 : S.top], no copy
-    }
-}
-
-// `?` hands an Err straight back to our caller and stops the loop.
-fn push_all(st: &mut Stack, xs: &[i32]) -> Result<(), Overflow> {
-    for &x in xs {
-        st.push(x)?;
-    }
-    Ok(())
 }
 
 fn main() {
     let mut st = Stack { s: [0; SIZE], top: 0 };
-    push_all(&mut st, &[15, 6, 2, 9]).unwrap(); // Figure 10.2(a)
-    println!("(a) {:?} top = {}", st.items(), st.top);
-    push_all(&mut st, &[17, 3]).unwrap();
-    println!("(b) {:?} top = {}", st.items(), st.top);
-    println!("POP returned {:?}", st.pop());
-    println!("(c) {:?} top = {}, array {:?}", st.items(), st.top, st.s);
-    let r = push_all(&mut st, &[8, 42, 5]); // room for only two more
-    println!("push 8, 42, 5: {:?}, top = {}", r, st.top);
-    let mut out = Vec::new();
+    for x in vec![15, 6, 2, 9, 17, 3] {
+        st.push(x); // Figure 10.2(a), then (b)
+    }
+    println!("{:?}", st.pop()); // Figure 10.2(c): Some(3)
+    for x in vec![8, 42, 5] {
+        println!("{} {}", x, st.push(x)); // room for only two more
+    }
+    let mut out = Vec::new(); // a Vec is a stack too
     while let Some(x) = st.pop() {
         out.push(x); // last in, first out
     }
-    println!("popped {:?}", out);
-    println!("empty: {}, one more POP: {:?}", st.stack_empty(), st.pop());
+    println!("{:?}", out);
+    println!("{:?}", st.pop()); // empty: None
+    println!("{:?}", out.pop());
+    println!("{}", out.is_empty());
 }
 </script>
 <script type="text/x-rust-out" id="rs-s4-out">
-(a) [15, 6, 2, 9] top = 4
-(b) [15, 6, 2, 9, 17, 3] top = 6
-POP returned Some(3)
-(c) [15, 6, 2, 9, 17] top = 5, array [15, 6, 2, 9, 17, 3, 0]
-push 8, 42, 5: Err(Overflow), top = 7
-popped [42, 8, 17, 9, 2, 6, 15]
-empty: true, one more POP: None
+Some(3)
+8 true
+42 true
+5 false
+[42, 8, 17, 9, 2, 6, 15]
+None
+Some(15)
+false
 </script>
   </section>
 
@@ -1950,7 +1938,7 @@ n = 2500: plain 1239.1  skips  59.2  sqrt(n)   50
         <div class="word"><dt>trait</dt><dd>An interface. <code>trait DynamicSet</code> lists the seven operations; an unsorted and a sorted array both implement it, and <code>fn in_order&lt;S: DynamicSet&gt;</code> works with either.</dd></div>
         <div class="word"><dt>&amp;self vs &amp;mut self</dt><dd>A method that takes <code>&amp;self</code> can only read, so the compiler enforces “a query doesn't change the set.” LIST-SEARCH′ needs <code>&amp;mut self</code> because it writes the key into the sentinel.</dd></div>
         <div class="word"><dt>Option&lt;usize&gt; as NIL</dt><dd>A handle to an element is <code>Some(index)</code>; the book's NIL is <code>None</code>, and the compiler makes every caller handle it.</dd></div>
-        <div class="word"><dt>Result and ?</dt><dd><code>push</code> returns <code>Result&lt;(), Overflow&gt;</code>; <code>?</code> passes an <code>Err</code> straight back to the caller. A unit struct like <code>Overflow</code> is an error type with no fields.</dd></div>
+        <div class="word"><dt>Option from pop</dt><dd>The stack's <code>pop</code> returns <code>Some(x)</code>, or <code>None</code> when the stack is empty, so underflow is a value the caller must handle rather than a crash; its <code>push</code> returns <code>false</code> on overflow. <code>Vec</code>'s own <code>pop</code> works the same way.</dd></div>
         <div class="word"><dt>size_of::&lt;T&gt;()</dt><dd>The bytes one <code>T</code> takes, known at compile time: the <i>b</i> of the address formula. A <code>String</code> is a 24-byte header whatever its length.</dd></div>
         <div class="word"><dt>Index trait</dt><dd>Implementing <code>Index&lt;(usize, usize)&gt;</code> lets a matrix type be read as <code>mx[(i, j)]</code>; the <code>[]</code> operator is just a trait.</dd></div>
         <div class="word"><dt>enum + match</dt><dd><code>enum Order { Row, Col, Block }</code>, and a <code>match</code> that must cover every variant, picks the index formula.</dd></div>
@@ -2846,8 +2834,8 @@ K.page(10);
   const stTop = stat("S.top", 0), stPush = stat("pushes", 0), stPop = stat("pops", 0), stErr = stat("errors", 0);
   stats.append(stTop, stPush, stPop, stErr);
 
-  const MAP = { "STACK-EMPTY": 12, "STACK-EMPTY:1": 13, "STACK-EMPTY:2": 13, "STACK-EMPTY:3": 13,
-    PUSH: 16, "PUSH:1": 17, "PUSH:2": 18, "PUSH:3": 20, "PUSH:4": 21, POP: 25, "POP:1": 26, "POP:2": 27, "POP:3": 29, "POP:4": 30 };
+  const MAP = { "STACK-EMPTY": 9, "STACK-EMPTY:1": 10, "STACK-EMPTY:2": 10, "STACK-EMPTY:3": 10,
+    PUSH: 13, "PUSH:1": 14, "PUSH:2": 15, "PUSH:3": 17, "PUSH:4": 18, POP: 22, "POP:1": 23, "POP:2": 24, "POP:3": 26, "POP:4": 27 };
   const cv = code("#s4-code", { files: [{ name: "STACK-EMPTY · PUSH · POP", src: src("ps-s4"), rs: { name: "stack.rs", src: src("rs-s4"), out: src("rs-s4-out"), map: MAP } }] });
   const MODES = [
     { size: 7, start: [15, 6, 2, 9], pool: [17, 3, 8, 42, 5, 11, 26, 30], script: [["push"], ["push"], ["pop"]], intro: "The stack of Figure 10.2(a): 15, 6, 2, 9 in S[1 : 7], with S.top = 4." },
@@ -2904,10 +2892,12 @@ K.page(10);
     txt(gTop, Math.max(16 + tl.length * 3.8, px), CY + CH + 52, tl, { mono: true, size: 12.5, bold: true });
     // what POP returned, and errors
     const RY = 236;
-    gLow.appendChild(s("rect", { x: 40, y: RY, width: 200, height: 40, rx: 10, class: st.ret != null ? "sv-good" : "sv-panel" }));
-    txt(gLow, 56, RY + 25, "POP returned", { anchor: "start", cls: "sv-label" });
-    if (st.ret != null) txt(gLow, 196, RY + 27, String(st.ret), { cls: "ac-v" });
-    if (st.err) box(gLow, 380, RY, 240, 40, "sv-bad", `error “${st.err}”`, null, 14);
+    // the Rust version reports both edge cases as values: pop gives None, push gives false
+    const none = rs && st.err === "underflow";
+    gLow.appendChild(s("rect", { x: 40, y: RY, width: 240, height: 40, rx: 10, class: st.ret != null ? "sv-good" : "sv-panel" }));
+    txt(gLow, 56, RY + 25, rs ? "pop returned" : "POP returned", { anchor: "start", cls: "sv-label" });
+    if (st.ret != null || none) txt(gLow, 266, RY + 27, none ? "None" : rs ? `Some(${st.ret})` : String(st.ret), { anchor: "end", cls: "ac-v" });
+    if (st.err) box(gLow, 380, RY, 240, 40, "sv-bad", rs ? (st.err === "overflow" ? "overflow: push → false" : "underflow: stack empty") : `error “${st.err}”`, null, 14);
     stTop.set(st.top); stPush.set(st.pushes); stPop.set(st.pops); stErr.set(st.errors, st.errors ? "bad" : undefined);
     if (pushBtn) pushBtn.textContent = `Push ${nextVal()}`;
   }
@@ -2919,22 +2909,22 @@ K.page(10);
     const x = nextVal(), size = M().size;
     st.ret = null; st.err = null; st.bad = null; cv.clear();
     const full = st.top === size;
-    cv.at(["PUSH:1"]); cv.notes({ "PUSH:1": [`${st.top} == ${size}? ${full ? "yes" : "no"}`, full ? "bad" : ""] }, { 17: [`${st.top} == ${size}: ${full}`, full ? "bad" : ""] });
+    cv.at(["PUSH:1"]); cv.notes({ "PUSH:1": [`${st.top} == ${size}? ${full ? "yes" : "no"}`, full ? "bad" : ""] }, { 14: [`${st.top} == ${size}: ${full}`, full ? "bad" : ""] });
     render(); say(`PUSH(S, ${x}), line 1: is the array full? S.top = ${st.top}, S.size = ${size}: ${full ? "<b>yes</b>." : "no."}`);
     await w(sleep(420));
     if (full) {
       st.err = "overflow"; st.bad = "over"; st.errors++;
       cv.at([]); cv.at(["PUSH:2"], "bad");
-      render(); say(`Line 2: <b>overflow</b>. All ${size} cells are in use, and S[${size + 1}] doesn't exist. Writing there anyway would scribble over whatever memory follows the array; the book stops with an error, and the Rust version returns <code>Err(Overflow)</code>.`);
+      render(); say(`Line 2: <b>overflow</b>. All ${size} cells are in use, and S[${size + 1}] doesn't exist. Writing there anyway would scribble over whatever memory follows the array; the book stops with an error, and the Rust version returns <code>false</code> and writes nothing.`);
       return;
     }
     st.top++;
-    cv.at(["PUSH:3"]); cv.notes({ "PUSH:3": `S.top = ${st.top}` }, { 20: `top = ${st.top}` });
+    cv.at(["PUSH:3"]); cv.notes({ "PUSH:3": `S.top = ${st.top}` }, { 17: `top = ${st.top}` });
     st.hideNext = true; render(); say(`Line 3: S.top = ${st.top}.`);
     const tg = draw.tag(String(x), "sv-data-soft"); layer.appendChild(tg);
     try { await w(fly(tg, [cx(st.top - 1), CY - 40], [cx(st.top - 1), CY + CH / 2], 380)); } finally { tg.remove(); }
     st.a[st.top - 1] = x; st.next++; st.pushes++; st.hideNext = false; st.hot = st.top - 1;
-    cv.at(["PUSH:4"]); cv.notes({ "PUSH:3": `S.top = ${st.top}`, "PUSH:4": [`S[${st.top}] = ${x}`, "good"] }, { 20: `top = ${st.top}`, 21: [`s[${st.top - 1}] = ${x}`, "good"] });
+    cv.at(["PUSH:4"]); cv.notes({ "PUSH:3": `S.top = ${st.top}`, "PUSH:4": [`S[${st.top}] = ${x}`, "good"] }, { 17: `top = ${st.top}`, 18: [`s[${st.top - 1}] = ${x}`, "good"] });
     render(); say(`Line 4: S[${st.top}] = ${x}. ${x} is now on top, ${st.top === size ? "and the array is full." : `with room for ${size - st.top} more.`}`);
     await w(sleep(260));
     st.hot = null; render();
@@ -2943,7 +2933,7 @@ K.page(10);
     st.ret = null; st.err = null; st.bad = null; cv.clear();
     const empty = st.top === 0;
     cv.at(["POP:1"]); cv.at(["STACK-EMPTY:1"], "on2", false);
-    cv.notes({ "STACK-EMPTY:1": `S.top = ${st.top}`, "POP:1": [empty ? "empty" : "not empty", empty ? "bad" : ""] }, { 13: `top == 0: ${empty}` });
+    cv.notes({ "STACK-EMPTY:1": `S.top = ${st.top}`, "POP:1": [empty ? "empty" : "not empty", empty ? "bad" : ""] }, { 10: `top == 0: ${empty}` });
     render(); say(`POP(S), line 1: STACK-EMPTY(S) checks S.top = ${st.top}. ${empty ? "<b>The stack is empty.</b>" : "There is something to pop."}`);
     await w(sleep(440));
     cv.at([], "on2", false);
@@ -2955,10 +2945,10 @@ K.page(10);
     }
     const k = st.top - 1, v = st.a[k];
     st.top--; st.hot = k;
-    cv.at(["POP:3"]); cv.notes({ "POP:3": `S.top = ${st.top}` }, { 29: `top = ${st.top}` });
+    cv.at(["POP:3"]); cv.notes({ "POP:3": `S.top = ${st.top}` }, { 26: `top = ${st.top}` });
     render(); say(`Line 3: S.top = ${st.top}. S[${k + 1}] = ${v} is no longer part of the stack.`);
     await w(sleep(300));
-    cv.at(["POP:4"]); cv.notes({ "POP:3": `S.top = ${st.top}`, "POP:4": [`return ${v}`, "good"] }, { 29: `top = ${st.top}`, 30: [`Some(${v})`, "good"] });
+    cv.at(["POP:4"]); cv.notes({ "POP:3": `S.top = ${st.top}`, "POP:4": [`return ${v}`, "good"] }, { 26: `top = ${st.top}`, 27: [`Some(${v})`, "good"] });
     const tg = draw.tag(String(v), "sv-data-soft"); layer.appendChild(tg);
     try { await w(fly(tg, [cx(k), CY + CH / 2], [196, 256], 440)); } finally { tg.remove(); }
     st.ret = v; st.pops++; st.hot = null;
@@ -3041,7 +3031,7 @@ K.page(10);
   }
   function render() {
     K.clear(gArr); K.clear(gPtr); K.clear(gRing); K.clear(gSide);
-    txt(gArr, X0, 26, (R() ? "q.slots[0 .. 11]" : "Q[1 : 12]") + " · one block of memory", { anchor: "start", cls: "sv-label" });
+    txt(gArr, X0, 26, (R() ? "q.slots[0 ..= 11]" : "Q[1 : 12]") + " · one block of memory", { anchor: "start", cls: "sv-label" });
     const marks = {}, vals = [];
     for (let i = 1; i <= N; i++) {
       marks[i - 1] = mark(i);
@@ -3171,6 +3161,7 @@ K.page(10);
     at(ref(P, 1), "on", [`x = ${x == null ? "?" : x}`, empty ? "bad" : ""], [`x = ${empty ? "None" : "Some(" + x + ")"}`, empty ? "bad" : ""],
       empty ? `Line ${1 + (checks ? 2 : 0)}: the queue is empty, but the book's DEQUEUE doesn't check. It reads Q[${hd}] anyway: ${x == null ? "a slot that was never written" : `a stale ${x} left from earlier`}.` : `Line ${1 + (checks ? 2 : 0)}: x = Q[${hd}] = ${x}, the element that has waited longest.`);
     await w(sleep(D));
+    if (R() && !empty) { st.q[hd] = null; render(); } // Rust's take() leaves None in the slot; the book's array keeps a stale value
     const wrap = hd === N;
     at(ref(P, 2), "on", `${hd} == 12? ${wrap ? "yes" : "no"}`, `${hd - 1} == 11? ${wrap}`, `Line ${2 + (checks ? 2 : 0)}: is Q.head at the last slot? ${wrap ? "Yes." : "No."}`);
     await w(sleep(D));

@@ -393,7 +393,7 @@ gcd(8, 15): trying 1, factors 1
           <p class="dc-eg"><b>With numbers:</b> gcd(30, 21) = gcd(21, 9) = gcd(9, 3) = gcd(3, 0) = 3.</p>
         </div>
         <p class="whyworks"><b>Why it never loses the answer:</b> a mod b is a minus some copies of b. So whatever divides a and b also divides a mod b. Run that backward, and whatever divides b and a mod b also divides a. The pair of numbers changes, but their common divisors stay exactly the same.</p>
-        <p class="imagine"><b>Try it:</b> press <b>Next</b> to make each cut. Amber is the squares just cut, blue is what is left. Then drag <b>a</b> and <b>b</b>. The two tiles below the picture compare the calls with the sizes the slow way would try.</p>
+        <p class="imagine"><b>Try it:</b> press <b>Next</b> to make each cut. Amber is the squares just cut, blue is what is left. Then drag <b>a</b> and <b>b</b>. The two tiles below the picture compare the calls with the sizes the slow way would try. <b>Loop</b> makes the same cuts with a while loop, which keeps one pair of numbers instead of a call for each cut.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -405,7 +405,7 @@ gcd(8, 15): trying 1, factors 1
         </details>
       </div>
       <div class="stage">
-        <div class="stage-head"><span class="stage-title">Cutting a rectangle into squares</span></div>
+        <div class="stage-head"><span class="stage-title">Cutting a rectangle into squares</span><span id="s4-seg"></span></div>
         <div class="stage-scroll"><svg id="s4-svg" viewBox="0 0 660 340" role="img" aria-label="A rectangle a wide and b tall. Each step cuts as many squares as fit off its long side and shows the smaller rectangle left over. A list at the right shows the matching recursive calls of EUCLID"></svg></div>
         <div class="controls" id="s4-inputs"></div>
         <div class="controls" id="s4-controls"></div>
@@ -456,6 +456,40 @@ gcd(21, 30) = 3
   euclid(15, 6)
   euclid(6, 3)
   euclid(3, 0)
+gcd(99, 78) = 3
+</script>
+<script type="text/x-rust" id="rs-s4-loop">
+// Euclid's algorithm as a loop: one stack frame, however many steps.
+fn euclid_loop(mut a: u64, mut b: u64) -> u64 {
+    while b != 0 {
+        println!("  a = {a}, b = {b}");
+        (a, b) = (b, a % b);
+    }
+    a
+}
+
+fn main() {
+    for (a, b) in [(30, 21), (21, 30), (99, 78)] {
+        let d = euclid_loop(a, b);
+        println!("gcd({a}, {b}) = {d}");
+    }
+}
+</script>
+<script type="text/x-rust-out" id="rs-s4-loop-out">
+  a = 30, b = 21
+  a = 21, b = 9
+  a = 9, b = 3
+gcd(30, 21) = 3
+  a = 21, b = 30
+  a = 30, b = 21
+  a = 21, b = 9
+  a = 9, b = 3
+gcd(21, 30) = 3
+  a = 99, b = 78
+  a = 78, b = 21
+  a = 21, b = 15
+  a = 15, b = 6
+  a = 6, b = 3
 gcd(99, 78) = 3
 </script>
   </section>
@@ -617,10 +651,10 @@ fn extended_euclid(a: i64, b: i64) -> (i64, i64, i64) {
     if b == 0 {
         return (a, 1, 0);
     }
-    let (d1, x1, y1) = extended_euclid(b, a % b);
-    let (d, x, y) = (d1, y1, x1 - (a / b) * y1);
-    println!("{a:>3} {b:>3} {:>2} | {d} {x:>3} {y:>3}", a / b);
-    (d, x, y)
+    let (d, x, y) = extended_euclid(b, a % b);
+    let q = a / b;
+    println!("{a:>3} {b:>3} {q:>2} | {d} {:>3} {:>3}", y, x - q * y);
+    (d, y, x - q * y)
 }
 
 fn main() {
@@ -1244,41 +1278,35 @@ else d = MODULAR-EXPONENTIATION(a, b − 1, n)  // b is odd
     return (a · d) mod n
 </script>
 <script type="text/x-rust" id="rs-s12">
-// a^b mod n by repeated squaring; prints d as Figure 31.4 lists it.
-fn modular_exponentiation(a: u64, b: u64, n: u64) -> u64 {
-    if b == 0 {
-        return 1;
+// a^b mod n by repeated squaring: a loop over b's bits, top bit first.
+fn mul_mod(x: u64, y: u64, n: u64) -> u64 {
+    let p = x as u128 * y as u128;
+    (p % n as u128) as u64
+}
+
+fn mod_exp(a: u64, b: u64, n: u64) -> u64 {
+    let mut d = 1;
+    let bits = 64 - b.leading_zeros();
+    for i in (0..bits).rev() {
+        d = mul_mod(d, d, n);
+        if (b >> i) & 1 == 1 {
+            d = mul_mod(a, d, n);
+        }
     }
-    if b % 2 == 0 {
-        let d = modular_exponentiation(a, b / 2, n);
-        println!("b = {b:>3}: d = {d:>3}, square");
-        d * d % n
-    } else {
-        let d = modular_exponentiation(a, b - 1, n);
-        println!("b = {b:>3}: d = {d:>3}, times a");
-        a * d % n
-    }
+    d
 }
 
 fn main() {
-    let r = modular_exponentiation(7, 560, 561);
-    println!("7^560 mod 561 = {r}");
+    let r = mod_exp(7, 560, 561);
+    println!("7^560 mod 561 = {}", r);
+    let m = u64::MAX;
+    let big = mod_exp(2, 64, m);
+    println!("2^64 mod {} = {}", m, big);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s12-out">
-b =   1: d =   1, times a
-b =   2: d =   7, square
-b =   4: d =  49, square
-b =   8: d = 157, square
-b =  16: d = 526, square
-b =  17: d = 103, times a
-b =  34: d = 160, square
-b =  35: d = 355, times a
-b =  70: d = 241, square
-b = 140: d = 298, square
-b = 280: d = 166, square
-b = 560: d =  67, square
 7^560 mod 561 = 1
+2^64 mod 18446744073709551615 = 1
 </script>
   </section>
 
@@ -1823,54 +1851,75 @@ if xₜ ≠ 1
 return FALSE
 </script>
 <script type="text/x-rust" id="rs-s18">
-// WITNESS: can base a prove that n is composite?
-fn power(a: u64, b: u64, n: u64) -> u64 {
-    if b == 0 {
-        return 1;
+// Miller-Rabin for any u64: WITNESS with twelve fixed bases.
+fn mul_mod(x: u64, y: u64, n: u64) -> u64 {
+    let p = x as u128 * y as u128;
+    (p % n as u128) as u64
+}
+
+fn mod_exp(a: u64, b: u64, n: u64) -> u64 {
+    let mut d = 1;
+    let bits = 64 - b.leading_zeros();
+    for i in (0..bits).rev() {
+        d = mul_mod(d, d, n);
+        if (b >> i) & 1 == 1 {
+            d = mul_mod(a, d, n);
+        }
     }
-    let d = power(a, b / 2, n);
-    let square = d * d % n;
-    if b % 2 == 0 { square } else { a * square % n }
+    d
 }
 
 fn witness(a: u64, n: u64) -> bool {
-    let (mut t, mut u) = (0, n - 1);
-    while u % 2 == 0 {
-        u /= 2;
-        t += 1;
-    }
-    let mut x = power(a, u, n);
-    print!("n={n} a={a} t={t} u={u}: {x}");
-    for _ in 1..=t {
+    let t = (n - 1).trailing_zeros();
+    let u = (n - 1) >> t;
+    let mut x = mod_exp(a, u, n);
+    for _ in 0..t {
         let last = x;
-        x = last * last % n;
-        print!(" {x}");
+        x = mul_mod(last, last, n);
         if x == 1 && last != 1 && last != n - 1 {
-            println!("  nontrivial root {last}");
             return true;
         }
     }
-    if x != 1 {
-        println!("  not 1 at the end");
-        return true;
+    x != 1
+}
+
+const BASES: [u64; 12] = [
+    2, 3, 5, 7, 11, 13,
+    17, 19, 23, 29, 31, 37,
+];
+
+fn is_prime(n: u64) -> bool {
+    if n < 2 {
+        return false;
     }
-    println!("  no proof");
-    false
+    for a in BASES {
+        if n % a == 0 {
+            return n == a;
+        }
+        if witness(a, n) {
+            return false;
+        }
+    }
+    true
 }
 
 fn main() {
-    let cases = [(7, 561), (2, 561), (2, 341), (3, 341), (7, 101)];
-    for (a, n) in cases {
-        witness(a, n);
+    println!("561: {}", witness(7, 561));
+    let m = 3825123056546413051;
+    for a in BASES {
+        print!("{}", witness(a, m) as u8);
     }
+    println!();
+    println!("m: {}", is_prime(m));
+    let p = u64::MAX - 58;
+    println!("p: {}", is_prime(p));
 }
 </script>
 <script type="text/x-rust-out" id="rs-s18-out">
-n=561 a=7 t=4 u=35: 241 298 166 67 1  nontrivial root 67
-n=561 a=2 t=4 u=35: 263 166 67 1  nontrivial root 67
-n=341 a=2 t=2 u=85: 32 1  nontrivial root 32
-n=341 a=3 t=2 u=85: 254 67 56  not 1 at the end
-n=101 a=7 t=2 u=25: 10 100 1  no proof
+561: true
+000000000001
+m: false
+p: true
 </script>
   </section>
 
@@ -2414,26 +2463,33 @@ function drawCuts(g, X, Y, u, a, b, doneSquares, nowSquares, rem, opts = {}) {
 /* ================= 31.2 · Euclid: cut squares ================= */
 (function s4() {
   const g = s("g"); K.$("#s4-svg").appendChild(g);
-  let a = 30, b = 21;
-  const cv = code("#s4-code", { files: [{ name: "EUCLID", src: src("ps-s4"), rs: { name: "euclid.rs", src: src("rs-s4"), out: src("rs-s4-out"),
-    map: rmap(src("rs-s4"), { 1: "if b == 0", 2: "        a", 3: "euclid(b, a % b)" }) } }] });
+  let a = 30, b = 21, mode = 0; // mode 1: the same cuts made by a while loop (Exercise 31.2-4), one frame throughout
+  const FILES = [
+    { name: "EUCLID", src: src("ps-s4"), rs: { name: "euclid.rs", src: src("rs-s4"), out: src("rs-s4-out"),
+      map: rmap(src("rs-s4"), { 1: "if b == 0", 2: "        a", 3: "euclid(b, a % b)" }) } },
+    { name: "EUCLID", src: src("ps-s4"), rs: { name: "euclid_loop.rs", src: src("rs-s4-loop"), out: src("rs-s4-loop-out"),
+      map: rmap(src("rs-s4-loop"), { 1: "while b != 0", 2: "    a", 3: "(a, b) = (b, a % b)" }) } },
+  ];
+  const cv = code("#s4-code", { files: [FILES[0]] });
   const stC = stat("recursive calls", 0), stT = stat("slow way: sizes to try", 0);
   K.$("#s4-stats").append(stC, stT);
   function frames() {
-    const c = cutFrames(a, b), out = [], rowsAll = c.rows, nCalls = c.calls.length;
+    const c = cutFrames(a, b), out = [], rowsAll = c.rows, nCalls = c.calls.length, loop = mode === 1;
     const rect = { x: 0, y: 0, w: a, h: b };
     out.push({ a, b, done: [], now: [], rem: rect, at: 0, rows: rowsAll, say: `A rectangle <b>${a} × ${b}</b>. Every tile that fits it is a common divisor of ${a} and ${b}.`, why: "We want the largest tile, without testing sizes one by one.", lines: 1, notes: { 1: `a = ${a}, b = ${b}` } });
     let done = [];
     c.calls.forEach((k, i) => {
       const left = k.r === 0 ? "Nothing is left." : `Left over: ${k.r} × ${k.b}.`;
-      const say = k.q === 0 ? `${k.a} is smaller than ${k.b}, so no ${k.b}-square fits. The call just swaps them: gcd(${k.b}, ${k.a}).`
-        : `${k.a} mod ${k.b}: <b>${pl(k.q, "square")}</b> of side ${k.b} fit${k.q === 1 ? "s" : ""}. ${left}`;
+      const say = k.q === 0 ? `${k.a} is smaller than ${k.b}, so no ${k.b}-square fits. ${loop ? `The pass just swaps them: a = ${k.b}, b = ${k.a}.` : `The call just swaps them: gcd(${k.b}, ${k.a}).`}`
+        : `${k.a} mod ${k.b}: <b>${pl(k.q, "square")}</b> of side ${k.b} fit${k.q === 1 ? "s" : ""}. ${left}${loop ? ` Now a = ${k.b}, b = ${k.r}.` : ""}`;
       out.push({ a, b, done: done.slice(), now: k.cut, rem: { x: k.x, y: k.y, w: k.w, h: k.h }, at: i + 1, rows: rowsAll, say,
-        why: k.r === 0 ? "" : i === 0 && k.q ? `Any tile that fits ${k.a} × ${k.b} also fits the leftover, so the gcd is the same for both.` : "", lines: 3, notes: { 3: `EUCLID(${k.b}, ${k.a} mod ${k.b} = ${k.r})` } });
+        why: k.r === 0 ? "" : i === 0 && k.q ? `Any tile that fits ${k.a} × ${k.b} also fits the leftover, so the gcd is the same for both.` : "", lines: 3,
+        notes: { 3: loop ? `a, b = ${k.b}, ${k.r}` : `EUCLID(${k.b}, ${k.a} mod ${k.b} = ${k.r})` } });
       done = done.concat(k.cut);
     });
     const G = c.d;
-    out.push({ a, b, done, now: [], rem: { x: 0, y: 0, w: 0, h: 0 }, at: nCalls, tile: G, rows: rowsAll, phase: "Result", tone: "good", say: `b is 0, so we stop. The last side, <b>${G}</b>, is the gcd of ${a} and ${b}. Tiles of size ${G} fill the whole rectangle.`, why: `That took ${pl(nCalls, "recursive call")}, and never needed a factor of either number.`, lines: 2, notes: { 2: `return ${G}` } });
+    out.push({ a, b, done, now: [], rem: { x: 0, y: 0, w: 0, h: 0 }, at: nCalls, tile: G, rows: rowsAll, phase: "Result", tone: "good", say: `b is 0, so we stop. The last side, <b>${G}</b>, is the gcd of ${a} and ${b}. Tiles of size ${G} fill the whole rectangle.`,
+      why: loop ? `That took ${pl(nCalls, "pass", "passes")} of the loop, all in one stack frame, and never needed a factor of either number.` : `That took ${pl(nCalls, "recursive call")}, and never needed a factor of either number.`, lines: 2, notes: { 2: `return ${G}` } });
     return out;
   }
   function paint(f) {
@@ -2449,14 +2505,24 @@ function drawCuts(g, X, Y, u, a, b, doneSquares, nowSquares, rem, opts = {}) {
       g.appendChild(s("rect", { x: X, y: Y, width: W, height: H, class: "ac-cell good" }));
       if (d) g.appendChild(s("path", { d, class: "pl-line thin", style: { strokeWidth: 1 } }));
     }
-    const PX = 424;
+    const PX = 424, at = Math.round(f.at);
+    if (mode === 1) { // the loop: one frame, its a and b overwritten on every pass
+      const r = f.rows[at];
+      txt(g, PX, 24, "the loop's one frame", { anchor: "start", cls: "sv-label" });
+      cell(g, PX, 34, 216, 25, `a = ${r[0]}, b = ${r[1]}`, r[1] === 0 ? "good" : "on", { size: 12.5, rx: 5 });
+      txt(g, PX, 82, `passes so far: ${at}`, { anchor: "start", cls: "sv-label" });
+      return;
+    }
     txt(g, PX, 24, "the calls", { anchor: "start", cls: "sv-label" });
-    f.rows.forEach((r, i) => {
-      const y = 34 + i * 29, live = i === Math.round(f.at), past = i < Math.round(f.at);
-      cell(g, PX, y, 216, 25, `EUCLID(${r[0]}, ${r[1]})`, live ? (r[1] === 0 ? "good" : "on") : past ? "dim" : "", { size: 12.5, rx: 5 });
+    f.rows.forEach((r, i) => { // a call appears when it is made, and stays open until the last one returns
+      if (i > at) return;
+      const y = 34 + i * 29, live = i === at;
+      cell(g, PX, y, 216, 25, `${CODE_LANG.rust ? "euclid" : "EUCLID"}(${r[0]}, ${r[1]})`, live ? (r[1] === 0 ? "good" : "on") : "dim", { size: 12.5, rx: 5 });
     });
   }
   const W = walk({ id: "s4", svg: "#s4-svg", code: cv, frames, paint, morph: 520 });
+  CODE_LANG.on(() => paint(W.frame));
+  K.$("#s4-seg").appendChild(seg(["Recursion", "Loop"], mode, (i) => { mode = i; cv.setFiles([FILES[i]]); stC.querySelector(".k").textContent = i ? "loop passes" : "recursive calls"; refresh(); }));
   function refresh() { const n = cutFrames(a, b).calls.length; stC.set(n, "good"); stT.set(Math.min(a, b)); W.rebuild(); }
   K.$("#s4-inputs").append(
     slider({ id: "s4-a", label: "a", min: 1, max: 100, value: a, onInput: (v) => { a = v; refresh(); } }),
@@ -2510,7 +2576,7 @@ function drawCuts(g, X, Y, u, a, b, doneSquares, nowSquares, rem, opts = {}) {
 (function s6() {
   const svg = K.$("#s6-svg"), g = s("g"); svg.appendChild(g);
   let a = 99, b = 78;
-  const R = rmap(src("rs-s6"), { 1: "if b == 0", 2: "return (a, 1, 0);", 3: "let (d1, x1, y1)", 4: "let (d, x, y) =", 5: "    (d, x, y)" });
+  const R = rmap(src("rs-s6"), { 1: "if b == 0", 2: "return (a, 1, 0);", 3: "= extended_euclid(b, a % b)", 4: ["let q = a / b", "(d, y, x - q * y)"], 5: "(d, y, x - q * y)" });
   const cv = code("#s6-code", { files: [{ name: "EXTENDED-EUCLID", src: src("ps-s6"), rs: { name: "extended_euclid.rs", src: src("rs-s6"), out: src("rs-s6-out"), map: R } }] });
   const X0 = 18, CW = 58, Y0 = 38, RH = 32, COLS = ["a", "b", "⌊a/b⌋", "d", "x", "y"], PX = 384;
   const cellX = (c) => X0 + c * CW, rowY = (r) => Y0 + r * RH;
@@ -2537,7 +2603,8 @@ function drawCuts(g, X, Y, u, a, b, doneSquares, nowSquares, rem, opts = {}) {
   }
   function paint(f) {
     K.clear(g);
-    COLS.forEach((c, i) => txt(g, cellX(i) + (CW - 4) / 2, Y0 - 10, c, { mono: true, bold: true, size: 13, fill: i > 2 ? "var(--lilac)" : "var(--ink-2)" }));
+    const rs = CODE_LANG.rust; // the Rust calls ⌊a/b⌋ q, and the answer from below x and y: it returns (d, y, x - q * y)
+    COLS.forEach((c, i) => txt(g, cellX(i) + (CW - 4) / 2, Y0 - 10, rs && i === 2 ? "q" : c, { mono: true, bold: true, size: 13, fill: i > 2 ? "var(--lilac)" : "var(--ink-2)" }));
     f.rows.forEach((r, i) => {
       if (i > f.down) { for (let c = 0; c < 6; c++) cell(g, cellX(c), rowY(i), CW - 4, RH - 4, "", "dim", { rx: 5 }); return; }
       const liveDown = i === f.down && f.up === f.rows.length, liveUp = i === f.up;
@@ -2555,9 +2622,9 @@ function drawCuts(g, X, Y, u, a, b, doneSquares, nowSquares, rem, opts = {}) {
     txt(g, PX, 34, f.up === f.rows.length ? "going down" : "coming back up", { anchor: "start", bold: true, size: 15 });
     legend(g, PX, 58, [["on", "this row"], ["on2", "used"], ["sorted", "done"]], { gap: 8 });
     if (f.arrow) {
-      txt(g, PX, 104, `q = ${f.q}, x′ = ${sg(f.x1)}, y′ = ${sg(f.y1)}`, { anchor: "start", mono: true, size: 13 });
-      txt(g, PX, 136, `x = y′ = ${sg(f.y1)}`, { anchor: "start", mono: true, bold: true, size: 14 });
-      txt(g, PX, 164, "y = x′ − q·y′", { anchor: "start", mono: true, size: 13 });
+      txt(g, PX, 104, rs ? `below: x = ${sg(f.x1)}, y = ${sg(f.y1)}` : `q = ${f.q}, x′ = ${sg(f.x1)}, y′ = ${sg(f.y1)}`, { anchor: "start", mono: true, size: 13 });
+      txt(g, PX, 136, rs ? `new x = y = ${sg(f.y1)}` : `x = y′ = ${sg(f.y1)}`, { anchor: "start", mono: true, bold: true, size: 14 });
+      txt(g, PX, 164, rs ? "new y = x − q·y" : "y = x′ − q·y′", { anchor: "start", mono: true, size: 13 });
       txt(g, PX, 188, `  = ${sg(f.x1)} − ${f.q}·${br(f.y1)} = ${sg(f.x1 - f.q * f.y1)}`, { anchor: "start", mono: true, bold: true, size: 14 });
     }
     if (f.sum) {
@@ -2573,6 +2640,7 @@ function drawCuts(g, X, Y, u, a, b, doneSquares, nowSquares, rem, opts = {}) {
   K.$("#s6-inputs").append(
     slider({ id: "s6-a", label: "a", min: 1, max: 100, value: a, onInput: (v) => { a = v; W.rebuild(); } }),
     slider({ id: "s6-b", label: "b", min: 1, max: 100, value: b, onInput: (v) => { b = v; W.rebuild(); } }));
+  CODE_LANG.on(() => W.go(W.i)); // repaint the names for the language shown
 })();
 
 /* ================= 31.3 · operation tables: who has an undo? ================= */
@@ -2926,7 +2994,7 @@ function drawCuts(g, X, Y, u, a, b, doneSquares, nowSquares, rem, opts = {}) {
   const svg = K.$("#s12-svg"), g = s("g"), gB = s("g"); svg.append(g, gB);
   let a = 7, b = 560, n = 561;
   const NM = "MODULAR-EXPONENTIATION";
-  const R = rmap(src("rs-s12"), { [NM + ":1"]: "if b == 0", [NM + ":2"]: "return 1;", [NM + ":3"]: "if b % 2 == 0", [NM + ":4"]: "let d = modular_exponentiation(a, b / 2, n)", [NM + ":5"]: "d * d % n", [NM + ":6"]: "let d = modular_exponentiation(a, b - 1, n)", [NM + ":7"]: "a * d % n" });
+  const R = rmap(src("rs-s12"), { [NM + ":1"]: "let bits = 64", [NM + ":2"]: "let mut d = 1;", [NM + ":3"]: "for i in (0..bits)", [NM + ":4"]: "for i in (0..bits)", [NM + ":5"]: "d = mul_mod(d, d, n)", [NM + ":6"]: "for i in (0..bits)", [NM + ":7"]: "d = mul_mod(a, d, n)" });
   const cv = code("#s12-code", { files: [{ name: NM, src: src("ps-s12"), rs: { name: "repeated_squaring.rs", src: src("rs-s12"), out: src("rs-s12-out"), map: R } }] });
   const L = (k) => `${NM}:${k}`, X0 = 78, Y1 = 92;
   function frames() {
@@ -3327,7 +3395,7 @@ function drawCuts(g, X, Y, u, a, b, doneSquares, nowSquares, rem, opts = {}) {
   const g = s("g"); K.$("#s18-svg").appendChild(g);
   const NS = [561, 341, 1105, 1729, 101], ROOTS = [35, 13, 21];
   let mode = 0, ni = 0, a = 7, ri = 0;
-  const R = rmap(src("rs-s18"), { 1: "let (mut t, mut u)", 2: "let mut x = power(a, u, n)", 3: "for _ in 1..=t", 4: "x = last * last % n", 5: "if x == 1 && last != 1", 6: "nontrivial root", 7: "if x != 1", 8: "not 1 at the end", 9: "    false" });
+  const R = rmap(src("rs-s18"), { 1: ["let t = (n - 1).trailing_zeros()", "let u = (n - 1) >> t"], 2: "let mut x = mod_exp(a, u, n)", 3: "for _ in 0..t", 4: "x = mul_mod(last, last, n)", 5: "if x == 1 && last != 1", 6: "return true", 7: "    x != 1", 8: "    x != 1", 9: "    x != 1" });
   const cv = code("#s18-code", { files: [{ name: "WITNESS", src: src("ps-s18"), rs: { name: "witness.rs", src: src("rs-s18"), out: src("rs-s18-out"), map: R } }] });
   const CASES = ["ends in something other than 1 → witness", "all 1s → no proof", "… −1, 1, …, 1 → no proof", "… d, 1, …, 1 with d not ±1 → witness"];
   const caseOf = (w, n) => { const xs = w.xs; if (w.why === "root") return 3; if (w.why === "fermat") return 0; const k = xs.findIndex((v) => v === 1); return k === 0 ? 1 : 2; };

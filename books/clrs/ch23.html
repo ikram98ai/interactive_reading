@@ -572,62 +572,63 @@ for k = 1 to n
 return D
 </script>
 <script type="text/x-rust" id="rs-s4-x">
-const N: usize = 5;
-const INF: i64 = i64::MAX; // "no path"
+// None means ∞: no path
+type Matrix = Vec<Vec<Option<i64>>>;
 
-type Matrix = [[i64; N]; N];
-
-// Figure 23.4's D(5), typed in by hand to check against.
-const BOOK: Matrix = [
-    [0, 1, -3, 2, -4],
-    [3, 0, -4, 1, -1],
-    [7, 4, 0, 5, 3],
-    [2, -1, -5, 0, -2],
-    [8, 5, 1, 6, 0],
-];
-
-fn add(a: i64, b: i64) -> i64 {
-    if a == INF || b == INF { INF } else { a + b }
+// a + b; None if either is None,
+// or if the sum overflows
+fn add(a: Option<i64>, b: Option<i64>)
+    -> Option<i64> {
+    a?.checked_add(b?)
 }
 
-fn floyd_warshall_in_place(w: &Matrix) -> Matrix {
-    let mut d = *w;
-    for k in 0..N {
-        for i in 0..N {
-            for j in 0..N {
-                // Both reads end before the write begins (each is a Copy
-                // i64), so d is never borrowed while it changes.
-                d[i][j] = d[i][j].min(add(d[i][k], d[k][j]));
+// the smaller, where None is ∞
+fn min(a: Option<i64>, b: Option<i64>)
+    -> Option<i64> {
+    match (a, b) {
+        (Some(x), Some(y)) => Some(x.min(y)),
+        _ => a.or(b),
+    }
+}
+
+fn floyd_warshall(d: &mut Matrix) {
+    let n = d.len();
+    for k in 0..n {
+        for i in 0..n {
+            for j in 0..n {
+                let t = add(d[i][k], d[k][j]);
+                d[i][j] = min(d[i][j], t);
             }
         }
     }
-    d
 }
 
 fn main() {
-    let mut w: Matrix = [[INF; N]; N];
-    for i in 0..N {
-        w[i][i] = 0;
+    let n = 5;
+    let mut d = vec![vec![None; n]; n];
+    for i in 0..n {
+        d[i][i] = Some(0);
     }
-    let edges = [(0, 1, 3), (0, 2, 8), (0, 4, -4), (1, 3, 1), (1, 4, 7),
-                 (2, 1, 4), (3, 0, 2), (3, 2, -5), (4, 3, 6)];
-    for (u, v, c) in edges {
-        w[u][v] = c;
+    let edges = [
+        (0, 1, 3), (0, 2, 8), (0, 4, -4),
+        (1, 3, 1), (1, 4, 7), (2, 1, 4),
+        (3, 0, 2), (3, 2, -5), (4, 3, 6),
+    ];
+    for &(u, v, w) in &edges {
+        d[u][v] = Some(w);
     }
-    let d = floyd_warshall_in_place(&w);
+    floyd_warshall(&mut d);
     for row in &d {
         println!("{:?}", row);
     }
-    println!("matches Figure 23.4: {}", d == BOOK);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s4-x-out">
-[0, 1, -3, 2, -4]
-[3, 0, -4, 1, -1]
-[7, 4, 0, 5, 3]
-[2, -1, -5, 0, -2]
-[8, 5, 1, 6, 0]
-matches Figure 23.4: true
+[Some(0), Some(1), Some(-3), Some(2), Some(-4)]
+[Some(3), Some(0), Some(-4), Some(1), Some(-1)]
+[Some(7), Some(4), Some(0), Some(5), Some(3)]
+[Some(2), Some(-1), Some(-5), Some(0), Some(-2)]
+[Some(8), Some(5), Some(1), Some(6), Some(0)]
 </script>
   </section>
 
@@ -2409,8 +2410,10 @@ K.page(23);
     const a = rsLines(m ? "rs-s4-x" : "rs-s4"), f = at(a, /^fn floyd_warshall/);
     // search from the function's own line on: main has loops of its own
     const inside = (re) => { for (let x = f; x < a.length; x++) if (re.test(a[x])) return x + 1; return 0; };
-    const L = { head: f, init: f + 1, k: inside(/for k in/), neu: inside(/let mut next = d/), i: inside(/for i in 0\.\.N/), j: inside(/for j in 0\.\.N/),
-      cell: inside(m ? /d\[i\]\[j\] = d\[i\]\[j\]\.min/ : /next\[i\]\[j\] = /), ret: inside(/^    d$/) };
+    // In place borrows the caller's matrix (d: &mut Matrix): there is no D = W copy and no return value, so the book's
+    // line 1 is the head (d arrives holding W) and its return is the function's closing brace.
+    const L = { head: f, init: m ? f : f + 1, k: inside(/for k in/), neu: inside(/let mut next = d/), i: inside(/for i in 0\.\.[Nn]\b/), j: inside(/for j in 0\.\.[Nn]\b/),
+      cell: inside(m ? /d\[i\]\[j\] = min\(/ : /next\[i\]\[j\] = /), ret: m ? inside(/^}$/) : inside(/^    d$/) };
     const map = m
       ? { "FLOYD-WARSHALL′": L.head, 1: L.init, 2: L.k, 3: L.i, 4: L.j, 5: L.cell, 6: L.ret }
       : { "FLOYD-WARSHALL": L.head, 1: L.init, 2: L.k, 3: L.neu, 4: L.i, 5: L.j, 6: L.cell, 7: L.ret };
@@ -2516,7 +2519,7 @@ K.page(23);
   }
   function matrix(e) {
     K.clear(gMat);
-    const heading = e.kind === null || e.kind === "init" ? (CODE_LANG.rust ? "d = w, before the loops" : "D(0) = W")
+    const heading = e.kind === null || e.kind === "init" ? (CODE_LANG.rust ? (mode === 1 ? "d, before the loops" : "d = w, before the loops") : "D(0) = W")
       : e.kind === "end" ? (CODE_LANG.rust ? "d after all 5 rounds" : "D(5) = final")
       : e.kind === "round" ? (CODE_LANG.rust ? `d, round k = ${vn(e.k)} starts` : `D(${e.k - 1}), round ${e.k} starts`)
       : (CODE_LANG.rust ? `d, round k = ${vn(e.k)}` : `D(${e.k}) is being filled`);
@@ -2544,22 +2547,54 @@ K.page(23);
     const good = e.kind === "cell" && e.imp, end = e.kind === "end";
     gFor.appendChild(s("rect", { x: 14, y: 306, width: 632, height: 48, rx: 10, class: good || end ? "sv-good" : "sv-panel" }));
     let a = "", b = "", tail = "";
-    const dn = (x, y) => `d[${vn(x)},${vn(y)}]`;
-    if (e.kind === null) { a = "D(0) = W"; b = "the edge weights, 0 on the diagonal, ∞ where there is no edge"; if (CODE_LANG.rust) a = "d = *w"; }
-    else if (e.kind === "init") { a = CODE_LANG.rust ? "let mut d = *w" : "D(0) = W"; b = "no stopover is allowed yet, so a price is an edge or ∞"; }
+    const dn = (x, y) => (CODE_LANG.rust ? `d[${vn(x)}][${vn(y)}]` : `d[${x},${y}]`);
+    const own = CODE_LANG.rust && mode === 1; // In place: the caller's d is borrowed, not copied from w
+    if (e.kind === null) { a = "D(0) = W"; b = "the edge weights, 0 on the diagonal, ∞ where there is no edge"; if (CODE_LANG.rust) a = own ? "d starts as the edge weights" : "d = *w"; }
+    else if (e.kind === "init") { a = CODE_LANG.rust ? (own ? "floyd_warshall(&mut d)" : "let mut d = *w") : "D(0) = W"; b = "no stopover is allowed yet, so a price is an edge or ∞"; }
     else if (e.kind === "round") { a = `round k = ${vn(e.k)}`; b = `may vertex ${vn(e.k)} be a stopover? Every pair (i, j) will ask`; }
     else if (e.kind === "cell") {
       a = `${dn(e.i, e.j)} = min( ${dn(e.i, e.j)} , ${dn(e.i, e.k)} + ${dn(e.k, e.j)} )`;
       b = `= min( ${fm(e.old)} , ${fm(e.a)} + ${par(e.b)} ) = min( ${fm(e.old)} , ${fm(e.via)} ) = ${fm(e.imp ? e.via : e.old)}`;
       tail = e.imp ? (e.old === INF ? "first path found" : `cheaper by ${e.old - e.via}`) : e.i === e.k || e.j === e.k ? "k is an end: no detour" : e.via === INF ? "no detour exists" : "keep";
-    } else { a = "all five stopovers allowed: D(5) holds δ(i, j) for every pair"; b = `${e.tests} pairs tested, ${e.better} got cheaper along the way`; if (CODE_LANG.rust) a = "d now holds δ(i, j) for every pair"; }
+    } else { a = "all five stopovers allowed: D(5) holds δ(i, j) for every pair"; b = `${e.tests} pairs tested, ${e.better} got cheaper along the way`; if (CODE_LANG.rust) a = "d now holds the shortest distance for every pair"; }
     txt(gFor, 30, 326, a, { anchor: "start", mono: true, bold: true, size: 12.5 });
     txt(gFor, 30, 345, b, { anchor: "start", mono: true, size: 12.5, cls: "sv-label" });
     if (tail) txt(gFor, 630, 326, tail, { anchor: "end", mono: true, bold: true, size: 12.5, fill: good ? "var(--ink)" : "var(--ink-2)" });
   }
+  /** In place: the program's d is a Vec<Vec<Option<i64>>> that main builds and floyd_warshall borrows (&mut), so the
+      heap holds the outer buffer of five row headers and each row's own buffer of five Options (None is ∞). */
+  function renderMemVec(e) {
+    const run = e.kind != null && e.kind !== "end", cell = e.kind === "cell";
+    const opt = (x) => (x === INF ? "None" : "Some(" + x + ")");
+    const stack = [{ fn: "main", vars: [{ n: "d", t: "Matrix", v: "5 rows", ptr: "o0" }] }];
+    if (run) {
+      const vars = [{ n: "d", t: "&mut Matrix", v: "→ main's d" }];
+      if (e.kind !== "init") vars.push({ n: "n", t: "usize", v: 5 }, { n: "k", t: "usize", v: e.k - 1, hot: e.kind === "round" },
+        { n: "i", t: "usize", v: cell ? e.i - 1 : "–" }, { n: "j", t: "usize", v: cell ? e.j - 1 : "–" },
+        { n: "t", t: "Option<i64>", v: cell ? opt(e.via) : "–", hot: cell });
+      stack.push({ fn: "floyd_warshall(&mut d)", top: true, vars });
+    }
+    const RY = 28, OX = 0, RX = 40, HY = 22, H0 = (RY - HY) * 2; // the header buffer is one block: its cells touch
+    const heap = [];
+    for (let r = 0; r < N; r++) {
+      heap.push({ id: "o" + r, label: r ? "" : "d", cells: [""], cw: 22, x: OX, y: H0 + r * HY, ptrs: [{ from: 0, to: "r" + r }] });
+      const marks = {};
+      if (cell) {
+        if (r === e.i - 1) marks[e.k - 1] = "on2";
+        if (r === e.k - 1) marks[e.j - 1] = "on2";
+        if (r === e.i - 1) marks[e.j - 1] = e.imp ? "good" : "on";
+      }
+      heap.push({ id: "r" + r, label: r ? "" : "5 rows · 5 × Option<i64> each", cells: e.d[r].map(opt), marks, cw: 50, x: RX, y: r * RY });
+    }
+    const note = e.kind == null ? "<code>main</code> built <code>d</code>: a <code>Vec</code> of five row headers, each pointing to its own heap buffer of five <code>Option&lt;i64&gt;</code>s, where <code>None</code> is ∞."
+      : e.kind === "end" ? "<code>floyd_warshall</code> returned, and its borrow of <code>d</code> ended. <code>main</code>'s matrix now holds δ(<i>i</i>, <i>j</i>): it was changed in place, and no second matrix was ever made."
+      : "<code>d</code> is borrowed with <code>&amp;mut</code>, so every write lands in <code>main</code>'s own rows. The reads <code>d[i][k]</code> and <code>d[k][j]</code> copy their values out before the write. Row <i>k</i> and column <i>k</i> never change in round <i>k</i>, so one matrix gives the same answers as two.";
+    m.set({ note, stack, heap });
+  }
   function renderMem(e) {
     const run = e.kind != null && e.kind !== "end";
     const inPlace = mode === 1;
+    if (inPlace) return renderMemVec(e);
     const main = { fn: "main", vars: [{ n: "w", t: "Matrix = [[i64; 5]; 5]", v: "200 bytes" }] };
     const vars = [{ n: "w", t: "&Matrix", v: "8 bytes → main's w" },
       { n: "d", t: "Matrix", v: "200 bytes", hot: inPlace ? e.kind === "cell" && e.imp : e.kind === "init" }];
@@ -2600,7 +2635,7 @@ K.page(23);
   const CAP = {
     null: () => "Nothing has run yet. The matrix is <b>W</b>: each edge's weight, 0 on the diagonal, ∞ where there is no edge. Click an edge to cut it, or press <b>Step</b>.",
     init: () => "Line 1: <b>D(0) = W</b>. No stopover is allowed, so each price is a single edge, or ∞.",
-    round: (e) => `Line 2–3: round <b>k = ${vn(e.k)}</b>. From now on vertex ${vn(e.k)} may be a stopover. Row ${vn(e.k)} and column ${vn(e.k)} (lilac) are the two halves every detour is built from.`,
+    round: (e) => `Line ${mode === 1 ? "2" : "2–3"}: round <b>k = ${vn(e.k)}</b>. From now on vertex ${vn(e.k)} may be a stopover. Row ${vn(e.k)} and column ${vn(e.k)} (lilac) are the two halves every detour is built from.`,
     cell: (e) => {
       const nm = (x, y) => `d[${vn(x)},${vn(y)}]`;
       if (e.i === e.k || e.j === e.k) return `Pair (${vn(e.i)}, ${vn(e.j)}): vertex ${vn(e.k)} is one of the two ends, so a stopover there changes nothing. ${nm(e.i, e.j)} stays <b>${fm(e.old)}</b>.`;

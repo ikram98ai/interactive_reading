@@ -362,95 +362,83 @@ exchange A[i + 1] with A[r]  // pivot goes just to the right of the low side
 return i + 1                 // new index of the pivot
 </script>
 <script type="text/x-rust" id="rs-s3">
-// RANDOMIZED-SELECT on Figure 9.1's array, as a loop (Exercise 9.2-2):
-// the window A[p : r] is one &mut slice that shrinks inside the Vec.
+use std::cmp::Ordering;
 
 struct Rng(u64);
 
 impl Rng {
-    fn next(&mut self) -> u64 {  // xorshift: std has no RNG
+    fn below(&mut self, n: usize) -> usize {
         self.0 ^= self.0 << 13;
         self.0 ^= self.0 >> 7;
         self.0 ^= self.0 << 17;
-        self.0
+        (self.0 % n as u64) as usize
     }
 }
 
 fn partition(a: &mut [i32]) -> usize {
     let r = a.len() - 1;
-    let x = a[r];                // the pivot
-    let mut i = 0;               // usize can't be p − 1: i is one ahead
+    let x = a[r];
+    let mut i = 0;
     for j in 0..r {
         if a[j] <= x {
             a.swap(i, j);
             i += 1;
         }
     }
-    a.swap(i, r);                // the pivot goes between the sides
+    a.swap(i, r);
     i
 }
 
-fn randomized_partition(a: &mut [i32],
-                        random: &mut impl FnMut(usize) -> usize) -> usize {
-    let i = random(a.len());     // RANDOM(p, r), as an offset from p
+fn randomized_partition(
+    a: &mut [i32],
+    rng: &mut Rng,
+) -> usize {
+    let i = rng.below(a.len());
     let r = a.len() - 1;
     a.swap(r, i);
     partition(a)
 }
 
-fn randomized_select(a: &mut [i32], mut i: usize,
-                     random: &mut impl FnMut(usize) -> usize) -> i32 {
-    let mut w = a;               // the window: all of A to start with
-    let mut p = 1;               // the book's p, only for printing
+fn randomized_select(
+    a: &mut [i32],
+    mut i: usize,
+    rng: &mut Rng,
+) -> i32 {
+    let mut w = a;
     loop {
-        println!("  p = {:>2}  r = {:>2}  i = {}", p, p + w.len() - 1, i);
         if w.len() == 1 {
             return w[0];
         }
-        let q = randomized_partition(w, random); // reborrows w for a while
+        let q = randomized_partition(w, rng);
         let k = q + 1;
-        if i == k {
-            return w[q];
-        } else if i < k {
-            w = &mut w[..q];     // A[p : q − 1]: same buffer, no copy
-        } else {
-            w = &mut w[q + 1..]; // A[q + 1 : r]
-            p += k;
-            i -= k;
+        match i.cmp(&k) {
+            Ordering::Equal => return w[q],
+            Ordering::Less => {
+                w = &mut w[..q];
+            }
+            Ordering::Greater => {
+                w = &mut w[q + 1..];
+                i -= k;
+            }
         }
     }
 }
 
 fn main() {
-    let fig = [6, 19, 4, 12, 14, 9, 15, 7, 8, 11, 3, 13, 2, 5, 10];
-    let mut v = fig.to_vec();
-    // Replay the figure's pivots, as offsets into each window.
-    let mut book = [4, 1, 6, 2, 0].into_iter();
-    let mut replay = |_len: usize| book.next().unwrap();
-    println!("Figure 9.1, i = 5:");
-    println!("answer {}", randomized_select(&mut v, 5, &mut replay));
-    let mut v = fig.to_vec();    // a new v shadows the old one
-    let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
-    let mut random = |len: usize| (rng.next() % len as u64) as usize;
-    println!("random pivots, i = 8 (the median):");
-    println!("answer {}", randomized_select(&mut v, 8, &mut random));
+    let mut v = vec![
+        6, 19, 4, 12, 14, 9, 15, 7,
+        8, 11, 3, 13, 2, 5, 10,
+    ];
+    let mut rng = Rng(5742);
+    let x =
+        randomized_select(&mut v, 5, &mut rng);
+    println!("5th smallest: {}", x);
+    println!("{:?}", v);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s3-out">
-Figure 9.1, i = 5:
-  p =  1  r = 15  i = 5
-  p =  1  r = 12  i = 5
-  p =  4  r = 12  i = 2
-  p =  4  r = 11  i = 2
-  p =  4  r =  5  i = 2
-  p =  5  r =  5  i = 1
-answer 6
-random pivots, i = 8 (the median):
-  p =  1  r = 15  i = 8
-  p =  1  r =  9  i = 8
-  p =  6  r =  9  i = 3
-  p =  7  r =  9  i = 2
-answer 9
+5th smallest: 6
+[3, 2, 4, 5, 6, 7, 8, 11, 9, 12, 10, 13, 14, 19, 15]
 </script>
   </section>
 
@@ -1881,14 +1869,14 @@ K.page(9);
 (function s3() {
   const svg = K.$("#s3-svg");
   const ctr = K.$("#s3-controls"), stats = K.$("#s3-stats");
-  const gHead = s("g"), gArr = s("g"), gMarks = s("g"), gTab = s("g"), layer = s("g");
+  const gHead = s("g"), gArr = s("g"), gMarks = s("g"), gTab = s("g", { "data-part": "table" }), layer = s("g");
   svg.append(gHead, gArr, gMarks, gTab, layer);
   const stR = stat("partitionings", 0), stC = stat("comparisons", 0), stP = stat("in play", 15);
   stats.append(stR, stC, stP);
   const cv = code("#s3-code", { files: [{ name: "RANDOMIZED-SELECT", src: src("ps-s3"), rs: { name: "randomized_select.rs", src: src("rs-s3"), out: src("rs-s3-out"), map: {
-    "RANDOMIZED-SELECT": 37, 1: 43, 2: 44, 3: 46, 4: 47, 5: 48, 6: 49, 7: 50, 8: 51, 9: [52, 53, 54, 55],
-    "RANDOMIZED-PARTITION": 29, "RANDOMIZED-PARTITION:1": 31, "RANDOMIZED-PARTITION:2": [32, 33], "RANDOMIZED-PARTITION:3": 34,
-    PARTITION: 15, "PARTITION:1": [16, 17], "PARTITION:2": 18, "PARTITION:3": 19, "PARTITION:4": 20, "PARTITION:5": 22, "PARTITION:6": 21, "PARTITION:7": 25, "PARTITION:8": 26,
+    "RANDOMIZED-SELECT": 38, 1: 45, 2: 46, 3: 48, 4: 49, 5: 50, 6: 51, 7: 50, 8: [52, 53], 9: [55, 56, 57],
+    "RANDOMIZED-PARTITION": 28, "RANDOMIZED-PARTITION:1": 32, "RANDOMIZED-PARTITION:2": [33, 34], "RANDOMIZED-PARTITION:3": 35,
+    PARTITION: 14, "PARTITION:1": [15, 16], "PARTITION:2": 17, "PARTITION:3": 18, "PARTITION:4": 19, "PARTITION:5": 21, "PARTITION:6": 20, "PARTITION:7": 24, "PARTITION:8": 25,
   } } }] });
   const m = mem("#s3-mem");
 
@@ -2082,7 +2070,7 @@ K.page(9);
       const nt = { 3: "partitioning…" }, rt = {};
       if (u.pl === "RANDOMIZED-PARTITION:1") {
         P.pickAt = u.pick; P.pivotAt = u.pick;
-        nt["RANDOMIZED-PARTITION:1"] = `i = ${u.pick}`; rt[31] = `i = ${u.pick - e.p}`;
+        nt["RANDOMIZED-PARTITION:1"] = `i = ${u.pick}`; rt[32] = `i = ${u.pick - e.p}`;
         st.notes = [nt, rt]; render();
         cap("#s3-cap", `RANDOMIZED-PARTITION line 1: RANDOM(${e.p}, ${e.r}) picks position ${u.pick}, so the pivot is <b>${st.a[u.pick - 1]}</b>.`);
         await w(sleep(520));
@@ -2095,24 +2083,24 @@ K.page(9);
         await w(sleep(260));
       } else if (u.pl === "PARTITION:1") {
         P.inPartition = true; P.x = u.x;
-        nt["PARTITION:1"] = `x = ${u.x}`; rt[17] = `x = ${u.x}`;
+        nt["PARTITION:1"] = `x = ${u.x}`; rt[16] = `x = ${u.x}`;
         st.notes = [nt, rt]; render();
         await w(sleep(200));
       } else if (u.pl === "PARTITION:2") {
         P.li = u.li;
-        nt["PARTITION:2"] = `i = ${u.li}`; rt[18] = `i = 0`;
+        nt["PARTITION:2"] = `i = ${u.li}`; rt[17] = `i = 0`;
         st.notes = [nt, rt]; render();
         await w(sleep(160));
       } else if (u.pl === "PARTITION:4") {
         P.j = u.j; P.li = u.li; st.cmp++;
         nt["PARTITION:3"] = `j = ${u.j}`; nt["PARTITION:4"] = [`${u.v} ≤ ${u.x}? ${u.ok ? "yes" : "no"}`, u.ok ? "good" : ""];
-        rt[19] = `j = ${u.j - e.p}`; rt[20] = [`${u.v} <= ${u.x}: ${u.ok}`, u.ok ? "good" : ""];
+        rt[18] = `j = ${u.j - e.p}`; rt[19] = [`${u.v} <= ${u.x}: ${u.ok}`, u.ok ? "good" : ""];
         st.notes = [nt, rt]; render();
         cap("#s3-cap", `PARTITION: is ${u.v} ≤ ${u.x}? ${u.ok ? "Yes, so it joins the low side." : "No, so it stays on the high side."}`);
         await w(sleep(150));
       } else if (u.pl[0] === "PARTITION:5") {
         P.li = u.li;
-        nt["PARTITION:5"] = `i = ${u.li}`; rt[22] = `i = ${u.li - e.p + 1}`;
+        nt["PARTITION:5"] = `i = ${u.li}`; rt[21] = `i = ${u.li - e.p + 1}`;
         st.notes = [nt, rt]; render();
         await swapAnim(w, u.swap[0], u.swap[1], 200);
         render();
@@ -2124,7 +2112,7 @@ K.page(9);
         cap("#s3-cap", `PARTITION line 7: the pivot ${e.x} moves to A[${u.li + 1}], just right of the low side.`);
         await w(sleep(220));
       } else if (u.pl === "PARTITION:8") {
-        nt["PARTITION:8"] = `q = ${u.q}`; rt[26] = `${u.q - e.p}`;
+        nt["PARTITION:8"] = `q = ${u.q}`; rt[25] = `${u.q - e.p}`;
         st.notes = [nt, rt]; render();
         await w(sleep(200));
       }
@@ -2134,42 +2122,42 @@ K.page(9);
   async function apply(e, w) {
     st.line = e.line; st.say = null;
     const a = st.a, nt = {}, rt = {};
-    nt[1] = `p = ${st.p}, r = ${st.r}`; rt[42] = `p = ${st.p}, r = ${st.r}`;
+    nt[1] = `p = ${st.p}, r = ${st.r}`; rt[44] = `w = v[${st.p - 1}..${st.r}]`;
     if (e.line === 1) {
       st.q = null; st.k = null;
-      nt[1] = [`p = ${e.p}, r = ${e.r}: ${e.base ? "equal" : "not equal"}`, e.base ? "good" : ""]; rt[43] = `w.len() = ${e.r - e.p + 1}`;
+      nt[1] = [`p = ${e.p}, r = ${e.r}: ${e.base ? "equal" : "not equal"}`, e.base ? "good" : ""]; rt[45] = `w.len() = ${e.r - e.p + 1}`;
       cap("#s3-cap", e.base ? `Line 1: p = r = ${e.p}. One element is left in play, so it must be the one.` : `Line 1: A[${e.p} : ${e.r}] still holds ${e.r - e.p + 1} elements, and we want the ${ord(e.i)} smallest of them.`);
     }
     if (e.line === 2) {
       st.done = true; st.ans = e.ans;
-      nt[2] = [`${e.val}`, "good"]; rt[44] = [`${e.val}`, "good"];
+      nt[2] = [`${e.val}`, "good"]; rt[46] = [`${e.val}`, "good"];
       cap("#s3-cap", `Line 2: return <b>${e.val}</b>, the ${ord(st.i0)} smallest. ${st.rounds} partitionings and ${st.cmp} comparisons. Sorting the 15 numbers is not needed, only one side was ever followed.`);
     }
     if (e.line === 3) {
       st.notes = [{ 3: "partitioning…" }, {}];
       await partitionAnim(e, w);
       st.rounds++; st.q = e.q; st.x = e.x; st.lowP = e.p; st.highR = e.r;
-      nt[3] = `q = ${e.q}`; rt[46] = `q = ${e.q - e.p}`;
+      nt[3] = `q = ${e.q}`; rt[48] = `q = ${e.q - e.p}`;
       cap("#s3-cap", `Line 3: ${e.n - 1} comparisons later the pivot ${e.x} is at q = ${e.q}: ${e.q - e.p} smaller element${e.q - e.p === 1 ? "" : "s"} to its left, ${e.r - e.q} larger to its right.`);
     }
     if (e.line === 4) {
-      st.k = e.k; nt[3] = `q = ${e.q}`; nt[4] = `k = ${e.k}`; rt[46] = `q = ${e.q - e.p}`; rt[47] = `k = ${e.k}`;
-      st.say = `k = q − p + 1 = ${e.q} − ${e.p} + 1 = ${e.k}`;
+      st.k = e.k; nt[3] = `q = ${e.q}`; nt[4] = `k = ${e.k}`; rt[48] = `q = ${e.q - e.p}`; rt[49] = `k = ${e.k}`;
+      st.say = CODE_LANG.rust ? `k = q + 1 = ${e.q - e.p} + 1 = ${e.k}` : `k = q − p + 1 = ${e.q} − ${e.p} + 1 = ${e.k}`;
       cap("#s3-cap", `Line 4: the pivot ${st.x} is the <b>${ord(e.k)} smallest</b> in the window.`);
     }
     if (e.line === 5) {
-      nt[4] = `k = ${e.k}`; nt[5] = [`${e.i} == ${e.k}? ${e.ok ? "yes" : "no"}`, e.ok ? "good" : ""]; rt[47] = `k = ${e.k}`;
-      st.say = `i = ${e.i}, k = ${e.k}`;
+      nt[4] = `k = ${e.k}`; nt[5] = [`${e.i} == ${e.k}? ${e.ok ? "yes" : "no"}`, e.ok ? "good" : ""]; rt[49] = `k = ${e.k}`; rt[50] = `i.cmp(&k) = ${e.i < e.k ? "Less" : e.i > e.k ? "Greater" : "Equal"}`;
+      st.say = CODE_LANG.rust ? `i.cmp(&k): ${e.i} vs ${e.k} is ${e.i < e.k ? "Less" : e.i > e.k ? "Greater" : "Equal"}` : `i = ${e.i}, k = ${e.k}`;
       cap("#s3-cap", e.ok ? `Line 5: i = k = ${e.k}, so the pivot is exactly the element we want.` : `Line 5: i = ${e.i} is not ${e.k}, so the pivot is not the answer.`);
     }
     if (e.line === 6) {
       st.done = true; st.ans = e.ans; st.shownRows = e.row + 1;
-      nt[6] = [`${e.val}`, "good"]; rt[49] = [`${e.val}`, "good"];
+      nt[6] = [`${e.val}`, "good"]; rt[51] = [`${e.val}`, "good"];
       cap("#s3-cap", `Line 6: return the pivot <b>${e.val}</b>, the ${ord(st.i0)} smallest. ${st.rounds} partitionings, ${st.cmp} comparisons.`);
     }
     if (e.line === 7) {
       nt[7] = [`${e.i} < ${e.k}? ${e.ok ? "yes" : "no"}`, ""];
-      st.say = e.ok ? `i = ${e.i} < k = ${e.k}: keep the low side` : `i = ${e.i} > k = ${e.k}: keep the high side`;
+      st.say = CODE_LANG.rust ? (e.ok ? `Less: keep the low side` : `Greater: keep the high side, i -= k`) : e.ok ? `i = ${e.i} < k = ${e.k}: keep the low side` : `i = ${e.i} > k = ${e.k}: keep the high side`;
       cap("#s3-cap", e.ok ? `Line 7: i &lt; k, so the answer is smaller than the pivot: it is on the low side.` : `Line 7: i &gt; k, so the answer is larger than the pivot: it is on the high side.`);
     }
     if (e.line === 8 || e.line === 9) {
@@ -2177,7 +2165,7 @@ K.page(9);
       st.q = null; st.k = null; st.p = e.p; st.r = e.r; st.i = e.i; st.shownRows = e.row + 1;
       const thrown = fr - fp + 1 - (e.r - e.p + 1);
       nt[e.line] = `→ A[${e.p} : ${e.r}], i = ${e.i}`;
-      rt[e.line === 8 ? 51 : 53] = `w = v[${e.p - 1}..${e.r}]`; if (e.line === 9) rt[55] = `i = ${e.i}`;
+      rt[e.line === 8 ? 53 : 56] = `w = v[${e.p - 1}..${e.r}]`; if (e.line === 9) rt[57] = `i = ${e.i}`;
       cap("#s3-cap", e.line === 8 ? `Line 8: recurse on A[${e.p} : ${e.r}] with the same i = ${e.i}. ${thrown} elements, the pivot and everything above it, are out of play for good.`
         : `Line 9: recurse on A[${e.p} : ${e.r}] with i − k = ${e.i}. The pivot and the ${thrown - 1} element${thrown === 2 ? "" : "s"} below it are out of play, and all ${thrown} were smaller than the answer, so it is now the ${ord(e.i)} smallest in play.`);
     }

@@ -2363,7 +2363,7 @@ K.page(25);
     if (e.kind !== null) {
       txt(gInfo, 14, 372, `iteration ${e.it}` + (e.q != null ? `  ·  q = ${e.q}` : "") + (e.kind === "layer" ? `  ·  layer ${e.j}` : ""), { anchor: "start", mono: true, size: 12, bold: true });
       (e.paths || []).forEach((p, i) => txt(gInfo, 14 + i * 206, 396, `P${i + 1} ${p.join(" ")}`, { anchor: "start", mono: true, size: 11.5, fill: "var(--ink-2)" }));
-    } else txt(gInfo, 14, 372, "matching of Figure 25.1(a): blue", { anchor: "start", mono: true, size: 12, fill: "var(--ink-2)" });
+    } else txt(gInfo, 14, 372, "Figure 25.1(a): a matching, in blue", { anchor: "start", mono: true, size: 12, fill: "var(--ink-2)" });
     stI.set(e.it || 0); stP.set(e.total || 0); stM.set(M.size);
   }
   const matched = (id, M) => { for (const k of M) { const [a, b] = k.split("-"); if (a === id || b === id) return true; } return false; };
@@ -3060,7 +3060,6 @@ K.page(25);
   busyBtns = [button(ctr, "Step", "", step), button(ctr, "Next proposal", "", nextProp), button(ctr, "Play", "primary", play)];
   button(ctr, "Reset", "", reset);
   ctr.appendChild(sideSeg);
-  busyBtns.forEach((b) => { b._needs = () => finished(); });
   reset();
 })();
 

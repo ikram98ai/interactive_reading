@@ -300,20 +300,24 @@ for s = 0 to n − m
         print "Pattern occurs with shift" s
 </script>
 <script type="text/x-rust" id="rs-s3">
-// Try every shift. Count each pair of letters compared.
-fn naive(t: &[u8], p: &[u8]) -> (Vec<usize>, usize) {
-    let (mut found, mut compared) = (Vec::new(), 0);
-    for s in 0..=t.len() - p.len() {
-        // The book's line 2: compare from the left, stop at a mismatch.
+// Try every shift: each window of m bytes. Count each pair of letters compared.
+fn naive(
+    t: &[u8],
+    p: &[u8],
+) -> (Vec<usize>, usize) {
+    let mut found = Vec::new();
+    let mut compared = 0;
+    let m = p.len();
+    for (s, w) in t.windows(m).enumerate() {
         let mut j = 0;
-        while j < p.len() {
+        while j < m {
             compared += 1;
-            if t[s + j] != p[j] {
+            if w[j] != p[j] {
                 break;
             }
             j += 1;
         }
-        if j == p.len() {
+        if j == m {
             found.push(s);
         }
     }
@@ -321,20 +325,24 @@ fn naive(t: &[u8], p: &[u8]) -> (Vec<usize>, usize) {
 }
 
 fn main() {
-    for (t, p) in [
+    let tests = [
         ("acaabc", "aab"),
         ("aaaaaaaaaa", "aaaaa"),
-        ("aaabaaab", "aaab"),
-    ] {
-        let (found, c) = naive(t.as_bytes(), p.as_bytes());
-        println!("{p} in {t}: shifts {found:?}, {c} comparisons");
+        ("ab", "abc"),
+    ];
+    for (t, p) in tests {
+        let r = naive(
+            t.as_bytes(),
+            p.as_bytes(),
+        );
+        println!("{} in {}: {:?}", p, t, r);
     }
 }
 </script>
 <script type="text/x-rust-out" id="rs-s3-out">
-aab in acaabc: shifts [2], 8 comparisons
-aaaaa in aaaaaaaaaa: shifts [0, 1, 2, 3, 4, 5], 30 comparisons
-aaab in aaabaaab: shifts [0, 4], 14 comparisons
+aab in acaabc: ([2], 8)
+aaaaa in aaaaaaaaaa: ([0, 1, 2, 3, 4, 5], 30)
+abc in ab: ([], 0)
 </script>
   </section>
 
@@ -1688,58 +1696,81 @@ for i = 2 to n
     rank[substr-rank[i].index] = r
 </script>
 <script type="text/x-rust" id="rs-s18">
-#[derive(Clone)]
 struct Sub {
     left: usize,
     right: usize,
-    index: usize, // counts from 1, as in the book
+    index: usize,
 }
 
-fn make_ranks(sub: &[Sub], rank: &mut [usize]) {
+fn key(x: &Sub) -> (usize, usize) {
+    (x.left, x.right)
+}
+
+fn pairs(
+    rank: &[usize],
+    l: usize,
+) -> Vec<Sub> {
+    let n = rank.len();
+    (0..n).map(|i| Sub {
+        left: rank[i],
+        right: if i + l < n {
+            rank[i + l]
+        } else {
+            0
+        },
+        index: i,
+    }).collect()
+}
+
+fn make_ranks(
+    sub: &[Sub],
+    rank: &mut [usize],
+) {
     let mut r = 1;
-    rank[sub[0].index - 1] = r;
-    for i in 1..sub.len() {
-        let (a, b) = (&sub[i], &sub[i - 1]);
-        if a.left != b.left || a.right != b.right {
+    rank[sub[0].index] = r;
+    for w in sub.windows(2) {
+        if key(&w[1]) != key(&w[0]) {
             r += 1;
         }
-        rank[a.index - 1] = r;
+        rank[w[1].index] = r;
     }
 }
 
-fn compute_suffix_array(t: &[u8]) -> Vec<usize> {
-    let n = t.len();
-    let mut rank = vec![0; n];
-    let mut sub: Vec<Sub> = (0..n)
-        .map(|i| Sub {
-            left: t[i] as usize,
-            right: if i + 1 < n { t[i + 1] as usize } else { 0 },
-            index: i + 1,
-        })
-        .collect();
-    sub.sort_by_key(|x| (x.left, x.right));
+fn suffix_array(t: &[u8]) -> Vec<usize> {
+    let mut rank = Vec::new();
+    for &c in t {
+        rank.push(c as usize);
+    }
+    let mut sub = pairs(&rank, 1);
+    sub.sort_by_key(key);
     let mut l = 2;
-    while l < n {
+    while l < t.len() {
         make_ranks(&sub, &mut rank);
-        println!("l = {l}, rank = {rank:?}");
-        for i in 0..n {
-            let right = if i + l < n { rank[i + l] } else { 0 };
-            sub[i] = Sub { left: rank[i], right, index: i + 1 };
-        }
-        sub.sort_by_key(|x| (x.left, x.right)); // now length 2l
+        sub = pairs(&rank, l);
+        sub.sort_by_key(key);
         l *= 2;
     }
     sub.iter().map(|x| x.index).collect()
 }
 
 fn main() {
-    println!("SA = {:?}", compute_suffix_array(b"ratatat"));
+    let text = "ratatat";
+    let sa = suffix_array(text.as_bytes());
+    println!("{:?}", sa);
+    for &i in &sa {
+        println!("{}", &text[i..]);
+    }
 }
 </script>
 <script type="text/x-rust-out" id="rs-s18-out">
-l = 2, rank = [2, 1, 4, 1, 4, 1, 3]
-l = 4, rank = [3, 2, 6, 2, 5, 1, 4]
-SA = [6, 4, 2, 1, 7, 5, 3]
+[5, 3, 1, 0, 6, 4, 2]
+at
+atat
+atatat
+ratatat
+t
+tat
+tatat
 </script>
   </section>
 
@@ -1804,7 +1835,9 @@ return LCP
 </script>
 <script type="text/x-rust" id="rs-s19">
 // sa and rank count from 0 here; lcp[r] compares places r - 1 and r.
-fn compute_lcp(t: &[u8], sa: &[usize]) -> Vec<usize> {
+fn compute_lcp(
+    t: &[u8], sa: &[usize],
+) -> Vec<usize> {
     let n = t.len();
     let mut rank = vec![0; n];
     for r in 0..n {
@@ -1816,7 +1849,9 @@ fn compute_lcp(t: &[u8], sa: &[usize]) -> Vec<usize> {
         if rank[i] > 0 {
             let j = sa[rank[i] - 1];
             let m = i.max(j);
-            while m + l < n && t[i + l] == t[j + l] {
+            while m + l < n
+                && t[i + l] == t[j + l]
+            {
                 l += 1;
             }
             lcp[rank[i]] = l;
@@ -1828,18 +1863,26 @@ fn compute_lcp(t: &[u8], sa: &[usize]) -> Vec<usize> {
     lcp // the finished array
 }
 
+// A simple suffix array: sort the starts by their suffixes.
+fn suffix_array(t: &[u8]) -> Vec<usize> {
+    let mut sa: Vec<usize> =
+        (0..t.len()).collect();
+    sa.sort_by_key(|&i| &t[i..]);
+    sa
+}
+
 fn main() {
     for text in ["ratatat", "banana"] {
-        let mut sa: Vec<usize> = (0..text.len()).collect();
-        sa.sort_by_key(|&i| &text[i..]);
-        let lcp = compute_lcp(text.as_bytes(), &sa);
-        println!("{text}: LCP = {lcp:?}");
+        let t = text.as_bytes();
+        let sa = suffix_array(t);
+        let lcp = compute_lcp(t, &sa);
+        println!("{text}: lcp = {lcp:?}");
     }
 }
 </script>
 <script type="text/x-rust-out" id="rs-s19-out">
-ratatat: LCP = [0, 2, 4, 0, 0, 1, 3]
-banana: LCP = [0, 1, 3, 0, 0, 2]
+ratatat: lcp = [0, 2, 4, 0, 0, 1, 3]
+banana: lcp = [0, 1, 3, 0, 0, 2]
 </script>
   </section>
 
@@ -2398,11 +2441,14 @@ function fsmLoop(g, x, y, o = {}) {
   const stC = stat("comparisons", 0), stR = stat("letters reread", 0), stF = stat("valid shifts", 0);
   K.$("#s3-stats").append(stC, stR, stF);
   const cv = code("#s3-code", { files: [{ name: "NAIVE-STRING-MATCHER", src: src("ps-s3"), rs: { name: "naive.rs", src: src("rs-s3"), out: src("rs-s3-out"),
-    map: rmap(src("rs-s3"), { 1: "for s in 0..=", 2: "if t[s + j] != p[j]", 3: "found.push(s)" }) } }] });
+    map: rmap(src("rs-s3"), { 1: "for (s, w) in", 2: "if w[j] != p[j]", 3: "found.push(s)" }) } }] });
   const sets = () => (mode === 0 ? { T: "acaabc", P: "aab", full: Infinity } : mode === 1 ? { T: "a".repeat(nA), P: "a".repeat(mA), full: 2 } : { T: "aaabaaab", P: "aaab", full: Infinity });
   function frames() {
     const { T, P, full } = sets(), n = T.length, m = P.length, worst = (n - m + 1) * m, out = [], found = [];
     let cn = 0, reread = 0, maxRead = -1;
+    // In Rust the letters are bytes counted from 0, and the code compares the window w with p: w[j] is t[s + j].
+    const R = CODE_LANG.rust, PL = (j) => (R ? `p[${j}]` : `Pattern letter ${j + 1}`), TL = (i, j) => (R ? `w[${j}], that is t[${i}],` : `text letter ${i + 1}`);
+    const knownB = R ? "t[3] is b" : "text letter 4 is b";
     const blank = (x) => Array(x).fill("");
     const stateOf = (sh, j, ok) => {
       const pm = [...P].map((_, k) => (k < j ? "good" : k === j ? (ok ? "good" : "bad") : "")), tm = [...T].map((_, i) => (i < sh ? "dim" : i - sh < j ? "good" : i - sh === j ? (ok ? "good" : "bad") : ""));
@@ -2412,7 +2458,7 @@ function fsmLoop(g, x, y, o = {}) {
     push({ sh: 0, pm: blank(m), tm: blank(n), read: -1, again: false, lines: 1, notes: { 1: "s = 0" },
       say: `Search for ${L(P)} in ${L(T)}. There are ${n - m + 1} shifts to try. Each step compares one pair of letters.`, why: "Watch the bar: the worst this could ever cost is " + worst + " comparisons." });
     for (let sh = 0; sh <= n - m; sh++) {
-      if (sh > 0 && sh < full) push({ sh, pm: blank(m), tm: [...T].map((_, i) => (i < sh ? "dim" : "")), read: -1, again: false, lines: 1, notes: { 1: `s = ${sh}` }, say: `Slide one column, to shift ${sh}, and start again from the pattern's first letter.`, why: mode === 2 && sh >= 1 && sh <= 3 && found.includes(0) ? "You already know text letter 4 is b, so this shift can't work. The naive matcher doesn't use that." : "" });
+      if (sh > 0 && sh < full) push({ sh, pm: blank(m), tm: [...T].map((_, i) => (i < sh ? "dim" : "")), read: -1, again: false, lines: 1, notes: { 1: `s = ${sh}` }, say: `Slide one column, to shift ${sh}, and start again from the pattern's first letter.`, why: mode === 2 && sh >= 1 && sh <= 3 && found.includes(0) ? `You already know ${knownB}, so this shift can't work. The naive matcher doesn't use that.` : "" });
       if (sh >= full) {
         // later shifts of a long run repeat exactly: one step each
         let j = 0;
@@ -2429,7 +2475,7 @@ function fsmLoop(g, x, y, o = {}) {
         cn++; if (again) reread++;
         maxRead = Math.max(maxRead, i);
         push({ sh, ...stateOf(sh, j, ok), read: i, again, cn, stat: [String(cn), String(reread), String(found.length)], lines: ok ? 2 : 2, notes: { 1: `s = ${sh}`, 2: `${P[j]} ${ok ? "=" : "≠"} ${T[i]}` }, mark: ok ? {} : { bad: [2] },
-          say: ok ? `Pattern letter ${j + 1} is ${L(P[j])} and text letter ${i + 1} is ${L(T[i])}. They match.${again ? " You had already read that text letter." : ""}` : `Pattern letter ${j + 1} is ${L(P[j])} but text letter ${i + 1} is ${L(T[i])}. Mismatch, so shift ${sh} is out.${again ? " And that text letter had been read before." : ""}`,
+          say: ok ? `${PL(j)} is ${L(P[j])} and ${TL(i, j)} is ${L(T[i])}. They match.${again ? " You had already read that text letter." : ""}` : `${PL(j)} is ${L(P[j])} but ${TL(i, j)} is ${L(T[i])}. Mismatch, so shift ${sh} is out.${again ? " And that text letter had been read before." : ""}`,
           why: mode === 2 && sh >= 1 && sh <= 3 && !ok ? "It failed on the b you already knew about." : "" });
         if (!ok) break;
       }
@@ -2445,13 +2491,19 @@ function fsmLoop(g, x, y, o = {}) {
   }
   function paint(f) {
     K.clear(g);
-    const n = f.T.length, xs = (i) => X0 + (i + 0.5) * CW, col = Math.round(f.sh);
-    nums(g, X0, 28, n, { cw: CW, hot: f.read });
+    const n = f.T.length, m = f.P.length, xs = (i) => X0 + (i + 0.5) * CW, col = Math.round(f.sh), R = CODE_LANG.rust;
+    nums(g, X0, 28, n, { cw: CW, hot: f.read, base: R ? 0 : 1 });
     if (f.read >= 0) note(g, xs(f.read), 12, f.again ? "read again" : "reading", { tone: f.again ? "bad" : "on" });
-    lane(g, X0 - 12, 56, "text T"); row(g, X0, 36, f.T, { cw: CW, mark: f.tm });
+    lane(g, X0 - 12, 56, R ? "text t" : "text T"); row(g, X0, 36, f.T, { cw: CW, mark: f.tm });
+    if (R && f.phase !== "Result") { // the Rust names the shift's window of m bytes: w is t[s..s + m]
+      g.appendChild(s("rect", { x: X0 + f.sh * CW - 1, y: 32, width: m * CW + 2, height: 40, rx: 8, style: { fill: "none", stroke: "var(--blue)", strokeWidth: "2" } }));
+      const roomRight = X0 + n * CW + 106 <= 656; // a long text (n > 10) leaves no room right of it: label the window from below instead
+      g.appendChild(s("text", roomRight ? { x: X0 + n * CW + 10, y: 56, class: "lane", "text-anchor": "start", style: { fill: "var(--blue)" } } : { x: X0 + f.sh * CW, y: 143, class: "lane", "text-anchor": "start", style: { fill: "var(--blue)" } }, `w = t[${col}..${col + m}]`));
+      g.appendChild(s("text", { x: X0 + (f.sh + m) * CW + 10, y: 114, class: "lane", "text-anchor": "start" }, `s = ${col}`));
+    }
     if (Math.abs(f.sh - col) < 0.01) f.pm.forEach((c, j) => { if (c === "good" || c === "bad") tick(g, xs(col + j), 69, 92, c === "bad"); });
-    lane(g, X0 - 12, 114, "pattern P"); row(g, X0, 94, f.P, { cw: CW, from: f.sh, mark: f.pm });
-    bars(g, { x: 14, y: 148, w: 632, labelW: 150, h: 22, gap: 8, max: f.worst, valueW: 44, items: [{ label: "comparisons so far", v: f.cn, tone: "on", text: String(Math.round(f.cn)) }, { label: "(n − m + 1) × m", v: f.worst, tone: "dim", text: String(f.worst) }] });
+    lane(g, X0 - 12, 114, R ? "pattern p" : "pattern P"); row(g, X0, 94, f.P, { cw: CW, from: f.sh, mark: f.pm });
+    bars(g, { x: 14, y: 148, w: 632, labelW: 150, h: 22, gap: 8, max: f.worst, valueW: 44, items: [{ label: R ? "compared" : "comparisons so far", v: f.cn, tone: "on", text: String(Math.round(f.cn)) }, { label: "(n − m + 1) × m", v: f.worst, tone: "dim", text: String(f.worst) }] });
     legend(g, 164, 226, [["good", "letters match"], ["bad", "letters differ"], ["sorted", "an occurrence"]], { gap: 14 });
     stC.set(f.stat[0]); stR.set(f.stat[1], f.stat[1] !== "0" ? "bad" : ""); stF.set(f.stat[2], f.stat[2] !== "0" ? "good" : "");
   }
@@ -2461,6 +2513,7 @@ function fsmLoop(g, x, y, o = {}) {
   const sync = () => { inputs.style.display = mode === 1 ? "" : "none"; };
   K.$("#s3-seg").appendChild(seg(["Book's example", "All a's", "It forgets"], mode, (i) => { mode = i; sync(); W.rebuild(); }));
   sync();
+  CODE_LANG.on(() => { const k = W.i; W.rebuild(); W.go(k); }); // the Rust counts from 0 and names the window
 })();
 
 /* ================= warm-up: remainders on a clock ================= */
@@ -2606,7 +2659,7 @@ function fsmLoop(g, x, y, o = {}) {
     lane(g, X0 - 8, 112, "t");
     row(g, SX, 92, f.strip, { cw: SW, ch: 38, from: f.from, mark: f.sm, size: 18 });
     if (f.view === "slow") {
-      lane(g, SX, 160, "the three sums", { anchor: "start" });
+      lane(g, SX, 160, "the three steps", { anchor: "start" });
       f.work.forEach((t, i) => txt(g, SX, 186 + i * 24, t, { anchor: "start", mono: true, size: 14, bold: i === f.work.length - 1 }));
     } else {
       bars(g, { x: 14, y: 156, w: 632, labelW: 150, h: 26, gap: 12, max: f.total, valueW: 44, items: [{ label: "rolling", v: f.rN, tone: "good", text: String(Math.round(f.rN)) }, { label: "recomputing", v: f.cN, tone: "bad", text: String(Math.round(f.cN)) }] });
@@ -2637,7 +2690,7 @@ function fsmLoop(g, x, y, o = {}) {
     let p = 0, t = 0;
     for (let i = 0; i < m; i++) { p = (d * p + Number(P[i])) % q; t = (d * t + Number(T[i])) % q; }
     const naive = naiveEvents(T, P).ev.length, vals = Array(n - m + 1).fill(""), vm = Array(n - m + 1).fill("");
-    let hits = 0, valid = 0, spur = 0, letters = 0;
+    let hits = 0, valid = 0, spur = 0, letters = 0, lastX = 0;
     const st = () => [String(hits), String(valid), String(spur), String(letters)];
     const base = { T, P, naive, pv: String(p), q: String(q), m };
     const snap = () => ({ vals: vals.slice(), vm: vm.slice(), letters, st: st() });
@@ -2651,8 +2704,8 @@ function fsmLoop(g, x, y, o = {}) {
       if (hit) hits++;
       const rollNote = sh > 0 ? { 12: `t = ${t}` } : { 6: `t0 = ${t}` };
       out.push(Object.assign({}, base, snap(), { sh, pm: Array(m).fill("dim"), tm: win(hit ? "on" : ""), lines: 8, notes: Object.assign({ 7: `s = ${sh}`, 8: `${p} ${hit ? "=" : "≠"} ${t}` }, rollNote),
-        say: hit ? `Window ${L(wstr)} has remainder <b>${t}</b>, equal to p. That is a <b>hit</b>. It might be the pattern, so now the letters must be checked.` : `Window ${L(wstr)} has remainder ${t}, not ${p}. It can't be the pattern. <b>No letters compared.</b>`,
-        why: sh === 1 ? `Rolling took three sums: (10 × (${vals[0]} − ${T[0]} × ${h}) + ${T[m]}) mod ${q} = ${t}.` : "" }));
+        say: hit ? `Window ${L(wstr)} has remainder <b>${t}</b>, equal to ${CODE_LANG.rust ? "pv" : "p"}. That is a <b>hit</b>. It might be the pattern, so now the letters must be checked.` : `Window ${L(wstr)} has remainder ${t}, not ${p}. It can't be the pattern. <b>No letters compared.</b>`,
+        why: sh > 0 && CODE_LANG.rust ? `x = 10 × (${vals[sh - 1]} − ${T[sh - 1]} × ${h}) + ${T[sh - 1 + m]} = ${String(lastX).replace("-", "−")}${lastX % q < 0 ? `. x % ${q} would be ${String(lastX % q).replace("-", "−")}, but` : ", and"} x.rem_euclid(${q}) = ${t}.` : sh === 1 ? `Rolling took three steps: (10 × (${vals[0]} − ${T[0]} × ${h}) + ${T[m]}) mod ${q} = ${t}.` : "" }));
       if (hit) {
         let j = 0; while (j < m && P[j] === T[sh + j]) j++;
         const ok = j === m, tests = ok ? m : j + 1;
@@ -2663,30 +2716,31 @@ function fsmLoop(g, x, y, o = {}) {
           say: ok ? `All ${m} letters match. <b>Shift ${sh} is valid.</b>` : `Letter ${j + 1} differs: ${L(P[j])} against ${L(T[sh + j])}. This is a <b>spurious hit</b>: same remainder, different number.`,
           why: ok ? "" : `${P} and ${wstr} both land on ${t} on a clock of ${q} marks.` }));
       }
-      if (sh < n - m) t = (((d * (t - Number(T[sh]) * h) + Number(T[sh + m])) % q) + q) % q;
+      if (sh < n - m) { lastX = d * (t - Number(T[sh]) * h) + Number(T[sh + m]); t = ((lastX % q) + q) % q; }
     }
-    out.push(Object.assign({}, base, snap(), { sh: n - m, pm: Array(m).fill("dim"), tm: Array(n).fill("dim"), phase: "Result", tone: "good", lines: [], say: `<b>${pl(valid, "valid shift")}, ${pl(spur, "spurious hit")}.</b> Rabin-Karp compared ${pl(letters, "letter")}, plus three sums per move. The naive matcher compares ${naive} on this input.`,
+    out.push(Object.assign({}, base, snap(), { sh: n - m, pm: Array(m).fill("dim"), tm: Array(n).fill("dim"), phase: "Result", tone: "good", lines: [], say: `<b>${pl(valid, "valid shift")}, ${pl(spur, "spurious hit")}.</b> Rabin-Karp compared ${pl(letters, "letter")}, plus three steps per move. The naive matcher compares ${naive} on this input.`,
       why: mode === 1 ? "Every window is real, so every one is checked in full. The remainders saved nothing here. This is the worst case." : spur > 2 ? "A small q means many false alarms. A large q means few." : "With a large enough q, spurious hits are rare, and the letter checks are nearly all for real matches." }));
     return out;
   }
   function paint(f) {
     K.clear(g);
-    const n = f.T.length, cw = n > 10 ? CW : 44, col = Math.round(f.sh);
-    nums(g, X0, 22, n, { cw });
-    lane(g, X0 - 8, 48, "text");
+    const n = f.T.length, cw = n > 10 ? CW : 44, col = Math.round(f.sh), rs = CODE_LANG.rust; // Rust mode: the program's names, counting from 0
+    nums(g, X0, 22, n, { cw, base: rs ? 0 : 1 });
+    lane(g, X0 - 8, 48, rs ? "t" : "text");
     row(g, X0, 30, f.T, { cw, mark: f.tm });
     g.appendChild(s("rect", { x: X0 + f.sh * cw - 1, y: 26, width: f.m * cw + 2, height: 40, rx: 9, class: "pt-line", style: { stroke: "var(--blue)", strokeWidth: 2.5 } }));
-    lane(g, X0 - 8, 94, "mod q");
+    lane(g, X0 - 8, 94, rs ? "tv" : "mod q");
     row(g, X0, 76, f.vals, { cw, ch: 28, mark: f.vm, size: f.q === "101" ? 11.5 : 13.5 });
-    lane(g, X0 - 8, 136, "P");
+    lane(g, X0 - 8, 136, rs ? "p" : "P");
     if (Math.abs(f.sh - col) < 0.01) f.pm.forEach((c, j) => { if (c === "good" || c === "bad") tick(g, X0 + (col + j + 0.5) * cw, 106, 116, c === "bad"); });
     row(g, X0, 116, f.P, { cw, from: f.sh, mark: f.pm });
-    txt(g, X0, 178, `p = ${f.P} mod ${f.q} = ${f.pv}`, { anchor: "start", mono: true, bold: true, size: 14 });
+    txt(g, X0, 178, `${rs ? "pv" : "p"} = ${f.P} mod ${f.q} = ${f.pv}`, { anchor: "start", mono: true, bold: true, size: 14 });
     legend(g, 340, 178, [["good", "valid"], ["bad", "spurious"], ["on", "hit"], ["dim", "ruled out"]], { gap: 12 });
     bars(g, { x: 14, y: 194, w: 632, labelW: 150, h: 22, gap: 8, max: f.naive, valueW: 44, items: [{ label: "compared, Rabin-Karp", v: f.letters, tone: "good", text: String(Math.round(f.letters)) }, { label: "compared, naive", v: f.naive, tone: "dim", text: String(f.naive) }] });
     stH.set(f.st[0]); stV.set(f.st[1], f.st[1] !== "0" ? "good" : ""); stS.set(f.st[2], f.st[2] !== "0" ? "bad" : ""); stL.set(f.st[3]);
   }
   const W = walk({ id: "s6", svg: "#s6-svg", code: cv, frames, paint, morph: 460 });
+  CODE_LANG.on(() => { const k = W.i; W.rebuild(); W.go(k); });
   K.$("#s6-inputs").appendChild(h("span", { class: "typein" }, "Modulus"));
   K.$("#s6-inputs").appendChild(seg(QS.map((v) => "q = " + v), qi, (i) => { qi = i; W.rebuild(); }));
   K.$("#s6-seg").appendChild(seg(["Book's digits", "All the same digit"], mode, (i) => { mode = i; W.rebuild(); }));
@@ -2986,10 +3040,10 @@ function fsmLoop(g, x, y, o = {}) {
 /* ---- the row "i / P[i] / π[i]" under a pattern, on the pattern's own columns ---- */
 function piTable(g, x, y, P, vals, o = {}) {
   const cw = o.cw || 36;
-  nums(g, x, y - 4, P.length, { cw, hot: o.hot });
-  lane(g, x - 12, y + 19, "P[i]");
+  nums(g, x, y - 4, P.length, { cw, hot: o.hot, base: o.rs ? 0 : 1 }); // o.rs: the Rust's names, counting from 0
+  lane(g, x - 12, y + 19, o.rs ? "p[i]" : "P[i]");
   row(g, x, y, P, { cw, ch: 28, mark: (i) => (o.pm ? o.pm(i) : "dim"), size: 13.5 });
-  lane(g, x - 12, y + 53, "π[i]");
+  lane(g, x - 12, y + 53, o.rs ? "pi[i]" : "π[i]");
   row(g, x, y + 34, vals, { cw, ch: 28, size: 13.5, mark: (i) => (o.vm ? o.vm(i) : "") });
 }
 
@@ -3088,10 +3142,12 @@ function piTable(g, x, y, P, vals, o = {}) {
   const cv = code("#s13-code", { files: [{ name: "COMPUTE-PREFIX-FUNCTION", src: src("ps-s13"), rs: { name: "compute_prefix.rs", src: src("rs-s13"), out: src("rs-s13-out"), map: rmap(src("rs-s13"), { 1: "let mut pi = vec", 2: "let mut pi = vec", 3: "let mut k = 0", 4: "for q in 1..m", 5: "while k > 0 && p[k] != p[q]", 6: "k = pi[k - 1]", 7: "if p[k] == p[q]", 8: "k += 1", 9: "pi[q] = k", 10: "(pi, rises, falls)" }) } }] });
   function frames() {
     const P = PATS[pick], m = P.length, out = [], pi = new Array(m).fill("");
+    // Rust mode: the program's names, counting from 0 (letter q is p[q - 1], the book's π[k] is pi[k - 1])
+    const R = CODE_LANG.rust, LQ = (q) => (R ? `p[${q - 1}]` : `Letter ${q}`), PK = (k) => (R ? `pi[${k - 1}]` : `π[${k}]`), QN = (q) => `q = ${R ? q - 1 : q}`;
     pi[0] = "0";
     let k = 0, ups = 0, downs = 0;
-    const snap = (q, o) => Object.assign({ P, m, q, k, from: q - 1 - k, piV: pi.slice(), ups, downs, stat: [String(q), String(k), String(ups), String(downs)] }, o);
-    out.push(snap(1, { from: 0, top: [...P].map((_, i) => (i === 0 ? "on" : "")), cm: [...P].map(() => "dim"), piHot: 0, lines: [2, 3], notes: { 2: "π[1] = 0", 3: "k = 0" }, say: `One letter has no smaller overlap, so π[1] = 0, and k starts at 0.`, why: "Next, each letter of the pattern gets one number, using the numbers before it." }));
+    const snap = (q, o) => Object.assign({ P, m, q, k, from: q - 1 - k, piV: pi.slice(), ups, downs, stat: [String(R ? q - 1 : q), String(k), String(ups), String(downs)] }, o);
+    out.push(snap(1, { from: 0, top: [...P].map((_, i) => (i === 0 ? "on" : "")), cm: [...P].map(() => "dim"), piHot: 0, lines: [2, 3], notes: { 2: `${PK(1)} = 0`, 3: "k = 0" }, say: `One letter has no smaller overlap, so ${PK(1)} = 0, and k starts at 0.`, why: "Next, each letter of the pattern gets one number, using the numbers before it." }));
     for (let q = 2; q <= m; q++) {
       const c = P[q - 1];
       const topFor = (st) => [...P].map((_, i) => (i === q - 1 ? st : i >= q - 1 - k && i < q - 1 ? "good" : i < q - 1 ? "dim" : ""));
@@ -3099,45 +3155,46 @@ function piTable(g, x, y, P, vals, o = {}) {
       for (;;) {
         const ok = P[k] === c;
         if (!ok && k > 0) {
-          out.push(snap(q, { top: topFor("bad"), cm: cmFor("bad"), piHot: q - 1, lines: 5, notes: { 4: `q = ${q}`, 5: `${P[k]} ≠ ${c}` }, mark: { bad: [5] }, say: `Letter ${q} is ${L(c)}, but the copy's next letter is ${L(P[k])}. The overlap of ${k} can't grow.` }));
+          out.push(snap(q, { top: topFor("bad"), cm: cmFor("bad"), piHot: q - 1, lines: 5, notes: { 4: QN(q), 5: `${P[k]} ≠ ${c}` }, mark: { bad: [5] }, say: `${LQ(q)} is ${L(c)}, but the copy's next letter${R ? `, p[${k}],` : ""} is ${L(P[k])}. The overlap of ${k} can't grow.` }));
           const nk = Number(pi[k - 1]);
           downs++;
           const was = k; k = nk;
-          out.push(snap(q, { top: topFor("on"), cm: cmFor("on"), piHot: was - 1, lines: 6, notes: { 4: `q = ${q}`, 6: `k = π[${was}] = ${nk}` }, say: `So fall back: <b>k = π[${was}] = ${nk}</b>. The copy glides right, and it keeps ${pl(nk, "letter")} of overlap.`, why: "The table already knows the next overlap to try. No other slide could work." }));
+          out.push(snap(q, { top: topFor("on"), cm: cmFor("on"), piHot: was - 1, lines: 6, notes: { 4: QN(q), 6: `k = ${PK(was)} = ${nk}` }, say: `So fall back: <b>k = ${PK(was)} = ${nk}</b>. The copy glides right, and it keeps ${pl(nk, "letter")} of overlap.`, why: "The table already knows the next overlap to try. No other slide could work." }));
           continue;
         }
         if (ok) {
-          out.push(snap(q, { top: topFor("good"), cm: cmFor("good"), piHot: q - 1, lines: 7, notes: { 4: `q = ${q}`, 7: `${P[k]} = ${c}` }, mark: { good: [7] }, say: `Letter ${q} is ${L(c)}, and so is the copy's next letter. The overlap can grow.` }));
+          out.push(snap(q, { top: topFor("good"), cm: cmFor("good"), piHot: q - 1, lines: 7, notes: { 4: QN(q), 7: `${P[k]} = ${c}` }, mark: { good: [7] }, say: `${LQ(q)} is ${L(c)}, and so is the copy's next letter${R ? `, p[${k}]` : ""}. The overlap can grow.` }));
           k++; ups++;
-          out.push(snap(q, { from: q - k, top: [...P].map((_, i) => (i >= q - k && i <= q - 1 ? "good" : i < q ? "dim" : "")), cm: [...P].map((_, x) => (x < k ? "good" : "dim")), piHot: q - 1, lines: 8, notes: { 4: `q = ${q}`, 8: `k = ${k}` }, say: `<b>k rises to ${k}.</b> That was one rise, and each letter gets at most one.` }));
+          out.push(snap(q, { from: q - k, top: [...P].map((_, i) => (i >= q - k && i <= q - 1 ? "good" : i < q ? "dim" : "")), cm: [...P].map((_, x) => (x < k ? "good" : "dim")), piHot: q - 1, lines: 8, notes: { 4: QN(q), 8: `k = ${k}` }, say: `<b>k rises to ${k}.</b> That was one rise, and each letter gets at most one.` }));
         } else {
-          out.push(snap(q, { top: topFor("bad"), cm: cmFor("bad"), piHot: q - 1, lines: 7, notes: { 4: `q = ${q}`, 7: `${P[k]} ≠ ${c}` }, say: `Letter ${q} is ${L(c)}, and the first letter is ${L(P[0])}. They differ, and k is already 0, so no overlap is possible.` }));
+          out.push(snap(q, { top: topFor("bad"), cm: cmFor("bad"), piHot: q - 1, lines: 7, notes: { 4: QN(q), 7: `${P[k]} ≠ ${c}` }, say: `${LQ(q)} is ${L(c)}, and the first letter is ${L(P[0])}. They differ, and k is already 0, so no overlap is possible.` }));
         }
         break;
       }
       pi[q - 1] = String(k);
-      out.push(snap(q, { from: q - k, top: [...P].map((_, i) => (i >= q - k && i <= q - 1 ? "good" : i < q ? "dim" : "")), cm: [...P].map((_, x) => (x < k ? "good" : "dim")), piHot: q - 1, lines: 9, notes: { 4: `q = ${q}`, 9: `π[${q}] = ${k}` }, say: `Write it down: <b>π[${q}] = ${k}</b>.` }));
+      out.push(snap(q, { from: q - k, top: [...P].map((_, i) => (i >= q - k && i <= q - 1 ? "good" : i < q ? "dim" : "")), cm: [...P].map((_, x) => (x < k ? "good" : "dim")), piHot: q - 1, lines: 9, notes: { 4: QN(q), 9: `${PK(q)} = ${k}` }, say: `Write it down: <b>${PK(q)} = ${k}</b>.` }));
     }
     const lastF = out[out.length - 1];
-    out.push(Object.assign({}, lastF, { lines: 10, notes: { 10: "done" }, phase: "Result", tone: "good", say: `<b>π = ${pi.join(", ")}.</b> k rose ${pl(ups, "time")} and fell ${pl(downs, "time")}, out of ${m - 1} letters.`, why: "Falls can't exceed rises, because k never goes below 0. So the whole job takes a number of steps proportional to m." }));
+    out.push(Object.assign({}, lastF, { lines: 10, notes: { 10: "done" }, phase: "Result", tone: "good", say: `<b>${R ? "pi" : "π"} = ${pi.join(", ")}.</b> k rose ${pl(ups, "time")} and fell ${pl(downs, "time")}, out of ${m - 1} letters.`, why: "Falls can't exceed rises, because k never goes below 0. So the whole job takes a number of steps proportional to m." }));
     return out;
   }
   function paint(f) {
     K.clear(g);
-    const xc = (i) => X0 + (i + 0.5) * CW, q = Math.round(f.q);
-    nums(g, X0, 18, f.m, { cw: CW, hot: q - 1 });
+    const xc = (i) => X0 + (i + 0.5) * CW, q = Math.round(f.q), R = CODE_LANG.rust;
+    nums(g, X0, 18, f.m, { cw: CW, hot: q - 1, base: R ? 0 : 1 });
     lane(g, X0 - 12, 44, "pattern"); row(g, X0, 24, f.P, { cw: CW, mark: f.top });
     lane(g, X0 - 12, 92, "copy");
     const col = Math.round(f.from);
     if (Math.abs(f.from - col) < 0.01) f.cm.forEach((c, j) => { if ((c === "good" || c === "bad" || c === "on") && col + j >= 0 && col + j < f.m) tick(g, xc(col + j), 58, 72, c === "bad"); });
     row(g, X0, 72, f.P, { cw: CW, from: f.from, mark: f.cm });
-    lane(g, X0 - 12, 137, "π[i]");
+    lane(g, X0 - 12, 137, R ? "pi[i]" : "π[i]");
     row(g, X0, 118, f.piV, { cw: CW, ch: 28, size: 13.5, mark: (i) => (i === f.piHot ? "on" : f.piV[i] === "" ? "" : "dim") });
     bars(g, { x: 14, y: 164, w: 632, labelW: 150, h: 22, gap: 8, max: Math.max(1, f.m - 1), valueW: 44, items: [{ label: "k has risen", v: f.ups, tone: "good", text: String(Math.round(f.ups)) }, { label: "k has fallen", v: f.downs, tone: "bad", text: String(Math.round(f.downs)) }] });
     legend(g, 164, 242, [["good", "overlap"], ["bad", "differ"], ["on", "in use now"]], { gap: 14 });
     stQ.set(f.stat[0]); stK.set(f.stat[1]); stU.set(f.stat[2], "good"); stD.set(f.stat[3], f.stat[3] !== "0" ? "bad" : "");
   }
   const W = walk({ id: "s13", svg: "#s13-svg", code: cv, frames, paint, morph: 480 });
+  CODE_LANG.on(() => { const k = W.i; W.rebuild(); W.go(k); }); // the Rust counts from 0
   K.$("#s13-inputs").appendChild(seg(PATS, pick, (i) => { pick = i; W.rebuild(); }));
 })();
 
@@ -3151,11 +3208,13 @@ function piTable(g, x, y, P, vals, o = {}) {
   const cv = code("#s14-code", { files: [{ name: "KMP-MATCHER", src: src("ps-s14"), rs: { name: "kmp.rs", src: src("rs-s14"), out: src("rs-s14-out"), map: rmap(src("rs-s14"), { 1: "let pi = compute_prefix(p)", 2: "let mut q = 0;", 3: "for i in 0..t.len()", 4: "while q > 0 && p[q] != t[i]", 5: "q = pi[q - 1];", 6: "if p[q] == t[i]", 7: "q += 1", 8: "if q == p.len()", 9: "found.push", 10: "look for the next match" }) } }] });
   function frames() {
     const [T, P] = SETS[pick], n = T.length, m = P.length, pi = prefixFn(P), out = [], qRow = Array(n).fill(""), found = [];
+    // Rust mode: the program's names, counting from 0 (t[i], p[q], and pi[q - 1] for the book's π[q])
+    const R = CODE_LANG.rust, TL = (i) => (R ? `t[${i}]` : `Text letter ${i + 1}`), PL = (j) => (R ? `p[${j}]` : `pattern letter ${j + 1}`), PQ = (w) => (R ? `pi[${w - 1}]` : `π[${w}]`), IN = (i) => `i = ${R ? i : i + 1}`;
     let q = 0, cn = 0;
     const piS = pi.slice(1).map(String);
-    const snap = (i, o) => Object.assign({ T, P, i, from: i - q, q: String(q), qRow: qRow.slice(), piS, stat: [String(i + 1), String(q), String(cn), "0"], used: -1, keep: "" }, o);
+    const snap = (i, o) => Object.assign({ T, P, i, from: i - q, q: String(q), qRow: qRow.slice(), piS, stat: [String(R ? i : i + 1), String(q), String(cn), "0"], used: -1, keep: "" }, o);
     const marks = (i, st, qq = q) => ({ tm: [...T].map((_, x) => (x < i - qq ? "dim" : x < i ? "good" : x === i ? st : "")), pm: [...P].map((_, j) => (j < qq ? "good" : j === qq ? st : "")) });
-    out.push(snap(0, Object.assign(marks(0, "on"), { lines: [1, 2], notes: { 1: `π = ${piS.join(" ")}`, 2: "q = 0" }, say: `Search for ${L(P)} in ${L(T)}. Its array π is ready: ${piS.join(", ")}. The arrow marks the text letter being read.`, why: "Watch the arrow. It only ever moves to the right." })));
+    out.push(snap(0, Object.assign(marks(0, "on"), { lines: [1, 2], notes: { 1: `${R ? "pi" : "π"} = ${piS.join(" ")}`, 2: "q = 0" }, say: `Search for ${L(P)} in ${L(T)}. Its array ${R ? "pi" : "π"} is ready: ${piS.join(", ")}. The arrow marks the text letter being read.`, why: "Watch the arrow. It only ever moves to the right." })));
     let agree = true;
     for (let i = 0; i < n; i++) {
       for (;;) {
@@ -3163,18 +3222,18 @@ function piTable(g, x, y, P, vals, o = {}) {
         cn++;
         if (ok) {
           const was = q;
-          out.push(snap(i, Object.assign(marks(i, "good"), { lines: [6, 7], mark: { good: [6] }, notes: { 3: `i = ${i + 1}`, 6: `${P[q]} = ${T[i]}`, 7: `q = ${was + 1}` }, say: `Text letter ${i + 1} is ${L(T[i])}, and pattern letter ${q + 1} is ${L(P[q])}. They match, so <b>q = ${was + 1}</b>.` })));
+          out.push(snap(i, Object.assign(marks(i, "good"), { lines: [6, 7], mark: { good: [6] }, notes: { 3: IN(i), 6: `${P[q]} = ${T[i]}`, 7: `q = ${was + 1}` }, say: `${TL(i)} is ${L(T[i])}, and ${PL(q)} is ${L(P[q])}. They match, so <b>q = ${was + 1}</b>.` })));
           q++;
           break;
         }
         if (q === 0) {
-          out.push(snap(i, Object.assign(marks(i, "bad"), { lines: 6, notes: { 3: `i = ${i + 1}`, 6: `${P[0]} ≠ ${T[i]}` }, say: `Text letter ${i + 1} is ${L(T[i])}, and it doesn't match even the first pattern letter. Nothing can be kept, so move on to the next text letter.` })));
+          out.push(snap(i, Object.assign(marks(i, "bad"), { lines: 6, notes: { 3: IN(i), 6: `${P[0]} ≠ ${T[i]}` }, say: `${TL(i)} is ${L(T[i])}, and it doesn't match even ${R ? "p[0]" : "the first pattern letter"}. Nothing can be kept, so move on to the next text letter.` })));
           break;
         }
         const was = q;
-        out.push(snap(i, Object.assign(marks(i, "bad"), { lines: 4, mark: { bad: [4] }, notes: { 3: `i = ${i + 1}`, 4: `${P[q]} ≠ ${T[i]}` }, say: `Text letter ${i + 1} is ${L(T[i])}, but pattern letter ${q + 1} is ${L(P[q])}. Mismatch with q = ${q}.` })));
+        out.push(snap(i, Object.assign(marks(i, "bad"), { lines: 4, mark: { bad: [4] }, notes: { 3: IN(i), 4: `${P[q]} ≠ ${T[i]}` }, say: `${TL(i)} is ${L(T[i])}, but ${PL(q)} is ${L(P[q])}. Mismatch with q = ${q}.` })));
         q = pi[q];
-        out.push(snap(i, Object.assign(marks(i, "on"), { lines: 5, notes: { 3: `i = ${i + 1}`, 5: `q = π[${was}] = ${q}` }, used: was - 1, keep: `keep ${q} of ${was}`, say: `<b>q = π[${was}] = ${q}.</b> The pattern jumps ${was - q} ${was - q === 1 ? "column" : "columns"} right. The arrow stays where it is, and ${pl(q, "letter")} stay matched without being compared.`, why: was === 5 && q === 3 && pick === 1 ? "Three falls are coming, as the book's example says: 5 to 3, 3 to 1, 1 to 0." : "" })));
+        out.push(snap(i, Object.assign(marks(i, "on"), { lines: 5, notes: { 3: IN(i), 5: `q = ${PQ(was)} = ${q}` }, used: was - 1, keep: `keep ${q} of ${was}`, say: `<b>q = ${PQ(was)} = ${q}.</b> The pattern jumps ${was - q} ${was - q === 1 ? "column" : "columns"} right. The arrow stays where it is, and ${pl(q, "letter")} stay matched without being compared.`, why: was === 5 && q === 3 && pick === 1 ? "Three falls are coming, as the book's example says: 5 to 3, 3 to 1, 1 to 0." : "" })));
       }
       qRow[i] = String(q);
       if (q !== sigma(T.slice(0, i + 1), P)) agree = false;
@@ -3184,31 +3243,32 @@ function piTable(g, x, y, P, vals, o = {}) {
         const pmAll = [...P].map(() => "sorted"), tmAll = [...T].map((_, x) => (x <= i - m ? "dim" : x <= i ? "sorted" : ""));
         out.push(Object.assign(snap(i, { from: i + 1 - m, tm: tmAll, pm: pmAll, lines: 9, mark: { good: [9] }, notes: { 8: `q = ${m}`, 9: `shift ${i + 1 - m}` }, tone: "good", say: `All ${m} letters match, so the pattern occurs with <b>shift ${i + 1 - m}</b>.` })));
         q = pi[q];
-        if (i < n - 1) out.push(Object.assign(snap(i + 1, { from: i + 1 - q, tm: [...T].map((_, x) => (x < i + 1 - q ? "dim" : x <= i ? "good" : x === i + 1 ? "on" : "")), pm: [...P].map((_, j) => (j < q ? "good" : j === q ? "on" : "")), lines: 10, notes: { 10: `q = π[${was}] = ${q}` }, used: was - 1, keep: `keep ${q} of ${was}`, say: `Look for the next one: <b>q = π[${was}] = ${q}</b>. The end of this occurrence may start another.` })));
+        if (i < n - 1) out.push(Object.assign(snap(i + 1, { from: i + 1 - q, tm: [...T].map((_, x) => (x < i + 1 - q ? "dim" : x <= i ? "good" : x === i + 1 ? "on" : "")), pm: [...P].map((_, j) => (j < q ? "good" : j === q ? "on" : "")), lines: 10, notes: { 10: `q = ${PQ(was)} = ${q}` }, used: was - 1, keep: `keep ${q} of ${was}`, say: `Look for the next one: <b>q = ${PQ(was)} = ${q}</b>. The end of this occurrence may start another.` })));
       }
     }
     const res = snap(n - 1, { from: Math.max(0, n - 1 - m + 1 > n - m ? n - m : n - m), tm: [...T].map(() => "dim"), pm: [...P].map(() => "dim"), lines: [], phase: "Result", tone: "good", q: String(q),
       say: `Done, with <b>${pl(cn, "comparison")}</b> and no move back in the text. ${found.length === 1 ? "Valid shift:" : "Valid shifts:"} <b>${found.join(", ")}</b>.`, why: agree ? `The q row, ${qRow.join(" ")}, is exactly the state sequence the automaton of this pattern goes through.` : "" });
-    res.stat = [String(n), String(q), String(cn), "0"];
+    res.stat = [String(R ? n - 1 : n), String(q), String(cn), "0"];
     res.done = true;
     out.push(res);
     return out;
   }
   function paint(f) {
     K.clear(g);
-    const n = f.T.length, cw = CW, xc = (i) => X0 + (i + 0.5) * cw, I = Math.round(f.i), col = Math.round(f.from);
-    nums(g, X0, 28, n, { cw, hot: f.done ? undefined : I });
+    const n = f.T.length, cw = CW, xc = (i) => X0 + (i + 0.5) * cw, I = Math.round(f.i), col = Math.round(f.from), R = CODE_LANG.rust;
+    nums(g, X0, 28, n, { cw, hot: f.done ? undefined : I, base: R ? 0 : 1 });
     if (!f.done) point(g, [xc(f.i), 3], [xc(f.i), 16], { tone: "on" });
-    lane(g, X0 - 12, 54, "text T"); row(g, X0, 34, f.T, { cw, mark: f.tm });
+    lane(g, X0 - 12, 54, R ? "t" : "text T"); row(g, X0, 34, f.T, { cw, mark: f.tm });
     lane(g, X0 - 12, 87, "q after");
     row(g, X0, 70, f.qRow, { cw, ch: 26, size: 13, mark: (i) => (f.qRow[i] === "" ? "" : "dim") });
     if (Math.abs(f.from - col) < 0.01) f.pm.forEach((c, j) => { if (c === "good" || c === "sorted") tick(g, xc(col + j), 100, 116); else if (c === "bad") tick(g, xc(col + j), 100, 116, true); });
-    lane(g, X0 - 12, 137, "pattern P"); row(g, X0, 118, f.P, { cw, from: f.from, mark: f.pm });
+    lane(g, X0 - 12, 137, R ? "p" : "pattern P"); row(g, X0, 118, f.P, { cw, from: f.from, mark: f.pm });
     if (f.keep) { const right = X0 + (f.from + f.P.length) * cw + 8; if (right < 560) note(g, right, 138, f.keep, { anchor: "start", tone: "on2" }); else note(g, X0 + f.from * cw - 8, 138, f.keep, { anchor: "end", tone: "on2" }); }
-    piTable(g, X0, 182, f.P, f.piS, { cw, hot: f.used, pm: () => "dim", vm: (i) => (i === f.used ? "on" : "dim") });
+    piTable(g, X0, 182, f.P, f.piS, { cw, hot: f.used, rs: R, pm: () => "dim", vm: (i) => (i === f.used ? "on" : "dim") });
     stI.set(f.stat[0]); stQ.set(f.stat[1]); stC.set(f.stat[2]); stB.set(f.stat[3], "good");
   }
   const W = walk({ id: "s14", svg: "#s14-svg", code: cv, frames, paint, morph: 520 });
+  CODE_LANG.on(() => { const k = W.i; W.rebuild(); W.go(k); }); // the Rust counts from 0
   K.$("#s14-seg").appendChild(seg(["The book's text", "Three falls", "Overlapping"], pick, (i) => { pick = i; W.rebuild(); }));
 })();
 
@@ -3441,15 +3501,15 @@ function piTable(g, x, y, P, vals, o = {}) {
   let pick = 0;
   const stL = stat("l, length sorted", 2), stR = stat("rounds", 0), stD = stat("different ranks", "–");
   K.$("#s18-stats").append(stL, stR, stD);
-  const cv = code("#s18-code", { files: [{ name: "COMPUTE-SUFFIX-ARRAY", src: src("ps-s18"), rs: { name: "compute_suffix_array.rs", src: src("rs-s18"), out: src("rs-s18-out"), map: rmap(src("rs-s18"), { 2: "let mut sub: Vec<Sub>", 3: "left: t[i] as usize", 5: "right: if i + 1 < n", 7: "index: i + 1,", 8: "sub.sort_by_key", 9: "let mut l = 2", 10: "while l < n", 11: "make_ranks(&sub, &mut rank)", 12: "for i in 0..n", 13: "sub[i] = Sub", 15: "let right = if i + l < n", 18: "now length 2l", 19: "l *= 2", 21: "sub.iter().map", "MAKE-RANKS:1": "let mut r = 1", "MAKE-RANKS:2": "rank[sub[0].index - 1] = r", "MAKE-RANKS:5": "r += 1", "MAKE-RANKS:6": "rank[a.index - 1] = r" }) } }] });
+  const cv = code("#s18-code", { files: [{ name: "COMPUTE-SUFFIX-ARRAY", src: src("ps-s18"), rs: { name: "suffix_array.rs", src: src("rs-s18"), out: src("rs-s18-out"), map: rmap(src("rs-s18"), { 2: "for &c in t", 3: "rank.push(c as usize)", 5: "let mut sub = pairs(&rank, 1)", 7: "let mut sub = pairs(&rank, 1)", 8: "    sub.sort_by_key(key)", 9: "let mut l = 2", 10: "while l < t.len()", 11: "make_ranks(&sub, &mut rank)", 12: "sub = pairs(&rank, l)", 13: "left: rank[i]", 15: "right: if i + l < n", 16: "            0", 17: "index: i,", 18: "        sub.sort_by_key(key)", 19: "l *= 2", 21: "sub.iter().map", "MAKE-RANKS:1": "let mut r = 1", "MAKE-RANKS:2": "rank[sub[0].index] = r", "MAKE-RANKS:4": "if key(&w[1]) != key(&w[0])", "MAKE-RANKS:5": "r += 1", "MAKE-RANKS:6": "rank[w[1].index] = r" }) } }] });
   function frames() {
-    const T = TEXTS[pick], n = T.length, out = [];
+    const T = TEXTS[pick], n = T.length, out = [], R = CODE_LANG.rust, b = R ? 0 : 1; // Rust mode: the program counts from 0
     let sub = Array.from({ length: n }, (_, i) => ({ l: T.charCodeAt(i), r: i + 1 < n ? T.charCodeAt(i + 1) : 0, idx: i + 1 }));
     let rank = Array(n).fill(""), len = 2, rounds = 0, ranks = "–";
     const posOf = (arr) => { const p = Array(n); arr.forEach((x, place) => { p[x.idx - 1] = place; }); return p; };
     const push = (o) => out.push(Object.assign({ T, n, ys: posOf(sub), L: Array.from({ length: n }, (_, i) => String(sub.find((x) => x.idx === i + 1).l)), R: Array.from({ length: n }, (_, i) => String(sub.find((x) => x.idx === i + 1).r)), len, rank: rank.slice(), hot: -1, rk: [], tie: [], st: [String(len), String(rounds), ranks] }, o));
     const ord0 = T[0], sorter = (a, b) => a.l - b.l || a.r - b.r;
-    push({ hot: 0, lines: [3, 5, 7], notes: { 3: `${ord0} is ${T.charCodeAt(0)}` }, say: `Start with pieces of 2 letters. Each row's numbers are the ASCII codes of its two letters. Row 1, ${L(T.slice(0, 2))}, is (${T.charCodeAt(0)}, ${T.charCodeAt(1)}).`, why: `The last row has only one letter, so its right number is 0. Nothing comes before an empty piece.` });
+    push({ hot: 0, lines: [3, 5, 7], notes: { 3: `${ord0} is ${T.charCodeAt(0)}` }, say: `Start with pieces of 2 letters. Each row's numbers are the ASCII codes of its two letters. Row ${b}, ${L(T.slice(0, 2))}, is (${T.charCodeAt(0)}, ${T.charCodeAt(1)}).`, why: `The last row has only one letter, so its right number is 0. Nothing comes before an empty piece.` });
     sub = [...sub].sort(sorter);
     const first = T.slice(sub[0].idx - 1, sub[0].idx + 1);
     push({ lines: 8, say: `Sort the rows by their pair of numbers. Rows glide into order, and now the pieces read alphabetically. ${L(first)} comes first.`, why: "Equal pieces end up next to each other." });
@@ -3464,17 +3524,17 @@ function piTable(g, x, y, P, vals, o = {}) {
       sub = Array.from({ length: n }, (_, i) => ({ l: nr[i], r: i + l < n ? nr[i + l] : 0, idx: i + 1 }));
       len = 2 * l;
       const ex = 0, hasR = ex + l < n;
-      push({ hot: ex, rk: hasR ? [ex, ex + l] : [ex], lines: [13, 15], notes: { 13: `l = ${l}` }, say: `Make pairs for length ${len}. Rows go back to text order. Row 1 is (rank[1], rank[${1 + l}]) = (${nr[0]}, ${hasR ? nr[ex + l] : 0}).`, why: `Two pieces of length ${old} side by side make one piece of length ${len}. So no letters are compared.` });
+      push({ hot: ex, rk: hasR ? [ex, ex + l] : [ex], lines: [13, 15], notes: { 13: `l = ${l}` }, st: [String(l), String(rounds), ranks], say: `Make pairs for length ${len}. Rows go back to text order. Row ${b} is (rank[${b}], rank[${b + l}]) = (${nr[0]}, ${hasR ? nr[ex + l] : 0}).`, why: `Two pieces of length ${old} side by side make one piece of length ${len}. So no letters are compared.` });
       sub = [...sub].sort(sorter);
       rounds++;
-      push({ lines: 18, notes: { 18: `length ${len}` }, say: `Sort by the new pairs. Now the pieces of up to ${len} letters are in order.`, why: "With radix sort this takes linear time, because all the numbers are small." });
+      push({ lines: 18, notes: { 18: `length ${len}` }, say: `Sort by the new pairs. Now the pieces of up to ${len} letters are in order.`, why: R ? "The library sort takes O(n log n) time. Radix sort could do it in linear time, because all the numbers are small." : "With radix sort this takes linear time, because all the numbers are small." });
       l = 2 * l;
       out[out.length - 1].st[0] = String(l);
       out[out.length - 1].lines = [18, 19];
       out[out.length - 1].notes = { 18: `length ${len}`, 19: `l = ${l}` };
     }
     const SA = sub.map((x) => x.idx);
-    push({ lines: 21, notes: { 21: "index column" }, phase: "Result", tone: "good", st: [String(l), String(rounds), ranks], saRead: true, say: `l is now ${l}, so everything is sorted. Read the index column from the top: <b>SA = ${SA.join(", ")}</b>.`, why: `That took ${pl(rounds, "round")} of the while loop for a text of ${n} letters.` });
+    push({ lines: 21, notes: { 21: "index column" }, phase: "Result", tone: "good", st: [String(l), String(rounds), ranks], saRead: true, say: `l is now ${l}, so everything is sorted. Read the index column from the top: <b>${R ? `sa = [${SA.map((x) => x - 1).join(", ")}]` : `SA = ${SA.join(", ")}`}</b>.`, why: `That took ${pl(rounds, "round")} of the while loop for a text of ${n} letters.` });
     return out;
   }
   function paint(f) {
@@ -3483,7 +3543,8 @@ function piTable(g, x, y, P, vals, o = {}) {
     const X = { place: 30, left: 48, right: 104, idx: 160, sub: 214, rk: 474 };
     lane(g, 40, 32, "text");
     row(g, 48, 12, f.T, { cw: 30, ch: 28, mark: (i) => (f.hot >= 0 && i >= f.hot && i < f.hot + f.len ? "on" : "") });
-    nums(g, 48, 56, n, { cw: 30 });
+    const b = CODE_LANG.rust ? 0 : 1;
+    nums(g, 48, 56, n, { cw: 30, base: b });
     [["left", X.left + 26], ["right", X.right + 26], ["index", X.idx + 22]].forEach(([t, x]) => g.appendChild(s("text", { x, y: Y0 - 8, class: "ix", "text-anchor": "middle" }, t)));
     g.appendChild(s("text", { x: X.sub + 2, y: Y0 - 8, class: "ix" }, "substring"));
     for (let i = 0; i < n; i++) {
@@ -3491,20 +3552,21 @@ function piTable(g, x, y, P, vals, o = {}) {
       const cls = on ? "on" : "";
       row(g, X.left, y, [f.L[i]], { cw: 52, ch, size: 13, mark: () => cls });
       row(g, X.right, y, [f.R[i]], { cw: 52, ch, size: 13, mark: () => cls });
-      row(g, X.idx, y, [String(i + 1)], { cw: 44, ch, size: 13, mark: () => (f.saRead ? "good" : cls) });
+      row(g, X.idx, y, [String(i + b)], { cw: 44, ch, size: 13, mark: () => (f.saRead ? "good" : cls) });
       row(g, X.sub, y, f.T.slice(i, i + f.len), { cw, ch, size: 13.5, mark: () => cls });
     }
     g.appendChild(s("text", { x: X.rk + 14, y: Y0 - 8, class: "ix", "text-anchor": "middle" }, "i"));
     g.appendChild(s("text", { x: X.rk + 66, y: Y0 - 8, class: "ix", "text-anchor": "middle" }, "rank[i]"));
     for (let i = 0; i < n; i++) {
       const y = Y0 + i * rh;
-      g.appendChild(s("text", { x: X.rk + 14, y: y + 18, class: "ix", "text-anchor": "middle" }, String(i + 1)));
+      g.appendChild(s("text", { x: X.rk + 14, y: y + 18, class: "ix", "text-anchor": "middle" }, String(i + b)));
       row(g, X.rk + 36, y, [f.rank[i]], { cw: 60, ch, size: 13, mark: () => (f.rk.includes(i) ? "on2" : f.rank[i] ? "sorted" : "") });
     }
     stL.set(f.st[0]); stR.set(f.st[1]); stD.set(f.st[2]);
   }
   const W = walk({ id: "s18", svg: "#s18-svg", code: cv, frames, paint, morph: 560 });
   K.$("#s18-inputs").appendChild(seg(TEXTS, pick, (i) => { pick = i; W.rebuild(); }));
+  CODE_LANG.on(() => { const k = W.i; W.rebuild(); W.go(k); }); // the Rust counts from 0
 })();
 
 /* ================= 32.5 · COMPUTE-LCP: each suffix inherits most of the last one's work ================= */
@@ -3524,38 +3586,40 @@ function piTable(g, x, y, P, vals, o = {}) {
     const lc = Array(n).fill("");
     const maxB = Math.max(1, scratch, log.reduce((a, e) => a + e.tests, 0));
     const blankRows = () => Array(n).fill(null);
-    const push = (o) => out.push(Object.assign({ T, n, rows, SA: SA.slice(1).map(String), lc: lc.slice(), cur: -1, nb: -1, show: 0, kept: 0, stop: false, cn, scratch, maxB, st: ["–", "0", String(cn)] }, o));
-    push({ lines: [4, 5], notes: { 5: "l = 0" }, say: `The suffixes of ${L(T)} are already sorted. Next, fill the LCP column, going through the text from position 1.`, why: "Each suffix is compared with the one just above it in the list." });
+    // Rust mode: the program's names, counting from 0 (place r is the book's r + 1, start i the book's i + 1)
+    const R = CODE_LANG.rust, P = (v) => (R ? v - 1 : v), A = R ? "lcp" : "LCP";
+    const push = (o) => out.push(Object.assign({ T, n, rows, SA: SA.slice(1).map((v) => String(P(v))), lc: lc.slice(), cur: -1, nb: -1, show: 0, kept: 0, stop: false, cn, scratch, maxB, st: ["–", "0", String(cn)] }, o));
+    push({ lines: [4, 5], notes: { 5: "l = 0" }, say: R ? `The suffixes of ${L(T)} are already sorted, and sa holds where each one starts. Next, fill lcp, going through the text from i = 0.` : `The suffixes of ${L(T)} are already sorted. Next, fill the LCP column, going through the text from position 1.`, why: "Each suffix is compared with the one just above it in the list." });
     let prevL = 0;
     log.forEach((e, k) => {
       const r = rank[e.i];
       if (e.j == null) {
         lc[r - 1] = "0";
-        push({ cur: r - 1, nb: -1, lines: [7], st: [String(e.i), "0", String(cn)], notes: { 6: `i = ${e.i}` }, say: `Position ${e.i}: ${L(T.slice(e.i - 1))} is the smallest suffix. Nothing comes before it, so LCP[1] = 0 by definition.` });
+        push({ cur: r - 1, nb: -1, lines: [7], st: [String(P(e.i)), "0", String(cn)], notes: { 6: `i = ${P(e.i)}` }, say: R ? `i = ${P(e.i)}: ${L(T.slice(e.i - 1))} is the smallest suffix, so rank[${P(e.i)}] = 0. Nothing comes before it, so lcp[0] stays 0.` : `Position ${e.i}: ${L(T.slice(e.i - 1))} is the smallest suffix. Nothing comes before it, so LCP[1] = 0 by definition.` });
         prevL = 0;
         return;
       }
-      push({ cur: r - 1, nb: r - 2, kept: e.kept, show: e.kept, lines: [8], st: [String(e.i), String(e.kept), String(cn)], notes: { 6: `i = ${e.i}`, 8: `j = ${e.j}` },
-        say: `Position ${e.i}: ${L(T.slice(e.i - 1))}, in place ${r}. Its neighbour above is ${L(T.slice(e.j - 1))}. ${e.kept ? `From the last suffix, the first <b>${e.kept}</b> ${e.kept === 1 ? "letter is" : "letters are"} already known to agree.` : "No letters are known to agree yet."}`,
+      push({ cur: r - 1, nb: r - 2, kept: e.kept, show: e.kept, lines: [8], st: [String(P(e.i)), String(e.kept), String(cn)], notes: { 6: `i = ${P(e.i)}`, 8: `j = ${P(e.j)}` },
+        say: `${R ? `i = ${P(e.i)}: ${L(T.slice(e.i - 1))}, at rank[${P(e.i)}] = ${P(r)}. Its neighbour above starts at j = sa[${P(r) - 1}] = ${P(e.j)}: ${L(T.slice(e.j - 1))}.` : `Position ${e.i}: ${L(T.slice(e.i - 1))}, in place ${r}. Its neighbour above is ${L(T.slice(e.j - 1))}.`} ${e.kept ? `From the last suffix, the first <b>${e.kept}</b> ${e.kept === 1 ? "letter is" : "letters are"} already known to agree.` : "No letters are known to agree yet."}`,
         why: k > 0 && prevL > 0 ? `The last suffix shared ${prevL}. This one is that suffix with its first letter removed, so it shares at least ${prevL - 1}.` : "" });
       cn += e.tests;
       lc[r - 1] = String(e.l);
-      push({ cur: r - 1, nb: r - 2, kept: e.kept, show: e.l, stop: true, lines: [10, 12], notes: { 6: `i = ${e.i}`, 10: `${pl(e.tests, "test")}`, 12: `LCP[${r}] = ${e.l}` }, st: [String(e.i), String(e.l), String(cn)],
-        say: e.tests === 0 ? `Compare nothing: the shorter suffix has run out of letters. <b>LCP[${r}] = ${e.l}</b>.` : `Compare on from there: ${pl(e.tests, "test")}. They agree on <b>${e.l}</b> ${e.l === 1 ? "letter" : "letters"} in all, so LCP[${r}] = ${e.l}.` });
+      push({ cur: r - 1, nb: r - 2, kept: e.kept, show: e.l, stop: true, lines: [10, 12], notes: { 6: `i = ${P(e.i)}`, 10: `${pl(e.tests, "test")}`, 12: `${A}[${P(r)}] = ${e.l}` }, st: [String(P(e.i)), String(e.l), String(cn)],
+        say: e.tests === 0 ? `Compare nothing: the shorter suffix has run out of letters. <b>${A}[${P(r)}] = ${e.l}</b>.` : `Compare on from there: ${pl(e.tests, "test")}. They agree on <b>${e.l}</b> ${e.l === 1 ? "letter" : "letters"} in all, so ${A}[${P(r)}] = ${e.l}.` });
       prevL = e.l;
     });
-    out.push(Object.assign({}, out[out.length - 1], { cur: -1, nb: -1, show: 0, stop: false, kept: 0, lines: 15, notes: {}, phase: "Result", tone: "good", st: ["–", "–", String(cn)], say: `<b>LCP = ${LCP.slice(1).join(", ")}.</b> It took ${pl(cn, "letter comparison")}. Comparing each pair from scratch would take ${scratch}.`, why: `On this short text the saving is modest. As texts grow, the procedure stays linear, while starting afresh can cost about n² letters.` }));
+    out.push(Object.assign({}, out[out.length - 1], { cur: -1, nb: -1, show: 0, stop: false, kept: 0, lines: 15, notes: {}, phase: "Result", tone: "good", st: ["–", "–", String(cn)], say: `<b>${A} = ${LCP.slice(1).join(", ")}.</b> It took ${pl(cn, "letter comparison")}. Comparing each pair from scratch would take ${scratch}.`, why: `On this short text the saving is modest. As texts grow, the procedure stays linear, while starting afresh can cost about n² letters.` }));
     return out;
   }
   function paint(f) {
     K.clear(g);
-    const n = f.n, rh = 30, ch = 27, Y0 = 26, cw = 28, LX = 96, CX = 340 + 20;
-    [["place", 30], ["SA", 66]].forEach(([t, x]) => g.appendChild(s("text", { x, y: 18, class: "ix", "text-anchor": "middle" }, t)));
-    g.appendChild(s("text", { x: LX + 2, y: 18, class: "ix" }, "the sorted suffix"));
-    g.appendChild(s("text", { x: CX + 24, y: 18, class: "ix", "text-anchor": "middle" }, "LCP"));
+    const n = f.n, rh = 30, ch = 27, Y0 = 26, cw = 28, LX = 96, CX = 340 + 20, R = CODE_LANG.rust; // Rust mode: the program's names, counting from 0
+    [[R ? "r" : "place", 30], [R ? "sa" : "SA", 66]].forEach(([t, x]) => g.appendChild(s("text", { x, y: 18, class: "ix", "text-anchor": "middle" }, t)));
+    g.appendChild(s("text", { x: LX + 2, y: 18, class: "ix" }, R ? "t[sa[r]..]" : "the sorted suffix"));
+    g.appendChild(s("text", { x: CX + 24, y: 18, class: "ix", "text-anchor": "middle" }, R ? "lcp" : "LCP"));
     for (let r = 0; r < n; r++) {
       const y = Y0 + r * rh, active = r === f.cur || r === f.nb, x = f.rows[r];
-      g.appendChild(s("text", { x: 30, y: y + 18, class: "ix", "text-anchor": "middle" }, String(r + 1)));
+      g.appendChild(s("text", { x: 30, y: y + 18, class: "ix", "text-anchor": "middle" }, String(R ? r : r + 1)));
       row(g, 46, y, [f.SA[r]], { cw: 40, ch, size: 13.5, mark: () => (r === f.cur ? "on" : r === f.nb ? "on2" : "dim") });
       const mk = (i) => { if (!active) return "dim"; if (i < f.kept) return "sorted"; if (i < f.show) return "good"; if (f.stop && i === f.show && f.show < Math.min((f.rows[f.cur] || "").length, (f.rows[f.nb] || "").length)) return "bad"; return r === f.cur ? "on" : "on2"; };
       row(g, LX, y, x, { cw, ch, size: 14, mark: mk });
@@ -3567,6 +3631,7 @@ function piTable(g, x, y, P, vals, o = {}) {
     stI.set(f.st[0]); stL.set(f.st[1]); stC.set(f.st[2]);
   }
   const W = walk({ id: "s19", svg: "#s19-svg", code: cv, frames, paint, morph: 300 });
+  CODE_LANG.on(() => { const k = W.i; W.rebuild(); W.go(k); }); // the Rust counts from 0
   K.$("#s19-inputs").appendChild(seg(TEXTS, pick, (i) => { pick = i; W.rebuild(); }));
 })();
 

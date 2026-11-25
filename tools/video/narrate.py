@@ -174,7 +174,7 @@ def book_profile(script):
     return json.loads(p.read_text()) if p.exists() else {}
 
 
-def rust(src, work, want_error, compile_cmd=("rustc", "--edition", "2021", "-A", "warnings"), warnings=False):
+def rust(src, work, want_error, compile_cmd=("rustc", "--edition", "2021", "-A", "warnings"), warnings=False, shown="main.rs"):
     """Compile and run one snapshot, as the run panel will show it. Cached by the source text."""
     key = hashlib.md5(src.encode()).hexdigest()[:12]
     d = work / "rust"; d.mkdir(parents=True, exist_ok=True)
@@ -182,17 +182,17 @@ def rust(src, work, want_error, compile_cmd=("rustc", "--edition", "2021", "-A",
     rs.write_text(src + "\n")
     c = subprocess.run([*compile_cmd, "-o", str(exe), str(rs)], capture_output=True, text=True)
     if c.returncode:
-        err = c.stderr.replace(str(rs), "main.rs").replace(str(pathlib.Path.home()), "~")  # no user name on screen
+        err = c.stderr.replace(str(rs), shown).replace(str(pathlib.Path.home()), "~")  # no user name on screen
         blocks = err.split("\n\n")
         first = next((b for b in blocks if b.startswith("error")), err)  # the first error is the one the video talks about
         abort = next((b.splitlines()[0] for b in blocks if b.startswith("error: aborting")), "")  # rustc's own last line
         out, ok = first.strip() + ("\n\n" + abort if abort else ""), False
     else:
         r = subprocess.run([str(exe)], capture_output=True, text=True, timeout=20)
-        err = re.sub(r"thread '([^']*)' \(\d+\)", r"thread '\1'", r.stderr.replace(str(rs), "main.rs").replace(str(pathlib.Path.home()), "~"))  # the same on every run, and no user name on screen
+        err = re.sub(r"thread '([^']*)' \(\d+\)", r"thread '\1'", r.stderr.replace(str(rs), shown).replace(str(pathlib.Path.home()), "~"))  # the same on every run, and no user name on screen
         out, ok = (r.stdout + (err if r.returncode else "")).rstrip(), r.returncode == 0
         if warnings and c.stderr.strip():   # a short shows rustc's warnings, as the command on screen would print them
-            out = c.stderr.replace(str(rs), "main.rs").rstrip() + "\n\n" + out
+            out = c.stderr.replace(str(rs), shown).rstrip() + "\n\n" + out
     if ok == want_error:
         sys.exit(f"narrate: a {{run{' error' if want_error else ''}}} expected {'an error' if want_error else 'a clean run'}, but got:\n{out}\n--- source ---\n{src}")
     return {"out": out, "ok": ok}
@@ -447,7 +447,7 @@ def main():
                 current = c["arg"].split()[0]
                 if current not in meta["code"]: problems.append(f"{{code {current}}}: no ```rust @{current} block")
             if c["op"] == "run" and current in meta["code"] and current not in runs:
-                runs[current] = rust(meta["code"][current], build, c["arg"].strip() == "error", compile_cmd, short)
+                runs[current] = rust(meta["code"][current], build, c["arg"].strip() == "error", compile_cmd, short, meta.get("file") or lang.get("file", "main.rs"))
     if problems and not a.no_lint: sys.exit("script lint failed:\n  " + "\n  ".join(problems))
     ear = ear_lint(segs)
     if ear: print(f"{name}: {len(ear)} sentences written for the eye, not the ear (write-video-script voice.md):\n  " + "\n  ".join(ear), flush=True)

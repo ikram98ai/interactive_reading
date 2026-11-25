@@ -641,18 +641,22 @@ RB-INSERT-FIXUP(T, z)
 </script>
 <script type="text/x-rust" id="rs-s4">
 // RB-INSERT on an arena: every node lives in one Vec, links are indices.
-// Index 0 is the sentinel T.nil, so a missing child is just the number 0.
+// Index 0 is the sentinel T.nil, so a missing child is just NodeId(0).
 #[derive(Clone, Copy, PartialEq, Debug)] // derive writes these impls for us
 enum Color { Red, Black }
 use Color::{Black, Red};
 
+// A newtype: an index into nodes that can't be mixed up with a key
+#[derive(Clone, Copy, PartialEq)]
+struct NodeId(usize);
+
 #[derive(Clone, Copy)] // Copy: `let n = t.nodes[i]` copies, borrows nothing
-struct Node { key: i32, color: Color, p: usize, left: usize, right: usize }
+struct Node { key: i32, color: Color, p: NodeId, left: NodeId, right: NodeId }
 
 #[derive(Clone)] // .clone() copies the whole Vec into a new buffer
-struct Tree { nodes: Vec<Node>, root: usize }
+struct Tree { nodes: Vec<Node>, root: NodeId }
 
-const NIL: usize = 0;
+const NIL: NodeId = NodeId(0);
 
 // What the checker can find; each variant carries its own data.
 enum Broken { RedRoot(i32), RedRed(i32, i32), BlackHeight(i32, u32, u32) }
@@ -664,41 +668,41 @@ impl Tree {
     }
     // A new node z, key filled in. push may move the buffer; the index
     // stays valid, while a &Node held across the push would not compile.
-    fn alloc(&mut self, key: i32) -> usize {
+    fn alloc(&mut self, key: i32) -> NodeId {
         let n = Node { key, color: Black, p: NIL, left: NIL, right: NIL };
         self.nodes.push(n);
-        self.nodes.len() - 1
+        NodeId(self.nodes.len() - 1)
     }
-    fn rb_insert(&mut self, z: usize) -> usize {
+    fn rb_insert(&mut self, z: NodeId) -> NodeId {
         let mut x = self.root; // node being compared with z
         let mut y = NIL; // y will be parent of z
-        let zk = self.nodes[z].key; // i32 is Copy: read it out once
+        let zk = self.nodes[z.0].key; // i32 is Copy: read it out once
         while x != NIL {
             y = x;
-            if zk < self.nodes[x].key {
-                x = self.nodes[x].left;
+            if zk < self.nodes[x.0].key {
+                x = self.nodes[x.0].left;
             } else {
-                x = self.nodes[x].right;
+                x = self.nodes[x.0].right;
             }
         }
-        self.nodes[z].p = y;
+        self.nodes[z.0].p = y;
         if y == NIL {
             self.root = z; // tree T was empty
-        } else if zk < self.nodes[y].key {
-            self.nodes[y].left = z;
+        } else if zk < self.nodes[y.0].key {
+            self.nodes[y.0].left = z;
         } else {
-            self.nodes[y].right = z;
+            self.nodes[y.0].right = z;
         }
-        self.nodes[z].left = NIL;
-        self.nodes[z].right = NIL;
-        self.nodes[z].color = Red;
+        self.nodes[z.0].left = NIL;
+        self.nodes[z.0].right = NIL;
+        self.nodes[z.0].color = Red;
         z // the caller runs RB-INSERT-FIXUP(T, z): the next scene
     }
     // bh(x), the black nodes below x on every path to a leaf, or the fault
-    fn bh(&self, x: usize) -> Result<u32, Broken> {
+    fn bh(&self, x: NodeId) -> Result<u32, Broken> {
         if x == NIL { return Ok(0); }
-        let n = self.nodes[x];
-        let (l, r) = (self.nodes[n.left], self.nodes[n.right]);
+        let n = self.nodes[x.0];
+        let (l, r) = (self.nodes[n.left.0], self.nodes[n.right.0]);
         if n.color == Red && (l.color == Red || r.color == Red) {
             let child = if l.color == Red { l.key } else { r.key };
             return Err(Broken::RedRed(n.key, child));
@@ -712,7 +716,7 @@ impl Tree {
         Ok(left)
     }
     fn check(&self) -> String {
-        let r = self.nodes[self.root];
+        let r = self.nodes[self.root.0];
         let res = if r.color == Red { Err(Broken::RedRoot(r.key)) }
                   else { self.bh(self.root) };
         match res { // match takes the enum apart, field by field
@@ -731,7 +735,7 @@ fn main() {
     for k in [11, 2, 14, 1, 7, 15, 5, 8] { // arrays iterate by value
         let z = book.alloc(k);
         book.rb_insert(z);
-        if [11, 14, 1, 7].contains(&k) { book.nodes[z].color = Black; }
+        if [11, 14, 1, 7].contains(&k) { book.nodes[z.0].color = Black; }
     }
     let size = std::mem::size_of::<Node>();
     let (len, cap) = (book.nodes.len(), book.nodes.capacity());
@@ -740,7 +744,7 @@ fn main() {
         let mut t = book.clone();
         let z = t.alloc(k);
         t.rb_insert(z);
-        if black { t.nodes[z].color = Black; } // Exercise 13.3-1
+        if black { t.nodes[z.0].color = Black; } // Exercise 13.3-1
         let how = if black { "black" } else { "red" };
         println!("insert {k} {how}: {}", t.check());
     }
@@ -3023,10 +3027,10 @@ K.page(13);
   const RS = src("rs-s4"), RL = (needle) => RS.split("\n").findIndex((l) => l.includes(needle)) + 1;
   const L = {
     alloc: RL("self.nodes.push(n)"), hdr: RL("fn rb_insert"), x: RL("let mut x = self.root"), y: RL("let mut y = NIL"), wh: RL("while x != NIL"),
-    yx: RL("y = x;"), lt: RL("if zk < self.nodes[x].key"), xl: RL("x = self.nodes[x].left"), xr: RL("x = self.nodes[x].right"),
-    zp: RL("self.nodes[z].p = y"), ynil: RL("if y == NIL"), root: RL("self.root = z"), elif: RL("} else if zk < self.nodes[y].key"),
-    yl: RL("self.nodes[y].left = z"), yr: RL("self.nodes[y].right = z"), zl: RL("self.nodes[z].left = NIL"), zr: RL("self.nodes[z].right = NIL"),
-    red: RL("self.nodes[z].color = Red"), fix: RL("z // the caller runs"), black: RL("Exercise 13.3-1"),
+    yx: RL("y = x;"), lt: RL("if zk < self.nodes[x.0].key"), xl: RL("x = self.nodes[x.0].left"), xr: RL("x = self.nodes[x.0].right"),
+    zp: RL("self.nodes[z.0].p = y"), ynil: RL("if y == NIL"), root: RL("self.root = z"), elif: RL("} else if zk < self.nodes[y.0].key"),
+    yl: RL("self.nodes[y.0].left = z"), yr: RL("self.nodes[y.0].right = z"), zl: RL("self.nodes[z.0].left = NIL"), zr: RL("self.nodes[z.0].right = NIL"),
+    red: RL("self.nodes[z.0].color = Red"), fix: RL("z // the caller runs"), black: RL("Exercise 13.3-1"),
   };
   const cv = code("#s4-code", { files: [{ name: "RB-INSERT", src: src("ps-s4"), rs: { name: "rb_insert.rs", src: RS, out: src("rs-s4-out"),
     map: { "RB-INSERT": L.hdr, 1: L.x, 2: L.y, 3: L.wh, 4: L.yx, 5: L.lt, 6: L.xl, 7: [L.xr - 1, L.xr], 8: L.zp, 9: L.ynil, 10: L.root, 11: L.elif, 12: L.yl, 13: [L.yr - 1, L.yr], 14: L.zl, 15: L.zr, 16: L.red, 17: L.fix } } }] });
@@ -3335,25 +3339,25 @@ K.page(13);
     }
     const frames = [{ fn: "main", vars: [
       { n: "t.nodes", t: "Vec<Node>", v: `len ${len} · cap ${t.cap}`, ptr: "buf" },
-      { n: "t.root", t: "usize", v: t.root },
+      { n: "t.root", t: "NodeId", v: t.root },
     ] }];
     if (e && e.kind === "alloc") frames.push({ fn: "alloc(&mut self, key)", top: true, vars: [{ n: "key", t: "i32", v: e.key, hot: true }] });
     if (inCall) {
       const v = (val, ok) => (ok && val != null ? val : "–");
-      const vars = [{ n: "z", t: "usize", v: e.z, ptr: "buf:" + e.z, weak: true }];
-      vars.push({ n: "x", t: "usize", v: v(e.x, true), ptr: e.x != null ? "buf:" + e.x : null, weak: true, hot: [1, 6, 7].includes(e.line) });
-      vars.push({ n: "y", t: "usize", v: v(e.y, e.y != null), ptr: e.y != null && e.line >= 2 ? "buf:" + e.y : null, weak: true, hot: [2, 4].includes(e.line) });
+      const vars = [{ n: "z", t: "NodeId", v: e.z, ptr: "buf:" + e.z, weak: true }];
+      vars.push({ n: "x", t: "NodeId", v: v(e.x, true), ptr: e.x != null ? "buf:" + e.x : null, weak: true, hot: [1, 6, 7].includes(e.line) });
+      vars.push({ n: "y", t: "NodeId", v: v(e.y, e.y != null), ptr: e.y != null && e.line >= 2 ? "buf:" + e.y : null, weak: true, hot: [2, 4].includes(e.line) });
       frames.push({ fn: "rb_insert(&mut self, z)", top: true, vars });
     }
     let note;
-    if (!e) note = `The arena: one <code>Vec&lt;Node&gt;</code>, 32 bytes per node. Index 0 is T.nil, so a missing child is the number 0.`;
+    if (!e) note = `The arena: one <code>Vec&lt;Node&gt;</code>, 32 bytes per node. Index 0 is T.nil, so a missing child is <code>NodeId(0)</code>.`;
     else if (e.kind === "alloc") note = e.grew
       ? `The buffer was full, so <code>push</code> moved every node into a new buffer with room for ${t.cap}. Indices don't care: node 3 is still node 3. A <code>&amp;Node</code> kept across the push would not compile.`
       : `<code>push</code> puts z at the end, index ${e.z}. Nothing else moves; there is still room for ${t.cap - len} more.`;
     else if (e.kind === "fix") note = "The fixup only rewrites colours and the <code>p</code>, <code>left</code>, <code>right</code> indices. Every node keeps its slot in the buffer.";
     else if (e.kind === "undo") note = "The what-if tree is dropped; the next key goes into the tree as it was.";
-    else if (e.line >= 8) note = "Linking z is writing small numbers: <code>nodes[z].p = y</code> and <code>nodes[y].left</code> or <code>.right = z</code>.";
-    else note = "<code>x</code>, <code>y</code> and <code>z</code> are plain <code>usize</code> indices on the stack (dashed). The walk copies one index at a time out of the buffer.";
+    else if (e.line >= 8) note = "Linking z is writing small numbers: <code>nodes[z.0].p = y</code> and <code>nodes[y.0].left</code> or <code>.right = z</code>.";
+    else note = "<code>x</code>, <code>y</code> and <code>z</code> are <code>NodeId</code>s on the stack (dashed), each one a <code>usize</code> index. The walk copies one index at a time out of the buffer.";
     m.set({ note, stack: frames, heap: [{ id: "buf", label: `t.nodes · ${t.cap} slots × 32 B`, cells: cellsV, marks }] });
   }
 

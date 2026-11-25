@@ -11,15 +11,23 @@
    A section video (CLRS: one per section, videos/<book>/chNN/sMM/) is --long-form chNN/sMM: named chNN-sMM-<section>.mp4
    as narrate.py names it, titled by videos.section (title, intro, playlist, time) and book.json sections.
 
-   studio_upload.js videos/shorts/<book> --short NNN|all [--plan]
-   Uploads a Short (NNN-<slug>/NNN-<slug>.mp4, vertical and at most 3:00) and leaves it a draft in Studio: never scheduled,
-   never published. The title is the script's front-matter title, the description the one line in description.txt beside
+   studio_upload.js videos/shorts/<book> --short NNN|NNN,NNN,…|all [--day YYYY-MM-DD [--time HH:MM]] [--plan]
+   Uploads a Short (NNN-<slug>/NNN-<slug>.mp4, vertical and at most 3:00) and leaves it a draft in Studio. With --day it is
+   scheduled instead: the Shorts named go public one a day, in the order given, from --day at --time (default
+   videos.shorts.time), and a Short already up as a draft is opened and scheduled in place (title, description and
+   playlist set again; captions kept), never uploaded twice. The title is the script's front-matter title, the description the one line in description.txt beside
    it (it must not name the book or a channel), plus the .srt captions, "not made for kids", English and the playlist
    videos.shorts.playlist. No thumbnail: a Short's cover is a frame chosen in Studio. The same gates as a long form:
    judgement.py check, QA with no FAIL, nothing already up. It reopens each draft to read its title back.
    --again uploads a Short that's already up once more, as a new draft with the same title and description (a re-recorded
    MP4): the earlier upload is left as it is in Studio, its record moves to <video>.earlier-<id>.youtube.json, and the new
    record names it (`earlier`). A rerun resumes the new upload and never makes a third.
+
+   studio_upload.js videos/shorts/<book> --draft <video id> --title "<its exact Studio title>" --description <file>
+       --day YYYY-MM-DD [--time HH:MM] [--srt <file>] [--plan]
+   Schedules a Short that is up as a draft but has no folder here (its files lost): reads its title back first, sets the
+   description and playlist, adds the .srt only if the draft has no subtitles, schedules it and reads the schedule back.
+   Its record goes to videos/shorts/<book>/drafts/<id>.youtube.json.
 
    studio_upload.js <book dir> --long-form chNN[/sMM] --thumb [--plan]
    Makes the video's thumbnail again (thumb.js) and sets it on the video already up, on its Studio edit page, after reading
@@ -41,7 +49,7 @@ const { chromium } = require("playwright-core");
 
 const args = process.argv.slice(2);
 const opt = (k) => { const i = args.indexOf(k); return i < 0 ? null : args[i + 1]; };
-const VALUED = ["--from", "--to", "--limit", "--long-form", "--day", "--replaces", "--delete", "--title", "--short"];
+const VALUED = ["--from", "--to", "--limit", "--long-form", "--day", "--replaces", "--delete", "--title", "--short", "--time", "--lane", "--profile", "--draft", "--description", "--srt"];
 const BOOK = path.resolve(args.find((a, i) => !a.startsWith("--") && !VALUED.includes(args[i - 1])) || "videos/clrs");
 const ROOT = path.join(__dirname, "../..");
 const PROFILE = JSON.parse(fs.readFileSync(path.join(ROOT, "books", path.basename(BOOK), "book.json"), "utf8"));
@@ -90,9 +98,10 @@ const LONG_TIME = V.long_form.time;
 function slot(day, time = LONG_TIME) {
   const [y, mo, d] = day.split("-").map(Number), [h, mi] = hm(time);
   const utc = new Date(Date.UTC(y, mo - 1, d, h - UTC_OFFSET, mi));
-  return { date: `${MONTHS[mo - 1]} ${d}, ${y}`, clock: `${((h + 11) % 12) + 1}:${String(mi).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`,
+  return { longDate: `${new Date(Date.UTC(y, mo - 1, d)).toLocaleDateString("en-US", { month: "long", timeZone: "UTC" })} ${d}, ${y}`, date: `${MONTHS[mo - 1]} ${d}, ${y}`, clock: `${((h + 11) % 12) + 1}:${String(mi).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`,
     publish_at: utc.toISOString().replace(".000", ""), utc };
 }
+const addDays = (day, n) => { const [y, mo, d] = day.split("-").map(Number); return new Date(Date.UTC(y, mo - 1, d + n)).toISOString().slice(0, 10); };
 
 // YouTube makes chapters from description timestamps only if the first is 0:00, there are at least three, and each lasts 10 s.
 function chapterLines(file) {
@@ -212,12 +221,14 @@ function printLong(it) {
 function shortDirs(arg) {
   const all = fs.readdirSync(BOOK).filter((d) => /^\d{3}-[\w-]+$/.test(d) && fs.statSync(path.join(BOOK, d)).isDirectory()).sort();
   if (arg === "all") return all;
-  const hit = all.filter((d) => d === arg || d.startsWith(`${arg}-`));
-  if (hit.length !== 1) throw new Error(`--short takes a Short's number (such as 007), its folder, or all; ${arg} matches ${hit.length}`);
-  return hit;
+  return arg.split(",").map((a) => a.trim()).filter(Boolean).map((a) => {
+    const hit = all.filter((d) => d === a || d.startsWith(`${a}-`));
+    if (hit.length !== 1) throw new Error(`--short takes a Short's number (such as 007), its folder, a comma list of them, or all; ${a} matches ${hit.length}`);
+    return hit[0];
+  });
 }
 
-function shortPlan(dir) {
+function shortPlan(dir, index = 0) {
   const folder = path.join(BOOK, dir), f = (ext) => path.join(folder, dir + ext);
   const it = { id: dir, kind: "short", short: true, folder, stem: dir, video: f(".mp4"), srt: f(".srt"), record: f(".youtube.json"),
     qaFile: f(".qa.json"), script: path.join(folder, "script.md"), descFile: path.join(folder, "description.txt"),
@@ -234,6 +245,17 @@ function shortPlan(dir) {
   else if (it.title.length > 100) P(`title is ${it.title.length} characters (Studio allows 100)`);
   it.description = fs.existsSync(it.descFile) ? fs.readFileSync(it.descFile, "utf8").trim() : "";
   if (fs.existsSync(it.descFile) && !it.description) P("description.txt is empty");
+  if (/https?:\/\/|www\.|youtu\.?be|\.com\b/i.test(it.description)) P("description.txt has a link (a Short's description has none)");
+  if (DAY) { // scheduled: one a day from --day, in the order the Shorts were named
+    const time = opt("--time") || (V.shorts || {}).time;
+    if (!/^\d{4}-\d\d-\d\d$/.test(DAY)) P(`--day takes YYYY-MM-DD, not ${DAY}`);
+    else if (!/^\d\d:\d\d$/.test(time || "")) P("no --time, and books/<book>/book.json has no videos.shorts.time");
+    else {
+      it.day = addDays(DAY, index);
+      Object.assign(it, slot(it.day, time));
+      if (it.utc < new Date(Date.now() + 15 * 60000)) P(`${it.day} at ${time} has passed or is under 15 minutes away`);
+    }
+  }
   if (it.description.length > 5000 || /[<>]/.test(it.description)) P("the description is one Studio would reject (over 5000 characters, or < >)");
   // a Short stands alone: it never names the book, and never a channel (videos/never-say.txt, local only)
   const never = path.join(ROOT, "videos/never-say.txt");
@@ -285,7 +307,13 @@ function shortPlan(dir) {
     it.again = earlier.video_id; delete it.resume; prior = null;
     N(`uploads a new draft; the earlier upload https://youtu.be/${earlier.video_id} (${earlier.status || (earlier.incomplete ? "unfinished" : "uploaded")}) stays as it is`);
   }
-  if (prior) { it.already = prior; P(`already up: https://youtu.be/${prior.video_id} (${prior.status || "uploaded"})`); }
+  if (prior && it.publish_at && prior.status === "draft" && !prior.incomplete) {
+    it.reschedule = prior.video_id; prior = null; // a draft already up: open it and schedule it in place
+    N(`schedules the draft already up, https://youtu.be/${it.reschedule}, in place`);
+  }
+  if (prior && it.publish_at && prior.status === "scheduled" && prior.publish_at !== it.publish_at)
+    P(`already scheduled for ${prior.publish_at}, not ${it.publish_at}: change it in Studio, or name the Shorts so the days line up`);
+  if (prior) { it.already = prior; if (!it.publish_at || prior.status !== "scheduled") P(`already up: https://youtu.be/${prior.video_id} (${prior.status || "uploaded"})`); }
   return it;
 }
 
@@ -293,7 +321,7 @@ function printShort(it) {
   console.log(`${it.id}`);
   console.log(`  title      ${it.title || "?"}  (${(it.title || "").length}/100)`);
   console.log(`  playlist   ${it.playlist || "?"}`);
-  console.log(`  publish    never: left a draft in Studio`);
+  console.log(`  publish    ${it.publish_at ? `${it.day} ${it.clock} ${V.schedule.timezone} (${it.publish_at})${it.already ? ": already scheduled" : ""}` : "never: left a draft in Studio"}`);
   console.log(`  files      ${it.stem}.mp4 (${it.size || "?"}, ${it.duration ? it.duration.toFixed(1) + " s" : "?"}), .srt; no thumbnail (a Short's cover is a frame chosen in Studio)`);
   if (it.judgement) console.log(`  judgement  ${it.judgement}`);
   if (!it.qa) console.log("  QA         not run on this MP4 yet: the upload run runs it first");
@@ -387,7 +415,8 @@ async function setPlaylist(page, dlg, name) {
   if (!(await picked(box)).includes(name)) throw new Error(`playlist reads back as "${(await picked(box)).join(", ")}", wanted "${name}"`);
 }
 
-const launch = () => chromium.launchPersistentContext(path.join(os.homedir(), ".config/interactive-reading/chrome-studio"), {
+// --profile <dir>: another copy of the signed-in profile, so two or three runs (--lane) can drive Studio at once
+const launch = () => chromium.launchPersistentContext(opt("--profile") ? path.resolve(opt("--profile")) : path.join(os.homedir(), ".config/interactive-reading/chrome-studio"), {
   channel: "chrome", headless: false, viewport: null,
   ignoreDefaultArgs: ["--enable-automation"], args: ["--disable-blink-features=AutomationControlled", "--window-size=1400,1000"],
 });
@@ -441,6 +470,15 @@ async function openDraft(page, id) {
 
 async function upload(page, it) {
   let rec = fs.existsSync(it.record) ? JSON.parse(fs.readFileSync(it.record, "utf8")) : null;
+  if (rec && it.short && it.publish_at && rec.incomplete) { // a run may have stopped after Studio scheduled it
+    const scheduled = await checkScheduled(page.context(), rec.video_id, it).then(() => true, () => false);
+    if (scheduled) {
+      Object.assign(rec, { title: it.title, meta: it.meta, captions: "studio", publish_at: it.publish_at, playlist: it.playlist, status: "scheduled", done: true,
+        uploaded: rec.uploaded || new Date().toISOString().replace(/\.\d+Z$/, "Z") });
+      delete rec.incomplete; fs.writeFileSync(it.record, JSON.stringify(rec, null, 2) + "\n");
+      return rec.video_id;
+    }
+  }
   if (rec) await openDraft(page, rec.video_id); // uploaded before, but not finished
   else if (!(await openNew(page, it))) return "limit";
   const dlg = page.locator(DIALOG);
@@ -473,16 +511,19 @@ async function upload(page, it) {
   await dlg.locator("#toggle-button").click(); await sleep(1500);
   const lang = dlg.locator("ytcp-form-language-input").first();
   await lang.scrollIntoViewIfNeeded();
-  if (!/English/.test(await lang.innerText())) {
-    await lang.click(); await sleep(1200);
-    await page.locator("tp-yt-paper-item").filter({ hasText: /^\s*English\s*$/ }).first().click(); await sleep(1200);
-    if (!/English/.test(await lang.innerText())) throw new Error("video language did not set");
+  for (let i = 0; i < 3 && !/English/.test(await lang.innerText()); i++) { // the list can open empty while it loads: close and try again
+    await lang.click(); await sleep(2500);
+    const en = page.locator("tp-yt-paper-item").filter({ hasText: /^\s*English\s*$/ }).first();
+    if (await en.waitFor({ state: "visible", timeout: 10000 }).then(() => true, () => false)) { await en.click(); await sleep(1200); }
+    else { await page.keyboard.press("Escape"); await sleep(1500); }
   }
+  if (!/English/.test(await lang.innerText())) throw new Error("video language did not set");
   await shot(page, it, "details");
 
   await dlg.locator("#step-badge-1").click(); await sleep(2500); // Video elements
-  await addCaptions(page, dlg, it);
-  if (it.short) return saveDraft(page, dlg, it, rec);
+  const hasSubs = it.reschedule && /edit/i.test(await dlg.locator("#subtitles-button").innerText().catch(() => ""));
+  if (!hasSubs) { if (!it.srt || !fs.existsSync(it.srt)) throw new Error("the draft has no subtitles and there is no .srt to add"); await addCaptions(page, dlg, it); } // a draft scheduled in place keeps its captions
+  if (it.short && !it.publish_at) return saveDraft(page, dlg, it, rec);
   await dlg.locator("#step-badge-3").click(); await sleep(2500); // Visibility
   await shot(page, it, "visibility-0");
 
@@ -526,16 +567,46 @@ async function upload(page, it) {
   await shot(page, it, "done");
   // Studio's confirmation: "Video scheduled ... will be set to public on <date> at <time>", or "Video published"
   // (publishing now, Studio may just close the dialog: that counts too, and the run is checked on the video's page later)
-  const confirmed = page.getByText(it.now ? /video published|published/i : /will be set to public on/i).first();
+  // (a draft scheduled in place can answer "Video published" instead: for a Short, either counts, and the schedule is then
+  // read back from the video's own page below)
+  const confirmed = page.getByText(it.now ? /video published|published/i : it.short ? /will be set to public on|video published/i : /will be set to public on/i).first();
   await Promise.race([confirmed.waitFor({ timeout: 90000 }), ...(it.now ? [dlg.waitFor({ state: "hidden", timeout: 90000 })] : [])])
     .catch(() => { throw new Error(`Studio did not confirm the ${it.now ? "publish" : "schedule"}`); });
-  Object.assign(rec, { title: it.title, meta: it.meta, captions: "studio", thumbnail: THUMB(it) },
+  Object.assign(rec, { title: it.title, meta: it.meta, captions: "studio" }, it.short ? {} : { thumbnail: THUMB(it) },
+    it.short && !rec.uploaded ? { uploaded: new Date().toISOString().replace(/\.\d+Z$/, "Z") } : {},
     it.now ? { visibility: "public", published: new Date().toISOString().replace(/\.\d+Z$/, "Z") } : { publish_at: it.publish_at });
   Object.assign(rec, { playlist: it.playlist, status: it.now ? "public" : "scheduled", done: true }, it.replaces ? { replaces: it.replaces } : {});
+  const said = (await page.locator("tp-yt-paper-dialog, ytcp-dialog, [role=dialog]").filter({ hasText: /will be set to public on|video published/i }).last().innerText().catch(() => "")).replace(/\s+/g, " ");
+  await page.keyboard.press("Escape").catch(() => {});
+  if (it.short && !it.now && !said.includes(`will be set to public on ${it.longDate} at ${it.clock}`)) await checkScheduled(page.context(), rec.video_id, it);
   delete rec.incomplete;
   fs.writeFileSync(it.record, JSON.stringify(rec, null, 2) + "\n");
-  await page.keyboard.press("Escape").catch(() => {});
   return rec.video_id;
+}
+
+// Reads a scheduled video's visibility, date and time back from its edit page, in a fresh tab (a tab Studio has already
+// shown a dialog in can keep that dialog's old date in its page).
+async function checkScheduled(ctx, id, it) {
+  const tab = await ctx.newPage();
+  tab.on("dialog", (d) => d.dismiss().catch(() => {}));
+  try {
+    await tab.goto(`https://studio.youtube.com/video/${id}/edit`, { waitUntil: "domcontentloaded" });
+    let box, vis = "";
+    for (let i = 0; i < 20; i++) { // while Studio processes a new upload the visibility reads "Pending"
+      if (i) { await sleep(30000); await tab.reload({ waitUntil: "domcontentloaded" }); }
+      box = tab.locator("ytcp-video-metadata-visibility").first();
+      await box.waitFor({ timeout: 60000 }); await sleep(3000);
+      if (await tab.getByRole("button", { name: /edit draft/i }).first().isVisible().catch(() => false)) throw new Error(`${id} is still a draft`);
+      vis = (await box.innerText()).replace(/\s+/g, " ");
+      if (!/Pending/i.test(vis)) break;
+    }
+    if (!/Scheduled/i.test(vis)) throw new Error(`${id} reads back as "${vis.trim()}", not Scheduled`);
+    await box.click(); await sleep(2500);
+    const date = (await tab.locator("#datepicker-trigger").first().innerText()).trim();
+    const clock = await tab.locator("#time-of-day-container input").first().inputValue();
+    if (!date.includes(it.date) || clock.replace(/\s/g, "") !== it.clock.replace(/\s/g, ""))
+      throw new Error(`${id} is scheduled for ${date} ${clock}, wanted ${it.date} ${it.clock}`);
+  } finally { await tab.close({ runBeforeUnload: false }).catch(() => {}); }
 }
 
 // A Short is left a draft: the file finishes uploading, the dialog (which saves as it goes) is closed without choosing a
@@ -647,7 +718,7 @@ async function deleteVideo(page, id, title) {
   const box = dlg.locator("ytcp-checkbox-lit, tp-yt-paper-checkbox, [role=checkbox]").first();
   if (await box.isVisible().catch(() => false)) { await box.click(); await sleep(600); }
   await shot(page, { id: `delete/${id}` }, "confirm");
-  await dlg.getByRole("button", { name: /^\s*Delete( forever)?\s*$/i }).last().click({ timeout: 15000 });
+  await dlg.getByRole("button", { name: /^\s*Delete( forever| draft video)?\s*$/i }).last().click({ timeout: 15000 }); // a draft's says "Delete draft video"
   await sleep(6000);
   await shot(page, { id: `delete/${id}` }, "after");
   // the video's Studio page should now be gone
@@ -676,14 +747,57 @@ async function deleteVideo(page, id, title) {
     } finally { await ctx.close(); }
     return;
   }
+  if (opt("--draft")) {
+    const id = opt("--draft"), title = opt("--title"), descFile = opt("--description"), time = opt("--time") || (V.shorts || {}).time;
+    const problems = [];
+    if (!/^[\w-]{11}$/.test(id || "")) problems.push("--draft takes an 11-character video id");
+    if (!title) problems.push("--title: the draft's exact title in Studio");
+    const description = descFile && fs.existsSync(descFile) ? fs.readFileSync(descFile, "utf8").trim() : "";
+    if (!description) problems.push("--description: a file with the description");
+    if (/https?:\/\/|www\.|youtu\.?be|\.com\b/i.test(description)) problems.push("the description has a link");
+    if (description.length > 5000 || /[<>]/.test(description)) problems.push("the description is one Studio would reject (over 5000 characters, or < >)");
+    if (!DAY || !/^\d{4}-\d\d-\d\d$/.test(DAY)) problems.push("--day YYYY-MM-DD");
+    const dir = path.join(BOOK, "drafts"); fs.mkdirSync(dir, { recursive: true });
+    const it = { id, kind: "short", short: true, title, description, playlist: (V.shorts || {}).playlist, srt: opt("--srt"),
+      record: path.join(dir, `${id}.youtube.json`), reschedule: id, day: DAY, meta: crypto.createHash("sha1").update(title + "\n" + description).digest("hex").slice(0, 12) };
+    if (DAY) Object.assign(it, slot(DAY, time));
+    const prior = fs.existsSync(it.record) ? readJSON(it.record) : null;
+    if (prior && prior.status === "scheduled") problems.push(`already scheduled for ${prior.publish_at}`);
+    console.log(`${id}  ${title}\n  publish    ${it.day} ${it.clock} ${V.schedule.timezone} (${it.publish_at})\n  playlist   ${it.playlist}\n  description\n` + description.split("\n").map((l) => `    | ${l}`).join("\n"));
+    for (const p of problems) console.log(`  PROBLEM: ${p}`);
+    if (PLAN || problems.length) { if (problems.length) process.exitCode = 1; return; }
+    if (!prior) fs.writeFileSync(it.record, JSON.stringify({ video_id: id, title, via: "studio", status: "draft", done: true }, null, 2) + "\n");
+    const ctx = await launch();
+    const page = ctx.pages()[0] || (await ctx.newPage());
+    page.on("dialog", (d) => (d.type() === "beforeunload" ? d.accept() : d.dismiss()).catch(() => {}));
+    try {
+      await openDraft(page, id);
+      const got = (await page.locator(`${DIALOG} #title-textarea #textbox`).innerText()).trim();
+      if (got !== title) throw new Error(`the draft is titled "${got}", not "${title}": not touching it`);
+      await page.locator(`${DIALOG} #ytcp-uploads-dialog-close-button`).first().click().catch(() => {}); await sleep(2000);
+      const r = await upload(page, it);
+      console.log(`  ${id}  scheduled ${it.day} ${it.clock}  ${title}`);
+    } catch (e) {
+      const shotPath = path.join(dir, `${id}-error.png`);
+      await page.screenshot({ path: shotPath }).catch(() => {});
+      console.log(`STOPPED: ${e.message.split("\n")[0]}\n  screenshot: ${shotPath}`);
+      process.exitCode = 1;
+    } finally { await ctx.close(); }
+    return;
+  }
   if (SHORT) {
     let items;
-    try { items = shortDirs(SHORT).map(shortPlan); } catch (e) { console.error(`studio_upload: ${e.message}`); process.exitCode = 2; return; }
+    try { items = shortDirs(SHORT).map((d, i) => shortPlan(d, i)); } catch (e) { console.error(`studio_upload: ${e.message}`); process.exitCode = 2; return; }
     const todo = items.filter((it) => !it.already);
     if (!PLAN) for (const it of todo) if (!it.problems.length && !it.qa) runQA(it); // last, because it takes minutes
     for (const it of items) printShort(it);
-    const ready = todo.filter((it) => !it.problems.length).slice(0, LIMIT), held = todo.filter((it) => it.problems.length);
-    console.log(`\n${items.length - todo.length} already up, ${ready.length} to upload as drafts, ${held.length} held back by a problem`);
+    // --lane k/n: this run takes every nth Short, starting at the kth; each keeps the day its place in the full list gives it
+    const lane = opt("--lane") && opt("--lane").split("/").map(Number);
+    if (lane) items.forEach((it, i) => { it.lane = (i % lane[1]) + 1; });
+    const mine = (it) => !lane || it.lane === lane[0];
+    const ready = todo.filter((it) => !it.problems.length && mine(it)).slice(0, LIMIT), held = todo.filter((it) => it.problems.length);
+    const verb = DAY ? `to schedule (${ready.filter((it) => it.reschedule).length} of them drafts already up, scheduled in place)` : "to upload as drafts";
+    console.log(`\n${items.length - todo.length} already up, ${ready.length} ${verb}, ${held.length} held back by a problem`);
     if (PLAN) { if (held.length) process.exitCode = 1; return; }
     if (!ready.length) { if (held.length) process.exitCode = 1; return; }
     const ctx = await launch();
@@ -698,9 +812,11 @@ async function deleteVideo(page, id, title) {
           const to = path.join(it.folder, `${it.stem}.earlier-${it.again}.youtube.json`);
           fs.renameSync(it.record, to); console.log(`  ${it.id}: the earlier record is now ${path.basename(to)}`);
         }
+        const now = fs.existsSync(it.record) ? readJSON(it.record) : null; // another lane may have done it since the plan
+        if (now && now.done && (now.status === "scheduled" || (!it.publish_at && now.status === "draft")) && !it.again) { console.log(`  ${it.id}  already ${now.status}, skipped`); n++; continue; }
         const r = await upload(page, it);
         if (r === "limit") { console.log("STOPPED: Studio's daily upload limit is reached; rerun later"); process.exitCode = 1; break; }
-        console.log(`  ${it.id}  draft https://youtu.be/${r}  ${it.title}  (${++n}/${ready.length})`);
+        console.log(`  ${it.id}  ${it.publish_at ? `scheduled ${it.day} ${it.clock}` : "draft"} https://youtu.be/${r}  ${it.title}  (${++n}/${ready.length})`);
       }
       if (n) console.log(`  commit the records: git -C videos add ${path.relative(path.join(ROOT, "videos"), BOOK)}/*/*.youtube.json && git -C videos commit`);
     } catch (e) {

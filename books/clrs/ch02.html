@@ -1132,46 +1132,60 @@ MERGE(A, p, q, r)
 <script type="text/x-rust" id="rs-s9">
 // MERGE-SORT on a slice: `a` plays the book's A[p : r].
 fn merge_sort(a: &mut [i32]) {
-    if a.len() <= 1 {
+    let n = a.len();
+    if n <= 1 {
         return; // zero or one element: already sorted
     }
-    let q = (a.len() + 1) / 2; // the left half gets ⌈n/2⌉ items
+    let q = (n + 1) / 2; // the left half gets ⌈n/2⌉ items
     // Each call borrows one half for as long as it runs; once it returns,
     // the next line can borrow the other half, and merge can use all of a.
     merge_sort(&mut a[..q]); // recursively sort a[..q]
     merge_sort(&mut a[q..]); // recursively sort a[q..]
-    merge(a, q); // merge the two sorted halves
+    merge(a, 0, q - 1, n - 1); // merge a[0..=q-1] and a[q..=n-1]
 }
 
-// Merge the sorted runs a[..q] and a[q..] (scene 2.3.1 has the book's MERGE).
-fn merge(a: &mut [i32], q: usize) {
-    let (left, right) = (a[..q].to_vec(), a[q..].to_vec());
-    let (mut i, mut j) = (0, 0);
-    for k in 0..a.len() {
-        if j == right.len() || (i < left.len() && left[i] <= right[j]) {
+// MERGE (scene 2.3.1): the sorted runs a[p..=q] and a[q + 1..=r] become one.
+fn merge(
+    a: &mut [i32],
+    p: usize,
+    q: usize,
+    r: usize,
+) {
+    let n_l = q - p + 1;
+    let n_r = r - q;
+    let left = a[p..=q].to_vec();
+    let right = a[q + 1..=r].to_vec();
+    let (mut i, mut j, mut k) = (0, 0, p);
+    while i < n_l && j < n_r {
+        if left[i] <= right[j] {
             a[k] = left[i];
             i += 1;
         } else {
             a[k] = right[j];
             j += 1;
         }
+        k += 1;
     }
-    println!("merged {:?}", a);
+    while i < n_l {
+        a[k] = left[i];
+        i += 1;
+        k += 1;
+    }
+    while j < n_r {
+        a[k] = right[j];
+        j += 1;
+        k += 1;
+    }
 }
 
 fn main() {
     let mut v = vec![12, 3, 7, 9, 14, 6, 11, 2]; // Figure 2.4
     merge_sort(&mut v);
+    println!("{:?}", v);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s9-out">
-merged [3, 12]
-merged [7, 9]
-merged [3, 7, 9, 12]
-merged [6, 14]
-merged [2, 11]
-merged [2, 6, 11, 14]
-merged [2, 3, 6, 7, 9, 11, 12, 14]
+[2, 3, 6, 7, 9, 11, 12, 14]
 </script>
   </section>
 
@@ -1521,7 +1535,7 @@ for i = 1 to n − 1
 fn bubblesort(a: &mut [i32]) -> (u32, u32) {
     let n = a.len();
     let (mut cmps, mut swaps) = (0, 0);
-    for i in 0..n - 1 { // usize: n - 1 would panic (underflow) if n == 0
+    for i in 0..n.saturating_sub(1) { // usize: n - 1 panics if n == 0
         for j in (i + 1..n).rev() { // the book's "n downto i + 1"
             cmps += 1;
             if a[j] < a[j - 1] {
@@ -3766,6 +3780,8 @@ K.page(2);
   }
   const merging = () => st.e && st.e.lines.length && st.e.lines[0] >= 8 || st.done;
   const copied = () => (st.k == null ? 0 : st.k - P);
+  // In Rust, left = a[p..=q].to_vec() finishes before right's to_vec() starts: right appears once its copy begins
+  const rightOn = () => !CODE_LANG.rust || !st.e || st.e.cj != null || st.e.lines[0] >= 8 || st.done;
 
   function render() {
     K.clear(gTop); K.clear(gA); K.clear(gLR); K.clear(gPtr); K.clear(gBadge);
@@ -3792,7 +3808,7 @@ K.page(2);
     cells(g1, { x: AX, y: AY, vals: st.A, cw: CW, ch: CH, gap: GAP, marks: mA, base: rs ? P - 1 : P });
     // L and R
     if (st.alloc) {
-      [["L", st.L, NL, st.i], ["R", st.R, NR, st.j]].forEach(([side, vals, len, idx]) => {
+      [["L", st.L, NL, st.i], ["R", st.R, NR, st.j]].filter(([side]) => side === "L" || rightOn()).forEach(([side, vals, len, idx]) => {
         const x0 = side === "L" ? LX : RX;
         txt(gLR, x0 - 12, LY + CH / 2 + 5, rs ? (side === "L" ? "left" : "right") : side, { anchor: "end", bold: true });
         const mk = {};
@@ -3806,16 +3822,16 @@ K.page(2);
       });
     }
     // pointers k, i, j
-    const ptr = (x, y, label, cls) => {
+    const ptr = (x, y, label, cls, end) => { // end: the label ends at the pointer, so one past R's end stays on the stage
       gPtr.appendChild(s("path", { d: `M${x},${y} l-6,10 h12 Z`, class: cls }));
-      txt(gPtr, x, y + 24, label, { mono: true, size: 12, bold: true });
+      txt(gPtr, end ? x + 6 : x, y + 24, label, { mono: true, size: 12, bold: true, anchor: end ? "end" : undefined });
     };
     if (st.k != null && !st.done) ptr(ax(st.k), AY + CH + 20, `k = ${rs ? st.k - 1 : st.k}`, "sv-fill-sun");
     const ci = e && e.ci != null ? e.ci : null, cj = e && e.cj != null ? e.cj : null;
-    if (st.i != null && !st.done) ptr(px("L", st.i), LY + CH + 6, st.i === NL ? `i = ${NL} = nL` : `i = ${st.i}`, "sv-fill-blue");
-    else if (ci != null) ptr(px("L", ci), LY + CH + 6, `i = ${ci}`, "sv-fill-blue");
-    if (st.j != null && !st.done) ptr(px("R", st.j), LY + CH + 6, st.j === NR ? `j = ${NR} = nR` : `j = ${st.j}`, "sv-fill-blue");
-    else if (cj != null) ptr(px("R", cj), LY + CH + 6, `j = ${cj}`, "sv-fill-blue");
+    if (st.i != null && !st.done) ptr(px("L", st.i), LY + CH + 6, st.i === NL ? `i = ${NL} = ${rs ? "n_l" : "nL"}` : `i = ${st.i}`, "sv-fill-blue");
+    else if (ci != null && !rs) ptr(px("L", ci), LY + CH + 6, `i = ${ci}`, "sv-fill-blue");
+    if (st.j != null && !st.done) ptr(px("R", st.j), LY + CH + 6, st.j === NR ? `j = ${NR} = ${rs ? "n_r" : "nR"}` : `j = ${st.j}`, "sv-fill-blue", st.j === NR);
+    else if (cj != null && !rs) ptr(px("R", cj), LY + CH + 6, `j = ${cj}`, "sv-fill-blue");
     // what the current line decided
     let badge = null, tone = "sv-panel";
     if (e && e.cmp) { badge = rs ? `left[${st.i}] = ${e.cmp.li} <= right[${st.j}] = ${e.cmp.rj}?  ${e.cmp.takeL ? "yes: take left[i]" : "no: take right[j]"}` : `L[${st.i}] = ${e.cmp.li} ≤ R[${st.j}] = ${e.cmp.rj}?  ${e.cmp.takeL ? "yes: take L[i]" : "no: take R[j]"}`; tone = "sv-data-soft"; }
@@ -3861,12 +3877,12 @@ K.page(2);
       const lv = Array.from({ length: NL }, (_, t) => (st.L[t] == null ? "" : st.L[t]));
       const rv = Array.from({ length: NR }, (_, t) => (st.R[t] == null ? "" : st.R[t]));
       heap.push({ id: "Lb", label: done ? "left · freed" : `left · ${NL} × i32`, cells: lv, cw: 26, free: done, x: 0, y: 54 });
-      heap.push({ id: "Rb", label: done ? "right · freed" : `right · ${NR} × i32`, cells: rv, cw: 26, free: done, x: 160, y: 54 });
+      if (rightOn()) heap.push({ id: "Rb", label: done ? "right · freed" : `right · ${NR} × i32`, cells: rv, cw: 26, free: done, x: 160, y: 54 });
     }
     if (started && !done) frames.push({ fn: "merge(&mut a, 8, 11, 15)", top: true, vars: [
       { n: "a", t: "&mut [i32]", v: "len 17", ptr: "buf" },
       { n: "left", t: "Vec<i32>", v: st.alloc ? `len ${NL}` : "–", ptr: st.alloc ? "Lb" : null, hot: e.lines[0] === 3 || e.lines[0] === 4 },
-      { n: "right", t: "Vec<i32>", v: st.alloc ? `len ${NR}` : "–", ptr: st.alloc ? "Rb" : null, hot: e.lines[0] === 3 || e.lines[0] === 6 },
+      { n: "right", t: "Vec<i32>", v: st.alloc && rightOn() ? `len ${NR}` : "–", ptr: st.alloc && rightOn() ? "Rb" : null, hot: e.lines[0] === 3 || e.lines[0] === 6 },
       { n: "(i, j, k)", t: "(usize, usize, usize)", v: st.i == null ? "–" : rsTuple().slice(12), hot: e.lines[0] >= 8 },
     ] });
     m.set({
@@ -3952,7 +3968,7 @@ K.page(2);
   const stCalls = stat("calls after the first", 0), stDepth = stat("stack depth", 0), stMoves = stat("values merged", 0);
   stats.append(stCalls, stDepth, stMoves);
   const cv = code("#s9-code", { files: [{ name: "MERGE-SORT", src: src("ps-s9"), rs: { name: "merge_sort.rs", src: src("rs-s9"), out: src("rs-s9-out"),
-    map: { "MERGE-SORT": 2, 1: 3, 2: 4, 3: 6, 4: 9, 5: 10, 7: 11 } } }] });
+    map: { "MERGE-SORT": 2, 1: 4, 2: 5, 3: 7, 4: 10, 5: 11, 7: 12 } } }] });
   const m = mem("#s9-mem");
   let mode = 0, n = 8, input = FIG.slice(), T, events, st, busy = [];
   const S = session((b) => busy.forEach((x) => (x.disabled = b)));
@@ -3999,8 +4015,9 @@ K.page(2);
       let i = 0, j = 0;
       for (let k = node.p; k <= node.r; k++) {
         const takeL = j >= R.length || (i < L.length && L[i] <= R[j]);
+        const tail = i >= L.length || j >= R.length; // one run is used up: merge's copy-the-rest loops
         const v = takeL ? L[i] : R[j];
-        const from = takeL ? { kid: 0, idx: i } : { kid: 1, idx: j };
+        const from = takeL ? { kid: 0, idx: i, tail } : { kid: 1, idx: j, tail };
         if (takeL) i++; else j++;
         A[k - 1] = v;
         ev.push({ node, lines: [7], move: true, from, k, v, last: k === node.r, calls });
@@ -4061,15 +4078,15 @@ K.page(2);
     const e = st.e;
     if (!e) { cv.clear(); cv.out(null); return; }
     const x = e.node, len = x.r - x.p + 1;
-    if (st.done) { cv.at([]); cv.at([], "on2", false); cv.notes({ 7: ["A[1 : n] sorted", "good"] }, { 32: ["sorted", "good"] }); cv.out(`⟨${st.vals[T.root.id].join(", ")}⟩`); return; }
+    if (st.done) { cv.at([]); cv.at([], "on2", false); cv.notes({ 7: ["A[1 : n] sorted", "good"] }, { 51: ["sorted", "good"] }); cv.out(`⟨${st.vals[T.root.id].join(", ")}⟩`); return; }
     cv.at(e.lines);
-    cv.at(e.move ? [e.from.kid === 0 ? "rs:20" : "rs:23"] : [], "on2", false);
-    const nt = { 1: `p = ${x.p}, r = ${x.r}` }, rt = { 3: `a = v[${x.p - 1}..${x.r}], len ${len}` };
-    if (e.leaf) { nt[2] = ["p = r: return", "good"]; rt[4] = ["len 1: return", "good"]; }
-    if (x.q != null && e.lines[0] >= 3) { nt[3] = `q = ${x.q}`; rt[6] = `q = ${x.q - x.p + 1}`; }
-    if (e.lines[0] === 4) { nt[4] = `→ (A, ${x.p}, ${x.q})`; rt[9] = `a[..q] = v[${x.p - 1}..${x.q}]`; }
-    if (e.lines[0] === 5) { nt[5] = `→ (A, ${x.q + 1}, ${x.r})`; rt[10] = `a[q..] = v[${x.q}..${x.r}]`; }
-    if (e.lines[0] === 7) { nt[7] = `MERGE(A, ${x.p}, ${x.q}, ${x.r})`; rt[11] = `merge(a, ${x.q - x.p + 1})`; }
+    cv.at(e.move ? [e.from.kid === 0 ? (e.from.tail ? "rs:38" : "rs:29") : (e.from.tail ? "rs:43" : "rs:32")] : [], "on2", false);
+    const nt = { 1: `p = ${x.p}, r = ${x.r}` }, rt = { 4: `a = v[${x.p - 1}..${x.r}], n = ${len}` };
+    if (e.leaf) { nt[2] = ["p = r: return", "good"]; rt[5] = ["n = 1: return", "good"]; }
+    if (x.q != null && e.lines[0] >= 3) { nt[3] = `q = ${x.q}`; rt[7] = `q = ${x.q - x.p + 1}`; }
+    if (e.lines[0] === 4) { nt[4] = `→ (A, ${x.p}, ${x.q})`; rt[10] = `a[..q] = v[${x.p - 1}..${x.q}]`; }
+    if (e.lines[0] === 5) { nt[5] = `→ (A, ${x.q + 1}, ${x.r})`; rt[11] = `a[q..] = v[${x.q}..${x.r}]`; }
+    if (e.lines[0] === 7) { nt[7] = `MERGE(A, ${x.p}, ${x.q}, ${x.r})`; rt[12] = `merge(a, 0, ${x.q - x.p}, ${len - 1})`; }
     cv.notes(nt, rt);
     cv.out(null);
   }
@@ -4091,7 +4108,7 @@ K.page(2);
     if (inMerge) {
       const x = e.node, nl = x.q - x.p + 1, nr = x.r - x.q;
       const kidL = st.vals[x.kids[0].id], kidR = st.vals[x.kids[1].id];
-      frames.push({ fn: "merge(a, q)", top: true, vars: [
+      frames.push({ fn: "merge", top: true, vars: [
         { n: "a", t: "&mut [i32]", v: `len ${x.r - x.p + 1}`, ptr: `buf:${x.p - 1}` },
         { n: "left", t: "Vec<i32>", v: `len ${nl}`, ptr: "L" },
         { n: "right", t: "Vec<i32>", v: `len ${nr}`, ptr: "R" },

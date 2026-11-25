@@ -167,7 +167,7 @@ None
         <p class="story">Picture a heap that is perfect except at one spot. Node <i>i</i> holds a value smaller than one of its children, but the two subtrees under it are fine max-heaps on their own. The repair is local: look at <i>A</i>[<i>i</i>] and its two children, find the <b>largest</b> of the three, and if that isn't <i>A</i>[<i>i</i>], swap them. The small value has moved down one level and node <i>i</i> is now fine. The subtree it landed in may be broken, though, so do the same thing there. The value <b>floats down</b> until it is at least as large as its children, or has become a leaf.</p>
         <p class="story">That is <b>MAX-HEAPIFY</b>(<i>A</i>, <i>i</i>). Each call does a constant amount of work and then calls itself on one child, so the total is one step per level: O(<i>h</i>) on a node of height <i>h</i>, at most O(lg <i>n</i>).</p>
         <p class="story">The book states it as the recurrence <i>T</i>(<i>n</i>) ≤ <i>T</i>(2<i>n</i>/3) + Θ(1). Why 2<i>n</i>/3? A child's subtree takes the biggest share of the nodes when the bottom level is exactly half full: then the left subtree is one level deeper than the right one. With 11 nodes the left subtree holds 7, and that share creeps toward 2/3 as the heap grows but never reaches it. Case 2 of the master theorem turns the recurrence into O(lg <i>n</i>).</p>
-        <p class="imagine"><b>Try it:</b> <b>Step</b> through MAX-HEAPIFY(<i>A</i>, 2) from Figure 6.2. The blue node is <i>i</i>, yellow nodes are being compared, the green one is <i>largest</i>, and the shaded triangle is the subtree this call is responsible for. Then try <b>Bottom half full</b>: 11 nodes, and the root's 1 sinks all the way down. Watch the <b>subtree at i</b> counter: 11, then 7, which is under 2·11/3. <b>Nothing to do</b> calls it on a node that is already larger than its children. In <b>Rust</b>, the memory strip grows one stack frame per recursive call, each one borrowing the same buffer.</p>
+        <p class="imagine"><b>Try it:</b> <b>Step</b> through MAX-HEAPIFY(<i>A</i>, 2) from Figure 6.2. The blue node is <i>i</i>, yellow nodes are being compared, the green one is <i>largest</i>, and the shaded triangle is the subtree this call is responsible for. Then try <b>Bottom half full</b>: 11 nodes, and the root's 1 sinks all the way down. Watch the <b>subtree at i</b> counter: 11, then 7, which is under 2·11/3. <b>Nothing to do</b> calls it on a node that is already larger than its children. In <b>Rust</b> it is a loop, as Exercise 6.2-6 asks: one call, one stack frame, and <code>i = largest</code> moves it down a level, borrowing the same buffer the whole time.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -203,35 +203,56 @@ if largest ≠ i
     MAX-HEAPIFY(A, largest)
 </script>
 <script type="text/x-rust" id="rs-s2">
-// MAX-HEAPIFY with 0-based indices; n plays the book's A.heap-size.
-fn max_heapify(a: &mut [i32], i: usize, n: usize) {
-    let l = 2 * i + 1; // LEFT(i)
-    let r = 2 * i + 2; // RIGHT(i)
-    // `if` is an expression: its value goes straight into `largest`
-    let mut largest = if l < n && a[l] > a[i] { l } else { i };
-    if r < n && a[r] > a[largest] {
-        largest = r;
-    }
-    if largest != i {
+// MAX-HEAPIFY with 0-based indices, as a loop (Exercise 6.2-6).
+// #[inline] asks the compiler to put the body into each caller: no call at all.
+#[inline]
+fn parent(i: usize) -> usize {
+    (i - 1) / 2 // only for i > 0: the root has no parent
+}
+
+#[inline]
+fn left(i: usize) -> usize {
+    2 * i + 1
+}
+
+#[inline]
+fn right(i: usize) -> usize {
+    2 * i + 2
+}
+
+fn max_heapify(a: &mut [i32], mut i: usize) {
+    let n = a.len(); // heap-size is simply the slice's length
+    loop {
+        let l = left(i);
+        let r = right(i);
+        let mut largest = i;
+        if l < n && a[l] > a[largest] {
+            largest = l;
+        }
+        if r < n && a[r] > a[largest] {
+            largest = r;
+        }
+        if largest == i {
+            break; // at least as large as its children, or a leaf
+        }
         a.swap(i, largest);
-        // Passing `a` on reborrows it: the caller gets it back afterwards.
-        max_heapify(a, largest, n); // each call is a new stack frame
+        i = largest; // the book recurses here; the loop keeps one frame
     }
 }
 
 fn main() {
     let mut a = vec![16, 4, 10, 14, 7, 9, 3, 2, 8, 1]; // Figure 6.2(a)
-    let n = a.len();
-    max_heapify(&mut a, 1, n); // the book's MAX-HEAPIFY(A, 2)
+    max_heapify(&mut a, 1); // the book's MAX-HEAPIFY(A, 2)
     println!("{:?}", a);
+    println!("parent of 8: {}", parent(8));
     let mut b = vec![1, 15, 13, 12, 9, 11, 10, 3, 8, 5, 7]; // n = 11
-    let n = b.len(); // a new `n` shadows the old one
-    max_heapify(&mut b, 0, n); // the root sinks to the bottom level
+    max_heapify(&mut b, 0); // the root sinks to the bottom level
     println!("{:?}", b);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s2-out">
 [16, 14, 10, 8, 7, 9, 3, 2, 4, 1]
+parent of 8: 3
 [15, 12, 13, 8, 9, 11, 10, 3, 1, 5, 7]
 </script>
   </section>
@@ -549,8 +570,8 @@ impl MaxPq {
         self.a.first().copied() // None when empty: no "heap underflow"
     }
     fn extract_max(&mut self) -> Option<Job> {
-        let max = self.maximum()?; // `?` returns None right away if empty
-        self.a.swap_remove(0); // the last item moves to a[0], len − 1
+        if self.a.is_empty() { return None; } // no "heap underflow"
+        let max = self.a.swap_remove(0); // the last item moves to a[0]
         self.max_heapify(0);
         Some(max)
     }
@@ -1427,9 +1448,10 @@ K.page(6);
   const stCalls = stat("calls deep", 0), stCmp = stat("comparisons", 0), stSw = stat("exchanges", 0), stSub = stat("subtree at i", "–");
   stats.append(stCalls, stCmp, stSw, stSub);
   const RS = src("rs-s2"), RL = (needle) => RS.split("\n").findIndex((l) => l.includes(needle)) + 1;
-  const L = { hdr: RL("fn max_heapify"), l: RL("let l ="), r: RL("let r ="), lg: RL("let mut largest"), rt: RL("if r < n"), rset: RL("largest = r;"), ne: RL("if largest != i"), sw: RL("a.swap(i, largest)"), rec: RL("max_heapify(a, largest, n)") };
+  // The Rust is a loop: one frame, and `i = largest` where the book recurses (traceRs).
+  const L = { hdr: RL("fn max_heapify"), l: RL("let l ="), r: RL("let r ="), init: RL("let mut largest"), lg: RL("if l < n"), lset: RL("largest = l;"), rt: RL("if r < n"), rset: RL("largest = r;"), ne: RL("if largest == i"), sw: RL("a.swap(i, largest)"), rec: RL("i = largest;") };
   const cv = code("#s2-code", { files: [{ name: "MAX-HEAPIFY", src: src("ps-s2"), rs: { name: "max_heapify.rs", src: RS, out: src("rs-s2-out"),
-    map: { "MAX-HEAPIFY": L.hdr, 1: L.l, 2: L.r, 3: L.lg, 4: L.lg, 5: L.lg, 6: L.rt, 7: L.rset, 8: L.ne, 9: L.sw, 10: L.rec } } }] });
+    map: { "MAX-HEAPIFY": L.hdr, 1: L.l, 2: L.r, 3: L.lg, 4: L.lset, 5: L.init, 6: L.rt, 7: L.rset, 8: L.ne, 9: L.sw, 10: L.rec } } }] });
   const m = mem("#s2-mem");
   let mode = 0, st, events, busy = [];
   const S = session((b) => busy.forEach((x) => (x.disabled = b)));
@@ -1466,10 +1488,40 @@ K.page(6);
     })(i0);
     return ev;
   }
+  // The Rust loop: the same tests and swaps, but one call and one frame; `i = largest` takes the recursion's place.
+  function traceRs(A0, i0) {
+    const A = A0.slice(), n = A.length, ev = [], f = { i: i0, l: null, r: null, largest: null };
+    let cmp = 0, swaps = 0;
+    const snap = (x) => ev.push(Object.assign({ A: A.slice(), frames: [Object.assign({}, f)], cmp, swaps }, x));
+    snap({ lines: ["MAX-HEAPIFY"], kind: "call" });
+    for (;;) {
+      const i = f.i;
+      f.l = 2 * i; f.r = 2 * i + 1; f.largest = null;
+      snap({ lines: [1, 2] });
+      const lIn = f.l <= n, lOk = lIn && A[f.l - 1] > A[i - 1];
+      if (lIn) cmp++;
+      f.largest = lOk ? f.l : i;
+      snap({ lines: [3, lOk ? 4 : 5], test: { c: f.l, inH: lIn, ok: lOk, vs: i } });
+      const rIn = f.r <= n, vs = f.largest, rOk = rIn && A[f.r - 1] > A[vs - 1];
+      if (rIn) cmp++;
+      if (rOk) f.largest = f.r;
+      snap({ lines: rOk ? [6, 7] : [6], test: { c: f.r, inH: rIn, ok: rOk, vs } });
+      const go = f.largest !== i;
+      snap({ lines: [8], go });
+      if (!go) break;
+      const j = f.largest;
+      [A[i - 1], A[j - 1]] = [A[j - 1], A[i - 1]]; swaps++;
+      snap({ lines: [9], swap: [i, j] });
+      f.i = j;
+      snap({ lines: [10], rec: j });
+    }
+    ev.push({ A: A.slice(), frames: [], cmp, swaps, kind: "ret", i: f.i, lines: [], done: true });
+    return ev;
+  }
   function fresh() {
     const M = MODES[mode];
     st = { A: M.A.slice(), n: M.A.length, k: 0, e: null, flying: null };
-    events = trace(M.A, M.i);
+    events = CODE_LANG.rust ? traceRs(M.A, M.i) : trace(M.A, M.i);
     K.$("#s2-title").textContent = M.title;
   }
   const subtree = (i, n) => { const out = []; const q = [i]; while (q.length) { const x = q.shift(); if (x > n) continue; out.push(x); q.push(2 * x, 2 * x + 1); } return out; };
@@ -1544,7 +1596,7 @@ K.page(6);
       if (ln === 6 && t.ok) n[7] = `largest = ${f.largest}`;
       if (ln === 3 || t.ok) r[ln === 3 ? L.lg : L.rset] = ln === 3 ? [`${rmsg} → largest = ${Z(f.largest)}`, t.ok ? "good" : "warn"] : `largest = ${Z(f.largest)}`;
     }
-    if (e.lines[0] === 8) { n[8] = [e.go ? `${f.largest} ≠ ${f.i}` : `largest = i: stop`, e.go ? "warn" : "good"]; r[L.ne] = [e.go ? `${Z(f.largest)} != ${Z(f.i)}` : "false: stop", e.go ? "warn" : "good"]; }
+    if (e.lines[0] === 8) { n[8] = [e.go ? `${f.largest} ≠ ${f.i}` : `largest = i: stop`, e.go ? "warn" : "good"]; r[L.ne] = [e.go ? `${Z(f.largest)} != ${Z(f.i)}: go on` : "true: break", e.go ? "warn" : "good"]; }
     if (e.swap) { n[9] = `A[${B(e.swap[0])}] ↔ A[${B(e.swap[1])}]`; r[L.sw] = `swap(${Z(e.swap[0])}, ${Z(e.swap[1])})`; }
     if (e.rec) { n[10] = `MAX-HEAPIFY(A, ${e.rec})`; r[L.rec] = `i = ${Z(e.rec)}`; }
     if (e.kind === "ret" && f) { n[10] = ["returned", "good"]; r[L.rec] = ["returned", "good"]; }
@@ -1557,7 +1609,14 @@ K.page(6);
     fs.forEach((f, k) => {
       const isTop = k === fs.length - 1 && !e.done;
       const name = `max_heapify(a, ${f.i - 1}, ${n})`;
-      if (!isTop) frames.push({ fn: name, sub: "waiting at the call", vars: [{ n: "largest", t: "usize", v: f.largest - 1 }] });
+      if (CODE_LANG.rust) frames.push({ fn: "max_heapify", top: true, vars: [ // the loop: one frame, its i moving down
+        { n: "a", t: "&mut [i32]", v: `len ${n}`, ptr: "buf" },
+        { n: "n", t: "usize", v: n },
+        { n: "i", t: "usize", v: f.i - 1, hot: e.kind === "call" || !!e.rec },
+        { n: "l, r", t: "usize", v: f.l == null ? "–" : `${f.l - 1}, ${f.r - 1}`, hot: e.lines[0] === 1 },
+        { n: "largest", t: "usize", v: f.largest == null ? "–" : f.largest - 1, hot: !!e.test },
+      ] });
+      else if (!isTop) frames.push({ fn: name, sub: "waiting at the call", vars: [{ n: "largest", t: "usize", v: f.largest - 1 }] });
       else frames.push({ fn: name, top: true, vars: [
         { n: "a", t: "&mut [i32]", v: `len ${n}`, ptr: "buf" },
         { n: "l, r", t: "usize", v: f.l == null ? "–" : `${f.l - 1}, ${f.r - 1}`, hot: e.lines[0] === 1 },
@@ -1572,6 +1631,8 @@ K.page(6);
     }
     m.set({
       note: !e ? "Before the call: <code>main</code> owns the heap buffer through <code>a</code>."
+        : e.done && CODE_LANG.rust ? "<code>break</code> left the loop and the call returned: its one frame is gone. The buffer was changed in place, through the borrow."
+        : CODE_LANG.rust ? "One call, one frame: <code>i = largest</code> moves it down a level, so the stack never grows. <code>a</code> is a pointer and a length: a mutable borrow of <code>main</code>'s buffer, no copy."
         : e.done ? "Every call has returned and its frame is gone. The buffer was changed in place, through borrows only."
         : e.kind === "ret" ? "A call returned: its frame is popped, and the caller continues right after line 10, where nothing is left to do."
         : fs.length > 1 ? `${fs.length} frames deep. Each recursive call pushes a frame; Rust does not promise to turn this tail call into a jump. Every <code>a</code> reborrows the same buffer.`
@@ -1581,17 +1642,17 @@ K.page(6);
     });
   }
   const CAP = (e) => {
-    const f = top(), A = st.A, rsI = (x) => (CODE_LANG.rust ? x - 1 : x);
-    if (e.done) return `Done. The value that started at node ${rsI(MODES[mode].i)} came to rest at node ${rsI(st.landed)}, after ${e.swaps} exchange${e.swaps === 1 ? "" : "s"} and ${e.cmp} comparisons: one level per call, O(h).`;
+    const f = top(), A = st.A, rs = CODE_LANG.rust, rsI = (x) => (rs ? x - 1 : x), P = (s) => (rs ? "" : s); // Rust: no book line numbers
+    if (e.done) return `Done. The value that started at node ${rsI(MODES[mode].i)} came to rest at node ${rsI(st.landed)}, after ${e.swaps} exchange${e.swaps === 1 ? "" : "s"} and ${e.cmp} comparisons: one level per ${rs ? "pass of the loop" : "call"}, O(h).`;
     if (e.kind === "ret") return `MAX-HEAPIFY on node ${rsI(e.i)} returns. Its frame is popped, and the caller has nothing left after line 10.`;
-    if (e.kind === "call") return `Call MAX-HEAPIFY(A, ${rsI(f.i)}). Its subtree (shaded) holds ${subtree(f.i, st.n).length} of the ${st.n} nodes; both of its child subtrees are already max-heaps.`;
+    if (e.kind === "call") return `Call ${rs ? `max_heapify(a, ${rsI(f.i)})` : `MAX-HEAPIFY(A, ${f.i})`}. Its subtree (shaded) holds ${subtree(f.i, st.n).length} of the ${st.n} nodes; both of its child subtrees are already max-heaps.`;
     const ln = e.lines[0];
-    if (ln === 1) return `Lines 1–2: the children of node ${rsI(f.i)} are nodes ${rsI(f.l)} and ${rsI(f.r)}${f.l > st.n ? ", both past heap-size: it is a leaf" : f.r > st.n ? `; ${rsI(f.r)} is past heap-size` : ""}.`;
-    if (ln === 3) return e.test.inH ? `Line 3: is the left child bigger? ${A[e.test.c - 1]} ${e.test.ok ? ">" : "≤"} ${A[f.i - 1]}, so largest = ${rsI(f.largest)}.` : `Line 3: node ${rsI(e.test.c)} is past heap-size, so largest = i.`;
-    if (ln === 6) return e.test.inH ? `Line 6: is the right child bigger still? ${A[e.test.c - 1]} ${e.test.ok ? ">" : "≤"} ${A[e.test.vs - 1]}, so largest = ${rsI(f.largest)}.` : `Line 6: node ${rsI(e.test.c)} is past heap-size; largest stays ${rsI(f.largest)}.`;
-    if (ln === 8) return e.go ? `Line 8: largest = ${rsI(f.largest)} ≠ i = ${rsI(f.i)}, so ${A[f.i - 1]} must move down.` : `Line 8: largest = i. ${A[f.i - 1]} is at least as large as its children (or has none), so the subtree is a max-heap. Stop.`;
-    if (ln === 9) return `Line 9: exchange. ${A[e.swap[0] - 1]} moves up to node ${rsI(e.swap[0])} and ${A[e.swap[1] - 1]} sinks to node ${rsI(e.swap[1])}, which may now break the property below it.`;
-    return `Line 10: recurse on node ${rsI(e.rec)}, one level down.`;
+    if (ln === 1) return `${P("Lines 1–2: t")}${rs ? "T" : ""}he children of node ${rsI(f.i)} are nodes ${rsI(f.l)} and ${rsI(f.r)}${f.l > st.n ? ", both past heap-size: it is a leaf" : f.r > st.n ? `; ${rsI(f.r)} is past heap-size` : ""}.`;
+    if (ln === 3) return e.test.inH ? `${P("Line 3: i")}${rs ? "I" : ""}s the left child bigger? ${A[e.test.c - 1]} ${e.test.ok ? ">" : "≤"} ${A[f.i - 1]}, so largest = ${rsI(f.largest)}.` : `${P("Line 3: n")}${rs ? "N" : ""}ode ${rsI(e.test.c)} is past heap-size, so largest = i.`;
+    if (ln === 6) return e.test.inH ? `${P("Line 6: i")}${rs ? "I" : ""}s the right child bigger still? ${A[e.test.c - 1]} ${e.test.ok ? ">" : "≤"} ${A[e.test.vs - 1]}, so largest = ${rsI(f.largest)}.` : `${P("Line 6: n")}${rs ? "N" : ""}ode ${rsI(e.test.c)} is past heap-size; largest stays ${rsI(f.largest)}.`;
+    if (ln === 8) return e.go ? `${P("Line 8: ")}largest = ${rsI(f.largest)} ≠ i = ${rsI(f.i)}, so ${A[f.i - 1]} must move down.` : `${P("Line 8: ")}largest = i. ${A[f.i - 1]} is at least as large as its children (or has none), so the subtree is a max-heap. ${rs ? "break" : "Stop"}.`;
+    if (ln === 9) return `${P("Line 9: ")}${rs ? "a.swap" : "exchange"}. ${A[e.swap[0] - 1]} moves up to node ${rsI(e.swap[0])} and ${A[e.swap[1] - 1]} sinks to node ${rsI(e.swap[1])}, which may now break the property below it.`;
+    return rs ? `i = largest = ${rsI(e.rec)}: the loop goes round again, one level down, in the same frame.` : `Line 10: recurse on node ${e.rec}, one level down.`;
   };
   async function apply(e, w) {
     if (e.swap) {
@@ -1615,7 +1676,7 @@ K.page(6);
   function redraw() {
     K.clear(layer); fresh(); st.landed = null; render();
     const M = MODES[mode];
-    cap("#s2-cap", mode === 0 ? "Figure 6.2(a): node 2 holds 4, smaller than its children 14 and 7, yet both subtrees below it are max-heaps. MAX-HEAPIFY(A, 2) will let the 4 float down."
+    cap("#s2-cap", mode === 0 ? (CODE_LANG.rust ? "Figure 6.2(a): node 1 holds 4, smaller than its children 14 and 7, yet both subtrees below it are max-heaps. max_heapify(a, 1) will let the 4 float down." : "Figure 6.2(a): node 2 holds 4, smaller than its children 14 and 7, yet both subtrees below it are max-heaps. MAX-HEAPIFY(A, 2) will let the 4 float down.")
       : mode === 1 ? "11 nodes with the bottom level exactly half full. The root holds 1, the smallest value, and both subtrees below it are max-heaps: the 1 will sink down the bigger, left side."
       : `Node 2 already holds ${M.A[1]}, larger than both children. Exercise 6.2-4: what does MAX-HEAPIFY do here?`);
   }
@@ -1623,7 +1684,7 @@ K.page(6);
   busy = [button(ctr, "Step", "", step), button(ctr, "Play", "primary", play)];
   button(ctr, "Reset", "", reset);
   K.$("#s2-seg").appendChild(seg(["Figure 6.2", "Bottom half full", "Nothing to do"], 0, (k) => { mode = k; reset(); }));
-  CODE_LANG.on(() => render());
+  CODE_LANG.on(() => reset()); // the Rust is a loop, so its steps differ: start the trace again
   redraw();
 })();
 
@@ -2080,7 +2141,7 @@ K.page(6);
       if (live && x) clickable(g, `Select job ${x.name}, key ${keyText(x.key)}`, () => { if (S.busy) return; st.sel = x; render(); cap("#s5-cap", `Selected <b>${x.name}</b> (key ${keyText(x.key)}), whose handle says it sits at index ${ix(i)}. <b>Increase key</b> now acts on it.`); });
       gNode.appendChild(g);
     }
-    txt(gNode, 14, 22, `A.heap-size = ${st.hs}   n = ${N}`, { anchor: "start", mono: true, size: 12, bold: true });
+    txt(gNode, 14, 22, CODE_LANG.rust ? `a.len() = ${st.hs}` : `A.heap-size = ${st.hs}   n = ${N}`, { anchor: "start", mono: true, size: 12, bold: true }); // a Vec has no fixed n
   }
   function panel(b, title, lines, cls) {
     gSide.appendChild(s("rect", { x: PX, y: b.y, width: PW, height: b.h, rx: 10, class: cls || "sv-panel" }));
@@ -2093,7 +2154,8 @@ K.page(6);
     panel(BOX.next, "next job to INSERT", [`${nm} · key ${st.nextKey != null ? keyText(st.nextKey) : nk}`], "sv-box");
     panel(BOX.proc, st.procDone ? "processor runs" : st.proc ? "max (held)" : "processor", [st.proc ? `${st.proc.name} · key ${st.proc.key}` : "idle"], st.procDone ? "sv-good" : st.proc ? "sv-data-soft" : "sv-panel");
     const x = st.sel, i = handle(x), inHeap = x && i >= 1 && i <= st.hs;
-    panel(BOX.sel, "selected job x", inHeap ? [`x.name   ${x.name}`, `x.key    ${keyText(x.key)}`, `handle   i = ${ix(i)}`] : ["tap a job"], inHeap ? "sv-data-soft" : "sv-panel");
+    const selRows = CODE_LANG.rust ? [`a[i].0   ${keyText(x && x.key)}`, `a[i].1   ${x && x.name}`, `index    i = ${ix(i)}`] : [`x.name   ${x && x.name}`, `x.key    ${keyText(x && x.key)}`, `handle   i = ${ix(i)}`]; // Rust: the job is a (key, name) pair at a[i]
+    panel(BOX.sel, CODE_LANG.rust ? "selected job" : "selected job x", inHeap ? selRows : ["tap a job"], inHeap ? "sv-data-soft" : "sv-panel");
   }
   function renderStats() {
     stHs.set(`${st.hs} / ${N}`, st.hs === 0 || st.hs === N ? "warn" : undefined);
@@ -2178,8 +2240,36 @@ K.page(6);
     await heapify(w, largest);
   }
 
+  /* Rust: swap_remove(0) moves the root out into max and the last item into a[0] in one step, so no item is ever in two slots */
+  async function extractMaxRs(w) {
+    st.marks = {};
+    await line(w, [EX + ":1"], `extract_max: is the heap empty? len = ${st.hs}.`, { notes: [[EX + ":1", `heap-size = ${st.hs}`, `len = ${st.hs}`]] });
+    if (st.hs < 1) {
+      await line(w, [EX + ":1"], `The heap is empty, so extract_max returns <b>None</b>: there is no job to take, and no error.`, { cls: "bad", notes: [[EX + ":1", "heap underflow", "None"]], ms: 900 });
+      st.marks = {}; render(); return;
+    }
+    const max = st.A[1], last = st.hs, p = pos(1), pb = [PX + PW / 2, BOX.proc.y + 28];
+    st.marks = last > 1 ? { 1: "on", [last]: "on" } : { 1: "on" };
+    hl([EX + ":2"]); render();
+    cap("#s5-cap", last > 1 ? `swap_remove(0): ${max.name} · ${max.key} moves out of a[0] into max, and the last item, ${st.A[last].key}, moves from a[${last - 1}] into a[0].` : `swap_remove(0): ${max.name} · ${max.key}, the only item, moves out of a[0] into max.`);
+    st.hide[1] = true; st.hide[last] = true; renderTree();
+    const t1 = draw.tag(`${max.name} ${max.key}`, "sv-data-soft"), t2 = last > 1 ? draw.tag(keyText(st.A[last].key), "sv-data-soft") : null;
+    layer.append(t1); if (t2) layer.append(t2);
+    try { await w(Promise.all([fly(t1, [p.x, p.y], pb, 450), t2 ? fly(t2, [pos(last).x, pos(last).y], [p.x, p.y], 450) : null])); }
+    finally { t1.remove(); if (t2) t2.remove(); }
+    st.hide = {}; st.proc = max; st.A[1] = st.A[last]; st.A[last] = null; st.hs--;
+    st.marks = st.hs >= 1 ? { 1: "on" } : {};
+    await line(w, [EX + ":2"], `max = ${max.name} · ${max.key}, and len drops to ${st.hs}. ${st.hs ? `The root now holds ${st.A[1].key}, which may be too small for it.` : "The heap is now empty."}`, { notes: [[EX + ":2", `heap-size = ${st.hs}`, `max = (${max.key}, "${max.name}"), len = ${st.hs}`]] });
+    await line(w, [EX + ":4"], `max_heapify(a, 0) lets the new root sink to its level.`, { ms: 260 });
+    await heapify(w, 1);
+    st.marks = {}; st.procDone = true; st.runs++;
+    if (st.sel === max) st.sel = null;
+    await line(w, [EX + ":5"], `Some(max): the processor runs <b>${max.name}</b> (key ${max.key}). ${st.ex} exchange${st.ex === 1 ? "" : "s"}: at most the height ⌊lg n⌋, so O(lg n).`, { cls: "good", notes: [[EX + ":5", `${max.name} · ${max.key}`, `Some((${max.key}, "${max.name}"))`]], ms: 200 });
+  }
+
   async function extractMax(w) {
     st.ex = 0; st.proc = null; st.procDone = false;
+    if (CODE_LANG.rust) return extractMaxRs(w);
     await line(w, [EX + ":1"], `EXTRACT-MAX, line 1: ask MAXIMUM for the root.`);
     const max = await maximum(w, EX + ":1");
     if (!max) { st.marks = {}; render(); return; }
@@ -2210,10 +2300,11 @@ K.page(6);
     await line(w, [EX + ":5"], `Line 5: return max. The processor runs <b>${max.name}</b> (key ${max.key}). ${st.ex} exchange${st.ex === 1 ? "" : "s"}: at most the height ⌊lg n⌋, so O(lg n).`, { cls: "good", notes: [[EX + ":5", `${max.name} · ${max.key}`, `Some((${max.key}, "${max.name}"))`]], ms: 200 });
   }
 
-  async function increaseKey(w, x, k, caller) {
+  async function increaseKey(w, x, k, caller, climbOnly) {
     const dim = caller ? [caller] : [];
     let i = handle(x);
     st.marks = { [i]: "on" };
+    if (!climbOnly) { // Rust's insert pushes the real key and calls sift_up: no −∞, no check
     await line(w, [IK + ":1"], `INCREASE-KEY, line 1: is the new key ${k} smaller than ${x.name}'s key ${keyText(x.key)}?`, { dim, notes: [[IK + ":1", `${k} < ${keyText(x.key)}? ${k < x.key ? "yes" : "no"}`, `${k} < ${x.key === -Infinity ? 0 : x.key}? ${k < x.key}`]] });
     if (k < x.key) {
       st.marks = { [i]: "bad" };
@@ -2223,6 +2314,7 @@ K.page(6);
     const old = x.key; x.key = k;
     await line(w, [IK + ":3"], `Line 3: x.key = ${k}. The max-heap property may now fail between ${x.name} and its parent, and only there.`, { dim, notes: [[IK + ":3", `${keyText(old)} → ${k}`, `a[${i - 1}].0 = ${k}`]] });
     await line(w, [IK + ":4"], `Line 4: x's handle says where it is: <b>i = ${ix(i)}</b>. Without a handle this would be a search through the array.`, { dim, notes: [[IK + ":4", `i = ${i}`, `i = ${i - 1}`]] });
+    }
     for (;;) {
       const p = PAR(i), go = i > 1 && st.A[p].key < st.A[i].key;
       st.marks = { [i]: "on" }; if (i > 1) st.marks[p] = "on2";
@@ -2241,6 +2333,23 @@ K.page(6);
     return true;
   }
 
+  /* Rust: push((k, name)) puts the job, with its real key, at the end of the Vec; then sift_up(last) climbs. There is no −∞:
+     a new leaf only ever moves up, so INCREASE-KEY's check would never fail. */
+  async function insertRs(w, name, k) {
+    const slot = st.hs + 1, x = { name, key: k }, p = pos(slot);
+    st.marks = {}; hl([IN + ":6"]); render();
+    cap("#s5-cap", `push((${k}, "${name}")): the job goes in at the end of the vector, a[${ix(slot)}], a new leaf.`);
+    await moveTag(w, `${name} ${k}`, "sv-data-soft", [PX + PW / 2, BOX.next.y + 38], [p.x, p.y], 450);
+    st.hs = slot; st.A[slot] = x; st.next++; st.sel = x;
+    st.marks = { [slot]: "on" };
+    await line(w, [IN + ":7"], `len = ${st.hs}, so last = ${ix(slot)}: sift_up(last) starts its climb from the new leaf.`, { notes: [[IN + ":6", `A[${slot}] = ${name}`, `push((${k}, "${name}"))`], [IN + ":7", `handle = ${slot}`, `last = ${slot - 1}`]] });
+    await increaseKey(w, x, k, IN + ":8", true);
+    hl([IN + ":8"], "good");
+    notes([[IN + ":8", `${st.ex} exchange${st.ex === 1 ? "" : "s"}`, `${st.ex} swap${st.ex === 1 ? "" : "s"}`]]);
+    render();
+    cap("#s5-cap", `${name} (key ${k}) settled at index ${ix(handle(x))} after ${st.ex} swap${st.ex === 1 ? "" : "s"}: a climb up one path, O(lg n).`);
+  }
+
   async function insert(w) {
     st.ex = 0;
     const [name, k] = NEXT[st.next % NEXT.length];
@@ -2249,6 +2358,7 @@ K.page(6);
       await line(w, [IN + ":2"], `Line 2: <b>heap overflow</b>. All ${N} array slots are in use. A Rust <code>Vec</code> would simply grow, which is why the Rust version has no such check.`, { cls: "bad", notes: [[IN + ":2", "no room", "(no check)"]], ms: 900 });
       return;
     }
+    if (CODE_LANG.rust) return insertRs(w, name, k);
     st.hs++;
     const slot = st.hs;
     await line(w, [IN + ":3"], `Line 3: heap-size = ${st.hs}. A new leaf appears at index ${ix(slot)}.`, { notes: [[IN + ":3", `heap-size = ${st.hs}`, `len = ${st.hs}`]] });

@@ -14,3 +14,9 @@
 \busize\b	you size	Rust's usize is "you-size"; Kokoro says "yoozize"
 \bmut\b	mute	Rust's mut is "mute" (short for mutable); Kokoro says "mutt" (mˈʌt)
 \bprintln\b	print line	println is "print line"; Kokoro squeezes it into one word (pɹˈɪntln)
+\bPartialEq\b	Partial E Q	Rust's PartialEq trait is said "partial E Q"; Kokoro says "partial-ek" (pˈɑːʃəl ˈɛk)
+\b([Nn])one\b	\1un	none (and Rust's None) is "nun", /nʌn/ in UK and US English (Cambridge Dictionary); Kokoro's en-gb voices say "non" (nˈɒn)
+\bNaN\b	nan	NaN (not a number) is said "nan", /næn/; Kokoro reads it "nar-en" (nˈɑːɹ ˈɛn)
+\bcmp\b	compare	Rust's cmp (cmp, partial_cmp, total_cmp) is short for compare and said so; Kokoro spells it out (sˌiːˌɛmpˈiː)
+\b([Ee])num\b	\1enum	enum (Rust's enum keyword, short for enumeration) is said "EE-num"; Kokoro's en-gb voices say "in-UM" (ɪnˈʌm); "eenum" gives ˈiːnəm
+\bKnuth\b	Kuh-nooth	Donald Knuth is "kuh-NOOTH" (his own FAQ, www-cs-faculty.stanford.edu/~knuth/faq.html: "pronounced Ka-NOOTH"); Kokoro says "nuth" (nˈʌθ); "Kuh-nooth" gives kˈʌnˈuːθ

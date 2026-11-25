@@ -87,25 +87,25 @@ if p < r
 </script>
 <script type="text/x-rust" id="rs-s1">
 // QUICKSORT on a slice: `a` is the book's A[p : r], indexed from 0.
-// (An index version needs q − 1, which underflows a usize when q = 0.)
-fn quicksort(a: &mut [i32], depth: usize) {
-    if a.len() > 1 { // the book's p < r: at least two items
-        // Partition the subarray around the pivot, which ends up in a[q].
-        let q = partition(a);
-        // {:w$} pads "" to w = 2 · depth spaces: an indented call tree.
-        println!("{:w$}{:?} pivot {}", "", a, a[q], w = 2 * depth);
-        // Each call reborrows a window of the same buffer: nothing is copied.
-        quicksort(&mut a[..q], depth + 1); // recursively sort the low side
-        quicksort(&mut a[q + 1..], depth + 1); // recursively sort the high side
+fn quicksort(a: &mut [i32]) {
+    if a.len() < 2 { // the book's p ≥ r: under two items is already sorted,
+        return; // and partition's a.len() - 1 would panic on an empty slice
     }
+    // Partition the subarray around the pivot, which ends up in a[q].
+    let q = partition(a);
+    // split_at_mut: two mutable borrows of `a` that can't overlap.
+    let (low, rest) = a.split_at_mut(q);
+    quicksort(low); // recursively sort the low side
+    quicksort(&mut rest[1..]); // the high side (rest[0] is the pivot)
 }
 
 // PARTITION, which the next scene steps through line by line.
 fn partition(a: &mut [i32]) -> usize {
     let r = a.len() - 1;
-    let mut lo = 0; // a[..lo] is the low side
+    let x = a[r];
+    let mut lo = 0;
     for j in 0..r {
-        if a[j] <= a[r] {
+        if a[j] <= x {
             a.swap(lo, j);
             lo += 1;
         }
@@ -116,16 +116,11 @@ fn partition(a: &mut [i32]) -> usize {
 
 fn main() {
     let mut v = vec![2, 8, 7, 1, 3, 5, 6, 4]; // Figure 7.1, on the heap
-    quicksort(&mut v, 0);
+    quicksort(&mut v);
     println!("{:?}", v);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s1-out">
-[2, 1, 3, 4, 7, 5, 6, 8] pivot 4
-  [2, 1, 3] pivot 3
-    [1, 2] pivot 1
-  [7, 5, 6, 8] pivot 8
-    [5, 6, 7] pivot 6
 [1, 2, 3, 4, 5, 6, 7, 8]
 </script>
   </section>
@@ -183,8 +178,8 @@ fn partition(a: &mut [i32]) -> usize {
         debug_assert!(a[..lo].iter().all(|&v| v <= x));
         debug_assert!(a[lo..j].iter().all(|&v| v > x) && a[r] == x);
         if a[j] <= x { // does this element belong on the low side?
-            lo += 1; // a new slot in the low side: a[lo - 1]
-            a.swap(lo - 1, j); // put this element there
+            a.swap(lo, j); // put it in the first slot past the low side
+            lo += 1; // the low side grows by one
         }
     }
     a.swap(lo, r); // pivot goes just to the right of the low side
@@ -931,49 +926,46 @@ while TRUE
     else return j
 </script>
 <script type="text/x-rust" id="rs-s9">
-// The book's HOARE-PARTITION with 0-based indices. Returns j such that
-// every item of a[p..=j] is <= every item of a[j + 1..=r]. Needs p < r.
-fn hoare_partition(a: &mut [i32], p: usize, r: usize) -> usize {
-    let x = a[p]; // the pivot; i32 is Copy, so x is a copy, not a borrow
-    // i starts at p - 1, which is -1 when p = 0. usize can't hold -1, so
-    // i and j are isize, cast back with `as usize` whenever they index.
-    let mut i = p as isize - 1;
-    let mut j = r as isize + 1;
+// The book's HOARE-PARTITION on a slice, 0-based. Returns j such that
+// every item of a[..=j] is <= every item of a[j + 1..]. Needs len >= 2.
+fn hoare_partition(a: &mut [i32]) -> usize {
+    let x = a[0]; // the pivot; i32 is Copy, so x is a copy, not a borrow
+    let mut i = 0; // usize can't be -1, so the scouts start on the ends
+    let mut j = a.len() - 1;
     loop {
-        loop {
-            j -= 1; // repeat … until: the body runs before the test
-            if a[j as usize] <= x { break; }
+        while a[j] > x { // a while tests first: look, then step
+            j -= 1;
         }
-        loop {
+        while a[i] < x {
             i += 1;
-            if a[i as usize] >= x { break; }
         }
-        if i < j {
-            a.swap(i as usize, j as usize);
-        } else {
-            return j as usize; // return leaves every loop at once
+        if i >= j {
+            return j; // return leaves the loop and the function at once
         }
+        a.swap(i, j);
+        i += 1; // both swapped items are on their right sides now,
+        j -= 1; // so step past them (the book's repeat steps first)
     }
 }
 
-// Part (f): the pivot is not in its final place, so keep A[q] in a side.
-fn quicksort(a: &mut [i32], p: usize, r: usize) {
-    if p < r {
-        let q = hoare_partition(a, p, r);
-        quicksort(a, p, q); // A[p : q], q included this time
-        quicksort(a, q + 1, r);
+// Part (f): the pivot is not in its final place, so a[..=j] keeps a[j].
+fn quicksort(a: &mut [i32]) {
+    if a.len() > 1 {
+        let j = hoare_partition(a);
+        let (lo, hi) = a.split_at_mut(j + 1); // a[..=j] and a[j + 1..]
+        quicksort(lo);
+        quicksort(hi);
     }
 }
 
 fn main() {
     let mut a = vec![13, 19, 9, 5, 12, 8, 7, 4, 11, 2, 6, 21];
-    let j = hoare_partition(&mut a, 0, 11);
-    println!("returns j = {j}: {:?}", a);
-    let n = a.len();
-    quicksort(&mut a, 0, n - 1);
+    let j = hoare_partition(&mut a);
+    println!("returns j = {}: {:?}", j, a);
+    quicksort(&mut a);
     println!("sorted:          {:?}", a);
     let mut same = vec![7; 12]; // vec![v; n]: n copies of v
-    println!("all equal: j = {}", hoare_partition(&mut same, 0, 11));
+    println!("all equal: j = {}", hoare_partition(&mut same));
 }
 </script>
 <script type="text/x-rust-out" id="rs-s9-out">
@@ -1553,7 +1545,7 @@ K.page(7);
   const ctr = K.$("#s1-controls"), stats = K.$("#s1-stats");
   const stCalls = stat("calls", 0), stPart = stat("partitions", 0), stCmp = stat("comparisons", 0), stDepth = stat("deepest call", 0);
   stats.append(stCalls, stPart, stCmp, stDepth);
-  const cv = code("#s1-code", { files: [{ name: "QUICKSORT", src: src("ps-s1"), rs: { name: "quicksort.rs", src: src("rs-s1"), out: src("rs-s1-out"), map: { QUICKSORT: 3, 1: 4, 2: 5, 3: 6, 4: 10, 5: 11 } } }] });
+  const cv = code("#s1-code", { files: [{ name: "QUICKSORT", src: src("ps-s1"), rs: { name: "quicksort.rs", src: src("rs-s1"), out: src("rs-s1-out"), map: { QUICKSORT: 2, 1: 3, 2: 6, 3: 7, 4: 10, 5: 11 } } }] });
   const m = mem("#s1-mem");
   let input = FIG.slice(), st, events, busy = [];
   const S = session((b) => busy.forEach((x) => (x.disabled = b)));
@@ -1598,7 +1590,7 @@ K.page(7);
     const rs = CODE_LANG.rust;
     const c = st.cur != null ? st.calls[st.cur] : null;
     let head = "QUICKSORT(A, 1, " + N + ")";
-    if (c) head = rs ? `quicksort(&mut a[${c.p - 1}..${c.r}])` : `QUICKSORT(A, ${c.p}, ${c.r})`;
+    if (c) head = rs ? `quicksort(${rsArg(c)}) · a = v[${c.p - 1}..${c.r}]` : `QUICKSORT(A, ${c.p}, ${c.r})`;
     txt(gHead, 16, 26, st.done ? (rs ? "quicksort returned: sorted" : "QUICKSORT(A, 1, 8) returned: sorted") : c ? head : "nothing has run yet", { anchor: "start", mono: true, size: 13, bold: !!c || st.done });
     if (c && !st.done) txt(gHead, 644, 26, `depth ${c.d} · stack ${st.stack.length}`, { anchor: "end", mono: true, size: 12, cls: "sv-label" });
     // cells: pivots in their final place are lilac, the running call's range blue
@@ -1650,11 +1642,11 @@ K.page(7);
       cv.at([1], "on"); cv.at(par ? [c.via] : [], "dim", false); cv.at([], "good", false);
       const yes = c.p < c.r;
       n[1] = [`p = ${c.p}, r = ${c.r}: ${yes ? "p < r" : "return"}`, yes ? null : "good"];
-      r[4] = [`len ${Math.max(0, c.r - c.p + 1)}${yes ? " > 1" : ": return"}`, yes ? null : "good"];
+      r[3] = [`len ${Math.max(0, c.r - c.p + 1)}${yes ? "" : ": return"}`, yes ? null : "good"];
     } else if (e.t === "part") {
       cv.at([3], "on"); cv.at([], "dim", false); cv.at([], "good", false);
-      n[1] = `p = ${c.p}, r = ${c.r}`; r[4] = `len ${c.r - c.p + 1}`;
-      n[3] = `q = ${c.q}`; r[6] = `q = ${c.q - c.p}`;
+      n[1] = `p = ${c.p}, r = ${c.r}`; r[3] = `len ${c.r - c.p + 1}`;
+      n[3] = `q = ${c.q}`; r[7] = `q = ${c.q - c.p}`;
     } else {
       cv.at([], "on"); cv.at(par ? [c.via] : [], "dim", false); cv.at([5], "good");
       n[5] = ["returned", "good"]; r[11] = ["returned", "good"];
@@ -1665,12 +1657,17 @@ K.page(7);
   function renderMem() {
     const frames = [{ fn: "main", vars: [{ n: "v", t: "Vec<i32>", v: "len 8 · cap 8", ptr: "buf" }] }];
     const top = st.stack[st.stack.length - 1];
-    const shown = st.stack.length > 4 ? st.stack.slice(-3) : st.stack;
-    if (st.stack.length > 4) frames.push({ fn: `⋮ ${st.stack.length - 3} more quicksort frames`, vars: [] });
+    const more = st.stack.length - 2, shown = more > 0 ? st.stack.slice(-2) : st.stack; // the running call and its caller
+    if (more > 0) frames.push({ fn: `⋮ ${more} more quicksort frame${more === 1 ? "" : "s"}`, vars: [] });
     shown.forEach((id) => {
       const cl = st.calls[id], len = Math.max(0, cl.r - cl.p + 1), isTop = id === top;
       const vars = [{ n: "a", t: "&mut [i32]", v: `len ${len}`, ptr: len ? `buf:${cl.p - 1}` : null }];
-      if (isTop && cl.q != null && st.status[id] && st.status[id].settled) vars.push({ n: "q", t: "usize", v: cl.q - cl.p, hot: true });
+      if (cl.q != null && st.status[id] && st.status[id].settled) { // after partition and split_at_mut(q)
+        const q = cl.q - cl.p, nr = cl.r - cl.q + 1;
+        vars.push({ n: "q", t: "usize", v: q, hot: isTop });
+        vars.push({ n: "low", t: "&mut [i32]", v: `len ${q}`, ptr: q ? `buf:${cl.p - 1}` : null });
+        vars.push({ n: "rest", t: "&mut [i32]", v: `len ${nr}`, ptr: `buf:${cl.q - 1}` });
+      }
       frames.push({ fn: "quicksort", sub: `depth ${cl.d}`, top: isTop, vars });
     });
     const marks = {};
@@ -1679,8 +1676,8 @@ K.page(7);
     m.set({
       note: !st.ev ? "<code>v</code> owns one heap buffer of eight <code>i32</code>s. Every call will borrow a window of it."
         : st.done ? "All frames are gone and nothing was freed or copied: every <code>a</code> only borrowed a window of <code>v</code>'s buffer."
-        : c && c.p > c.r ? "An empty slice: its length is 0, so the call returns at once. In Rust, <code>a[..0]</code> is fine where an index <i>q</i> − 1 would underflow."
-        : c && st.status[c.id] && st.status[c.id].settled ? `<code>q</code> = ${c.q - c.p} counts from the start of this slice, not of <code>v</code>: the pivot sits at <code>v[${c.q - 1}]</code>.`
+        : c && c.p > c.r ? "An empty slice: its length is under 2, so the call returns before <code>partition</code>, whose <code>a.len() - 1</code> would panic on it."
+        : c && st.status[c.id] && st.status[c.id].settled ? `<code>q</code> = ${c.q - c.p} counts from the start of this slice, not of <code>v</code>: the pivot sits at <code>v[${c.q - 1}]</code>. <code>split_at_mut(q)</code> cut <code>a</code> into <code>low</code> and <code>rest</code>, two windows that can't overlap.`
         : "Each frame's <code>a</code> is a fat pointer (address + length) into the same buffer.",
       stack: frames,
       heap: [{ id: "buf", label: "v's buffer · 8 × i32", cells: st.a, marks, cw: 34 }],
@@ -1688,7 +1685,24 @@ K.page(7);
   }
 
   /* ---------- running ---------- */
+  function rsArg(c) { return c.parent == null ? "&mut v" : c.via === 4 ? "low" : "&mut rest[1..]"; }
+  function rsCap(e) { // the Rust program's names: v, a, q, low, rest
+    const c = st.calls[e.id], V = (p, r) => `v[${p - 1}..${r}]`, len = Math.max(0, c.r - c.p + 1);
+    if (e.t === "call") {
+      const who = `quicksort(${rsArg(c)}): a = ${V(c.p, c.r)}`;
+      if (c.p > c.r) return `${who}, an empty ${c.via === 4 ? "low" : "high"} side. Its length is under 2, so it returns at once, before partition.`;
+      if (c.p === c.r) return `${who}, one number, already sorted. Its length is under 2, so it returns at once.`;
+      return `${who}, ${len} numbers, so it has work to do.`;
+    }
+    if (e.t === "part") {
+      const lo = c.q - c.p, hi = c.r - c.q;
+      return `partition(a) picks the pivot <b>${st.a[c.q - 1]}</b> and rearranges ${V(c.p, c.r)} around it with ${e.cmp} comparison${e.cmp === 1 ? "" : "s"}: ${lo} on the low side, ${hi} on the high side. It returns q = ${lo}: the pivot lands at <b>v[${c.q - 1}]</b>, its final place. split_at_mut(q) cuts a into low = ${V(c.p, c.q - 1)} and rest = ${V(c.q, c.r)}.`;
+    }
+    if (c.parent == null) return `The first call returns: v is sorted, with no combine step.`;
+    return `quicksort on ${V(c.p, c.r)} returns. Both sides are sorted, on the correct side of the pivot, so there is nothing to combine.`;
+  }
   function capText(e) {
+    if (CODE_LANG.rust) return rsCap(e);
     const c = st.calls[e.id], A = (p, r) => (CODE_LANG.rust ? `a[${p - 1}..${r}]` : `A[${p} : ${r}]`);
     if (e.t === "call") {
       const who = c.parent == null ? "The first call" : `Line ${c.via} of the call above calls`;
@@ -1745,7 +1759,7 @@ K.page(7);
   const play = () => S.run(async (w) => { while (await stepOnce(w)) await w(sleep(320)); });
   function redraw() {
     K.clear(layer); fresh(); render();
-    cap("#s1-cap", `Nothing has run yet. The input is ${input.join() === FIG.join() ? "the array of Figure 7.1" : "a random array"}, ⟨${input.join(", ")}⟩.`);
+    cap("#s1-cap", `Nothing has run yet. The input is ${input.join() === FIG.join() ? "the array of Figure 7.1" : "a random array"}, ⟨${input.join(", ")}⟩: n = ${N}.`);
   }
   function reset() { S.cancel(); redraw(); }
   function randomInput() { // a fresh shuffle whose recursion fits the rows (depth ≤ 5)
@@ -1774,7 +1788,7 @@ K.page(7);
   const ctr = K.$("#s2-controls"), stats = K.$("#s2-stats");
   const stC = stat("comparisons", 0), stX = stat("exchanges", 0), stI = stat("iterations", 0);
   stats.append(stC, stX, stI);
-  const cv = code("#s2-code", { files: [{ name: "PARTITION", src: src("ps-s2"), rs: { name: "partition.rs", src: src("rs-s2"), out: src("rs-s2-out"), map: { PARTITION: 3, 1: 5, 2: 6, 3: 7, 4: 11, 5: 12, 6: 13, 7: 16, 8: 17 } } }] });
+  const cv = code("#s2-code", { files: [{ name: "PARTITION", src: src("ps-s2"), rs: { name: "partition.rs", src: src("rs-s2"), out: src("rs-s2-out"), map: { PARTITION: 3, 1: 5, 2: 6, 3: 7, 4: 11, 5: 13, 6: 12, 7: 16, 8: 17 } } }] });
   let input = INST[0].slice(), mode = 0, geo, st, events, busy = [];
   const S = session((b) => busy.forEach((x) => (x.disabled = b)));
 
@@ -1785,8 +1799,8 @@ K.page(7);
   const cx = (k) => geo.x0 + k * geo.pitch + geo.cw / 2; // k counts from 0
   const left = (k) => geo.x0 + k * geo.pitch, right = (k) => geo.x0 + k * geo.pitch + geo.cw;
 
-  /* the book's PARTITION(A, 1, n), as a list of line events (indices 1-based like the book) */
-  function trace(a0) {
+  /* the book's PARTITION(A, 1, n), as a list of line events (indices 1-based like the book); rs: the Rust's order */
+  function trace(a0, rs) {
     const a = a0.slice(), r = a.length, ev = [];
     const x = a[r - 1];
     ev.push({ line: 1, x });
@@ -1796,7 +1810,12 @@ K.page(7);
       ev.push({ line: 3, i, j });
       const ok = a[j - 1] <= x;
       ev.push({ line: 4, i, j, ok, v: a[j - 1] });
-      if (ok) {
+      if (ok && rs) { // the Rust swaps into a[lo] first, then counts it: lo += 1
+        [a[i], a[j - 1]] = [a[j - 1], a[i]];
+        ev.push({ line: 6, i, j, rs: true });
+        i++;
+        ev.push({ line: 5, i, j, rs: true });
+      } else if (ok) {
         i++;
         ev.push({ line: 5, i, j });
         [a[i - 1], a[j - 1]] = [a[j - 1], a[i - 1]];
@@ -1812,7 +1831,7 @@ K.page(7);
   function fresh() {
     layout();
     st = { a: input.slice(), x: null, i: null, j: null, line: null, k: 0, cmp: 0, xch: 0, iters: 0, chk: null, hide: [], q: null, done: false, ok: null, processed: false, exit: false };
-    events = trace(input);
+    events = trace(input, !!CODE_LANG.rust);
   }
   const R = () => geo.n; // r, 1-based
   /** which region a 1-based index is in right now */
@@ -1820,7 +1839,9 @@ K.page(7);
     if (st.done || st.line === 7) return k <= st.i ? "low" : k === st.i + 1 ? "pivot" : "high";
     if (st.i == null) return k === R() && st.x != null ? "pivot" : "unknown";
     if (k === R()) return "pivot";
-    const lowTo = st.line === 5 ? st.i - 1 : st.i; // line 5 has made a slot, line 6 fills it
+    // the book: line 5 has made a slot, line 6 fills it; the Rust: line 6's swap fills a[lo], then line 5 counts it
+    const rsSwap = st.line === 6 && st.rs && st.processed;
+    const lowTo = st.line === 5 && !st.rs ? st.i - 1 : rsSwap ? st.i + 1 : st.i;
     const highTo = st.j == null ? lowTo : st.processed ? st.j : st.j - 1;
     if (k <= lowTo) return "low";
     if (k <= highTo) return "high";
@@ -1891,7 +1912,7 @@ K.page(7);
       gChk.appendChild(s("rect", { x, y, width: w, height: 36, rx: 9, class: ok == null ? "sv-panel" : ok ? "sv-good" : "sv-bad" }));
       txt(gChk, x + w / 2, y + 23, (ok == null ? "… " : ok ? "✓ " : "✗ ") + lab, { mono: true, size: 12, bold: ok != null });
     });
-    txt(gChk, 330, 276, st.done ? "partitioned: low side, pivot, high side" : "the loop invariant, tested at line 3", { cls: "sv-label" });
+    txt(gChk, 330, 276, st.done ? "partitioned: low side, pivot, high side" : rs ? "the loop invariant, tested as each pass begins" : "the loop invariant, tested at line 3", { cls: "sv-label" });
     stC.set(st.cmp); stX.set(st.xch); stI.set(st.iters, st.done ? "good" : undefined);
     renderCode();
   }
@@ -1904,8 +1925,8 @@ K.page(7);
     if (st.i != null && st.line !== 5) { n[2] = `i = ${st.i}`; r[6] = `lo = ${st.i}`; }
     if (st.j != null && !st.done) { n[3] = st.exit ? `j = ${st.j}: done` : `j = ${st.j}`; r[7] = st.exit ? `j = ${st.j - 1}: loop over` : `j = ${st.j - 1}`; }
     if (st.line === 4) { const t = `${st.v} ≤ ${st.x}? ${st.ok ? "yes" : "no"}`; n[4] = [t, st.ok ? "good" : "warn"]; r[11] = [`${st.v} <= ${st.x}: ${st.ok}`, st.ok ? "good" : "warn"]; }
-    if (st.line === 5) { n[5] = `i = ${st.i}`; r[12] = `lo = ${st.i}`; }
-    if (st.line === 6) { n[6] = `A[${st.i}] ↔ A[${st.j}]`; r[13] = `swap(${st.i - 1}, ${st.j - 1})`; }
+    if (st.line === 5) { n[5] = `i = ${st.i}`; r[13] = `lo = ${st.i}`; }
+    if (st.line === 6) { n[6] = `A[${st.i}] ↔ A[${st.j}]`; r[12] = `swap(${st.rs ? st.i : st.i - 1}, ${st.j - 1})`; }
     if (st.line === 7 || st.done) { n[7] = `A[${st.i + 1}] ↔ A[${R()}]`; r[16] = `swap(${st.i}, ${R() - 1})`; }
     if (st.done) { n[8] = [`q = ${st.q}`, "good"]; r[17] = [`returns ${st.q - 1}`, "good"]; }
     cv.notes(n, r);
@@ -1918,8 +1939,9 @@ K.page(7);
       case 2: return `Line 2: <b>i = p − 1 = 0</b>, just left of the array, so the low side A[p : i] is empty.`;
       case 3: return e.exit ? `Line 3: j reached r, so the loop is over after exactly r − p = ${geo.n - 1} iterations. The unknown region is empty; the invariant still holds.` : `Line 3: <b>j = ${e.j}</b>. The invariant holds before this iteration: every check at the bottom is green.`;
       case 4: return e.ok ? `Line 4: ${e.v} ≤ ${st.x}, so ${e.v} belongs on the low side: case (b) of Figure 7.3.` : `Line 4: ${e.v} > ${st.x}, so it stays where it is and the high side grows to include it: case (a), only j moves.`;
-      case 5: return `Line 5: <b>i = ${e.i}</b>, the index of a new slot in the low side.`;
-      case 6: return e.i === e.j ? `Line 6: i = j = ${e.j}, so ${st.a[e.i - 1]} is “swapped with itself” and joins the low side.` : `Line 6: exchange ${A}[${e.i}] with ${A}[${e.j}]. The small value joins the low side and the big value it displaced moves to the end of the high side.`;
+      case 5: return e.rs ? `lo += 1: <b>lo = ${e.i}</b>, so the low side a[..lo] now holds it.` : `Line 5: <b>i = ${e.i}</b>, the index of a new slot in the low side.`;
+      case 6: if (e.rs) return e.i + 1 === e.j ? `a.swap(${e.i}, ${e.j - 1}): lo = j = ${e.i}, so ${st.a[e.i]} is “swapped with itself” at the end of the low side.` : `a.swap(${e.i}, ${e.j - 1}): the small value moves to a[lo], just past the low side, and the big value it displaced moves to the end of the high side.`;
+        return e.i === e.j ? `Line 6: i = j = ${e.j}, so ${st.a[e.i - 1]} is “swapped with itself” and joins the low side.` : `Line 6: exchange ${A}[${e.i}] with ${A}[${e.j}]. The small value joins the low side and the big value it displaced moves to the end of the high side.`;
       case 7: return `Line 7: exchange A[i + 1] with A[r]: the pivot trades places with the leftmost element greater than x and lands between the two sides.`;
       case 8: return `Line 8: return <b>q = ${e.q}</b>${CODE_LANG.rust ? ` (index ${e.q - 1} from 0 in Rust)` : ""}. ${st.a[e.q - 1]} is in its final sorted place: ${e.q - 1} values ≤ it on the left, ${geo.n - e.q} values > it on the right. ${geo.n - 1} comparisons for n = ${geo.n}: Θ(n).`;
     }
@@ -1940,13 +1962,13 @@ K.page(7);
     st.a[k1] = v2; st.a[k2] = v1; st.hide = [];
   }
   async function apply(e, w) {
-    st.line = e.line; st.exit = !!e.exit;
+    st.line = e.line; st.exit = !!e.exit; st.rs = !!e.rs;
     if (e.line === 1) st.x = e.x;
     if (e.line === 2) st.i = e.i;
     if (e.line === 3) { st.i = e.i; st.j = e.j; st.processed = false; st.chk = checks(); if (!e.exit) st.iters++; }
     if (e.line === 4) { st.cmp++; st.ok = e.ok; st.v = e.v; if (!e.ok) st.processed = true; }
     if (e.line === 5) st.i = e.i;
-    if (e.line === 6) { st.xch++; render(); await swapAnim(e.i - 1, e.j - 1, w); st.processed = true; }
+    if (e.line === 6) { st.xch++; render(); await swapAnim(e.rs ? e.i : e.i - 1, e.j - 1, w); st.processed = true; }
     if (e.line === 7) { st.xch++; st.chk = null; render(); await swapAnim(e.i, R() - 1, w); }
     if (e.line === 8) { st.done = true; st.q = e.q; st.chk = [true, true, true]; }
     render();
@@ -1973,7 +1995,7 @@ K.page(7);
     }
     reset();
   }));
-  CODE_LANG.on(() => render());
+  CODE_LANG.on(() => { if (st.k === 0) fresh(); render(); }); // the Rust swaps before it counts: re-trace if nothing has run
   redraw();
 })();
 
@@ -3313,13 +3335,16 @@ K.page(7);
   const BOOK = [13, 19, 9, 5, 12, 8, 7, 4, 11, 2, 6, 21];
   const CW = 42, CH = 46, GAP = 6, X0 = 45, AY = 84;
   const cx = (b) => X0 + (b - 1) * (CW + GAP) + CW / 2; // book index b (1-based) → centre x
-  const gHead = s("g"), gArr = s("g"), gPtr = s("g"), gChk = s("g"), gCmp = s("g"), layer = s("g");
+  const gHead = s("g"), gArr = s("g"), gPtr = s("g"), gChk = s("g", { "data-part": "checks" }), gCmp = s("g", { "data-part": "compare" }), layer = s("g"); // the video tool shows and hides parts by name
   svg.append(gHead, gArr, gPtr, gChk, gCmp, layer);
   const ctr = K.$("#s9-controls"), stats = K.$("#s9-stats");
   const stX = stat("exchanges", 0), stT = stat("element tests", 0), stW = stat("while iterations", 0);
   stats.append(stX, stT, stW);
   const cv = code("#s9-code", { files: [{ name: "HOARE-PARTITION", src: src("ps-s9"), rs: { name: "hoare.rs", src: src("rs-s9"), out: src("rs-s9-out"),
-    map: { "HOARE-PARTITION": 3, 1: 4, 2: 7, 3: 8, 4: 9, 5: 10, 6: 11, 7: 12, 8: 14, 9: 15, 10: 16, 11: 18, 12: 19, 13: [20, 21] } } }] });
+    map: { "HOARE-PARTITION": 3, 1: 4, 2: 5, 3: 6, 4: 7, 5: 8, 6: 9, 7: 8, 8: 11, 9: 12, 10: 11, 11: 14, 12: [17, 18, 19], 13: 15 } } }] });
+  // Rust mode draws the program's scouts: they start on the end cells and look before they step, and after a swap they
+  // step past it at once, where the book's start outside the ends and step before they look.
+  const scoutsAt = (e) => CODE_LANG.rust ? { i: e.scout === "i" || e.line === 11 ? e.i : e.i + 1, j: e.scout || e.line === 11 ? e.j : e.j - 1 } : { i: e.i, j: e.j };
   let input = BOOK.slice(), kind = 0, st, events, busy = [];
   const S = session((b) => busy.forEach((x) => (x.disabled = b)));
 
@@ -3377,8 +3402,8 @@ K.page(7);
     const A = e ? e.A : input, x = input[0];
     const done = e && e.ret != null;
     // header: the pivot and the range
-    txt(gHead, 24, 24, `x = ${rs ? "a" : "A"}[p] = ${x}`, { anchor: "start", mono: true, size: 13, bold: true });
-    txt(gHead, 636, 24, rs ? `p = 0, r = ${R - 1}` : `p = 1, r = ${R}`, { anchor: "end", mono: true, size: 13 });
+    txt(gHead, 24, 24, `x = ${rs ? "a[0]" : "A[p]"} = ${x}`, { anchor: "start", mono: true, size: 13, bold: true });
+    txt(gHead, 636, 24, rs ? `a.len() = ${N}` : `p = 1, r = ${R}`, { anchor: "end", mono: true, size: 13 });
     // cells: low side lilac, high side blue, the scout's element yellow
     const marks = {};
     if (e) for (let b = P; b <= R; b++) {
@@ -3405,24 +3430,25 @@ K.page(7);
         gArr.appendChild(s("path", { d: `M${x1},${y - 6} V${y} H${x2} V${y - 6}`, class: "sv-wire-solid", style: { stroke: cls } }));
         txt(gArr, (x1 + x2) / 2, y + 16, label, { mono: true, size: 12, bold: true });
       };
-      br(P, j, `${rs ? `a[0..=${j - 1}]` : `A[1 : ${j}]`} · max ${Math.max(...left)}`, "var(--lilac)");
-      br(j + 1, R, `min ${Math.min(...right)}`, "var(--blue)");
+      br(P, j, `${rs ? `a[..=${j - 1}]` : `A[1 : ${j}]`} · max ${Math.max(...left)}`, "var(--lilac)");
+      br(j + 1, R, `${rs ? `a[${j}..] · ` : ""}min ${Math.min(...right)}`, "var(--blue)");
     }
     // the two scouts
-    if (e && e.line >= 2 && !done) {
+    if (e && (e.line >= 2 || e.lines) && !done) { // the scouts stay on screen while they walk
       const ptr = (b, label, cls, dx) => {
         const x0 = b < P ? X0 - 21 : b > R ? cx(R) + CW / 2 + 21 : cx(b);
         const xx = x0 + dx;
         gPtr.appendChild(s("path", { d: `M${xx},${AY + CH + 22} l-6,10 h12 Z`, class: cls }));
         txt(gPtr, xx, AY + CH + 46, label, { mono: true, size: 13, bold: true });
       };
-      const same = e.i === e.j;
-      ptr(e.i, "i", "sv-fill-sun", same ? -8 : 0);
-      if (e.line >= 3) ptr(e.j, "j", "sv-fill-blue", same ? 8 : 0);
+      const at = scoutsAt(e), same = at.i === at.j;
+      ptr(at.i, "i", "sv-fill-sun", same ? -8 : 0);
+      if (e.line >= 3 || e.lines) ptr(at.j, "j", "sv-fill-blue", same ? 8 : 0);
     }
     // parts (c), (d), (e)
     const ok = done ? checks(e) : null;
-    [["(c) i, j stay in A[p : r]", ok && ok.c], ["(d) p ≤ j < r", ok && ok.d], ["(e) A[p : j] ≤ A[j+1 : r]", ok && ok.e]].forEach(([label, v], k) => {
+    const L3 = rs ? ["i, j stay in bounds", "j < a.len() − 1", "a[..=j] ≤ a[j+1..]"] : ["(c) i, j stay in A[p : r]", "(d) p ≤ j < r", "(e) A[p : j] ≤ A[j+1 : r]"];
+    [[L3[0], ok && ok.c], [L3[1], ok && ok.d], [L3[2], ok && ok.e]].forEach(([label, v], k) => {
       const w = 196, x0 = 24 + k * (w + 10), y = 198;
       gChk.appendChild(s("rect", { x: x0, y, width: w, height: 32, rx: 9, class: v == null ? "sv-panel" : v ? "sv-good" : "sv-bad" }));
       txt(gChk, x0 + w / 2, y + 21, (v == null ? "… " : v ? "✓ " : "✗ ") + label, { size: 12.5, bold: v != null });
@@ -3432,9 +3458,10 @@ K.page(7);
     gCmp.appendChild(s("rect", { x: 24, y: 246, width: 612, height: 70, rx: 10, class: "sv-panel" }));
     const hj = done ? (rs ? `j = ${e.ret - 1}` : `j = ${e.ret}`) : "j = ?";
     const hs = done ? `sides ${e.ret} | ${N - e.ret}` : "sides ?";
-    txt(gCmp, 40, 274, `HOARE-PARTITION  pivot ${rs ? "a" : "A"}[p] = ${x}  ·  ${lx} exchange${lx === 1 ? "" : "s"}  ·  ${hj}  ·  ${hs}`, { anchor: "start", mono: true, size: 12, bold: true });
-    txt(gCmp, 40, 300, `PARTITION (7.1)  pivot ${rs ? "a" : "A"}[r] = ${L.x}  ·  ${L.X} exchanges  ·  q = ${L.q - off}  ·  sides ${L.q - P} | ${R - L.q}`, { anchor: "start", mono: true, size: 12, fill: "var(--ink-2)" });
+    txt(gCmp, 40, 274, `${rs ? "hoare_partition  pivot a[0]" : "HOARE-PARTITION  pivot A[p]"} = ${x}  ·  ${lx} exchange${lx === 1 ? "" : "s"}  ·  ${hj}  ·  ${hs}`, { anchor: "start", mono: true, size: 12, bold: true });
+    txt(gCmp, 40, 300, `${rs ? `partition        pivot a[${N - 1}]` : "PARTITION (7.1)  pivot A[r]"} = ${L.x}  ·  ${L.X} exchanges  ·  q = ${L.q - off}  ·  sides ${L.q - P} | ${R - L.q}`, { anchor: "start", mono: true, size: 12, fill: "var(--ink-2)" });
     stX.set(e ? e.X : 0); stT.set(e ? e.T : 0); stW.set(e ? e.W : 0, done ? "good" : undefined);
+    stT.querySelector(".k").textContent = rs ? "comparisons" : "element tests"; stW.querySelector(".k").textContent = rs ? "loop passes" : "while iterations";
     renderCode();
   }
   function checks(e) {
@@ -3447,18 +3474,19 @@ K.page(7);
     cv.at(e.lines || [e.line], e.ret != null ? "good" : "on");
     if (e.ret == null) cv.at([], "good", false); else cv.at([], "on", false);
     const n = {}, r = {};
+    const at = scoutsAt(e); // the Rust scouts, 1-based like e
     n[1] = `x = ${input[0]}`; r[4] = `x = ${input[0]}`;
-    if (e.line === 2) { n[2] = `i = ${e.i}`; r[7] = `i = ${e.i - off}`; }
-    if (e.line === 3) { n[3] = `j = ${e.j}`; r[8] = `j = ${e.j - off}`; }
-    if (e.line > 3 || e.lines) { n[6] = `j = ${e.j}`; r[11] = `j = ${e.j - off}`; n[9] = `i = ${e.i}`; r[15] = `i = ${e.i - off}`; }
-    if (e.W) { n[4] = `iteration ${e.W}`; r[9] = `iteration ${e.W}`; }
-    if (e.scout === "j") { n[7] = [`A[${e.at}] = ${e.A[e.at - 1]} ≤ ${input[0]}? ${e.ok ? "yes" : "no"}`, e.ok ? "good" : "warn"]; r[12] = [`a[${e.at - 1}] <= ${input[0]}: ${e.ok}`, e.ok ? "good" : "warn"]; }
-    if (e.scout === "i") { n[10] = [`A[${e.at}] = ${e.A[e.at - 1]} ≥ ${input[0]}? ${e.ok ? "yes" : "no"}`, e.ok ? "good" : "warn"]; r[16] = [`a[${e.at - 1}] >= ${input[0]}: ${e.ok}`, e.ok ? "good" : "warn"]; }
-    if (e.line === 11) { n[11] = [`${e.i} < ${e.j}? ${e.go ? "yes" : "no"}`, e.go ? "warn" : "good"]; r[18] = [`${e.i - off} < ${e.j - off}: ${e.go}`, e.go ? "warn" : "good"]; }
-    if (e.line === 12) { n[12] = `A[${e.swap[0]}] ↔ A[${e.swap[1]}]`; r[19] = `swap(${e.swap[0] - 1}, ${e.swap[1] - 1})`; }
-    if (e.ret != null) { n[13] = [`return ${e.ret}`, "good"]; r[21] = [`return ${e.ret - 1}`, "good"]; }
+    if (e.line === 2) { n[2] = `i = ${e.i}`; r[5] = `i = ${at.i - 1}`; }
+    if (e.line === 3) { n[3] = `j = ${e.j}`; r[6] = `j = ${at.j - 1}`; }
+    if (e.line > 3 || e.lines) { n[6] = `j = ${e.j}`; r[9] = `j = ${at.j - 1}`; n[9] = `i = ${e.i}`; r[12] = `i = ${at.i - 1}`; }
+    if (e.W) { n[4] = `iteration ${e.W}`; r[7] = `pass ${e.W}`; }
+    if (e.scout === "j") { n[7] = [`A[${e.at}] = ${e.A[e.at - 1]} ≤ ${input[0]}? ${e.ok ? "yes" : "no"}`, e.ok ? "good" : "warn"]; r[8] = [`a[${e.at - 1}] > ${input[0]}: ${!e.ok}`, e.ok ? "good" : "warn"]; }
+    if (e.scout === "i") { n[10] = [`A[${e.at}] = ${e.A[e.at - 1]} ≥ ${input[0]}? ${e.ok ? "yes" : "no"}`, e.ok ? "good" : "warn"]; r[11] = [`a[${e.at - 1}] < ${input[0]}: ${!e.ok}`, e.ok ? "good" : "warn"]; }
+    if (e.line === 11) { n[11] = [`${e.i} < ${e.j}? ${e.go ? "yes" : "no"}`, e.go ? "warn" : "good"]; r[14] = [`${e.i - 1} >= ${e.j - 1}: ${!e.go}`, e.go ? "warn" : "good"]; }
+    if (e.line === 12) { n[12] = `A[${e.swap[0]}] ↔ A[${e.swap[1]}]`; r[17] = `swap(${e.swap[0] - 1}, ${e.swap[1] - 1})`; }
+    if (e.ret != null) { n[13] = [`return ${e.ret}`, "good"]; r[15] = [`return ${e.ret - 1}`, "good"]; }
     cv.notes(n, r);
-    cv.out(e.ret != null ? `j = ${e.ret}  ⟨${e.A.join(", ")}⟩` : null);
+    cv.out(e.ret != null ? `j = ${e.ret - off}  ⟨${e.A.join(", ")}⟩` : null);
   }
   function caption(e) {
     const x = input[0];

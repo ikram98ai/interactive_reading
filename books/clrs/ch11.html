@@ -303,8 +303,8 @@ first collision, mean of 1000 oracles: key 4.60
         <h2>Every slot keeps a short list</h2>
         <p class="story">Collisions will happen, so give each slot room for more than one element. With <b>chaining</b>, slot <i>j</i> points to the head of a linked list holding every stored element whose hash value is <i>j</i>, and holds NIL if there is none. The book calls it a nonrecursive divide-and-conquer: <i>h</i> splits the <i>n</i> elements into <i>m</i> lists of about <i>n</i>/<i>m</i> each, and each list is managed on its own.</p>
         <p class="story"><b>CHAINED-HASH-INSERT</b> puts the new element at the front of its list: O(1) in the worst case, as long as the key is not already there. <b>CHAINED-HASH-SEARCH</b> walks the list, so it costs the list's length. <b>CHAINED-HASH-DELETE</b> is handed the element <i>x</i> itself, not its key, so with a <b>doubly linked</b> list it unlinks <i>x</i> in O(1) with no search at all.</p>
-        <p class="story">Real Rust code rarely chains with linked nodes. Here each chain is a <code>Vec&lt;(u64, String)&gt;</code>: one contiguous buffer per slot, no allocation per element, no pointers to chase, and the cache brings neighbours in for free. Order inside a chain doesn't matter, so delete uses <code>swap_remove</code>, which moves the last pair into the hole in O(1). One thing is lost. Rust won't let you hold a reference to <i>x</i> while you change the table, so <code>delete</code> takes the key and searches first.</p>
-        <p class="imagine"><b>Try it:</b> press <b>Insert next</b> to add the keys of Exercise 11.2-2 with <i>h</i>(<i>k</i>) = <i>k</i> mod 9. Each new key goes to the front of its list. Click a key to pick it, then press <b>Search picked</b> or <b>Delete picked</b>. <b>Search a miss</b> walks a whole list and finds nothing. Switch to <b>Rust</b>: each list turns into a buffer that appends at the back, and a delete fills the hole with the last pair.</p>
+        <p class="story">Real Rust code rarely chains with linked nodes. Here the table is generic, <code>ChainedTable&lt;K, V&gt;</code> for any key type that is <code>Hash + Eq</code>, and each chain is a <code>Vec&lt;(K, V)&gt;</code>: one contiguous buffer per slot, no allocation per element, no pointers to chase, and the cache brings neighbours in for free. The slot is the key's <code>DefaultHasher</code> hash (the hasher behind std's <code>HashMap</code>) mod <i>m</i>, so the Rust view puts the same keys in other slots than <i>k</i> mod 9 does. Order inside a chain doesn't matter, so delete uses <code>swap_remove</code>, which moves the last pair into the hole in O(1). One thing is lost. Rust won't let you hold a reference to <i>x</i> while you change the table, so <code>delete</code> takes the key and searches first.</p>
+        <p class="imagine"><b>Try it:</b> press <b>Insert next</b> to add the keys of Exercise 11.2-2 with <i>h</i>(<i>k</i>) = <i>k</i> mod 9. Each new key goes to the front of its list. Click a key to pick it, then press <b>Search picked</b> or <b>Delete picked</b>. <b>Search a miss</b> walks a whole list and finds nothing. Switch to <b>Rust</b>: the keys are hashed by <code>DefaultHasher</code>, each list turns into a buffer that appends at the back, and a delete fills the hole with the last pair.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -357,72 +357,75 @@ if x.next ≠ NIL
     x.next.prev = x.prev
 </script>
 <script type="text/x-rust" id="rs-s3">
-// Chaining, with each chain a Vec: one small buffer per slot.
-struct ChainedTable {
-    t: Vec<Vec<(u64, String)>>, // slot j: the (key, data) pairs there
+// Chaining with one Vec per slot, hashed by DefaultHasher.
+use std::hash::{DefaultHasher, Hash, Hasher};
+
+struct ChainedTable<K, V> {
+    t: Vec<Vec<(K, V)>>,
 }
 
-impl ChainedTable {
+impl<K: Hash + Eq, V> ChainedTable<K, V> {
     fn new(m: usize) -> Self {
-        ChainedTable { t: (0..m).map(|_| Vec::new()).collect() }
-    }
-
-    fn h(&self, k: u64) -> usize {
-        (k % self.t.len() as u64) as usize // Exercise 11.2-2: k mod 9
-    }
-
-    fn insert(&mut self, k: u64, data: String) {
-        let j = self.h(k);
-        self.t[j].push((k, data)); // O(1) amortized, at the back
-    }
-
-    fn search(&self, k: u64) -> Option<&String> {
-        let chain = &self.t[self.h(k)]; // a shared borrow of one chain
-        let i = chain.iter().position(|(key, _)| *key == k)?;
-        Some(&chain[i].1)
-    }
-
-    // Takes the key: a &-pointer to x can't live through a change to T.
-    fn delete(&mut self, k: u64) -> Option<String> {
-        let j = self.h(k);
-        let i = self.t[j].iter().position(|(key, _)| *key == k)?;
-        Some(self.t[j].swap_remove(i).1) // the last pair fills the hole
-    }
-
-    fn show(&self) {
-        for (j, chain) in self.t.iter().enumerate() {
-            let keys: Vec<u64> = chain.iter().map(|p| p.0).collect();
-            println!("  T[{}] {:?}", j, keys);
+        let mut t = Vec::with_capacity(m);
+        for _ in 0..m {
+            t.push(Vec::new());
         }
+        ChainedTable { t }
+    }
+
+    fn h(&self, k: &K) -> usize {
+        let mut s = DefaultHasher::new();
+        k.hash(&mut s);
+        let m = self.t.len() as u64;
+        (s.finish() % m) as usize
+    }
+
+    fn insert(&mut self, k: K, data: V) {
+        let j = self.h(&k);
+        self.t[j].push((k, data));
+    }
+
+    fn search(&self, k: &K) -> Option<&V> {
+        let chain = &self.t[self.h(k)];
+        for i in 0..chain.len() {
+            if chain[i].0 == *k {
+                return Some(&chain[i].1);
+            }
+        }
+        None
+    }
+
+    fn delete(&mut self, k: &K) -> Option<V> {
+        let j = self.h(k);
+        let chain = &mut self.t[j];
+        for i in 0..chain.len() {
+            if chain[i].0 == *k {
+                let p = chain.swap_remove(i);
+                return Some(p.1);
+            }
+        }
+        None
     }
 }
 
 fn main() {
+    let keys: [u64; 9] =
+        [5, 28, 19, 15, 20, 33, 12, 17, 10];
     let mut t = ChainedTable::new(9);
-    for k in [5, 28, 19, 15, 20, 33, 12, 17, 10] {
-        t.insert(k, format!("item {}", k)); // format! builds a String
+    for k in keys {
+        t.insert(k, format!("item {}", k));
     }
-    t.show();
-    println!("search 19 -> {:?}", t.search(19));
-    println!("search 37 -> {:?}", t.search(37)); // 37 mod 9 = 1: a miss
-    println!("delete 28 -> {:?}", t.delete(28));
-    println!("T[1] now {:?}", t.t[1]);
+    println!("{:?}", t.search(&33));
+    println!("{:?}", t.search(&37));
+    println!("{:?}", t.delete(&28));
+    println!("{:?}", t.t[6]);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s3-out">
-  T[0] []
-  T[1] [28, 19, 10]
-  T[2] [20]
-  T[3] [12]
-  T[4] []
-  T[5] [5]
-  T[6] [15, 33]
-  T[7] []
-  T[8] [17]
-search 19 -> Some("item 19")
-search 37 -> None
-delete 28 -> Some("item 28")
-T[1] now [(10, "item 10"), (19, "item 19")]
+Some("item 33")
+None
+Some("item 28")
+[(33, "item 33")]
 </script>
   </section>
 
@@ -1064,24 +1067,24 @@ const M: u64 = 11;
 
 // Exercise 11.4-1's probe sequence: h1(k) = k, h2(k) = 1 + (k mod 10).
 fn h(k: u64, i: u64) -> usize {
-    ((k + i * (1 + k % (M - 1))) % M) as usize
+    ((k % M + i * (1 + k % (M - 1))) % M) as usize // k % M first: no overflow
 }
 
-// Result is Ok(slot) or Err(why); the caller can't ignore the error.
-fn hash_insert(t: &mut [Slot], k: u64) -> Result<usize, &'static str> {
+// Some(slot), or None when every probe found a key (the book's overflow).
+fn hash_insert(t: &mut [Slot], k: u64) -> Option<usize> {
     let mut i = 0;
     loop {
         let q = h(k, i);
         match t[q] {
             Slot::Empty | Slot::Deleted => { // DELETED counts as free
                 t[q] = Slot::Full(k);
-                return Ok(q);
+                return Some(q);
             }
             Slot::Full(_) => i += 1, // `_` ignores the key inside
         }
         if i == M { break; }
     }
-    Err("hash table overflow")
+    None // hash table overflow
 }
 
 fn hash_search(t: &[Slot], k: u64) -> Option<usize> {
@@ -1117,7 +1120,7 @@ fn main() {
     for mark in [Slot::Empty, Slot::Deleted] {
         let mut t = vec![Slot::Empty; M as usize]; // copies of one Slot
         for k in keys {
-            hash_insert(&mut t, k).unwrap(); // unwrap: panic on Err
+            hash_insert(&mut t, k).unwrap(); // unwrap: panic on None
         }
         hash_delete(&mut t, 4, mark);
         println!("delete 4 as {:?}: {}", mark, show(&t));
@@ -1130,10 +1133,10 @@ fn main() {
 size_of::<Slot>() = 16
 delete 4 as Empty: 22 - 59 17 - 15 28 88 - 31 10
   search 59 -> None
-  insert 26 -> Ok(4)
+  insert 26 -> Some(4)
 delete 4 as Deleted: 22 - 59 17 D 15 28 88 - 31 10
   search 59 -> Some(2)
-  insert 26 -> Ok(4)
+  insert 26 -> Some(4)
 </script>
   </section>
 
@@ -2399,14 +2402,19 @@ K.page(11);
   stats.append(stN, stA, stX, stL);
   const R = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
   const cv = code("#s3-code", { files: [{ name: "CHAINED-HASH", src: src("ps-s3"), rs: { name: "chained.rs", src: src("rs-s3"), out: src("rs-s3-out"), map: {
-    "CHAINED-HASH-INSERT": 15, "CHAINED-HASH-INSERT:1": [16, 17], "CHAINED-HASH-SEARCH": 20, "CHAINED-HASH-SEARCH:1": 21,
-    "CHAINED-HASH-DELETE": 27, "CHAINED-HASH-DELETE:1": [28, 29, 30],
-    "LIST-PREPEND": 17, "LIST-SEARCH": 22, "LIST-SEARCH:1": 21, "LIST-SEARCH:2": 22, "LIST-SEARCH:3": 22, "LIST-SEARCH:4": 23,
-    "LIST-DELETE": 30,
+    "CHAINED-HASH-INSERT": 24, "CHAINED-HASH-INSERT:1": [25, 26], "CHAINED-HASH-SEARCH": 29, "CHAINED-HASH-SEARCH:1": 30,
+    "CHAINED-HASH-DELETE": 39, "CHAINED-HASH-DELETE:1": [40, 41, 42, 43, 44, 45],
+    "LIST-PREPEND": 26, "LIST-SEARCH": [31, 32], "LIST-SEARCH:1": 30, "LIST-SEARCH:2": 32, "LIST-SEARCH:3": 31, "LIST-SEARCH:4": 33,
+    "LIST-DELETE": 44,
   } } }] });
   const m = mem("#s3-mem");
 
   const M = 9, EX = [5, 28, 19, 15, 20, 33, 12, 17, 10], MAXLEN = 7;
+  // The book hashes with k mod 9; the Rust view with DefaultHasher::new(), mod 9. DH[k] is that slot for the u64 keys
+  // 0..99, as rustc 1.99 computes it (std does not promise the same hashes across releases).
+  const DH = "7647440764815548026030737277632576583800874078781617870060533135655570878357075612580281418473381625";
+  const hb = (k) => k % M, hr = (k) => +DH[k], hj = (k) => (CODE_LANG.rust ? hr(k) : hb(k));
+  const chains = () => (CODE_LANG.rust ? st.vec : st.book);
   let st, busy = [];
   const S = session((b) => busy.forEach((x) => (x.disabled = b)));
 
@@ -2428,8 +2436,9 @@ K.page(11);
   function render() {
     [gHead, gSlots, gChains].forEach(K.clear);
     const rs = CODE_LANG.rust;
-    txt(gHead, 14, 24, `T[0 : 8]   n = ${st.n}   ${rs ? "each chain a Vec buffer" : "each chain a doubly linked list"}`, { anchor: "start", mono: true, size: 12.5, bold: true });
-    txt(gHead, 646, 24, "click a key to pick it", { anchor: "end", cls: "sv-label" });
+    K.$("#s3-pill").lastChild.textContent = rs ? "h = DefaultHasher mod 9" : "h(k) = k mod 9";
+    txt(gHead, 14, 24, `T[0 : 8]   n = ${st.n}   ${rs ? "Vec chains · DefaultHasher" : "each chain a doubly linked list"}`, { anchor: "start", mono: true, size: 12.5, bold: true });
+    if (!rs) txt(gHead, 646, 24, "click a key to pick it", { anchor: "end", cls: "sv-label" }); // the Rust view keeps its picture compact
     for (let j = 0; j < M; j++) {
       const y = rowY(j), ch = order(j), cy = y + NH / 2;
       txt(gSlots, 24, cy + 4, String(j), { cls: "ac-i", size: 11 });
@@ -2446,7 +2455,7 @@ K.page(11);
         const g = s("g");
         g.appendChild(s("rect", { x, y, width: 54, height: NH, rx: rs ? 3 : 7, class: cls, style: st.pick === k ? { stroke: "var(--ink)", strokeWidth: 2.4 } : {} }));
         txt(g, x + 27, y + 17, String(k), { mono: true, size: 13, bold: true });
-        clickable(g, `Key ${k} in slot ${j}`, () => { if (S.busy) return; st.pick = k; render(); cap("#s3-cap", `Picked <b>${k}</b>, in the list of slot ${j} because ${k} mod 9 = ${j}. Search for it or delete it.`); });
+        clickable(g, `Key ${k} in slot ${j}`, () => { if (S.busy) return; st.pick = k; render(); cap("#s3-cap", `Picked <b>${k}</b>, in the ${rs ? "Vec" : "list"} of slot ${j} because ${rs ? `DefaultHasher sends ${k} to slot ${j}` : `${k} mod 9 = ${j}`}. Search for it or delete it.`); });
         gChains.appendChild(g);
         // the book's doubly linked list: next above, prev below
         if (!rs && i < ch.length - 1 && !(st.xs && st.xs.j === j)) {
@@ -2456,7 +2465,7 @@ K.page(11);
         }
       });
     }
-    const lens = st.book.map((c) => c.length);
+    const lens = chains().map((c) => c.length);
     stN.set(st.n); stA.set((st.n / M).toFixed(2)); stL.set(Math.max(...lens));
     stX.set(st.examined == null ? "–" : st.examined);
     renderCode(); renderMem();
@@ -2470,7 +2479,7 @@ K.page(11);
     cv.notes(st.notes[0], st.notes[1]);
   }
   function renderMem() {
-    const j = st.opSlot != null ? st.opSlot : st.pick != null ? st.pick % M : null;
+    const j = st.opSlot != null ? st.opSlot : st.pick != null ? hr(st.pick) : null;
     const heap = [{ id: "outer", label: "t's buffer · 9 Vec headers (ptr, len, cap)", cells: st.vec.map((c) => c.length), cw: 30,
       marks: j != null ? { [j]: "on" } : {}, ptrs: j != null && st.cap[j] ? [{ from: j, to: "inner" }] : [] }];
     if (j != null && st.cap[j]) {
@@ -2494,11 +2503,11 @@ K.page(11);
   /* ---------- operations ---------- */
   const setMark = (mk, ps, rsn) => { st.mark = mk; st.notes = [ps || {}, rsn || {}]; render(); };
   async function insert(w, k) {
-    const j = k % M, rs = CODE_LANG.rust;
-    st.opSlot = j; st.hotSlot = j; st.look = null; st.found = null; st.gone = null; st.examined = null;
+    const j = hj(k), jb = hb(k), jr = hr(k), rs = CODE_LANG.rust;
+    st.opSlot = jr; st.hotSlot = j; st.look = null; st.found = null; st.gone = null; st.examined = null;
     st.frame = { fn: "insert(&mut self, k, data)", vars: [{ n: "k", t: "u64", v: k }, { n: "j", t: "usize", v: j, hot: true }] };
-    setMark({ dim: ["CHAINED-HASH-INSERT:1"], ps: ["LIST-PREPEND:1"], rs: [16] }, { "CHAINED-HASH-INSERT:1": `h(${k}) = ${j}`, "LIST-PREPEND:1": `x.next = ${st.book[j][0] != null ? st.book[j][0] : "NIL"}` }, { 16: `j = ${k} % 9 = ${j}` });
-    cap("#s3-cap", `${k} mod 9 = <b>${j}</b>, so ${k} goes into slot ${j}'s ${rs ? "Vec" : "list"}.`);
+    setMark({ dim: ["CHAINED-HASH-INSERT:1"], ps: ["LIST-PREPEND:1"], rs: [25] }, { "CHAINED-HASH-INSERT:1": `h(${k}) = ${jb}`, "LIST-PREPEND:1": `x.next = ${st.book[jb][0] != null ? st.book[jb][0] : "NIL"}` }, { 25: `j = h(${k}) = ${jr}` });
+    cap("#s3-cap", rs ? `DefaultHasher's hash of ${k}, mod 9, is <b>${j}</b>, so ${k} goes into slot ${j}'s Vec.` : `${k} mod 9 = <b>${j}</b>, so ${k} goes into slot ${j}'s list.`);
     const tag = draw.tag(String(k), "sv-data-soft"); layer.appendChild(tag);
     const cy = rowY(j) + NH / 2;
     try {
@@ -2510,33 +2519,33 @@ K.page(11);
         await w(Promise.all([fly(tag, [SLX + SLW / 2, cy], [bx(0) + 27, cy], 420),
           tween(420, (t) => { st.xs = { j, x: [null].concat(old.map((_, i) => lerp(bx(i), bx(i + 1), t))) }; render(); })]));
         st.xs = null; st.hide = null;
-        st.vec[j].push(k);
+        st.vec[jr].push(k);
       } else {
         const i = st.vec[j].length;
         await w(fly(tag, [SLX + SLW / 2, cy], [vx(i) + 27, cy], 420));
-        st.vec[j].push(k); st.book[j].unshift(k);
+        st.vec[jr].push(k); st.book[jb].unshift(k);
       }
     } finally { tag.remove(); st.xs = null; st.hide = null; }
     let grew = null;
-    if (st.vec[j].length > st.cap[j]) { grew = [st.cap[j], Math.max(4, st.cap[j] * 2)]; st.cap[j] = grew[1]; }
+    if (st.vec[jr].length > st.cap[jr]) { grew = [st.cap[jr], Math.max(4, st.cap[jr] * 2)]; st.cap[jr] = grew[1]; }
     st.n++;
-    const head = st.book[j];
-    setMark({ dim: ["CHAINED-HASH-INSERT:1"], ps: ["LIST-PREPEND:5"], rs: [17], tone: "good" }, { "CHAINED-HASH-INSERT:1": `h(${k}) = ${j}`, "LIST-PREPEND:5": `L.head = ${k}` }, { 17: `len ${st.vec[j].length} · cap ${st.cap[j]}` });
-    cap("#s3-cap", rs ? `<code>push</code> put ${k} at the back of slot ${j}'s buffer` + (grew ? grew[0] ? `, which was full: a new buffer with cap ${grew[1]}, the pairs copied over. Amortized, still O(1).` : `. It was an empty Vec, so this first push allocated a buffer for 4 pairs.` : ". No pointer to update: the pairs just sit side by side.")
+    const head = st.book[jb];
+    setMark({ dim: ["CHAINED-HASH-INSERT:1"], ps: ["LIST-PREPEND:5"], rs: [26], tone: "good" }, { "CHAINED-HASH-INSERT:1": `h(${k}) = ${jb}`, "LIST-PREPEND:5": `L.head = ${k}` }, { 26: `len ${st.vec[jr].length} · cap ${st.cap[jr]}` });
+    cap("#s3-cap", rs ? `<code>push</code> put ${k} at the back of slot ${j}'s buffer` + (grew ? grew[0] ? `, which was full: a new buffer with cap ${grew[1]}, the pairs copied over. Amortized, still O(1).` : `. It was an empty Vec, so this first push allocated a buffer for 4 pairs.` : `${st.vec[jr].length > 1 ? `, behind ${st.vec[jr][st.vec[jr].length - 2]}` : ""}. No pointer to update: the pairs just sit side by side.`)
       : `LIST-PREPEND made ${k} the new head of slot ${j}'s list${head.length > 1 ? `, in front of ${head[1]}` : ""}. Four pointer writes, O(1), however long the list.`);
   }
   async function walk(w, k, purpose) {
-    const j = k % M, rs = CODE_LANG.rust, ch = order(j).slice();
-    st.opSlot = j; st.hotSlot = j; st.found = null; st.gone = null; st.look = null; st.examined = 0;
+    const j = hj(k), rs = CODE_LANG.rust, ch = order(j).slice();
+    st.opSlot = hr(k); st.hotSlot = j; st.found = null; st.gone = null; st.look = null; st.examined = 0;
     const del = purpose === "delete";
-    const rline = del ? 29 : 22;
-    st.frame = { fn: del ? "delete(&mut self, k)" : "search(&self, k)", vars: [{ n: "k", t: "u64", v: k }, { n: "i", t: "usize", v: "–", hot: true }] };
-    setMark({ dim: ["CHAINED-HASH-SEARCH:1"], ps: ["LIST-SEARCH:1"], rs: del ? [28] : [21] }, { "CHAINED-HASH-SEARCH:1": `h(${k}) = ${j}`, "LIST-SEARCH:1": `x = ${ch.length ? (rs ? st.book[j][0] : ch[0]) : "NIL"}` }, { [del ? 28 : 21]: `slot ${j}` });
+    const rline = del ? 43 : 32, rnone = del ? 48 : 36;
+    st.frame = { fn: del ? "delete(&mut self, k)" : "search(&self, k)", vars: [{ n: "k", t: "&u64", v: k }, { n: "i", t: "usize", v: "–", hot: true }] };
+    setMark({ dim: ["CHAINED-HASH-SEARCH:1"], ps: ["LIST-SEARCH:1"], rs: del ? [40] : [30] }, { "CHAINED-HASH-SEARCH:1": `h(${k}) = ${j}`, "LIST-SEARCH:1": `x = ${ch.length ? ch[0] : "NIL"}` }, { [del ? 40 : 30]: `slot ${j}` });
     await w(sleep(380));
     for (let i = 0; i <= ch.length; i++) {
       if (i === ch.length) {
         st.look = null;
-        setMark({ dim: ["CHAINED-HASH-SEARCH:1"], ps: ["LIST-SEARCH:2"], rs: [rline], tone: "bad" }, { "LIST-SEARCH:2": ["x = NIL, stop", "bad"] }, { [rline]: ["None: ? returns", "bad"] });
+        setMark({ dim: ["CHAINED-HASH-SEARCH:1"], ps: ["LIST-SEARCH:2"], rs: [rnone], tone: "bad" }, { "LIST-SEARCH:2": ["x = NIL, stop", "bad"] }, { [rnone]: ["None", "bad"] });
         return -1;
       }
       st.look = { j, i }; st.examined++;
@@ -2551,26 +2560,26 @@ K.page(11);
   }
   const searchPicked = () => S.run(async (w) => {
     if (!st.n) { cap("#s3-cap", "The table is empty. Insert a few keys first."); return; }
-    if (st.pick == null || !allKeys().includes(st.pick)) { const j = st.book.reduce((b, c, i) => (c.length > st.book[b].length ? i : b), 0); st.pick = order(j)[order(j).length - 1]; }
+    if (st.pick == null || !allKeys().includes(st.pick)) { const C = chains(), j = C.reduce((b, c, i) => (c.length > C[b].length ? i : b), 0); st.pick = order(j)[order(j).length - 1]; }
     const k = st.pick, i = await walk(w, k, "search");
     st.found = k; st.look = null;
-    setMark({ dim: ["CHAINED-HASH-SEARCH:1"], ps: ["LIST-SEARCH:4"], rs: [23], tone: "good" }, { "CHAINED-HASH-SEARCH:1": `h(${k}) = ${k % M}`, "LIST-SEARCH:4": `return ${k}` }, { 23: `Some("item ${k}")` });
+    setMark({ dim: ["CHAINED-HASH-SEARCH:1"], ps: ["LIST-SEARCH:4"], rs: [33], tone: "good" }, { "CHAINED-HASH-SEARCH:1": `h(${k}) = ${hj(k)}`, "LIST-SEARCH:4": `return ${k}` }, { 33: `Some("item ${k}")` });
     cap("#s3-cap", `CHAINED-HASH-SEARCH(T, ${k}) found it after examining <b>${i + 1}</b> element${i ? "s" : ""}: the cost is the position in the list, not the size of the table.`);
   });
   const searchMiss = () => S.run(async (w) => {
-    const present = new Set(allKeys()), lens = st.book.map((c) => c.length), top = Math.max(...lens);
-    const cands = R(10, 99).filter((k) => !present.has(k) && lens[k % M] === top);
+    const present = new Set(allKeys()), lens = chains().map((c) => c.length), top = Math.max(...lens);
+    const cands = R(10, 99).filter((k) => !present.has(k) && lens[hj(k)] === top);
     const k = cands[Math.floor(Math.random() * cands.length)];
     st.pick = null;
     await walk(w, k, "search");
-    const n = lens[k % M];
-    setMark({ dim: ["CHAINED-HASH-SEARCH:1"], ps: ["LIST-SEARCH:4"], rs: [22], tone: "bad" }, { "CHAINED-HASH-SEARCH:1": `h(${k}) = ${k % M}`, "LIST-SEARCH:4": ["return NIL", "bad"] }, { 22: ["None", "bad"] });
-    cap("#s3-cap", `${k} is not stored. ${k} mod 9 = ${k % M}, so the search had to read <b>all ${n}</b> element${n === 1 ? "" : "s"} of that list${n ? "" : " (none)"} before it could say NIL. A miss always pays for the whole list.`);
+    const n = lens[hj(k)];
+    setMark({ dim: ["CHAINED-HASH-SEARCH:1"], ps: ["LIST-SEARCH:4"], rs: [36], tone: "bad" }, { "CHAINED-HASH-SEARCH:1": `h(${k}) = ${hj(k)}`, "LIST-SEARCH:4": ["return NIL", "bad"] }, { 36: ["None", "bad"] });
+    cap("#s3-cap", `${k} is not stored. ${CODE_LANG.rust ? `DefaultHasher sends ${k} to slot ${hj(k)}` : `${k} mod 9 = ${hj(k)}`}, so the search had to read <b>all ${n}</b> element${n === 1 ? "" : "s"} of that ${CODE_LANG.rust ? "Vec" : "list"}${n ? "" : " (none)"} before it could say ${CODE_LANG.rust ? "None" : "NIL"}. A miss always pays for the whole ${CODE_LANG.rust ? "chain" : "list"}.`);
   });
   const deletePicked = () => S.run(async (w) => {
     if (!st.n) { cap("#s3-cap", "Nothing to delete: the table is empty."); return; }
-    if (st.pick == null || !allKeys().includes(st.pick)) { const L = st.book.reduce((b, c) => (c.length > b.length ? c : b), []); st.pick = L[Math.floor(L.length / 2)]; }
-    const k = st.pick, j = k % M, rs = CODE_LANG.rust;
+    if (st.pick == null || !allKeys().includes(st.pick)) { const L = chains().reduce((b, c) => (c.length > b.length ? c : b), []); st.pick = L[Math.floor(L.length / 2)]; }
+    const k = st.pick, j = hj(k), jb = hb(k), jr = hr(k), rs = CODE_LANG.rust;
     if (!rs) {
       // the book: x is handed over, so no search, just pointer surgery
       const L = st.book[j], i = L.indexOf(k), prev = i > 0 ? L[i - 1] : null, next = i < L.length - 1 ? L[i + 1] : null;
@@ -2589,7 +2598,7 @@ K.page(11);
       st.book[j] = rest; st.gone = null;
       await w(tween(380, (t) => { st.xs = { j, x: rest.map((_, q) => lerp(from[q], bx(q), t)) }; render(); }));
       st.xs = null;
-      const vi = st.vec[j].indexOf(k), last = st.vec[j].pop(); if (vi < st.vec[j].length) st.vec[j][vi] = last; // keep the Rust view in step
+      const vi = st.vec[jr].indexOf(k), last = st.vec[jr].pop(); if (vi < st.vec[jr].length) st.vec[jr][vi] = last; // keep the Rust view in step
       st.n--; st.pick = null;
       setMark({ dim: ["CHAINED-HASH-DELETE:1"], ps: [next != null ? "LIST-DELETE:5" : "LIST-DELETE:4"], tone: "good" }, { "CHAINED-HASH-DELETE:1": `${k} unlinked` }, {});
       cap("#s3-cap", `${k} is unlinked: ${prev != null ? prev : "the head"} now points past it${next != null ? ` to ${next}, and ${next} points back` : ""}. <b>O(1)</b>, and <b>0</b> elements examined, because x came with its prev pointer.`);
@@ -2599,7 +2608,7 @@ K.page(11);
     const i = await walk(w, k, "delete");
     const V = st.vec[j], lastI = V.length - 1;
     st.gone = { j, k }; st.look = null;
-    setMark({ ps: [], rs: [30] }, {}, { 30: lastI === i ? `swap_remove(${i}): it was last` : `swap_remove(${i}): ${V[lastI]} fills it` });
+    setMark({ ps: [], rs: [44] }, {}, { 44: lastI === i ? `swap_remove(${i}): it was last` : `swap_remove(${i}): ${V[lastI]} fills it` });
     await w(sleep(360));
     if (i !== lastI) {
       const mv = V[lastI], tag = draw.tag(String(mv), "sv-db"); layer.appendChild(tag);
@@ -2609,16 +2618,16 @@ K.page(11);
       V[i] = mv;
     }
     V.pop();
-    st.book[j] = st.book[j].filter((x) => x !== k);
+    st.book[jb] = st.book[jb].filter((x) => x !== k);
     st.n--; st.pick = null; st.gone = null;
-    setMark({ ps: [], rs: [30], tone: "good" }, {}, { 30: [`removed ${k}`, "good"] });
+    setMark({ ps: [], rs: [45], tone: "good" }, {}, { 45: [`removed ${k}: Some(p.1)`, "good"] });
     cap("#s3-cap", `Deleting ${k} took a search by key (${i + 1} examined), then <code>swap_remove</code> ${i !== lastI ? `moved the last pair, ${V[i]}, into the hole` : "just dropped the last pair"}. O(1) after the search, and the order of a chain never mattered. The buffer keeps its cap ${st.cap[j]}.`);
   });
   const insertNext = () => S.run(async (w) => {
     let k;
     if (st.next < EX.length) k = EX[st.next++];
     else {
-      const present = new Set(allKeys()), cands = R(10, 99).filter((x) => !present.has(x) && st.book[x % M].length < MAXLEN - 1);
+      const present = new Set(allKeys()), cands = R(10, 99).filter((x) => !present.has(x) && st.book[hb(x)].length < MAXLEN - 1 && st.vec[hr(x)].length < MAXLEN - 1);
       k = cands[Math.floor(Math.random() * cands.length)];
     }
     await insert(w, k);
@@ -3817,7 +3826,7 @@ K.page(11);
       else if (v === "D") txt(gCells, x + CW / 2, TY + CH / 2 + 4, CODE_LANG.rust ? "Deleted" : "DELETED", { cls: "ac-i", size: 10.5, bold: true });
       txt(gCells, x + CW / 2, TY + CH + 15, String(q), { cls: "ac-i" });
     }
-    txt(gCells, 14, TY - 8, "T", { anchor: "start", cls: "sv-label" });
+    txt(gCells, 14, TY - 8, CODE_LANG.rust ? "t" : "T", { anchor: "start", cls: "sv-label" });
     // the probe pointer
     if (view.i != null) {
       const q = view.path[view.path.length - 1], x = cx(q);
@@ -3827,8 +3836,12 @@ K.page(11);
     // the result
     const r = last || { tone: null, text: `${nKeys()} of ${M} slots hold a key · empty slots hold ${CODE_LANG.rust ? "Slot::Empty" : "NIL"}` };
     gRes.appendChild(s("rect", { x: 14, y: 240, width: 632, height: 38, rx: 10, class: r.tone === "good" ? "sv-good" : r.tone === "bad" ? "sv-bad" : "sv-panel" }));
-    txt(gRes, 330, 264, r.text, { mono: true, size: 12.5, bold: r.tone != null });
-    txt(gRes, 14, 304, mode === 0 ? "keys 10, 22, 31, 4, 15, 28, 17, 88, 59 · Exercise 11.4-1" : "the nine keys of Exercise 11.4-1 are in place", { anchor: "start", cls: "sv-label" });
+    // in Rust mode the result reads as the program's call and return value
+    const rsRes = (t) => rsWord(t).replace(/HASH-INSERT\(T, /g, "hash_insert(&mut t, ").replace(/HASH-SEARCH\(T, /g, "hash_search(&t, ")
+      .replace(/HASH-DELETE\(T, (\d+)\)/g, (_, k) => `hash_delete(&mut t, ${k}, ${mode === 1 ? "Empty" : "Deleted"})`)
+      .replace(/returned (\d+)/g, "returned Some($1)").replace(/returned Empty/g, "returned None").replace(/ in T$/, " in t");
+    txt(gRes, 330, 264, last && CODE_LANG.rust ? rsRes(r.text) : r.text, { mono: true, size: 12.5, bold: r.tone != null });
+    txt(gRes, 14, 304, mode === 0 ? "Exercise 11.4-1 · keys 10, 22, 31, 4, 15, 28, 17, 88, 59" : "Exercise 11.4-1 · the nine keys are in place", { anchor: "start", cls: "sv-label" });
     const n = nKeys();
     stN.set(n); stA.set((n / M).toFixed(2), n === M ? "bad" : undefined); stP.set(view.path.length);
     renderMem();
@@ -3885,7 +3898,7 @@ K.page(11);
         await w(fly(tag, [57, 27], [cx(q), TY + CH / 2], 420));
         tag.remove();
         T[q] = k; view.marks[q] = "good"; view.i = null;
-        cv.at([]); cv.at([`${P}:6`], "good"); notes({ [`${P}:4`]: [`T[${q}] = ${show}`, "good"], [`${P}:6`]: [`return ${q}`, "good", `Ok(${q})`] });
+        cv.at([]); cv.at([`${P}:6`], "good"); notes({ [`${P}:4`]: [`T[${q}] = ${show}`, "good"], [`${P}:6`]: [`return ${q}`, "good", `Some(${q})`] });
         setLast("good", `HASH-INSERT(T, ${k}) returned ${q} after ${view.path.length} probe${view.path.length > 1 ? "s" : ""}`);
         cap("#s9-cap", v === "D" ? `Slot ${q} holds DELETED, which HASH-INSERT treats as free, so <b>${k}</b> reuses the tombstone's slot. The table is back to ${nKeys()} keys.`
           : view.path.length === 1 ? `Probe i = 0 lands on slot ${q}, and it holds NIL: <b>${k}</b> gets its first choice. HASH-INSERT returns ${q}.`
@@ -3896,7 +3909,7 @@ K.page(11);
         notes({ [`${P}:3`]: `q = ${q}`, [`${P}:4`]: [`T[${q}] = ${show}`, "warn"], [`${P}:7`]: `i = ${cur.i}` });
         cv.at([`${P}:7`]);
         if (cur.i === M) {
-          cv.at([]); cv.at([`${P}:9`], "bad"); notes({ [`${P}:8`]: [`i = ${M} = m`, "bad"], [`${P}:9`]: ["overflow", "bad", "Err(overflow)"] });
+          cv.at([]); cv.at([`${P}:9`], "bad"); notes({ [`${P}:8`]: [`i = ${M} = m`, "bad"], [`${P}:9`]: ["overflow", "bad", "None"] });
           view.marks[q] = "bad"; view.i = null;
           setLast("bad", `HASH-INSERT(T, ${k}): error "hash table overflow"`);
           cap("#s9-cap", `All ${M} probes of ${k}'s sequence found a key, so HASH-INSERT gives up: <b>hash table overflow</b>. Its probe sequence is a permutation, so it really did try every slot. With open addressing α can never pass 1.`);

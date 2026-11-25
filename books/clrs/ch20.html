@@ -37,6 +37,7 @@
 .s6-dim { opacity: .35; }
 .gr-node.clickable:hover circle, .gr-node.clickable:focus-visible circle { stroke: var(--lilac); stroke-width: 3.5; }
 #s7-svg .gr-k { font-size: 11px; }
+#s7-svg .gr-node.gray20.on circle { fill: color-mix(in srgb, var(--ink-3) 38%, var(--surface)); stroke: var(--sun); stroke-width: 3.5; } /* the current vertex stays gray, with a gold ring */
 .gr-node.gray20 circle { fill: color-mix(in srgb, var(--ink-3) 38%, var(--surface)); stroke: var(--ink-3); stroke-width: 2; }
 .gr-node.gray20.on circle { fill: var(--sun-soft); stroke: var(--sun); stroke-width: 3; }
 .gr-node.gray20.on2 circle { fill: var(--blue-soft); stroke: var(--blue); stroke-width: 3; }
@@ -424,70 +425,69 @@ while Q ≠ ∅
 <script type="text/x-rust" id="rs-s3">
 use std::collections::VecDeque;
 
-#[derive(Clone, Copy, PartialEq)]
-enum Color { White, Gray, Black }
-
-// `&[Vec<usize>]` borrows the adjacency lists. `None` plays the book's
-// NIL (for pi) and its infinity (for d: not reached yet).
-fn bfs(
-    adj: &[Vec<usize>],
-    s: usize,
-) -> (Vec<Option<u32>>, Vec<Option<usize>>) {
-    let n = adj.len();
-    let mut color = vec![Color::White; n];
-    let mut d: Vec<Option<u32>> = vec![None; n];
-    let mut pi: Vec<Option<usize>> = vec![None; n];
-    color[s] = Color::Gray;
-    d[s] = Some(0);
-    // Each vertex is enqueued once, so n slots can never overflow.
-    let mut q = VecDeque::with_capacity(n);
-    q.push_back(s);
-    while let Some(u) = q.pop_front() {   // test + dequeue in one go
-        for &v in &adj[u] {      // `&v` copies each index out of the list
-            if color[v] == Color::White {
-                color[v] = Color::Gray;
-                d[v] = Some(d[u].unwrap() + 1);  // u was reached: Some
-                pi[v] = Some(u);
-                q.push_back(v);
-            }
-        }
-        color[u] = Color::Black;
-    }
-    (d, pi)
+// adj[u] lists the numbers of u's neighbours.
+struct Graph {
+    adj: Vec<Vec<usize>>,
 }
 
-fn name(i: usize) -> char { (b'r' + i as u8) as char } // 0 is 'r', 1 is 's'
+impl Graph {
+    // A distance per vertex. None plays the book's infinity and its WHITE: the
+    // code only asks "white or not?", so it keeps no colours (and no parents π).
+    fn bfs(
+        &self,
+        s: usize,
+    ) -> Vec<Option<u32>> {
+        let n = self.adj.len();
+        let mut d = vec![None; n];
+        d[s] = Some(0);
+        // Each vertex is enqueued once, so n slots never overflow.
+        let mut q = VecDeque::with_capacity(n);
+        q.push_back(s);
+        while let Some(u) = q.pop_front() { // test + dequeue in one go
+            let du = d[u].unwrap(); // u was queued, so it was reached
+            for &v in &self.adj[u] { // `&v` copies each index out
+                if d[v].is_none() {
+                    d[v] = Some(du + 1);
+                    q.push_back(v);
+                }
+            }
+        }
+        d
+    }
+}
 
 fn main() {
-    // r s t u v w x y z are 0..=8; neighbours in alphabetical order
-    let adj = vec![
-        vec![1, 2, 5],    // r: s t w
-        vec![0, 3, 4],    // s: r u v
-        vec![0, 3],       // t: r u
-        vec![1, 2, 7],    // u: s t y
-        vec![1, 5, 7],    // v: s w y
-        vec![0, 4, 6, 8], // w: r v x z
-        vec![5, 7, 8],    // x: w y z
-        vec![3, 4, 6],    // y: u v x
-        vec![5, 6],       // z: w x
-    ];
-    let (d, pi) = bfs(&adj, 1); // source s
-    for v in 0..adj.len() {
-        let from = pi[v].map_or('-', name); // NIL prints as '-'
-        println!("{} d={:?} from {}", name(v), d[v], from);
+    let g = Graph {
+        adj: vec![
+            vec![1, 2, 5],    // r: s t w
+            vec![0, 3, 4],    // s: r u v
+            vec![0, 3],       // t: r u
+            vec![1, 2, 7],    // u: s t y
+            vec![1, 5, 7],    // v: s w y
+            vec![0, 4, 6, 8], // w: r v x z
+            vec![5, 7, 8],    // x: w y z
+            vec![3, 4, 6],    // y: u v x
+            vec![5, 6],       // z: w x
+        ],
+    };
+    let d = g.bfs(1); // source s
+    let names = ['r', 's', 't', 'u', 'v',
+                 'w', 'x', 'y', 'z'];
+    for v in 0..d.len() {
+        println!("{}: {:?}", names[v], d[v]);
     }
 }
 </script>
 <script type="text/x-rust-out" id="rs-s3-out">
-r d=Some(1) from s
-s d=Some(0) from -
-t d=Some(2) from r
-u d=Some(1) from s
-v d=Some(1) from s
-w d=Some(2) from r
-x d=Some(3) from w
-y d=Some(2) from u
-z d=Some(3) from w
+r: Some(1)
+s: Some(0)
+t: Some(2)
+u: Some(1)
+v: Some(1)
+w: Some(2)
+x: Some(3)
+y: Some(2)
+z: Some(3)
 </script>
   </section>
 
@@ -964,63 +964,74 @@ u.color = BLACK          // blacken u; it is finished
 #[derive(Clone, Copy, PartialEq)]
 enum Color { White, Gray, Black }
 
-// const arrays live in the binary: fixed size, no allocation.
-const NAMES: [&str; 9] = ["shirt", "tie", "jacket", "belt", "watch",
-                          "shorts", "pants", "shoes", "socks"];
-// (u, v) means: u must be put on before v
-const EDGES: [(usize, usize); 9] = [(0, 1), (0, 3), (1, 2), (3, 2), (5, 6),
-                                    (5, 7), (6, 7), (6, 3), (8, 7)];
-
-// A free function: the state travels in as &mut arguments.
-fn visit(g: &[Vec<usize>], u: usize, color: &mut [Color],
-         order: &mut Vec<usize>, back: &mut Vec<(usize, usize)>) {
-    color[u] = Color::Gray;
-    for &v in &g[u] {
-        match color[v] {
-            Color::White => visit(g, v, color, order, back),
-            Color::Gray => back.push((u, v)), // Lemma 20.11: a cycle
-            Color::Black => {}
-        }
-    }
-    color[u] = Color::Black;
-    order.push(u); // finished: push at the END is O(1) on a Vec
+struct Topo {
+    color: Vec<Color>,
+    order: Vec<usize>,
 }
 
-fn topological_sort(g: &[Vec<usize>]) -> (Vec<usize>, Vec<(usize, usize)>) {
-    let mut color = vec![Color::White; g.len()];
-    let (mut order, mut back) = (Vec::new(), Vec::new());
-    for u in 0..g.len() {
-        if color[u] == Color::White {
-            visit(g, u, &mut color, &mut order, &mut back);
+impl Topo {
+    fn sort(g: &[Vec<usize>]) -> Vec<usize> {
+        let n = g.len();
+        let mut s = Topo {
+            color: vec![Color::White; n],
+            order: Vec::with_capacity(n),
+        };
+        for u in 0..n {
+            if s.color[u] == Color::White {
+                s.visit(g, u);
+            }
         }
+        s.order.reverse(); // the last to finish comes first
+        s.order
     }
-    order.reverse(); // the book's "front of a list" = reverse finish order
-    (order, back)
+
+    fn visit(
+        &mut self,
+        g: &[Vec<usize>],
+        u: usize,
+    ) {
+        self.color[u] = Color::Gray;
+        for &v in &g[u] {
+            if self.color[v] == Color::White {
+                self.visit(g, v);
+            }
+        }
+        self.color[u] = Color::Black;
+        self.order.push(u); // finished: push on the end, O(1)
+    }
 }
 
 fn main() {
-    let mut edges = EDGES.to_vec(); // array -> growable Vec
-    for round in 0..2 {
-        let mut g = vec![Vec::new(); NAMES.len()];
-        for &(u, v) in &edges {
-            g[u].push(v);
-        }
-        let (order, back) = topological_sort(&g);
-        let list: Vec<&str> = order.iter().map(|&v| NAMES[v]).collect();
-        println!("{}", list.join(" "));
-        for (u, v) in back {
-            println!("  back edge {} -> {}: no order", NAMES[u], NAMES[v]);
-        }
-        if round == 0 {
-            edges.push((2, 0)); // the jacket before the shirt: a cycle
-        }
+    let g = vec![
+        vec![1, 3], // shirt: tie belt
+        vec![2],    // tie: jacket
+        vec![],     // jacket
+        vec![2],    // belt: jacket
+        vec![],     // watch
+        vec![6, 7], // shorts: pants shoes
+        vec![7, 3], // pants: shoes belt
+        vec![],     // shoes
+        vec![7],    // socks: shoes
+    ];
+    let names = ["shirt", "tie", "jacket",
+                 "belt", "watch", "shorts",
+                 "pants", "shoes", "socks"];
+    let order = Topo::sort(&g);
+    for &u in &order {
+        println!("{}", names[u]);
     }
 }
 </script>
 <script type="text/x-rust-out" id="rs-s7-out">
-socks shorts pants shoes watch shirt belt tie jacket
-socks shorts pants shoes watch shirt belt tie jacket
-  back edge jacket -> shirt: no order
+socks
+shorts
+pants
+shoes
+watch
+shirt
+belt
+tie
+jacket
 </script>
   </section>
 
@@ -1084,68 +1095,90 @@ u.f = time
 u.color = BLACK          // blacken u; it is finished
 </script>
 <script type="text/x-rust" id="rs-s8">
-// Passes 1 and 2 share this DFS: it pushes each vertex when it finishes.
-fn dfs(g: &[Vec<usize>], u: usize, seen: &mut [bool], out: &mut Vec<usize>) {
-    seen[u] = true;                // WHITE becomes GRAY (lines 1-3)
-    for &v in &g[u] {              // line 4
-        if !seen[v] {              // line 5: still WHITE
-            dfs(g, v, seen, out);  // lines 6-7
-        }
-    }
-    out.push(u);                   // lines 8-10: u is finished
+// One depth-first search: seen marks a vertex found (WHITE becomes GRAY),
+// and order lists the vertices as they finish (BLACK). No clock, no colours.
+struct Dfs {
+    seen: Vec<bool>,
+    order: Vec<usize>,
 }
 
-// Line 2. g is only borrowed: gt is a new, separate graph.
-fn transpose(g: &[Vec<usize>]) -> Vec<Vec<usize>> {
-    let mut gt = vec![Vec::new(); g.len()]; // vec![x; n] clones x n times
-    for (u, list) in g.iter().enumerate() {
-        for &v in list {
-            gt[v].push(u);         // the edge (u, v) becomes (v, u)
+impl Dfs {
+    fn new(n: usize) -> Dfs {
+        Dfs {
+            seen: vec![false; n],
+            order: Vec::with_capacity(n), // room for every vertex
+        }
+    }
+
+    fn visit(
+        &mut self,
+        g: &[Vec<usize>],
+        u: usize,
+    ) {
+        self.seen[u] = true;           // DFS-VISIT lines 1-3
+        for &v in &g[u] {              // line 4
+            if !self.seen[v] {         // line 5: still WHITE
+                self.visit(g, v);      // lines 6-7
+            }
+        }
+        self.order.push(u);            // lines 8-10: u is finished
+    }
+}
+
+// One label per vertex: comp[v] is the number of v's component.
+fn scc(g: &[Vec<usize>]) -> Vec<usize> {
+    let n = g.len();
+    let mut first = Dfs::new(n);       // line 1: DFS(G)
+    for u in 0..n {
+        if !first.seen[u] {
+            first.visit(g, u);
+        }
+    }
+    let gt = transpose(g);             // line 2
+    let mut second = Dfs::new(n);      // line 3: DFS(G^T)
+    let mut comp = vec![0; n];
+    let mut label = 0;
+    for &u in first.order.iter().rev() { // decreasing finish time
+        if !second.seen[u] {
+            second.visit(&gt, u);
+            for v in second.order.drain(..) { // line 4: this tree
+                comp[v] = label;
+            }
+            label += 1;
+        }
+    }
+    comp
+}
+
+// g is only borrowed: gt is a new, separate graph.
+fn transpose(
+    g: &[Vec<usize>],
+) -> Vec<Vec<usize>> {
+    let mut gt = vec![Vec::new(); g.len()];
+    for u in 0..g.len() {
+        for &v in &g[u] {
+            gt[v].push(u);             // the edge (u, v) becomes (v, u)
         }
     }
     gt
 }
 
-fn scc(g: &[Vec<usize>], start: &[usize]) -> Vec<Vec<usize>> {
-    let n = g.len();
-    let (mut seen, mut order) = (vec![false; n], Vec::new());
-    for &u in start {              // line 1: DFS(G)
-        if !seen[u] {
-            dfs(g, u, &mut seen, &mut order);
-        }
-    }
-    let gt = transpose(g);         // line 2
-    let mut seen = vec![false; n]; // shadowing: a fresh `seen` for pass 2
-    let mut comps = Vec::new();
-    for &u in order.iter().rev() { // line 3: decreasing finish time
-        if !seen[u] {
-            let mut tree = Vec::new();
-            dfs(&gt, u, &mut seen, &mut tree);
-            tree.sort();
-            comps.push(tree);      // line 4: one tree, one component
-        }
-    }
-    comps
-}
-
 fn main() {
-    let names = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-    // Figure 20.9(a) with a..h = 0..7
-    let g = vec![vec![1], vec![2, 4, 5], vec![6, 3], vec![2, 7],
-                 vec![0, 5], vec![6], vec![5, 7], vec![7]];
-    // like the book's first DFS: start at c, then b, then the rest
-    let start = [2, 1, 0, 3, 4, 5, 6, 7];
-    for comp in scc(&g, &start) {
-        let word: String = comp.iter().map(|&v| names[v]).collect();
-        println!("{}", word);
-    }
+    let g = vec![
+        vec![1],       // a: b
+        vec![2, 4, 5], // b: c e f
+        vec![6, 3],    // c: g d
+        vec![2, 7],    // d: c h
+        vec![0, 5],    // e: a f
+        vec![6],       // f: g
+        vec![5, 7],    // g: f h
+        vec![7],       // h: h
+    ];
+    println!("{:?}", scc(&g));
 }
 </script>
 <script type="text/x-rust-out" id="rs-s8-out">
-abe
-cd
-fg
-h
+[0, 0, 1, 1, 0, 2, 2, 3]
 </script>
   </section>
 
@@ -2270,7 +2303,7 @@ K.page(20);
   const stD = stat("discovered", "0 of 9"), stQ = stat("in queue", 0), stS = stat("entries scanned", 0);
   stats.append(stD, stQ, stS);
   const cv = code("#s3-code", { files: [{ name: "BFS", src: src("ps-s3"), rs: { name: "bfs.rs", src: src("rs-s3"), out: src("rs-s3-out"),
-    map: { BFS: 8, 1: 13, 2: 13, 3: 14, 4: 15, 5: 16, 6: 17, 7: 15, 8: 19, 9: 20, 10: 21, 11: 21, 12: 22, 13: 23, 14: 24, 15: 25, 16: 26, 17: 27, 18: 30 } } }] });
+    map: { BFS: 11, 1: 16, 2: 16, 3: 16, 4: 16, 5: 17, 6: 17, 7: 17, 8: 19, 9: 20, 10: 21, 11: 21, 12: 23, 13: 24, 14: 25, 15: 25, 16: 25, 17: 26, 18: 28 } } }] });
   const m = mem("#s3-mem");
   const off = new Set();
   let source = "s", adj, events, st, busyBtns = [];
@@ -2379,40 +2412,47 @@ K.page(20);
     txt(gPanel, QX + 24, 290, "ring: u, the one dequeued", { anchor: "start", cls: "sv-label" });
   }
   function renderMem(e) {
+    // The Rust is Graph::bfs(&self, s): d (Option<u32>, None = the book's ∞ and WHITE) and the VecDeque q. No colours, no π.
     const run = st.k >= 0 && e.kind !== "end";
-    const live = e.Q.length;
-    const frames = [{ fn: "main", vars: [{ n: "adj", t: "Vec<Vec<usize>>", v: "9 lists" }] }];
+    const live = e.Q.length, queued = e.kind !== "init" && e.kind !== "src";
+    const inU = !!e.u, inV = e.kind === "look" || e.kind === "disc";
+    const dCells = () => V.map((v) => (e.d[v] === undefined || e.d[v] === Infinity ? "∞" : e.d[v]));
+    const frames = [{ fn: "main", vars: [{ n: "g", t: "Graph", v: "adj: 9 lists" }] }];
     const heap = [];
     if (run) {
-      frames.push({ fn: "bfs(&adj, 1)", top: true, vars: [
-        { n: "adj", t: "&[Vec<usize>]", v: "len 9" },
-        { n: "color", t: "Vec<Color>", v: "len 9", ptr: "color" },
-        { n: "d", t: "Vec<Option<u32>>", v: "len 9", ptr: "d" },
-        { n: "q", t: "VecDeque<usize>", v: "head " + e.head + " · len " + live, ptr: "q", hot: e.kind === "deq" || e.kind === "disc" || e.kind === "enq0" },
-        { n: "u", t: "usize", v: e.u ? idx(e.u) + " (" + e.u + ")" : "–", hot: e.kind === "deq" },
-        { n: "v", t: "usize", v: e.v && (e.kind === "look" || e.kind === "disc") ? idx(e.v) + " (" + e.v + ")" : "–", hot: e.kind === "look" },
-      ] });
-      heap.push({ id: "color", label: "color · 9 × Color (1 byte each)", cw: 32,
-        cells: V.map((v) => ({ white: "W", gray: "G", black: "B" })[e.color[v]]),
-        marks: Object.fromEntries(V.map((v, i) => [i, e.color[v] === "gray" ? "on" : e.color[v] === "black" ? "dim" : ""])) });
-      heap.push({ id: "d", label: "d · 9 × Option<u32>  (None = ∞)", cw: 32,
-        cells: V.map((v) => (e.d[v] === undefined || e.d[v] === Infinity ? "∞" : e.d[v])),
-        marks: e.v && (e.kind === "look" || e.kind === "disc") ? { [idx(e.v)]: "on2" } : {} });
-      const qc = Array(9).fill(""), qm = {};
-      for (let i = 0; i < 9; i++) qm[i] = "free";
-      e.Q.forEach((v, i) => { qc[e.head + i] = v; qm[e.head + i] = i === 0 ? "on2" : "on"; });
-      heap.push({ id: "q", label: "q's buffer · capacity 9, never grows", cw: 32, cells: qc, marks: qm });
+      const vars = [
+        { n: "self", t: "&Graph", v: "→ main's g" },
+        { n: "s", t: "usize", v: idx(source) },
+        { n: "d", t: "Vec<Option<u32>>", v: "len 9", ptr: "d", hot: e.kind === "init" || e.kind === "src" || e.kind === "disc" },
+      ];
+      if (queued) vars.push({ n: "q", t: "VecDeque<usize>", v: "head " + e.head + " · len " + live, ptr: "q", hot: e.kind === "deq" || e.kind === "disc" || e.kind === "enq0" });
+      if (inU) vars.push({ n: "u", t: "usize", v: idx(e.u) + " (" + e.u + ")", hot: e.kind === "deq" }, { n: "du", t: "u32", v: e.d[e.u] });
+      if (inV) vars.push({ n: "v", t: "usize", v: idx(e.v) + " (" + e.v + ")", hot: e.kind === "look" });
+      frames.push({ fn: "bfs(&self, s)", top: true, vars });
+      heap.push({ id: "d", label: "d · 9 × Option<u32> · ∞ is None", cw: 32, cells: dCells(),
+        marks: inV ? { [idx(e.v)]: "on2" } : e.kind === "deq" ? { [idx(e.u)]: "on" } : e.kind === "src" ? { [idx(source)]: "on2" } : {} });
+      if (queued) {
+        const qc = Array(9).fill(""), qm = {};
+        for (let i = 0; i < 9; i++) qm[i] = "free";
+        e.Q.forEach((v, i) => { qc[e.head + i] = idx(v); qm[e.head + i] = i === 0 ? "on2" : "on"; });
+        heap.push({ id: "q", label: "q's buffer · capacity 9, never grows", cw: 32, cells: qc, marks: qm });
+      }
     } else if (e.kind === "end") {
       frames[0].vars.push({ n: "d", t: "Vec<Option<u32>>", v: "len 9", ptr: "d" });
-      heap.push({ id: "d", label: "d · 9 × Option<u32>  (None = ∞)", cw: 32, cells: V.map((v) => (e.d[v] === Infinity ? "∞" : e.d[v])) });
+      heap.push({ id: "d", label: "d · 9 × Option<u32> · ∞ is None", cw: 32, cells: dCells() });
     }
     const notes = {
-      pre: "Before the call: <code>main</code> owns the adjacency lists, and <code>bfs</code> will only borrow them.",
+      pre: "Before the call: <code>main</code> owns <code>g</code> and its nine lists, and <code>bfs</code> will only borrow it, as <code>&amp;self</code>.",
+      init: "<code>vec![None; n]</code>: every distance starts as None, the book's ∞. None also stands for white: not discovered yet.",
+      src: "<code>d[s] = Some(0)</code>: the source is reached, at distance 0.",
+      enq0: "<code>with_capacity(n)</code> reserves 9 slots, and <code>push_back</code> puts the source at the tail.",
       deq: "<code>pop_front</code> hands back the head and moves the head index one slot. Nothing is shifted, so a dequeue is O(1).",
+      look: "<code>is_none()</code> asks whether v is still white: no distance yet.",
       disc: "<code>push_back</code> writes into the next free slot. Every vertex is enqueued once, so 9 slots are always enough.",
-      end: "<code>bfs</code> returned: <code>color</code> and the queue's buffer were freed with the frame, and <code>d</code> moved out to its caller.",
+      black: "u's list is done. The book paints u black; the code keeps no colours, because <code>d[u]</code> is already Some, and that is all line 13 asks.",
+      end: "<code>bfs</code> returned: the queue's buffer was freed with its frame, and <code>d</code> moved out to <code>main</code>.",
     };
-    m.set({ note: st.k < 0 ? notes.pre : notes[e.kind] || "<code>color</code>, <code>d</code> and the queue are three heap buffers; <code>adj</code> is only borrowed.", stack: frames, heap });
+    m.set({ note: st.k < 0 ? notes.pre : notes[e.kind] || "", stack: frames, heap });
   }
 
   function paintCode(e) {
@@ -2423,13 +2463,15 @@ K.page(20);
     const set = (bookLine, rustLine, text, tone) => { n[bookLine] = tone ? [text, tone] : text; r[rustLine] = tone ? [text, tone] : text; };
     if (e.u && !end) { set(11, 21, "u = " + e.u + (CODE_LANG.rust ? " (" + idx(e.u) + ")" : "")); }
     if (e.kind === "look" || e.kind === "disc") {
-      set(12, 22, "v = " + e.v);
+      set(12, 23, "v = " + e.v);
       const word = e.kind === "disc" ? "white" : e.was;
-      set(13, 23, e.v + ": " + word.toUpperCase(), word === "white" ? "warn" : "good");
+      n[13] = [e.v + ": " + word.toUpperCase(), word === "white" ? "warn" : "good"];
+      r[24] = word === "white" ? ["d[" + idx(e.v) + "] is None", "warn"] : ["d[" + idx(e.v) + "] = Some(" + e.d[e.v] + ")", "good"];
     }
-    if (e.kind === "disc") { set(15, 25, e.v + ".d = " + e.d[e.v]); set(16, 26, e.v + ".π = " + e.u); }
-    if (e.Q.length || e.kind === "enq0" || end) { n[10] = "Q = ⟨" + e.Q.join(" ") + "⟩"; r[21] = "q = [" + e.Q.join(" ") + "]"; }
-    if (e.kind === "enq0") { n[9] = "Q = ⟨" + e.Q.join(" ") + "⟩"; r[20] = "q = [" + e.Q.join(" ") + "]"; delete n[10]; delete r[21]; }
+    if (e.kind === "disc") { set(15, 25, e.v + ".d = " + e.d[e.v]); n[16] = e.v + ".π = " + e.u; }
+    const qr = () => "q = [" + e.Q.map(idx).join(" ") + "]";
+    if (e.Q.length || e.kind === "enq0" || end) { n[10] = "Q = ⟨" + e.Q.join(" ") + "⟩"; r[21] = qr(); }
+    if (e.kind === "enq0") { n[9] = "Q = ⟨" + e.Q.join(" ") + "⟩"; r[20] = qr(); delete n[10]; delete r[21]; }
     cv.notes(n, r);
   }
   function caption(e) {
@@ -2804,7 +2846,7 @@ K.page(20);
     // row 1: the open calls
     const y1 = 270;
     txt(gRows, 30, y1 + 18, "open calls", { anchor: "start", mono: true, size: 11, cls: "sv-label" });
-    if (!st.stack.length) txt(gRows, 140, y1 + 18, st.done ? "none: the search is over" : "none yet", { anchor: "start", mono: true, size: 11, cls: "sv-label" });
+    if (!st.stack.length) txt(gRows, 140, y1 + 18, st.done ? "none: the search is over" : st.roots.length ? "none open" : "none yet", { anchor: "start", mono: true, size: 11, cls: "sv-label" });
     st.stack.forEach((fr, i) => {
       const x = 140 + i * 42;
       gRows.appendChild(s("rect", { x, y: y1, width: 36, height: 26, rx: 8, class: "ac-cell" + (i === st.stack.length - 1 ? " on" : "") }));
@@ -2879,12 +2921,12 @@ K.page(20);
     const frames = [];
     const inRun = st.started && !st.done;
     const mainVars = [{ n: "g", t: "Vec<Vec<usize>>", v: "6 lists" }];
-    if (st.done) mainVars.push({ n: "s", t: "Dfs", v: "owns 5 Vecs", hot: true });
+    if (st.done) mainVars.push({ n: "s", t: "Dfs", v: "owns its Vecs", hot: true });
     frames.push({ fn: "main", vars: mainVars });
-    if (inRun) frames.push({ fn: "Dfs::run", sub: "line 5 loop", vars: [{ n: "s", t: "Dfs", v: "time " + st.time }, { n: "u", t: "usize", v: st.roots.length ? IDX[st.roots[st.roots.length - 1]] : "–" }] });
+    if (inRun) frames.push({ fn: "Dfs::run", sub: "outer loop", vars: [{ n: "s", t: "Dfs", v: "time " + st.time }, { n: "u", t: "usize", v: st.loopU == null ? "–" : IDX[st.loopU] }] });
     if (inRun) st.stack.forEach((fr, i) => frames.push({
       fn: "visit(" + fr.u + ")", sub: "&mut self → s", top: i === st.stack.length - 1,
-      vars: [{ n: "u", t: "usize", v: IDX[fr.u] }, { n: "v", t: "usize", v: fr.cur == null ? "–" : IDX[ADJ[fr.u][fr.cur]], hot: i === st.stack.length - 1 && st.last && st.last.k === "edge" }],
+      vars: [{ n: "u", t: "usize", v: IDX[fr.u] }, { n: "v", t: "usize", v: fr.next ? IDX[ADJ[fr.u][fr.next - 1]] : "–", hot: i === st.stack.length - 1 && st.last && st.last.k === "edge" }],
     }));
     const heap = st.started ? [
       { id: "color", label: "s.color · Vec<Color> · 6 bytes", cells: NAMES.map((x) => L[st.color[x]]), marks: cm, cw: 32 },
@@ -2918,8 +2960,8 @@ K.page(20);
     st.started = true; st.last = e;
     const key = (a, b) => a + ">" + b;
     if (e.k === "init") { st.time = 0; }
-    if (e.k === "root") { st.roots.push(e.u); st.edgeNow = null; }
-    if (e.k === "skip") { st.edgeNow = null; }
+    if (e.k === "root") { st.roots.push(e.u); st.loopU = e.u; st.edgeNow = null; }
+    if (e.k === "skip") { st.loopU = e.u; st.edgeNow = null; }
     if (e.k === "disc") {
       st.time = e.t; st.d[e.u] = e.t; st.color[e.u] = "G"; st.edgeNow = null;
       st.stack.push({ u: e.u, next: 0, cur: null });
@@ -3319,11 +3361,13 @@ K.page(20);
   const RSL = src("rs-s7").split("\n");
   const RL = (needle, after) => RSL.findIndex((l, i) => i >= (after || 0) && l.includes(needle)) + 1;
   const X = {};
-  X.topo = RL("fn topological_sort"); X.visit = RL("fn visit"); X.gray = RL("color[u] = Color::Gray;"); X.forL = RL("for &v in &g[u]"); X.armW = RL("Color::White => visit");
-  X.armG = RL("Color::Gray => back.push"); X.armB = RL("Color::Black => {}"); X.black = RL("color[u] = Color::Black;"); X.push = RL("order.push(u);");
-  X.init = RL("let mut color = vec!["); X.mFor = RL("for u in 0..g.len()"); X.mIf = RL("if color[u] == Color::White"); X.mVis = RL("visit(g, u, &mut color"); X.rev = RL("order.reverse();"); X.ret = RL("(order, back)", X.rev);
+  // The Rust is Topo::sort: DFS through &mut self with colours only (no clock: the finish order is the list itself),
+  // each finished vertex pushed on the END of order, and one reverse at the end. Rust mode draws exactly that.
+  X.topo = RL("fn sort"); X.visit = RL("fn visit"); X.gray = RL("self.color[u] = Color::Gray;"); X.forL = RL("for &v in &g[u]"); X.ifW = RL("if self.color[v] == Color::White");
+  X.rec = RL("self.visit(g, v);"); X.black = RL("self.color[u] = Color::Black;"); X.push = RL("self.order.push(u);");
+  X.init = RL("let mut s = Topo {"); X.mFor = RL("for u in 0..n"); X.mIf = RL("if s.color[u] == Color::White"); X.mVis = RL("s.visit(g, u);"); X.rev = RL("s.order.reverse();"); X.ret = RL("s.order", X.rev);
   const map = { "TOPOLOGICAL-SORT": X.topo, 1: [X.mFor, X.mVis], 2: [X.push, X.rev], 3: X.ret, DFS: X.topo, "DFS:1": X.init, "DFS:2": X.init, "DFS:3": X.init, "DFS:5": X.mFor, "DFS:6": X.mIf, "DFS:7": X.mVis, "DFS-VISIT": X.visit,
-    "DFS-VISIT:1": X.gray, "DFS-VISIT:2": X.gray, "DFS-VISIT:3": X.gray, "DFS-VISIT:4": X.forL, "DFS-VISIT:5": X.armW, "DFS-VISIT:6": X.armW, "DFS-VISIT:7": X.armW, "DFS-VISIT:8": X.black, "DFS-VISIT:9": X.black, "DFS-VISIT:10": X.black };
+    "DFS-VISIT:1": X.gray, "DFS-VISIT:2": X.gray, "DFS-VISIT:3": X.gray, "DFS-VISIT:4": X.forL, "DFS-VISIT:5": X.ifW, "DFS-VISIT:6": X.rec, "DFS-VISIT:7": X.rec, "DFS-VISIT:8": X.black, "DFS-VISIT:9": X.black, "DFS-VISIT:10": X.black };
   const cv = code("#s7-code", { files: [{ name: "TOPOLOGICAL-SORT", src: src("ps-s7"), rs: { name: "topological_sort.rs", src: src("rs-s7"), out: src("rs-s7-out"), map } }] });
 
   let edges = BASE.map((e) => e.slice()), st, events, busy = [], sel = null, addBtn;
@@ -3359,11 +3403,12 @@ K.page(20);
       ev.push({ k: "fin", u, t: time, p });
     };
     NAMES.forEach((u) => { if (col[u] === "W") visit(u, null); });
+    if (CODE_LANG.rust) ev.push({ k: "rev" }); // the Rust pushed on the end, so one reverse puts the last to finish first
     ev.push({ k: "done" });
     return ev;
   }
   function fresh() {
-    st = { color: {}, d: {}, f: {}, list: [], time: 0, stack: [], edgeNow: null, kind: {}, back: 0, k: 0, last: null, done: false, started: false, msg: "" };
+    st = { color: {}, d: {}, f: {}, list: [], time: 0, stack: [], edgeNow: null, kind: {}, back: 0, k: 0, last: null, done: false, started: false, msg: "", rev: false, hide: new Set() };
     NAMES.forEach((n) => (st.color[n] = "W"));
     events = trace();
   }
@@ -3400,23 +3445,27 @@ K.page(20);
     });
     NAMES.forEach((id) => {
       clickable(R_.nodes.get(id), "Pick " + id + " to add or remove an arrow", () => pickNode(id));
-      if (st.d[id] == null) return;
+      if (st.d[id] == null || CODE_LANG.rust) return; // the Rust keeps no clock, so Rust mode draws no d/f times
       const p = P[id], left = LEFT.has(id);
       txt(gTs, left ? p.x - R - 7 : p.x + R + 7, p.y + 4, st.d[id] + "/" + (st.f[id] == null ? "" : st.f[id]), { anchor: left ? "end" : "start", mono: true, size: 11.5, bold: true });
     });
-    txt(gHead, 30, 22, st.msg || (sel ? `${sel} → ? : click the garment it should come before` : "press Step, or click two garments to add an arrow"), { anchor: "start", mono: true, size: 12, cls: "sv-label" });
-    txt(gHead, 630, 22, "time = " + st.time, { anchor: "end", mono: true, size: 13, bold: true });
-    // the list: nine slots, filled from the right, because each new vertex goes onto the front
-    const n = st.list.length, off = 9 - n;
+    txt(gHead, 30, 22, st.msg || (sel ? `${sel} → ? : click the garment it should come before` : "each arrow: put this garment on before that one"), { anchor: "start", mono: true, size: 12, cls: "sv-label" });
+    if (!CODE_LANG.rust) txt(gHead, 630, 22, "time = " + st.time, { anchor: "end", mono: true, size: 13, bold: true });
+    // the list: nine slots, filled from the right, because each new vertex goes onto the front.
+    // In Rust mode it is the Vec order: filled from the left by push, then reversed once.
+    const n = st.list.length, off = CODE_LANG.rust ? 0 : 9 - n;
     for (let i = 0; i < 9; i++) gList.appendChild(s("rect", { x: slotX(i), y: SY, width: SW, height: SH, rx: 8, fill: "none", stroke: "var(--line-strong)", "stroke-dasharray": "3 3" }));
     st.list.forEach((name, i) => {
+      if (st.hide.has(i)) return; // in flight
       const x = slotX(off + i);
       gList.appendChild(s("rect", { x, y: SY, width: SW, height: SH, rx: 8, class: "ac-cell sorted" }));
       txt(gList, x + SW / 2, SY + 18, name, { mono: true, size: 11, bold: true });
     });
-    txt(gList, 30, SY + SH + 17, st.done ? "front of the list on the left: every arrow should point right" : "the list: each finished vertex goes onto the front", { anchor: "start", mono: true, size: 11, cls: "sv-label" });
+    const foot = !CODE_LANG.rust ? (st.done ? "front of the list on the left: every arrow should point right" : "the list: each finished vertex goes onto the front")
+      : st.done ? "order, reversed: every arrow should point right" : st.rev ? "order.reverse(): the last to finish comes first" : "order: each finished vertex is pushed on the end";
+    txt(gList, 30, SY + SH + 17, foot, { anchor: "start", mono: true, size: 11, cls: "sv-label" });
     if (st.done) arcs(); else K.clear(gArc);
-    stT.set(st.time); stL.set(n + " / 9", st.done ? "good" : undefined); stB.set(st.back, st.back ? "bad" : undefined);
+    stT.set(CODE_LANG.rust ? "–" : st.time); stL.set(n + " / 9", st.done ? "good" : undefined); stB.set(st.back, st.back ? "bad" : undefined);
     if (st.done) { const w = leftArrows(); stW.set(w, w ? "bad" : "good"); } else stW.set("–");
     renderCode();
   }
@@ -3426,15 +3475,15 @@ K.page(20);
     const e = st.last, v = e.v, u = e.u, on = [], on2 = [], rs = [];
     if (st.started && !st.done) on2.push("TOPOLOGICAL-SORT:1");
     const n = {}, r = {};
-    if (e.k === "disc") { on.push("DFS-VISIT:1", "DFS-VISIT:2", "DFS-VISIT:3"); if (!e.p) on2.push("DFS:5", "DFS:6", "DFS:7"); n["DFS-VISIT:2"] = `${u}.d = ${e.t}`; r[X.gray] = `d = ${e.t}`; }
+    if (e.k === "disc") { on.push("DFS-VISIT:1", "DFS-VISIT:2", "DFS-VISIT:3"); if (!e.p) on2.push("DFS:5", "DFS:6", "DFS:7"); n["DFS-VISIT:2"] = `${u}.d = ${e.t}`; r[X.gray] = `u = ${IDX[u]} (${u})`; }
     if (e.k === "edge") {
       on.push("DFS-VISIT:4", "DFS-VISIT:5"); if (e.c === "W") on.push("DFS-VISIT:6", "DFS-VISIT:7");
-      if (e.c === "G") rs.push("rs:" + X.armG); if (e.c === "B") rs.push("rs:" + X.armB);
-      n["DFS-VISIT:5"] = [`${v}.color = ${CNAME[e.c]}`, e.c === "G" ? "bad" : "good"]; r[e.c === "W" ? X.armW : e.c === "G" ? X.armG : X.armB] = [`color[${IDX[v]}] = ${CNAME[e.c].toLowerCase()}`, e.c === "G" ? "bad" : "good"];
+      n["DFS-VISIT:5"] = [`${v}.color = ${CNAME[e.c]}`, e.c === "G" ? "bad" : "good"]; r[X.ifW] = [`color[${IDX[v]}] = ${CNAME[e.c].toLowerCase()}`, e.c === "G" ? "bad" : "good"];
     }
+    if (e.k === "rev") { rs.push("rs:" + X.rev); r[X.rev] = "reversed"; }
     if (e.k === "fin") {
       on.push("DFS-VISIT:8", "DFS-VISIT:9", "DFS-VISIT:10"); on2.push("TOPOLOGICAL-SORT:2");
-      n["TOPOLOGICAL-SORT:2"] = `front = ${u}`; n["DFS-VISIT:9"] = `${u}.f = ${e.t}`; r[X.push] = `push ${u}`;
+      n["TOPOLOGICAL-SORT:2"] = `front = ${u}`; n["DFS-VISIT:9"] = `${u}.f = ${e.t}`; r[X.push] = `push ${u}`; rs.push("rs:" + X.push);
     }
     cv.at(on.concat(rs), "on"); cv.at(on2, "on2", false); cv.at(e.k === "done" ? ["TOPOLOGICAL-SORT:3"] : [], "good", false);
     if (e.k === "done") { n["TOPOLOGICAL-SORT:3"] = st.list.join(" ").slice(0, 40) + "…"; }
@@ -3442,20 +3491,26 @@ K.page(20);
     cv.out(st.done ? st.list.join(" → ") : null, null);
   }
 
+  const RS = () => CODE_LANG.rust; // Rust mode: no clock, and the list is the Vec order (push on the end, then reverse)
   const CAP = {
-    disc: (e) => `<b>${e.u}.d = ${e.t}</b>, ${e.u} turns GRAY. ${e.p ? `It was found from ${e.p}.` : "It starts a new tree."}`,
+    disc: (e) => RS() ? `<b>visit(${e.u})</b>: ${e.u} turns GRAY, an open visit. ${e.p ? `It was found from ${e.p}.` : "The main loop starts a new search here."}`
+      : `<b>${e.u}.d = ${e.t}</b>, ${e.u} turns GRAY. ${e.p ? `It was found from ${e.p}.` : "It starts a new tree."}`,
     edge: (e) => e.c === "W" ? `Edge (${e.u}, ${e.v}): <b>${e.v} is WHITE</b>, so DFS goes there. ${e.v} must finish before ${e.u} can.`
       : e.c === "G" ? `Edge (${e.u}, ${e.v}): <b>${e.v} is GRAY</b>: a <b>back edge</b>! ${e.v} is an open call and ${e.u} is below it, so ${e.v} ⇝ ${e.u} → ${e.v} is a cycle. By Lemma 20.11 no topological order exists.`
+      : RS() ? `Edge (${e.u}, ${e.v}): <b>${e.v} is BLACK</b>: it has finished already, so it is already in order, ahead of where ${e.u} will be pushed. Fine.`
       : `Edge (${e.u}, ${e.v}): <b>${e.v} is BLACK</b>: it has finished already, so it is already in the list, to the right of where ${e.u} will land. Fine.`,
-    fin: (e) => `<b>${e.u}.f = ${e.t}</b>: everything ${e.u} points to has finished. ${e.u} is BLACK and goes onto the <b>front</b> of the list (${st.list.length} of 9 placed).`,
-    done: () => { const w = leftArrows(); return w === 0 ? `The list is a topological sort: all ${edges.length} arrows point right, and the order is by decreasing finish time. Every edge (u, v) has v.f &lt; u.f.`
+    fin: (e) => RS() ? `<b>${e.u} finishes</b>: everything ${e.u} points to has finished. ${e.u} is BLACK, and <b>push</b> puts it on the end of order (${st.list.length} of 9 pushed).`
+      : `<b>${e.u}.f = ${e.t}</b>: everything ${e.u} points to has finished. ${e.u} is BLACK and goes onto the <b>front</b> of the list (${st.list.length} of 9 placed).`,
+    rev: () => `<b>order.reverse()</b>: the last vertex to finish, ${st.list[0]}, comes first, and the first to finish, ${st.list[8]}, comes last.`,
+    done: () => { const w = leftArrows(); return w === 0 && RS() ? `order is a topological sort: all ${edges.length} arrows point right. Each vertex finished after everything it points to, and the reverse put the last to finish first.`
+      : w === 0 ? `The list is a topological sort: all ${edges.length} arrows point right, and the order is by decreasing finish time. Every edge (u, v) has v.f &lt; u.f.`
       : `DFS found ${st.back} back edge${st.back > 1 ? "s" : ""} and the list has <b>${w} arrow${w > 1 ? "s" : ""} pointing left</b> (in coral). The list is not a topological order, and cannot be: the graph has a cycle. Remove the edge to fix it.`; },
   };
   const dot = (cls) => s("g", { transform: "translate(-100,-100)" }, s("circle", { r: 6, class: cls }));
 
   async function apply(e, w) {
     st.started = true; st.last = e;
-    if (e.k === "disc") { st.time = e.t; st.d[e.u] = e.t; st.color[e.u] = "G"; st.stack.push(e.u); st.edgeNow = null; st.msg = `time ${e.t}: discover ${e.u}`; }
+    if (e.k === "disc") { st.time = e.t; st.d[e.u] = e.t; st.color[e.u] = "G"; st.stack.push(e.u); st.edgeNow = null; st.msg = RS() ? `visit ${e.u}` : `time ${e.t}: discover ${e.u}`; }
     if (e.k === "edge") {
       st.edgeNow = { u: e.u, v: e.v, type: e.type }; st.kind[e.u + ">" + e.v] = e.type; if (e.type === "B") st.back++;
       st.msg = `explore (${e.u}, ${e.v}): ${e.v} is ${CNAME[e.c]}`;
@@ -3464,14 +3519,33 @@ K.page(20);
       st.edgeNow = null; return;
     }
     if (e.k === "fin") {
-      st.time = e.t; st.f[e.u] = e.t; st.color[e.u] = "B"; st.stack.pop(); st.edgeNow = null; st.msg = `time ${e.t}: finish ${e.u}`;
-      const from = [P[e.u].x, P[e.u].y], slot = 9 - st.list.length - 1;
+      st.time = e.t; st.f[e.u] = e.t; st.color[e.u] = "B"; st.stack.pop(); st.edgeNow = null; st.msg = RS() ? `${e.u} finishes: order.push(${e.u})` : `time ${e.t}: finish ${e.u}`;
+      const from = [P[e.u].x, P[e.u].y], slot = RS() ? st.list.length : 9 - st.list.length - 1;
       render(); cap("#s7-cap", CAP.fin({ ...e }));
       const tag = draw.tag(e.u, "sv-data-soft"); gFly.appendChild(tag);
       await w(fly(tag, from, [slotX(slot) + SW / 2, SY + SH / 2], 520));
       tag.remove();
-      st.list.unshift(e.u);
+      if (RS()) st.list.push(e.u); else st.list.unshift(e.u);
       render(); cap("#s7-cap", CAP.fin(e));
+      return;
+    }
+    if (e.k === "rev") { // Rust only: reverse swaps the two ends, then the next two, inward, in place
+      st.edgeNow = null; st.msg = "order.reverse()";
+      const at = (i) => [slotX(i) + SW / 2, SY + SH / 2];
+      for (let i = 0, j = st.list.length - 1; i < j; i++, j--) {
+        st.hide = new Set([i, j]); render();
+        const a = draw.tag(st.list[i], "sv-data-soft"), b = draw.tag(st.list[j], "sv-data-soft"); gFly.append(a, b);
+        const [x1, y1] = at(i), [x2] = at(j), top = y1 - 34 - 3 * (j - i);
+        await w(Promise.all([
+          tween(460, (t) => { const u = 1 - t; a.setAttribute("transform", `translate(${u * u * x1 + 2 * u * t * (x1 + x2) / 2 + t * t * x2},${u * u * y1 + 2 * u * t * top + t * t * y1})`); }, ease.inOut),
+          fly(b, [x2, y1], [x1, y1], 460),
+        ]));
+        a.remove(); b.remove();
+        [st.list[i], st.list[j]] = [st.list[j], st.list[i]];
+        st.hide = new Set(); render();
+        await w(sleep(90));
+      }
+      st.rev = true; render(); cap("#s7-cap", CAP.rev(e));
       return;
     }
     if (e.k === "done") { st.done = true; st.edgeNow = null; st.stack = []; st.msg = "DFS is done"; }
@@ -3479,7 +3553,8 @@ K.page(20);
   }
   async function stepOnce(w) { if (st.k >= events.length) return false; await apply(events[st.k++], w); return st.k < events.length; }
   const step = () => S.run(async (w) => { await stepOnce(w); });
-  const play = () => S.run(async (w) => { while (await stepOnce(w)) await w(sleep(220)); });
+  // Play runs the search; in Rust mode it stops when only the reverse is left, so Step shows that one line on its own
+  const play = () => S.run(async (w) => { while (await stepOnce(w)) { if (events[st.k].k === "rev") return; await w(sleep(220)); } });
 
   function rebuild(msg) { S.cancel(); K.clear(gFly); fresh(); render(); cap("#s7-cap", msg); }
   function intro() {
@@ -3504,7 +3579,7 @@ K.page(20);
   button(ctr, "Reset", "", reset);
   addBtn = button(ctr, "Add jacket → shirt", "", () => { if (S.busy) return; toggle("jacket", "shirt"); });
   busy.push(addBtn);
-  CODE_LANG.on(() => render());
+  CODE_LANG.on(() => rebuild(intro())); // Rust mode has one more step (the reverse), so the run starts over
   reset();
 })();
 
@@ -3518,6 +3593,7 @@ K.page(20);
   const FLIP = []; V.forEach((u) => ADJ[u].forEach((v) => FLIP.push([u, v])));       // 14 edges, in the order transpose() meets them
   const ADJT = {}; V.forEach((v) => (ADJT[v] = [])); FLIP.forEach(([u, v]) => ADJT[v].push(u));
   const START = ["c", "b", "a", "d", "e", "f", "g", "h"];                            // the first DFS starts at c, then b, as in the figure
+  const RS = () => CODE_LANG.rust; // Rust mode: the program's main loop runs 0..n (a first), it keeps no clock, and pass 2 labels a tree once it is done
   const R = 17, KCLS = ["k0", "k1", "k2", "k3"], CELL = ["on2", "good", "sorted", "on"];
 
   const gG = s("g"), gTs = s("g"), gHead = s("g"), gRow = s("g"), gFly = s("g");
@@ -3530,12 +3606,12 @@ K.page(20);
   const RSL = src("rs-s8").split("\n");
   const RL = (needle, after) => RSL.findIndex((l, i) => i >= (after || 0) && l.includes(needle)) + 1;
   const X = {};
-  X.dfs = RL("fn dfs"); X.seen = RL("seen[u] = true;"); X.forV = RL("for &v in &g[u]"); X.ifS = RL("if !seen[v]"); X.rec = RL("dfs(g, v, seen, out);"); X.push = RL("out.push(u);");
+  X.dfs = RL("fn visit"); X.seen = RL("self.seen[u] = true;"); X.forV = RL("for &v in &g[u]"); X.ifS = RL("if !self.seen[v]"); X.rec = RL("self.visit(g, v);"); X.push = RL("self.order.push(u);");
   X.tr = RL("fn transpose"); X.trPush = RL("gt[v].push(u);"); X.scc = RL("fn scc");
-  X.init1 = RL("let (mut seen, mut order)"); X.for1 = RL("for &u in start"); X.if1 = RL("if !seen[u]", X.for1); X.call1 = RL("dfs(g, u, &mut seen, &mut order)");
-  X.gt = RL("let gt = transpose(g);"); X.init3 = RL("let mut seen = vec![false; n]"); X.for3 = RL("for &u in order.iter().rev()"); X.if3 = RL("if !seen[u]", X.for3);
-  X.call3 = RL("dfs(&gt, u, &mut seen, &mut tree)"); X.comp = RL("comps.push(tree)");
-  const map = { "STRONGLY-CONNECTED-COMPONENTS": X.scc, 1: [X.for1, X.call1], 2: X.gt, 3: [X.for3, X.call3], 4: X.comp, DFS: X.init1, "DFS-VISIT": X.dfs,
+  X.init1 = RL("let mut first = Dfs::new(n);"); X.for1 = RL("for u in 0..n"); X.if1 = RL("if !first.seen[u]", X.for1); X.call1 = RL("first.visit(g, u);");
+  X.gt = RL("let gt = transpose(g);"); X.init3 = RL("let mut second = Dfs::new(n);"); X.for3 = RL("for &u in first.order.iter().rev()"); X.if3 = RL("if !second.seen[u]", X.for3);
+  X.call3 = RL("second.visit(&gt, u);"); X.comp = RL("for v in second.order.drain(..)"); X.label = RL("comp[v] = label;");
+  const map = { "STRONGLY-CONNECTED-COMPONENTS": X.scc, 1: [X.for1, X.call1], 2: X.gt, 3: [X.for3, X.call3], 4: [X.comp, X.label], DFS: X.init1, "DFS-VISIT": X.dfs,
     "DFS-VISIT:1": X.seen, "DFS-VISIT:2": X.seen, "DFS-VISIT:3": X.seen, "DFS-VISIT:4": X.forV, "DFS-VISIT:5": X.ifS, "DFS-VISIT:6": X.rec, "DFS-VISIT:7": X.rec, "DFS-VISIT:8": X.push, "DFS-VISIT:9": X.push, "DFS-VISIT:10": X.push };
   const cv = code("#s8-code", { files: [{ name: "STRONGLY-CONNECTED-COMPONENTS", src: src("ps-s8"), rs: { name: "scc.rs", src: src("rs-s8"), out: src("rs-s8-out"), map } }] });
   const m = mem("#s8-mem");
@@ -3556,7 +3632,7 @@ K.page(20);
       time++; col[u] = "B";
       ev.push({ k: "fin", u, p, ph, t: time });
     };
-    START.forEach((u) => { if (col[u] === "W") { ev.push({ k: "root", u, ph: 1 }); visit(ADJ, u, null, 1, []); } });
+    (RS() ? V : START).forEach((u) => { if (col[u] === "W") { ev.push({ k: "root", u, ph: 1 }); visit(ADJ, u, null, 1, []); } });
     const fin = {}; ev.forEach((e) => { if (e.k === "fin") fin[e.u] = e.t; });
     const byF = V.slice().sort((a, b) => fin[b] - fin[a]);
     ev.push({ k: "transpose", ph: 2 });
@@ -3572,7 +3648,7 @@ K.page(20);
     ev.push({ k: "done", ph: 4 });
     return { ev, fin, byF };
   }
-  const T = trace();
+  let T = trace();
 
   function fresh() {
     st = { ph: 0, c1: {}, c3: {}, d: {}, f: {}, tree: new Set(), order: [], flipped: 0, flipNow: null, stack: [], comp: {}, comps: [], rootNow: null, k: 0, last: null, done: false, chips: false, trees1: 0, placed: 0, started: false, time: 0 };
@@ -3599,7 +3675,7 @@ K.page(20);
     AL.graph.draw(gG, { directed: true, nodes: P, edges: E }, {
       r: R,
       node: (id) => {
-        if (st.ph >= 3) { const c = st.c3[id]; if (c === "B") return KCLS[st.comp[id]]; if (c === "G") return id === cur ? "gray20 on" : "gray20"; return ""; }
+        if (st.ph >= 3) { const c = st.c3[id]; if (c === "B") return st.comp[id] == null ? "black" : KCLS[st.comp[id]]; if (c === "G") return id === cur ? "gray20 on" : "gray20"; return ""; }
         const c = st.c1[id];
         let cls = c === "G" ? "gray20" : c === "B" ? "black" : "";
         if (id === cur && c === "G") cls += " on";
@@ -3610,17 +3686,27 @@ K.page(20);
     // h's self-loop: drawn by hand (a loop turns into itself under transposition)
     loopAt(gG, P.h, flipping && flipping[0] === "h" ? "on" : "");
     V.forEach((id) => {
-      if (st.f[id] == null && st.d[id] == null) return;
+      if ((st.f[id] == null && st.d[id] == null) || RS()) return; // the Rust keeps no clock: Rust mode draws no d/f times
       const p = P[id], y = TOP.has(id) ? p.y - R - 8 : p.y + R + 17;
       txt(gTs, p.x, y, st.ph >= 2 ? "f " + st.f[id] : st.d[id] + "/" + (st.f[id] == null ? "" : st.f[id]), { mono: true, size: 12, bold: true });
     });
     // header: which phase, and which graph
     const PH = { 0: "press Step or Next phase", 1: "1 · DFS(G): discover, finish, stamp", 2: "2 · create G^T: every arrow turns around", 3: "3 · DFS(G^T): roots by decreasing f", 4: "4 · each tree is one strongly connected component" };
+    if (RS()) Object.assign(PH, { 0: "the graph G: one-way edges", 1: "1 · search G: push each vertex as it finishes", 2: "2 · build G^T: every arrow turns around", 3: "3 · search G^T: roots from the end of the order" });
     txt(gHead, 30, 28, PH[st.ph], { anchor: "start", mono: true, size: 12, cls: "sv-label" });
     const gl = s("text", { x: 630, y: 30, class: "sv-text", "text-anchor": "end", style: { fontWeight: 700, fontSize: "16px" } }, "G", st.flipped >= FLIP.length ? s("tspan", { dy: -6, style: { fontSize: "11px" } }, "T") : null);
     gHead.appendChild(gl);
     // the roots in order of decreasing f, then the components found so far
     const y = 296;
+    // Rust mode: the row is first.order itself, filled as vertices finish; pass 2 takes its roots from the right end
+    if (RS()) {
+      txt(gRow, 30, y + 17, st.ph >= 3 ? "order, from the end ←" : "finish order", { anchor: "start", mono: true, size: 11, cls: "sv-label" });
+      V.forEach((_, i) => {
+        const id = st.order[i], x = 196 + i * 54, c = id != null ? st.comp[id] : null, cls = id != null && st.rootNow === id ? "on" : c != null ? CELL[c] : "";
+        gRow.appendChild(s("rect", { x, y, width: 46, height: 26, rx: 8, class: "ac-cell " + cls }));
+        if (id != null) txt(gRow, x + 23, y + 18, id, { cls: "ac-v", size: 14 });
+      });
+    } else {
     txt(gRow, 30, y + 17, "roots, largest f first", { anchor: "start", mono: true, size: 11, cls: "sv-label" });
     if (st.chips) T.byF.forEach((id, i) => {
       const x = 196 + i * 54, c = st.comp[id], cls = st.rootNow === id ? "on" : c != null ? CELL[c] : "";
@@ -3628,12 +3714,13 @@ K.page(20);
       txt(gRow, x + 23, y + 18, id, { cls: "ac-v", size: 14 });
     });
     else txt(gRow, 196, y + 17, "known once the first DFS ends", { anchor: "start", mono: true, size: 11, cls: "sv-label" });
-    txt(gRow, 30, 352 + 0, "components", { anchor: "start", mono: true, size: 11, cls: "sv-label" });
+    }
+    txt(gRow, 30, 352 + 0, RS() ? "labels" : "components", { anchor: "start", mono: true, size: 11, cls: "sv-label" });
     let x = 196;
     st.comps.forEach((c, i) => {
-      const w = c.length * 16 + 18;
+      const w = c.length * 16 + 18 + (RS() ? 22 : 0); // Rust mode: each component shows its label, comp[v]
       gRow.appendChild(s("rect", { x, y: 334, width: w, height: 26, rx: 13, class: "ac-cell " + CELL[i] }));
-      txt(gRow, x + w / 2, 352, c.join(" "), { mono: true, size: 12.5, bold: true });
+      txt(gRow, x + w / 2, 352, (RS() ? i + ": " : "") + c.join(" "), { mono: true, size: 12.5, bold: true });
       x += w + 10;
     });
     if (!st.comps.length) txt(gRow, 196, 352, st.ph >= 3 ? "none yet" : "—", { anchor: "start", mono: true, size: 11, cls: "sv-label" });
@@ -3648,53 +3735,70 @@ K.page(20);
     if (e.k === "init1") { on2.push("STRONGLY-CONNECTED-COMPONENTS:1"); on.push("DFS:1", "DFS:2", "DFS:3", "DFS:4", "rs:" + X.init1); }
     if (e.k === "root") { on2.push(top); on.push("DFS:5", "DFS:6", "DFS:7", ...(e.ph === 1 ? ["rs:" + X.for1, "rs:" + X.if1, "rs:" + X.call1] : ["rs:" + X.for3, "rs:" + X.if3, "rs:" + X.call3])); n["DFS:6"] = [`${e.u}.color = WHITE`, "good"]; }
     if (e.k === "disc") { on.push("DFS-VISIT:1", "DFS-VISIT:2", "DFS-VISIT:3"); on2.push(top); if (e.p) on2.push("DFS-VISIT:4", "DFS-VISIT:5", "DFS-VISIT:6", "DFS-VISIT:7"); if (e.ph === 1) n["DFS-VISIT:2"] = `${e.u}.d = ${e.t}`; }
-    if (e.k === "fin") { on.push("DFS-VISIT:8", "DFS-VISIT:9", "DFS-VISIT:10"); on2.push(top); if (e.ph === 1) { n["DFS-VISIT:9"] = `${e.u}.f = ${e.t}`; r[X.push] = `push ${e.u}`; } }
+    if (e.k === "fin") { on.push("DFS-VISIT:8", "DFS-VISIT:9", "DFS-VISIT:10"); on2.push(top); if (e.ph === 1) n["DFS-VISIT:9"] = `${e.u}.f = ${e.t}`; r[X.push] = `push ${IDX[e.u]} (${e.u})`; }
     if (e.k === "transpose") { on.push("STRONGLY-CONNECTED-COMPONENTS:2"); if (st.flipNow != null) { on.push("rs:" + X.trPush); const [u, v] = FLIP[st.flipNow]; r[X.trPush] = `gt[${IDX[v]}].push(${IDX[u]})`; } }
     if (e.k === "init3") { on2.push(top); on.push("DFS:1", "DFS:2", "DFS:3", "DFS:4", "rs:" + X.init3); }
-    if (e.k === "comp") { on2.push(top); good.push("STRONGLY-CONNECTED-COMPONENTS:4"); n["STRONGLY-CONNECTED-COMPONENTS:4"] = ["{" + e.members.join(" ") + "}", "good"]; r[X.comp] = ["{" + e.members.join(" ") + "}", "good"]; }
+    if (e.k === "comp") { on2.push(top); good.push("STRONGLY-CONNECTED-COMPONENTS:4"); n["STRONGLY-CONNECTED-COMPONENTS:4"] = ["{" + e.members.join(" ") + "}", "good"]; r[X.comp] = ["{" + e.members.join(" ") + "}", "good"]; r[X.label] = ["label = " + e.ci, "good"]; }
     if (e.k === "done") good.push("STRONGLY-CONNECTED-COMPONENTS:4");
     cv.at(on, "on"); cv.at(on2, "on2", false); cv.at(good, "good", false);
     cv.notes(n, r);
-    cv.out(st.comps.length ? st.comps.map((c) => "{" + c.join(" ") + "}").join("  ") : null, null);
+    cv.out(st.comps.length ? st.comps.map((c) => "{" + c.join(" ") + "}").join("  ") : null, st.done ? "[" + V.map((v) => st.comp[v]).join(", ") + "]" : null);
   }
 
+  /** the Rust run: main owns g; scc borrows it and owns first, gt, second, comp and label; the open visit calls sit on top */
   function renderMem() {
-    const gcells = V.map((u) => ADJ[u].join(""));
+    const num = (list) => list.map((v) => IDX[v]).join("");
+    const gcells = V.map((u) => num(ADJ[u]));
     const prog = {}; V.forEach((v) => (prog[v] = [])); FLIP.slice(0, st.flipped).forEach(([u, v]) => prog[v].push(u));
-    const gtcells = V.map((v) => prog[v].join(""));
+    const gtcells = V.map((v) => num(prog[v]));
     const frames = [{ fn: "main", vars: [{ n: "g", t: "Vec<Vec<usize>>", v: "8 lists", ptr: "g" }] }];
-    const inScc = st.started && !st.done;
-    if (inScc) frames.push({ fn: "scc(&g, &start)", top: true, vars: [
+    const inScc = st.started && !st.done, p3 = st.ph >= 3, depth = st.stack.length, tree2 = st.tree2 || [];
+    if (inScc) frames.push({ fn: "scc(&g)", top: !depth, vars: [
       { n: "g", t: "&[Vec<usize>]", v: "borrowed", ptr: "g", weak: true },
-      { n: "order", t: "Vec<usize>", v: "len " + st.order.length, ptr: "order" },
+      { n: "first", t: "Dfs", v: "order: " + st.order.length, ptr: "seen1" },
       { n: "gt", t: "Vec<Vec<usize>>", v: st.ph >= 2 ? "8 lists" : "–", ptr: st.ph >= 2 ? "gt" : undefined, hot: st.ph === 2 },
-      { n: "comps", t: "Vec<Vec<usize>>", v: "len " + st.comps.length, ptr: st.ph >= 3 ? "comps" : undefined },
+      { n: "second", t: "Dfs", v: p3 ? "order: " + tree2.length : "–", ptr: p3 ? "seen2" : undefined },
+      { n: "comp", t: "Vec<usize>", v: p3 ? "8 labels" : "–", ptr: p3 ? "comp" : undefined },
+      { n: "label", t: "usize", v: p3 ? st.comps.length : "–", hot: st.last && st.last.k === "comp" },
     ] });
-    if (st.done) frames[0].vars.push({ n: "comps", t: "Vec<Vec<usize>>", v: "4 lists", ptr: "comps", hot: true });
-    const heap = [{ id: "g", label: "g · 8 inner Vecs: the lists of Adj, a to h", cells: gcells, cw: 34 }];
-    if (inScc) heap.push({ id: "order", label: "order · finish order, pushed as vertices finish", cells: V.map((_, i) => (st.order[i] != null ? st.order[i] : "")), marks: st.last && st.last.k === "fin" && st.last.ph === 1 ? { [st.order.length - 1]: "on" } : {}, cw: 34 });
-    if (inScc && st.ph >= 2) heap.push({ id: "gt", label: "gt · a NEW graph, filled edge by edge", cells: gtcells, marks: st.flipNow != null ? { [IDX[FLIP[st.flipNow][1]]]: "on" } : {}, cw: 34 });
-    if (st.ph >= 3) heap.push({ id: "comps", label: "comps · one inner Vec per tree", cells: [0, 1, 2, 3].map((i) => (st.comps[i] ? st.comps[i].join("") : "")), cw: 44 });
+    // the open visit calls, one box (one frame each would not fit): how many, and the newest one's u
+    if (inScc && depth) { const u = st.stack[depth - 1]; frames.push({ fn: "visit × " + depth, sub: "&mut self → " + (p3 ? "second" : "first"), top: true, vars: [{ n: "u", t: "usize", v: IDX[u] + " (" + u + ")" }] }); }
+    if (st.done) frames[0].vars.push({ n: "scc(&g)", t: "Vec<usize>", v: "8 labels", ptr: "comp", hot: true });
+    const R0 = 0, R1 = 49, R2 = 98, R3 = 147, R4 = 196, W2 = 150;
+    const seenCells = (c) => V.map((v) => (c[v] === "W" ? "F" : "T"));
+    const heap = [{ id: "g", label: "g · one list per vertex, 0 to 7", cells: gcells, cw: 34, y: R0 }];
+    if (inScc) {
+      heap.push({ id: "seen1", label: "first.seen", cells: seenCells(st.c1), marks: st.ph === 1 && st.last && st.last.k === "disc" ? { [IDX[st.last.u]]: "on" } : {}, cw: 17, y: R1 });
+      heap.push({ id: "order1", label: "first.order", cells: V.map((_, i) => (st.order[i] != null ? IDX[st.order[i]] : "")), marks: st.ph === 1 && st.last && st.last.k === "fin" ? { [st.order.length - 1]: "on" } : p3 && st.rootNow ? { [st.order.indexOf(st.rootNow)]: "on" } : {}, cw: 17, x: W2, y: R1 });
+    }
+    if (inScc && st.ph >= 2) heap.push({ id: "gt", label: "gt · a new graph, filled edge by edge", cells: gtcells, marks: st.flipNow != null ? { [IDX[FLIP[st.flipNow][1]]]: "on" } : {}, cw: 34, y: R2 });
+    if (inScc && p3) {
+      heap.push({ id: "seen2", label: "second.seen", cells: seenCells(st.c3), marks: st.last && st.last.k === "disc" ? { [IDX[st.last.u]]: "on" } : {}, cw: 17, y: R3 });
+      heap.push({ id: "order2", label: "second.order", cells: V.map((_, i) => (tree2[i] != null ? IDX[tree2[i]] : "")), cw: 17, x: W2, y: R3 });
+    }
+    if (p3) { const lit = {}; if (st.last && st.last.k === "comp") st.last.members.forEach((v) => (lit[IDX[v]] = "on")); heap.push({ id: "comp", label: "comp · one label per vertex", cells: V.map((v) => (st.comp[v] == null ? 0 : st.comp[v])), marks: lit, cw: 34, y: st.done ? R1 : R4 }); }
     m.set({
       note: !st.started ? "Before the call: <code>main</code> owns the graph <code>g</code>, eight inner Vecs, one adjacency list per vertex."
-        : st.done ? "<code>scc</code> returned <code>comps</code> to <code>main</code>. Its <code>order</code> and <code>gt</code> were dropped when the call ended: the heap memory is freed."
-        : st.ph === 1 ? "<code>scc</code> only <i>borrows</i> <code>g</code> (dashed arrow). Each vertex is pushed onto <code>order</code> the moment it finishes."
-        : st.ph === 2 ? "<code>transpose</code> allocates a <b>new</b> graph and copies each edge reversed. <code>g</code> is not touched."
-        : "The second pass walks <code>order</code> backwards with <code>.rev()</code>: decreasing finish time, no sorting and no copy.",
+        : st.done ? "<code>scc</code> returned <code>comp</code> to <code>main</code>, moved, not copied. Its <code>first</code>, <code>gt</code> and <code>second</code> were dropped when the call ended: their heap memory is freed."
+        : st.ph === 1 ? "<code>scc</code> only <i>borrows</i> <code>g</code> (dashed arrow). Each vertex is pushed onto <code>first.order</code> the moment it finishes."
+        : st.ph === 2 ? "<code>transpose</code> allocates a <b>new</b> graph and pushes each edge reversed. <code>g</code> is not touched."
+        : "The second pass walks <code>first.order</code> backwards with <code>.rev()</code>: decreasing finish time, no sorting and no copy. When a tree is done, <code>drain</code> empties <code>second.order</code> and each of its vertices gets the label.",
       stack: frames, heap,
     });
   }
 
   const NM = (arr) => arr.join(", ");
   const CAP = {
-    init1: () => "Line 1 of the procedure calls <b>DFS(G)</b>. Lines 1–4 of DFS: everything WHITE, time = 0. Figure 20.9 starts at c, so this run does too. Only the tree edges are drawn; the other edges are examined and skipped.",
+    init1: () => RS() ? "Line 1 calls <b>DFS(G)</b>: <code>first</code> starts with nothing seen and an empty order. The Rust's main loop takes the vertices in index order, a first, and keeps no clock. Only the tree edges are drawn; the other edges are examined and skipped."
+      : "Line 1 of the procedure calls <b>DFS(G)</b>. Lines 1–4 of DFS: everything WHITE, time = 0. Figure 20.9 starts at c, so this run does too. Only the tree edges are drawn; the other edges are examined and skipped.",
     root: (e) => e.ph === 1 ? `DFS line 5–7: <b>${e.u}</b> is WHITE, so it roots a new tree of the first forest.` : `DFS line 5–7: <b>${e.u}</b> has the largest finish time among the vertices still WHITE: it roots the next tree of the forest of G<sup>T</sup>.`,
-    disc: (e) => e.ph === 1 ? `${e.p ? `Tree edge (${e.p}, ${e.u}). ` : ""}<b>${e.u}.d = ${e.t}</b>, ${e.u} turns GRAY.` : `${e.p ? `Edge (${e.p}, ${e.u}) of G<sup>T</sup> leads to ${e.u}, still WHITE. ` : ""}${e.u} joins the tree.`,
-    fin: (e) => e.ph === 1 ? `<b>${e.u}.f = ${e.t}</b>, ${e.u} is BLACK.${e.p ? ` Backtrack to ${e.p}.` : " This tree is complete."}` : `${e.u} is finished and takes the colour of its tree.`,
+    disc: (e) => e.ph === 1 ? `${e.p ? `Tree edge (${e.p}, ${e.u}). ` : ""}${RS() ? `<b>${e.u} is seen</b>` : `<b>${e.u}.d = ${e.t}</b>`}, ${e.u} turns GRAY.` : `${e.p ? `Edge (${e.p}, ${e.u}) of G<sup>T</sup> leads to ${e.u}, still WHITE. ` : ""}${e.u} joins the tree.`,
+    fin: (e) => RS() ? `<b>${e.u} is finished</b>, BLACK, and pushed onto ${e.ph === 1 ? "first" : "second"}.order: finish number ${e.ph === 1 ? st.order.length : (st.tree2 || []).length}${e.ph === 1 ? "" : " of this tree"}.${e.p ? ` Backtrack to ${e.p}.` : " This tree is complete."}`
+      : e.ph === 1 ? `<b>${e.u}.f = ${e.t}</b>, ${e.u} is BLACK.${e.p ? ` Backtrack to ${e.p}.` : " This tree is complete."}` : `${e.u} is finished and takes the colour of its tree.`,
     transpose: () => "Line 2: <b>create G<sup>T</sup></b>. One pass over the adjacency lists turns every edge (u, v) into (v, u), Θ(V + E). The self-loop on h stays as it is. G<sup>T</sup> has exactly the same components as G.",
     init3: () => `Line 3: <b>DFS(G<sup>T</sup>)</b>, with the main loop taking roots in the order of decreasing first-pass finish time: ${T.byF.join(", ")}.`,
-    comp: (e) => `Line 4: the tree rooted at ${e.root} is a strongly connected component: <b>{${NM(e.members)}}</b>. No edge of G<sup>T</sup> leads from it to a vertex that was not yet visited, so the search could not leak out.`,
-    done: () => `Four components: <b>${st.comps.map((c) => "{" + NM(c) + "}").join("  ")}</b>, as in Figure 20.9. Two depth-first searches and one transpose: Θ(V + E) in all.`,
+    comp: (e) => `Line 4: the tree rooted at ${e.root} is a strongly connected component: <b>{${NM(e.members)}}</b>${RS() ? `, label ${e.ci}` : ""}. No edge of G<sup>T</sup> leads from it to a vertex that was not yet visited, so the search could not leak out.`,
+    done: () => `Four components: <b>${st.comps.map((c) => "{" + NM(c) + "}").join("  ")}</b>${RS() ? ", labels " + V.map((v) => st.comp[v]).join(" ") : ", as in Figure 20.9"}. Two depth-first searches and one transpose: Θ(V + E) in all.`,
   };
   const dot = (cls) => s("g", { transform: "translate(-100,-100)" }, s("circle", { r: 6, class: cls }));
 
@@ -3713,8 +3817,9 @@ K.page(20);
     if (e.k === "fin") {
       A[e.u] = "B"; st.stack.pop();
       if (e.ph === 1) { st.f[e.u] = e.t; st.order.push(e.u); if (st.order.length === 8) st.chips = true; }
+      else if (RS()) (st.tree2 = st.tree2 || []).push(e.u); // the Rust pushes it onto second.order; the label comes when the tree is done
       else { st.placed++; st.comp[e.u] = st.comps.length; }
-      render(); cap("#s8-cap", CAP.fin(e) + (e.ph === 1 && st.order.length === 8 ? ` All finish times are known: largest first, the roots will be ${T.byF.join(", ")}.` : ""));
+      render(); cap("#s8-cap", CAP.fin(e) + (e.ph === 1 && st.order.length === 8 ? (RS() ? ` first.order is complete. Read from the end, the roots will be tried in the order ${T.byF.join(", ")}.` : ` All finish times are known: largest first, the roots will be ${T.byF.join(", ")}.`) : ""));
       if (e.p && !fast) { const d0 = dot("sv-fill-blue"); gFly.appendChild(d0); await w(fly(d0, [P[e.u].x, P[e.u].y], [P[e.p].x, P[e.p].y], 300)); d0.remove(); }
       return;
     }
@@ -3728,7 +3833,10 @@ K.page(20);
       st.flipNow = null;
     }
     if (e.k === "init3") { st.tree = new Set(); st.stack = []; }
-    if (e.k === "comp") { st.comps.push(e.members); st.rootNow = null; }
+    if (e.k === "comp") {
+      if (RS()) { e.members.forEach((v) => { st.comp[v] = e.ci; st.placed++; }); st.tree2 = []; } // drain: every vertex of the tree gets the label
+      st.comps.push(e.members); st.rootNow = null;
+    }
     if (e.k === "done") { st.done = true; st.rootNow = null; st.stack = []; }
     render(); cap("#s8-cap", CAP[e.k](e));
   }
@@ -3750,7 +3858,7 @@ K.page(20);
 
   busy = [button(ctr, "Step", "", step), button(ctr, "Play", "primary", play), button(ctr, "Next phase", "", nextPhase)];
   button(ctr, "Reset", "", reset);
-  CODE_LANG.on(() => render());
+  CODE_LANG.on(() => { S.cancel(); T = trace(); redraw(); }); // Rust mode starts its first search at a, so the run starts over
   redraw();
 })();
 

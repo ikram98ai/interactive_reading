@@ -549,7 +549,7 @@ f(v3, v2) = 0
         <p class="story">Start with no trucks rolling at all. Find any augmenting path, send as many extra trucks along it as its tightest leg allows, and look again. Repeat until the residual network has no path from <i>s</i> to <i>t</i>. That loop is the <b>Ford-Fulkerson method</b>, and the next scene shows why the flow it stops with is a maximum.</p>
         <p class="story">The book calls it a <i>method</i> rather than an <i>algorithm</i> because line 3 says only “a path”. Depth-first search, breadth-first search, or a clever guess are all allowed, and they do not cost the same. With integer capacities every round adds at least 1 to the flow value, so there are at most |<i>f</i>*| rounds, and each round costs O(<i>E</i>): the total is <b>O(<i>E</i> |<i>f</i>*|)</b>. That is a good bound when the best flow is small and a poor one when it is huge.</p>
         <p class="story">Figure 24.7 makes the point. Two roads leaving <i>s</i> and two entering <i>t</i> carry 10<sup>6</sup> trucks each, and a single middle road between <i>u</i> and <i>v</i> carries 1. If every path unluckily crosses the middle road, forwards and then backwards, each round adds one unit and the run takes 2,000,000 rounds. The same method with a different search for line 3 finishes in four.</p>
-        <p class="imagine"><b>Try it:</b> on <b>Figure 24.6</b>, press <b>Step</b> repeatedly and follow the highlighted lines: the search walks forward (and backs up from dead ends), the bottleneck turns coral, then each edge is updated. In the Rust view the highlight also follows the recursion, and the memory strip shows one stack frame per vertex on the path. Then pick <b>Figure 24.7 · unlucky</b> and press <b>Play</b>: after a few rounds adding 1 each, the counter races on. Try <b>M = 4</b> to watch every round, then <b>Figure 24.7 · DFS</b>: same network, same method, four rounds.</p>
+        <p class="imagine"><b>Try it:</b> on <b>Figure 24.6</b>, press <b>Step</b> repeatedly and follow the highlighted lines: the search walks forward (and backs up from dead ends), the bottleneck turns coral, then each edge is updated. In the Rust view the highlight also follows the recursion, and the memory strip shows one stack frame per vertex on the path. Then pick <b>Figure 24.7 · unlucky</b> and press <b>Play</b>: after a few rounds adding 1 each, the counter races on. Try <b>M = 4</b> to watch every round, then <b>Figure 24.7 · DFS</b>: same network, same method, four rounds. Last, <b>Figure 24.6 · BFS</b> finds each path by breadth-first search, the Edmonds-Karp algorithm of the next pages; its Rust keeps the residual network as one vector of edges, each followed by its reverse, so edge <code>e</code>'s partner is <code>e ^ 1</code>.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -684,6 +684,92 @@ fn main() {
 puck:     (23, 4)
 dfs:      (2000, 4)
 unlucky:  (2000, 2000)
+</script>
+<script type="text/x-rust" id="rs-s5-ek">
+use std::collections::VecDeque;
+
+struct Edge {
+    to: usize,
+    cap: u32,
+}
+
+struct Net {
+    adj: Vec<Vec<usize>>,
+    edges: Vec<Edge>,
+}
+
+fn add(net: &mut Net, u: usize, v: usize,
+       cap: u32) {
+    let e = net.edges.len();
+    net.adj[u].push(e);
+    net.adj[v].push(e ^ 1);
+    net.edges.push(Edge { to: v, cap });
+    net.edges.push(Edge { to: u, cap: 0 });
+}
+
+fn path(net: &Net, s: usize, t: usize)
+    -> Option<Vec<usize>> {
+    let n = net.adj.len();
+    let mut via = vec![None; n];
+    let mut q = VecDeque::with_capacity(n);
+    q.push_back(s);
+    while let Some(u) = q.pop_front() {
+        for &e in &net.adj[u] {
+            let v = net.edges[e].to;
+            if v != s && via[v].is_none()
+                && net.edges[e].cap > 0 {
+                via[v] = Some(e);
+                q.push_back(v);
+            }
+        }
+    }
+    let mut p = Vec::new();
+    let mut v = t;
+    while v != s {
+        let e = via[v]?;
+        p.push(e);
+        v = net.edges[e ^ 1].to;
+    }
+    Some(p)
+}
+
+fn max_flow(net: &mut Net, s: usize,
+            t: usize) -> u32 {
+    let mut flow = 0;
+    while let Some(p) = path(net, s, t) {
+        let mut b = u32::MAX;
+        for &e in &p {
+            b = b.min(net.edges[e].cap);
+        }
+        for &e in &p {
+            net.edges[e].cap -= b;
+            net.edges[e ^ 1].cap += b;
+        }
+        flow += b;
+    }
+    flow
+}
+
+fn main() {
+    // s, v1, v2, v3, v4, t are 0 to 5
+    let list = [
+        (0, 1, 16), (0, 2, 13), (1, 3, 12),
+        (2, 1, 4), (2, 4, 14), (3, 2, 9),
+        (3, 5, 20), (4, 3, 7), (4, 5, 4),
+    ];
+    let mut net = Net {
+        adj: vec![Vec::new(); 6],
+        edges: Vec::new(),
+    };
+    for &(u, v, cap) in &list {
+        add(&mut net, u, v, cap);
+    }
+    let f = max_flow(&mut net, 0, 5);
+    println!("max flow: {}", f);
+}
+</script>
+<script type="text/x-rust-out" id="rs-s5-ek-out">
+max flow: 23
 </script>
   </section>
 
@@ -2379,15 +2465,17 @@ K.page(24);
 /* ================= 24.2 · the Ford-Fulkerson method: FORD-FULKERSON(G, s, t) on Figures 24.6 and 24.7 ================= */
 (function s5() {
   const svg = K.$("#s5-svg"), GR = AL.graph, RV = 15;
-  const MODES = ["Figure 24.6 · DFS", "Figure 24.7 · unlucky", "Figure 24.7 · DFS"];
+  const MODES = ["Figure 24.6 · DFS", "Figure 24.7 · unlucky", "Figure 24.7 · DFS", "Figure 24.6 · BFS"];
   const MS = [4, 50, 1000000];
+  const EK = 3; // Figure 24.6 · BFS: line 3 by breadth-first search (Edmonds-Karp), and in Rust the edge arena of max_flow.rs
   let mode = 0, M = 1000000, net, f, rounds, phase, path, show, bn, aug, stk, seenSet, busyBtns = [];
+  let built = 0, AR = null, ek = null; // EK: edges added so far, the arena, the search's events and the one on screen
   const S = session((b) => busyBtns.forEach((x) => (x.disabled = b)));
   const copy = (m) => m.map((r) => r.slice());
 
   /* ---- the two networks ---- */
   function mkNet() {
-    const n = mode === 0
+    const n = mode === 0 || mode === EK
       ? { NM: ["s", "v1", "v2", "v3", "v4", "t"], T: 5,
         EG: [[0, 1, 16], [0, 2, 13], [1, 3, 12], [2, 1, 4], [2, 4, 14], [3, 2, 9], [3, 5, 20], [4, 3, 7], [4, 5, 4]],
         XY: [[[52, 80], [218, 44], [218, 116], [442, 44], [442, 116], [608, 80]], [[52, 251], [218, 196], [218, 306], [442, 196], [442, 306], [608, 251]]] }
@@ -2427,6 +2515,34 @@ K.page(24);
   }
   const chooser = (fl) => (mode === 1 ? unlucky(fl) : dfsTrace(fl));
 
+  /* ---- EK: the Rust edge arena. edges[2k] is the k-th edge (u, v) of G, edges[2k + 1] its reverse (v, u);
+     adj[u] lists edge ids in the order `add` pushed them. An edge's cap is its residual capacity, so the
+     reverse's cap is the flow on the real edge, and the residual network is every edge with cap > 0. ---- */
+  function mkArena() {
+    const adj = Array.from({ length: net.N }, () => []), ed = [];
+    net.EG.forEach(([u, v], k) => { adj[u].push(2 * k); adj[v].push(2 * k + 1); ed.push([u, v, k], [v, u, k]); });
+    return { adj, ed };
+  }
+  const tail = (e) => AR.ed[e][0], head = (e) => AR.ed[e][1];
+  const capOf = (fl, e) => { const [a, b, k] = AR.ed[e]; return e % 2 ? fl[b][a] : net.EG[k][2] - fl[a][b]; };
+  const resEK = (fl) => { const o = []; for (let e = 0; e < 2 * built; e++) { const c = capOf(fl, e); if (c > 0) o.push([tail(e), head(e), c]); } return o; };
+  function bfsTrace(fl) { // the Rust `path`: breadth-first from s, via[v] = the edge that first reached v; then the walk back from t
+    const via = Array(net.N).fill(null), buf = [0], ev = [], snap = (o) => Object.assign({ via: via.slice(), buf: buf.slice(), head: hd }, o);
+    let hd = 0;
+    ev.push(snap({ op: "start" }));
+    while (hd < buf.length) {
+      const u = buf[hd++], got = [];
+      for (const e of AR.adj[u]) { const v = head(e); if (v !== 0 && via[v] == null && capOf(fl, e) > 0) { via[v] = e; buf.push(v); got.push(v); } }
+      ev.push(snap({ op: "pop", u, got }));
+    }
+    const p = [];
+    let v = net.T;
+    while (v !== 0 && via[v] != null) { p.push(via[v]); v = tail(via[v]); }
+    ev.push(snap({ op: "walk", ok: v === 0, p: v === 0 ? p : null }));
+    return ev;
+  }
+  const pathOf = (p) => [net.T].concat(p.map(tail)).reverse(); // edge ids, t back to s → the vertices s … t
+
   /* ---- drawing ---- */
   function labelsOnCurves(R) {
     R.edges.forEach((g) => {
@@ -2441,19 +2557,24 @@ K.page(24);
   const ctr = K.$("#s5-controls"), stats = K.$("#s5-stats");
   const stR = stat("augmentations", 0), stV = stat("flow value", 0), stB = stat("bottleneck", "–"), stM = stat("maximum flow", "–");
   stats.append(stR, stV, stB, stM);
-  const cv = code("#s5-code", { files: [{ name: "FORD-FULKERSON", src: src("ps-s5"), rs: { name: "ford_fulkerson.rs", src: src("rs-s5"), out: src("rs-s5-out"),
-    map: { "FORD-FULKERSON": 55, 1: 60, 2: 60, 3: 62, 4: [63, 64], 5: 65, 6: 67, 7: 68, 8: [69, 70], 9: 75 } } }] });
+  const FILES = [{ name: "FORD-FULKERSON", src: src("ps-s5"), rs: { name: "ford_fulkerson.rs", src: src("rs-s5"), out: src("rs-s5-out"),
+    map: { "FORD-FULKERSON": 55, 1: 60, 2: 60, 3: 62, 4: [63, 64], 5: 65, 6: 67, 7: 68, 8: [69, 70], 9: 75 } } }];
+  const FILES_EK = [{ name: "FORD-FULKERSON", src: src("ps-s5"), rs: { name: "max_flow.rs", src: src("rs-s5-ek"), out: src("rs-s5-ek-out"),
+    map: { "FORD-FULKERSON": 48, 1: [76, 77], 2: [15, 16, 17, 18, 19], 3: 51, 4: [52, 53, 54], 5: 56, 6: [57, 58], 7: [57, 58], 8: [57, 58], 9: 62 } } }];
+  const cv = code("#s5-code", { files: FILES });
   const m = mem("#s5-mem");
 
   const pathEdges = () => path.slice(1).map((v, i) => [path[i], v]);
   function render() {
     const fB = aug ? aug.f0 : f;
-    const res = resEdges(fB), rm = new Map(res.map(([u, v, c]) => [u + ">" + v, c]));
+    const res = mode === EK ? resEK(fB) : resEdges(fB), rm = new Map(res.map(([u, v, c]) => [u + ">" + v, c]));
     const end = path.length ? path[path.length - 1] : -1;
     const pe = pathEdges(), pk = pe.map(([u, v]) => u + ">" + v);
     const bb = bn;
     const cur = aug ? aug.i : -1;
-    const nodeCls = (i) => (show === "search" && i === end ? "on2" : path.includes(i) ? "good" : i === 0 || i === net.T ? "src" : "");
+    const bfs = show === "bfs" && ek ? ek.ev[ek.i] : null, tree = new Set(bfs ? bfs.via.map((e, v) => (e == null ? null : tail(e) + ">" + v)).filter(Boolean) : []);
+    const nodeCls = (i) => (bfs ? (bfs.op === "pop" && i === bfs.u ? "on" : i === 0 || bfs.via[i] != null ? "on2" : i === net.T ? "src" : "")
+      : show === "search" && i === end ? "on2" : path.includes(i) ? "good" : i === 0 || i === net.T ? "src" : "");
     K.clear(gT);
     txt(gT, 14, 16, "flow f in G", { anchor: "start", cls: "sv-label" });
     txt(gT, 646, 16, "|f| = " + fmt(value(f)), { anchor: "end", cls: "sv-label" });
@@ -2483,6 +2604,7 @@ K.page(24);
     const RB = GR.draw(gB, GB, {
       r: RV, label: (id) => net.NM[+id], node: (id) => nodeCls(+id),
       edge: (e, key) => {
+        if (bfs) return tree.has(key) ? "on2" : "";
         const k = pk.indexOf(key);
         if (k < 0) return "";
         if (show === "search") return "on2";
@@ -2497,6 +2619,7 @@ K.page(24);
     renderMem();
   }
   function renderMem() {
+    if (mode === EK) { renderMemEK(); return; }
     const dfsMode = mode !== 1;
     const searching = show === "search" && stk && stk.length;
     const frames = [{ fn: "ford_fulkerson(&cap, find)", vars: [{ n: "flow", t: "Vec<Vec<i64>>", v: net.N + " rows" }, { n: "rounds", t: "usize", v: fmt(rounds), hot: phase === "bn" || show === "aug" }] }];
@@ -2521,6 +2644,62 @@ K.page(24);
     }
     m.set({ note, stack: frames, heap });
   }
+  // EK, the Rust run of max_flow.rs: main builds the arena with add, max_flow loops on path, path is the breadth-first search
+  function renderMemEK() {
+    const NM = net.NM, vx = (i) => i + " (" + NM[i] + ")";
+    const ev = ek ? ek.ev[ek.i] : null;
+    const inPath = (phase === "search" || phase === "found") && !!ev;
+    const inMax = inPath || phase === "bn" || (phase === "test" && rounds > 0);
+    const done = phase === "done", hasP = phase === "found" || phase === "bn";
+    const fl = f, n2 = 2 * built;
+    const net0 = built ? { n: "net", t: "Net", v: "adj: 6 lists", ptr: "edges" } : { n: "net", t: "Net", v: "edges: empty" };
+    const main = { fn: "main", vars: [{ n: "list", t: "[(usize, usize, u32); 9]", v: "9 edges" }, net0] };
+    if (phase === "init" && built > 0) { const [u, v, c] = net.EG[built - 1]; main.vars.push({ n: "u, v, cap", t: "usize, usize, u32", v: `${u}, ${v}, ${c}`, hot: true }); }
+    if (done) main.vars.push({ n: "f", t: "u32", v: fmt(value(f)), hot: true });
+    if (inMax) { main.sub = "list, net"; main.vars = []; }
+    const frames = [main], heap = [];
+    if (inMax) {
+      const mf = { fn: "max_flow(&mut net, 0, 5)", top: !inPath, vars: [{ n: "net", t: "&mut Net", v: "→ main's net" }, { n: "s, t", t: "usize", v: "0, 5" }, { n: "flow", t: "u32", v: fmt(value(phase === "bn" && aug ? aug.f0 : f)) }] };
+      if (phase === "bn") {
+        mf.vars.push({ n: "p", t: "Vec<usize>", v: "len " + (path.length - 1), ptr: "p" });
+        if (bn != null) mf.vars.push({ n: "b", t: "u32", v: fmt(bn), hot: show === "bn" });
+        if (aug && aug.e != null) mf.vars.push({ n: "e", t: "usize", v: aug.e, hot: true });
+      }
+      if (inPath) { mf.sub = "net, s, t, flow = " + fmt(value(f)); mf.vars = []; }
+      frames.push(mf);
+    }
+    if (inPath) {
+      const vars = [{ n: "net", t: "&Net", v: "→ main's net" }, { n: "s, t, n", t: "usize", v: "0, 5, 6" },
+        { n: "via", t: "Vec<Option<usize>>", v: "len 6", ptr: "via" }, { n: "q", t: "VecDeque<usize>", v: "len " + (ev.buf.length - ev.head), ptr: "q" }];
+      if (ev.op === "pop") vars.push({ n: "u", t: "usize", v: vx(ev.u), hot: true });
+      if (phase === "found") vars.push({ n: "p", t: "Vec<usize>", v: "len " + ev.p.length, ptr: "p" }, { n: "v", t: "usize", v: vx(0) });
+      frames.push({ fn: "path(net, 0, 5)", top: true, vars });
+    }
+    if (built) {
+      const marks = {};
+      if (phase === "init" || (phase === "test" && rounds === 0 && !ev)) { marks[n2 - 2] = "on"; marks[n2 - 1] = "on2"; }
+      if (phase === "bn" && aug && aug.e != null) { marks[aug.e] = "on"; marks[aug.e ^ 1] = "on2"; }
+      else if (phase === "bn" && ek && ek.p) ek.p.forEach((e) => (marks[e] = "on"));
+      heap.push({ id: "edges", label: "edges · " + n2 + " × Edge · each one's cap", cw: 16, cells: Array.from({ length: n2 }, (_, e) => capOf(fl, e)), marks });
+    }
+    if (inPath) {
+      const vm = {};
+      if (ev.op === "pop") ev.got.forEach((v) => (vm[v] = "on"));
+      heap.push({ id: "via", label: "via · 6 × Option<usize> · – is None", cw: 32, cells: ev.via.map((e) => (e == null ? "–" : e)), marks: vm });
+      const qc = Array(6).fill(""), qm = {};
+      for (let i = 0; i < 6; i++) qm[i] = "free";
+      for (let i = ev.head; i < ev.buf.length; i++) { qc[i] = ev.buf[i]; qm[i] = i === ev.head ? "on2" : "on"; }
+      heap.push({ id: "q", label: "q's buffer · room for 6", cw: 32, cells: qc, marks: qm });
+    }
+    if (hasP && ek && ek.p) heap.push({ id: "p", label: "p · edge ids, t back to s", cw: 32, cells: ek.p.slice() });
+    const note = done ? "<code>path</code> found no way to t and returned <code>None</code>, so <code>max_flow</code> returned the flow: <code>f</code>."
+      : phase === "bn" ? "Each edge <code>e</code> of the path loses <code>b</code> of room, and its partner <code>e ^ 1</code> gains <code>b</code>: the same two lines for a real edge and for a reverse."
+      : phase === "found" ? "The walk back from t: edge <code>e</code> came from where its partner points, <code>edges[e ^ 1].to</code>."
+      : inPath ? "<code>path</code> only reads <code>net</code>. <code>via[v]</code> is the edge that first reached <code>v</code>; <code>q</code> holds the vertices found but not yet scanned."
+      : built ? "Each <code>add</code> pushes two edges: the real one at an even index, its reverse right after it. So edge <code>e</code>'s partner is <code>e ^ 1</code>."
+      : "<code>main</code> holds the edge list and an empty <code>net</code>.";
+    m.set({ note, stack: frames, heap });
+  }
 
   /* ---- code panel ---- */
   const MARK = (lines, method) => { cv.at(lines, "on"); cv.at(method ? ["FORD-FULKERSON-METHOD:" + method] : [], "on2"); };
@@ -2532,9 +2711,10 @@ K.page(24);
   /* ---- the run ---- */
   function init() {
     net = mkNet(); f = zero(); rounds = 0; phase = "init"; path = []; show = "none"; bn = null; aug = null; stk = null; seenSet = null;
+    built = 0; ek = null; AR = mode === EK ? mkArena() : null;
   }
   const bottleneck = () => Math.min(...pathEdges().map(([u, v]) => cf(f, u, v)));
-  const maxFlow = () => (mode === 0 ? 23 : 2 * M);
+  const maxFlow = () => (mode === 0 || mode === EK ? 23 : 2 * M);
 
   async function doSearch(w, quick) {
     const r = chooser(f), pause = quick ? 90 : 170;
@@ -2604,7 +2784,93 @@ K.page(24);
     render();
     cap("#s5-cap", `Lines 1–2: every edge gets flow 0, so the residual network is a copy of the network itself. Next: line 3 looks for a path.`);
   }
+  /* ---- EK: one press per add, per search event (the start, each vertex leaving the queue, the walk back), then line 4, then lines 5–8 ---- */
+  const names2 = (l) => (l.length < 2 ? l.join("") : l.slice(0, -1).join(", ") + " and " + l[l.length - 1]);
+  async function doAddEK(w, quick) {
+    const k = built++, [u, v, c] = net.EG[k], NM = net.NM;
+    if (built === net.EG.length) phase = "test";
+    MARK([1, 2], 1); cv.notes({ 2: `(${NM[u]}, ${NM[v]}).f = 0` }, { 77: `add(${u}, ${v}, ${c})`, 15: `e = ${2 * k}` });
+    render();
+    cap("#s5-cap", `Lines 1–2: edge (${NM[u]}, ${NM[v]}) starts with flow 0, so it can still take all ${c}. The Rust adds it to the arena as <b>edges[${2 * k}]</b>, cap ${c}, and its reverse (${NM[v]}, ${NM[u]}) right after it, as <b>edges[${2 * k + 1}]</b>, cap 0.`);
+    await w(sleep(quick ? 60 : 260));
+  }
+  async function doStartEK(w, quick) {
+    ek = { ev: bfsTrace(f), i: 0, p: null }; show = "bfs"; phase = "search"; path = [];
+    MARK([3], 2); cv.notes({ 3: "round " + (rounds + 1) }, { 51: "round " + (rounds + 1) }); cv.at([3, "rs:27"], "on");
+    render();
+    cap("#s5-cap", `Line 3, breadth-first: round ${rounds + 1} starts its search with s alone in the queue q. No other vertex has been reached, so every via is None.`);
+    await w(sleep(quick ? 80 : 300));
+  }
+  async function doNextEK(w, quick) {
+    const e = ek.ev[++ek.i], NM = net.NM;
+    if (e.op === "pop") {
+      cv.at([3, "rs:28", "rs:29", "rs:31"].concat(e.got.length ? ["rs:33", "rs:34"] : []), "on");
+      render();
+      const got = e.got.map((v) => NM[v]);
+      cap("#s5-cap", `Line 3, breadth-first: <b>${NM[e.u]}</b> leaves the front of the queue. ` + (got.length
+        ? `Its edges with room left reach ${names2(got)} for the first time, so ${got.length === 1 ? "it joins" : "they join"} the back, and via records the edge that reached ${got.length === 1 ? "it" : "each one"}.`
+        : `None of its edges with room left leads anywhere new, so nothing joins the queue.`));
+      await w(sleep(quick ? 90 : 380));
+      return;
+    }
+    if (e.ok) { // the walk back from t
+      ek.p = e.p; path = pathOf(e.p); show = "found"; phase = "found";
+      cv.at([3, "rs:41", "rs:42", "rs:43"], "on"); cv.notes({ 3: "p = " + names(path) }, { 51: "p = " + names(path), 45: "Some([" + e.p.join(", ") + "])" });
+      render();
+      cap("#s5-cap", `Line 3: the queue is empty, and t was reached. Walking back from t along via gives the augmenting path <b>${nameOf(path)}</b>, with as few edges as any.`);
+      await w(sleep(quick ? 90 : 300));
+      return;
+    }
+    phase = "done"; path = [];
+    const seen = NM.filter((_, i) => i === 0 || e.via[i] != null);
+    cv.at([9], "good"); cv.at([], "on"); cv.at(["FORD-FULKERSON-METHOD:4"], "good"); cv.at([], "on2");
+    cv.notes({ 3: ["no path", "good"], 9: "|f| = " + fmt(value(f)) }, { 41: ["via[t] is None", "good"], 62: fmt(value(f)) });
+    render();
+    cap("#s5-cap", `Line 3: the search reached only ${names2(seen)}, never t, so <b>no augmenting path is left</b> and path returns None. Line 9: the flow value is <b>${fmt(value(f))}</b> after <b>${fmt(rounds)}</b> augmentations, a maximum flow.`);
+  }
+  async function doBottleneckEK(w, quick) {
+    bn = bottleneck(); show = "bn"; phase = "bn";
+    const vals = pathEdges().map(([u, v]) => cf(f, u, v)), t = "min{" + vals.map(fmt).join(", ") + "} = " + fmt(bn);
+    MARK([4], 3); cv.notes({ 4: t }, { 54: "b = " + fmt(bn) }); render();
+    cap("#s5-cap", `Line 4: the residual capacities along the path are ${vals.map(fmt).join(", ")}. The smallest, <b>c<sub>f</sub>(p) = ${fmt(bn)}</b>, is the bottleneck (coral).`);
+    await w(sleep(quick ? 150 : 300));
+  }
+  async function doUpdateEK(w, quick) {
+    const b = bn, before = value(f), ms = quick ? 0.45 : 0.75, NM = net.NM, p = ek.p;
+    aug = { i: -1, e: null, f0: copy(f) }; show = "aug";
+    for (let j = 0; j < p.length; j++) { // the Rust walks p from t back to s
+      const e = p[j], u = tail(e), v = head(e), fwd = e % 2 === 0, a = fwd ? [u, v] : [v, u];
+      aug.i = path.length - 2 - j; aug.e = e;
+      const nm = `(${NM[u]}, ${NM[v]})`, was = f[a[0]][a[1]], now = fwd ? was + b : was - b, line = fwd ? 7 : 8;
+      MARK([line], 3);
+      cv.notes({ 4: "c_f(p) = " + fmt(b), 5: nm, [line]: `(${NM[a[0]]}, ${NM[a[1]]}).f = ${fmt(was)} ${fwd ? "+" : "−"} ${fmt(b)}` },
+        { 54: "b = " + fmt(b), 57: `edges[${e}].cap = ${capOf(f, e) - b}`, 58: `edges[${e ^ 1}].cap = ${capOf(f, e ^ 1) + b}` });
+      cap("#s5-cap", (fwd ? `Line 7: ${nm} is an edge of G, so its flow goes up by ${fmt(b)}, to <b>${fmt(now)}</b>.` : `Line 8: ${nm} is a reverse edge, so the flow on (${NM[v]}, ${NM[u]}) goes <b>down</b> by ${fmt(b)}, to ${fmt(now)}.`)
+        + ` In the arena, edges[${e}] loses ${fmt(b)} of room and its partner, edges[${e ^ 1}], gains ${fmt(b)}.`);
+      render();
+      const tag = draw.tag((fwd ? "+" : "−") + fmt(b), fwd ? "sv-data-soft" : "sv-bad");
+      layer.appendChild(tag);
+      const p0 = at(u, 0), p1 = at(v, 0);
+      await w(fly(tag, [p0.x, p0.y], [p1.x, p1.y], 460 * ms));
+      tag.remove();
+      f[a[0]][a[1]] = now; render();
+      await w(sleep(200 * ms));
+    }
+    aug = null; path = []; show = "none"; bn = null; ek = null; rounds++; phase = "test";
+    cv.at([3], "on"); cv.notes({ 3: "|f| = " + fmt(value(f)) }, { 60: "flow = " + fmt(value(f)) });
+    render();
+    cap("#s5-cap", `Round ${fmt(rounds)} is done: the flow value went from ${fmt(before)} to <b>${fmt(value(f))}</b> (+${fmt(b)}). Back to line 3 with a new residual network.`);
+  }
+  async function stepEK(w, quick) {
+    if (phase === "init") await doAddEK(w, quick);
+    else if (phase === "test") await doStartEK(w, quick);
+    else if (phase === "search") await doNextEK(w, quick);
+    else if (phase === "found") await doBottleneckEK(w, quick);
+    else if (phase === "bn") await doUpdateEK(w, quick);
+    return phase !== "done";
+  }
   async function stepOnce(w, quick) {
+    if (mode === EK) return stepEK(w, quick);
     if (phase === "init") await doInit(w);
     else if (phase === "test") await doSearch(w, quick);
     else if (phase === "found") await doBottleneck(w, quick);
@@ -2632,8 +2898,9 @@ K.page(24);
       await w(sleep(quick ? (phase === "found" ? 200 : 90) : phase === "found" ? 350 : 200));
     }
   });
-  function reset() { S.cancel(); K.clear(layer); init(); cv.clear(); cv.out(null); stM.set(mode === 0 ? "23" : fmt(2 * M)); stM.hidden = false; render(); cap("#s5-cap", describe()); }
+  function reset() { S.cancel(); K.clear(layer); init(); cv.clear(); cv.out(null); stM.set(mode === 0 || mode === EK ? "23" : fmt(2 * M)); stM.hidden = false; render(); cap("#s5-cap", describe()); }
   function describe() {
+    if (mode === EK) return `Figure 24.1's network, with no flow yet, and line 3 done by <b>breadth-first search</b>: the Edmonds-Karp algorithm. In the Rust view, the residual network is an arena of edges, each followed by its reverse. Press <b>Step</b>: lines 1–2 add the edges one at a time, then each round searches, finds the bottleneck, and updates the path.`;
     if (mode === 0) return `Figure 24.1's network, with no flow yet. Press <b>Step</b>: lines 1–2 give every edge flow 0, then each round is three steps: line 3 finds a path, line 4 its bottleneck, lines 5–8 the update. The book's Figure 24.6 chooses other augmenting paths, and any choice ends at the same value, 23.`;
     return mode === 1 ? `Figure 24.7 with M = ${fmt(M)}: four roads of capacity M and a middle road u → v of capacity 1. Every path here will cross the middle road, so each round can carry only 1 unit. Press <b>Play</b>.` : `Figure 24.7 with M = ${fmt(M)}, but line 3 now uses the depth-first search of the Rust listing. Press <b>Play</b> and count the rounds.`;
   }
@@ -2642,7 +2909,7 @@ K.page(24);
   button(ctr, "Reset", "", reset);
   const mseg = seg(["M = 4", "M = 50", "M = 10⁶"], 2, (i) => { M = MS[i]; reset(); });
   mseg.hidden = true; ctr.appendChild(mseg);
-  K.$("#s5-seg").appendChild(seg(MODES, 0, (i) => { mode = i; mseg.hidden = i === 0; reset(); }));
+  K.$("#s5-seg").appendChild(seg(MODES, 0, (i) => { mode = i; mseg.hidden = i === 0 || i === EK; cv.setFiles(i === EK ? FILES_EK : FILES); reset(); }));
   CODE_LANG.on(() => { if (!aug) render(); });
   reset();
 })();

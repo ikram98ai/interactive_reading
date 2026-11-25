@@ -561,15 +561,20 @@ fn lup_solve(
     pi: &[usize; N],
     b: &[f64; N],
 ) -> ([f64; N], [f64; N]) {
-    let (mut y, mut x) = ([0.0; N], [0.0; N]);
+    let mut y = [0.0; N];
+    let mut x = [0.0; N];
     for i in 0..N {
         // every earlier y is known, so only y[i] is left to find
-        let known: f64 = (0..i).map(|j| l[i][j] * y[j]).sum();
+        let known: f64 = (0..i)
+            .map(|j| l[i][j] * y[j])
+            .sum();
         y[i] = b[pi[i]] - known;
     }
     for i in (0..N).rev() {
         // every later x is known, so only x[i] is left to find
-        let known: f64 = (i + 1..N).map(|j| u[i][j] * x[j]).sum();
+        let known: f64 = (i + 1..N)
+            .map(|j| u[i][j] * x[j])
+            .sum();
         x[i] = (y[i] - known) / u[i][i];
     }
     (y, x)
@@ -581,9 +586,8 @@ fn main() {
     let pi = [2, 0, 1]; // the book's pi[1..3] = 3, 1, 2, counted from 0
     let b = [3.0, 7.0, 8.0];
     let (y, x) = lup_solve(&l, &u, &pi, &b);
-    let tidy = |v: [f64; N]| v.map(|e| (e * 1e3).round() / 1e3);
-    println!("y = {:?}", tidy(y));
-    println!("x = {:?}", tidy(x));
+    println!("y = {:.1?}", y);
+    println!("x = {:.1?}", x);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s5-out">
@@ -865,25 +869,32 @@ for k = 1 to n
 <script type="text/x-rust" id="rs-s8">
 // LUP-DECOMPOSITION: the numbers of Figure 28.2, in place in the table.
 const N: usize = 4;
+const EPS: f64 = 1e-9;
 type M = [[f64; N]; N];
 
-fn lup_decomposition(a: &mut M) -> Result<[usize; N], &'static str> {
-    let mut pi = [0, 1, 2, 3]; // the identity permutation
+struct Singular(f64);
+
+fn lup_decomposition(
+    a: &mut M,
+) -> Result<[usize; N], Singular> {
+    let mut pi = [0; N];
+    for i in 0..N {
+        pi[i] = i;
+    }
     for k in 0..N {
         let mut p = 0.0;
         let mut k2 = k;
         for i in k..N {
-            // find the largest absolute value in column k
             if a[i][k].abs() > p {
                 p = a[i][k].abs();
                 k2 = i;
             }
         }
-        if p == 0.0 {
-            return Err("singular matrix");
+        if p < EPS {
+            return Err(Singular(p));
         }
         pi.swap(k, k2);
-        a.swap(k, k2); // whole rows: stored multipliers move too
+        a.swap(k, k2);
         for i in k + 1..N {
             a[i][k] /= a[k][k];
             for j in k + 1..N {
@@ -894,6 +905,20 @@ fn lup_decomposition(a: &mut M) -> Result<[usize; N], &'static str> {
     Ok(pi)
 }
 
+fn report(a: &mut M) {
+    match lup_decomposition(a) {
+        Ok(pi) => {
+            println!("pi = {:?}", pi);
+            for row in a.iter() {
+                println!("{:.1?}", row);
+            }
+        }
+        Err(Singular(p)) => {
+            println!("singular: p = {:.1e}", p);
+        }
+    }
+}
+
 fn main() {
     let mut a = [
         [2.0, 0.0, 2.0, 0.6],
@@ -901,24 +926,23 @@ fn main() {
         [5.0, 5.0, 4.0, 2.0],
         [-1.0, -2.0, 3.4, -1.0],
     ];
-    match lup_decomposition(&mut a) {
-        Err(why) => println!("{why}"),
-        Ok(pi) => {
-            println!("pi = {:?}", pi.map(|p| p + 1));
-            for row in &a {
-                // adding 0.0 turns a stray -0.0 into 0.0
-                println!("{:?}", row.map(|v| (v * 1e3).round() / 1e3 + 0.0));
-            }
-        }
-    }
+    report(&mut a);
+    let mut s = [
+        [1.0, 2.0, 3.0, 4.0],
+        [5.0, 6.0, 7.0, 8.0],
+        [9.0, 10.0, 11.0, 12.0],
+        [13.0, 14.0, 15.0, 16.0],
+    ];
+    report(&mut s);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s8-out">
-pi = [3, 1, 4, 2]
+pi = [2, 0, 3, 1]
 [5.0, 5.0, 4.0, 2.0]
 [0.4, -2.0, 0.4, -0.2]
 [-0.2, 0.5, 4.0, -0.5]
-[0.6, 0.0, 0.4, -3.0]
+[0.6, -0.0, 0.4, -3.0]
+singular: p = 1.9e-15
 </script>
   </section>
   <!-- 28.2 · computing a matrix inverse from an LUP decomposition -->
@@ -2280,12 +2304,14 @@ function workList(g, x, y, rows, o = {}) {
   let mode = 0, first = 8;
   const R = "LUP-SOLVE";
   const cv = code("#s5-code", { files: [{ name: R, src: src("ps-s5"), rs: { name: "lup_solve.rs", src: src("rs-s5"), out: src("rs-s5-out"),
-    map: rmap("rs-s5", { [R]: "fn lup_solve(", [`${R}:1`]: "let (mut y, mut x)", [`${R}:2`]: "for i in 0..N {", [`${R}:3`]: "y[i] = b[pi[i]]", [`${R}:4`]: "for i in (0..N).rev()", [`${R}:5`]: "x[i] = (y[i] - known)", [`${R}:6`]: 'println!("x =' }) } }] });
+    map: rmap("rs-s5", { [R]: "fn lup_solve(", [`${R}:1`]: "let mut y = [0.0; N];", [`${R}:2`]: "for i in 0..N {", [`${R}:3`]: "y[i] = b[pi[i]]", [`${R}:4`]: "for i in (0..N).rev()", [`${R}:5`]: "x[i] = (y[i] - known)", [`${R}:6`]: 'println!("x =' }) } }] });
   const stats = K.$("#s5-stats"), stOps = stat("sums and products so far", 0), stLeft = stat("unknowns left", 3);
   stats.append(stOps, stLeft);
   const X = { M: 54, v: 266, r: 362 }, Y0 = 50, CW = 54, CH = 36, GAP = 6, YW = 224, DY = 32;
   const rowY = (r) => Y0 + r * (CH + GAP) + CH / 2;
   const lineXY = (i) => [150, YW + i * DY - 5];
+  // Rust mode counts from 0 and writes y[0], as the program does; the book writes y₁
+  const vn = (nm, i) => (CODE_LANG.rust ? `${nm}[${i}]` : `${nm}${sub(i + 1)}`), rn = (i) => (CODE_LANG.rust ? i : i + 1);
   function frames() {
     const rhs0 = [first, 3, 7];
     const y = []; rhs0.forEach((v, i) => { let t = v; for (let j = 0; j < i; j++) t -= L[i][j] * y[j]; y[i] = t; });
@@ -2293,7 +2319,7 @@ function workList(g, x, y, rows, o = {}) {
     const order = forward ? [0, 1, 2] : [2, 1, 0], ans = [null, null, null], text = [null, null, null], out = [];
     let ops = 0;
     const mk = (o) => Object.assign({ forward, M, rhs, nm, ans: ans.slice(), text: text.slice(), row: -1, used: [], hot: -1, ops, left: ans.filter((v) => v == null).length }, o);
-    out.push(mk({ say: forward ? `The lower triangle L with the reordered totals. Three unknowns: y₁, y₂, y₃. Look at the first row: it has one unknown only.` : `The upper triangle U with the totals y from forward substitution. Here the <b>last</b> row has one unknown only, so start at the bottom.`, why: "The zeros in the triangle are what make this work: they remove unknowns from a row.", lines: R }));
+    out.push(mk({ say: forward ? `The lower triangle L with the reordered totals. Three unknowns: ${vn("y", 0)}, ${vn("y", 1)}, ${vn("y", 2)}. Look at the first row: it has one unknown only.` : `The upper triangle U with the totals y from forward substitution. Here the <b>last</b> row has one unknown only, so start at the bottom.`, why: "The zeros in the triangle are what make this work: they remove unknowns from a row.", lines: R }));
     const LN = forward ? `${R}:3` : `${R}:5`;
     order.forEach((i, step) => {
       const known = order.slice(0, step);
@@ -2301,20 +2327,20 @@ function workList(g, x, y, rows, o = {}) {
       const sumStr = terms.map((t) => `${num(t.c)} × ${num(t.v)}`).join(" + ");
       if (terms.length) {
         // one step: carry the known values into this row
-        text[i] = { t: `${nm}${sub(i + 1)}: ${num(rhs[i])} − (${sumStr})` };
+        text[i] = { t: `${vn(nm, i)}: ${num(rhs[i])} − (${sumStr})` };
         ops += terms.length * 2;
         out.push(mk({ row: i, used: known, hot: i, fly: terms.map((t) => [num(t.v), [X.v + CW / 2, rowY(t.j)], lineXY(i)]),
-          say: `Row ${i + 1} also holds ${terms.map((t) => `${nm}${sub(t.j + 1)}`).join(" and ")}, and we know ${terms.length > 1 ? "them" : "it"} now. Carry ${terms.length > 1 ? "them" : "it"} in: ${terms.map((t) => `${num(t.c)} × ${num(t.v)} = ${num(t.c * t.v)}`).join(", ")}.`,
-          lines: LN, notes: { [LN]: `i = ${i + 1}` } }));
+          say: `Row ${rn(i)} also holds ${terms.map((t) => vn(nm, t.j)).join(" and ")}, and we know ${terms.length > 1 ? "them" : "it"} now. Carry ${terms.length > 1 ? "them" : "it"} in: ${terms.map((t) => `${num(t.c)} × ${num(t.v)} = ${num(t.c * t.v)}`).join(", ")}.`,
+          lines: LN, notes: { [LN]: `i = ${rn(i)}` } }));
       }
       const sum = terms.reduce((t, e) => t + e.c * e.v, 0), diag = M[i][i], v = (rhs[i] - sum) / diag;
       ans[i] = v;
       if (!forward) ops += 1;
       const diff = sum < 0 ? `${num(rhs[i])} + ${num(-sum)}` : `${num(rhs[i])} − ${num(sum)}`;
       const lead = terms.length ? (forward ? diff : `(${diff})`) : num(rhs[i]);
-      const shown = forward && !terms.length ? `${nm}${sub(i + 1)} = ${num(v)}` : `${nm}${sub(i + 1)} = ${lead}${!forward ? ` ÷ ${num(diag)}` : ""} = ${num(v)}`;
+      const shown = forward && !terms.length ? `${vn(nm, i)} = ${num(v)}` : `${vn(nm, i)} = ${lead}${!forward ? ` ÷ ${num(diag)}` : ""} = ${num(v)}`;
       text[i] = { t: shown, tone: "good" };
-      out.push(mk({ row: i, solved: i, hot: i, say: terms.length ? `Only one unknown is left in row ${i + 1}: <b>${nm}${sub(i + 1)} = ${num(v)}</b>.` : (forward ? `Row 1 says y₁ = ${num(rhs[0])} straight away, because the 1 on L's diagonal needs no division: <b>y₁ = ${num(v)}</b>.` : `The last row says ${num(diag)} × x₃ = ${num(rhs[2])}. Divide: <b>x₃ = ${num(v)}</b>.`), why: step === 0 ? `That answer is the first domino: the next row can use it.` : "", lines: LN, notes: { [LN]: `${nm}_${i + 1} = ${num(v)}` } }));
+      out.push(mk({ row: i, solved: i, hot: i, say: terms.length ? `Only one unknown is left in row ${rn(i)}: <b>${vn(nm, i)} = ${num(v)}</b>.` : (forward ? `Row ${rn(0)} says ${vn("y", 0)} = ${num(rhs[0])} straight away, because the 1 on L's diagonal needs no division: <b>${vn("y", 0)} = ${num(v)}</b>.` : `The last row says ${num(diag)} × ${vn("x", 2)} = ${num(rhs[2])}. Divide: <b>${vn("x", 2)} = ${num(v)}</b>.`), why: step === 0 ? `That answer is the first domino: the next row can use it.` : "", lines: LN, notes: { [LN]: `${CODE_LANG.rust ? vn(nm, i) : `${nm}_${i + 1}`} = ${num(v)}` } }));
     });
     const result = forward ? `All three are known: <b>y = ${nums(ans)}</b>.` : `All three are known: <b>x = ${nums(ans)}</b>.`;
     out.push(mk({ phase: "Result", tone: "good", lines: forward ? `${R}:4` : `${R}:6`, notes: forward ? {} : { [`${R}:6`]: `x = ${nums(ans)}` }, say: `${result} That took <b>${ops}</b> sums and products.`, why: forward ? "Pick Back at the top to see these values become the totals for U." : "Each row uses at most every earlier answer once. So n rows cost about n × n small sums, which the book writes as Θ(n²)." }));
@@ -2323,7 +2349,7 @@ function workList(g, x, y, rows, o = {}) {
   function paint(f) {
     K.clear(g);
     const tri = (r, c) => (f.forward ? c <= r : c >= r);
-    mx(g, { x: X.M, y: Y0, cw: CW, ch: CH, gap: GAP, A: f.M.map((row, r) => row.map((v, c) => (tri(r, c) ? num(v) : "0"))), size: 15, label: f.forward ? "L" : "U",
+    mx(g, { x: X.M, y: Y0, cw: CW, ch: CH, gap: GAP, A: f.M.map((row, r) => row.map((v, c) => (tri(r, c) ? num(v) : "0"))), size: 15, label: CODE_LANG.rust ? (f.forward ? "l" : "u") : f.forward ? "L" : "U",
       mark: (r, c) => {
         if (f.row < 0) return tri(r, c) ? "" : "dim";
         if (r !== f.row) return "dim";
@@ -2332,13 +2358,13 @@ function workList(g, x, y, rows, o = {}) {
         return "on2";
       } });
     opSign(g, X.v - 24, rowY(1) + 7, "×");
-    mx(g, { x: X.v, y: Y0, cw: CW, ch: CH, gap: GAP, A: f.ans.map((v, i) => [v == null ? `${f.nm}${sub(i + 1)}` : num(v)]), size: 15, label: f.nm, mark: (r) => (f.solved === r ? "good" : f.ans[r] != null ? (f.used.includes(r) ? "on2" : "good") : r === f.row ? "on" : "dim") });
+    mx(g, { x: X.v, y: Y0, cw: CW, ch: CH, gap: GAP, A: f.ans.map((v, i) => [v == null ? vn(f.nm, i) : num(v)]), size: 15, label: f.nm, mark: (r) => (f.solved === r ? "good" : f.ans[r] != null ? (f.used.includes(r) ? "on2" : "good") : r === f.row ? "on" : "dim") });
     opSign(g, X.r - 24, rowY(1) + 7, "=");
-    mx(g, { x: X.r, y: Y0, cw: CW, ch: CH, gap: GAP, A: f.rhs.map((v) => [num(v)]), size: 15, label: f.forward ? "P b" : "y", mark: (r) => (f.row >= 0 && r !== f.row ? "dim" : f.row === r ? "on" : "") });
+    mx(g, { x: X.r, y: Y0, cw: CW, ch: CH, gap: GAP, A: f.rhs.map((v) => [num(v)]), size: 15, label: f.forward ? (CODE_LANG.rust ? "b[pi[i]]" : "P b") : "y", mark: (r) => (f.row >= 0 && r !== f.row ? "dim" : f.row === r ? "on" : "") });
     // the row in words, on the right
     if (f.row >= 0) {
-      const terms = f.M[f.row].map((c, j) => (tri(f.row, j) ? `${num(c)}${f.nm}${sub(j + 1)}` : null)).filter(Boolean);
-      txt(g, 450, 80, `Row ${f.row + 1} says:`, { anchor: "start", bold: true, size: 13 });
+      const terms = f.M[f.row].map((c, j) => (tri(f.row, j) ? (CODE_LANG.rust ? `${num(c)} * ${vn(f.nm, j)}` : `${num(c)}${f.nm}${sub(j + 1)}`) : null)).filter(Boolean);
+      txt(g, 450, 80, `Row ${rn(f.row)} says:`, { anchor: "start", bold: true, size: 13 });
       terms.forEach((t, i) => txt(g, 450, 104 + i * 20, (i ? "+ " : "") + t, { anchor: "start", mono: true, size: 13 }));
       txt(g, 450, 104 + terms.length * 20, `= ${num(f.rhs[f.row])}`, { anchor: "start", mono: true, size: 13 });
     }
@@ -2346,12 +2372,13 @@ function workList(g, x, y, rows, o = {}) {
     f.text.forEach((l, i) => {
       const hot = i === f.hot;
       g.appendChild(s("rect", { x: X.M - 6, y: YW + i * DY - 19, width: 560, height: 28, rx: 6, class: "ac-cell " + (hot ? (l && l.tone === "good" ? "good" : "on") : "dim"), style: { strokeWidth: 1 } }));
-      g.appendChild(s("text", { x: X.M + 4, y: YW + i * DY, class: "m28-work" + (hot ? "" : " old") }, l ? l.t : `${f.nm}${sub(i + 1)}: not yet`));
+      g.appendChild(s("text", { x: X.M + 4, y: YW + i * DY, class: "m28-work" + (hot ? "" : " old") }, l ? l.t : `${vn(f.nm, i)}: not yet`));
     });
     stOps.set(f.ops); stLeft.set(f.left, f.left === 0 ? "good" : "");
   }
   const W = walk({ id: "s5", svg: "#s5-svg", code: cv, frames, paint, enter: flights });
   K.$("#s5-seg").appendChild(seg(["Forward: L", "Back: U"], mode, (i) => { mode = i; W.rebuild(); }));
+  CODE_LANG.on(() => W.rebuild()); // repaint the names for the language shown
   K.$("#s5-inputs").append(slider({ id: "s5-first", label: "first total", min: 0, max: 12, value: first, onInput: (v) => { first = v; W.rebuild(); } }));
 })();
 
@@ -2576,6 +2603,8 @@ function workList(g, x, y, rows, o = {}) {
   const A0 = [[2, 0, 2, 0.6], [3, 3, 4, -2], [5, 5, 4, 2], [-1, -2, 3.4, -1]], N = 4;
   let mode = 0;
   const R = "LUP-DECOMPOSITION";
+  // Rust mode counts places and rows from 0 and writes pi and a, as the program does; the book counts from 1 and writes π
+  const ix = (i) => (CODE_LANG.rust ? i : i + 1), PI = () => (CODE_LANG.rust ? "pi" : "π"), piStr = (p0) => p0.map((v) => ix(v)).join(", ");
   const cv = code("#s8-code", { files: [{ name: R, src: src("ps-s8"), rs: { name: "lup_decomposition.rs", src: src("rs-s8"), out: src("rs-s8-out"),
     map: rmap("rs-s8", { [R]: "fn lup_decomposition(", [`${R}:2`]: "let mut pi =", [`${R}:3`]: "let mut pi =", [`${R}:4`]: "for k in 0..N", [`${R}:6`]: "for i in k..N", [`${R}:7`]: "if a[i][k].abs() > p", [`${R}:12`]: "pi.swap(k, k2)", [`${R}:14`]: "a.swap(k, k2)", [`${R}:16`]: "a[i][k] /= a[k][k]", [`${R}:18`]: "a[i][j] -= a[i][k]" }) } }] });
   const stats = K.$("#s8-stats"), stM = stat("largest multiplier", "none"), stS = stat("swaps", 0), stPi = stat("π", "1, 2, 3, 4");
@@ -2590,29 +2619,29 @@ function workList(g, x, y, rows, o = {}) {
     const posOf = (pi) => A0.map((_, r) => pi.indexOf(r));
     const mk = (a, pi, o) => Object.assign({ A: byOrig(a, pi, shown), pos: posOf(pi), piNow: pi.map((v) => v + 1), kinds: byOrig(a, pi, (v, p, c) => (p > c && c < (o.stair == null ? k : o.stair) ? "L" : p <= c && p < (o.stair == null ? k : o.stair) ? "U" : "")), maxM: maxM ? num(maxM) : "none", swaps }, o);
     const id = [0, 1, 2, 3];
-    out.push(mk(A0, id, { stair: 0, say: "The book's matrix, with π = 1, 2, 3, 4: nothing has moved yet. Each round will search one column for its pivot.", why: "Watch the row labels. They keep showing which row of A each row started as.", lines: R, notes: {} }));
+    out.push(mk(A0, id, { stair: 0, say: `The book's matrix, with ${PI()} = ${piStr(id)}: nothing has moved yet. Each round will search one column for its pivot.`, why: "Watch the row labels. They keep showing which row of A each row started as.", lines: R, notes: {} }));
     F.log.forEach((e) => {
       if (e.type === "pivot") {
         k = e.k;
         const cand = e.before.slice(e.k).map((r) => r[e.k]);
         const ruleSays = mode === 0 ? `The largest size is <b>${num(Math.abs(e.before[e.kp][e.k]))}</b>, so that row's number becomes the pivot.` : `The lazy rule takes the first nonzero: <b>${num(e.before[e.kp][e.k])}</b>.`;
-        out.push(mk(e.before, e.pi, { stair: e.k, scan: e.k, pick: e.pi[e.kp], cand, candRows: e.pi.slice(e.k), candPick: e.kp - e.k, say: `Round ${e.k + 1}: the candidates in column ${e.k + 1}, on or below the diagonal, are ${nums(cand)}. ${ruleSays}`, lines: `${R}:7`, notes: { [`${R}:4`]: `k = ${e.k + 1}`, [`${R}:8`]: `p = ${num(Math.abs(e.before[e.kp][e.k]))}`, [`${R}:9`]: `k′ = ${e.kp + 1}` } }));
+        out.push(mk(e.before, e.pi, { stair: e.k, scan: e.k, pick: e.pi[e.kp], cand, candRows: e.pi.slice(e.k), candPick: e.kp - e.k, say: `Round ${ix(e.k)}: the candidates in column ${ix(e.k)}, on or below the diagonal, are ${nums(cand)}. ${ruleSays}`, lines: `${R}:7`, notes: { [`${R}:4`]: `k = ${e.k + 1}`, [`${R}:8`]: `p = ${num(Math.abs(e.before[e.kp][e.k]))}`, [`${R}:9`]: `k′ = ${e.kp + 1}` } }));
       } else if (e.type === "swap") {
         if (e.k === e.kp) {
-          out.push(mk(e.after, e.pi, { stair: e.k, pivotAt: e.k, say: `The chosen number <b>${num(e.after[e.k][e.k])}</b> is already in place ${e.k + 1}, so no swap is needed. π stays ${e.pi.map((v) => v + 1).join(", ")}.`, lines: `${R}:12`, notes: {} }));
+          out.push(mk(e.after, e.pi, { stair: e.k, pivotAt: e.k, say: `The chosen number <b>${num(e.after[e.k][e.k])}</b> is already in place ${ix(e.k)}, so no swap is needed. ${PI()} stays ${piStr(e.pi)}.`, lines: `${R}:12`, notes: {} }));
         } else {
           swaps++;
-          out.push(mk(e.after, e.pi, { stair: e.k, glide: true, lift: e.pi[e.k], swapHot: [e.pi[e.k], e.pi[e.kp]], piHot: [e.k, e.kp], say: `Swap the rows in places ${e.k + 1} and ${e.kp + 1}, whole rows. The pivot is now <b>${num(e.after[e.k][e.k])}</b>. π becomes <b>${e.pi.map((v) => v + 1).join(", ")}</b>.`, why: e.k > 0 ? "Any multipliers already stored in these rows travel with them. That is why whole rows are swapped." : "P gets the same news: its rows record the new order.", lines: `${R}:14`, notes: { [`${R}:12`]: `π = ${e.pi.map((v) => v + 1).join(", ")}` } }));
+          out.push(mk(e.after, e.pi, { stair: e.k, glide: true, lift: e.pi[e.k], swapHot: [e.pi[e.k], e.pi[e.kp]], piHot: [e.k, e.kp], say: `Swap the rows in places ${ix(e.k)} and ${ix(e.kp)}, whole rows. The pivot is now <b>${num(e.after[e.k][e.k])}</b>. ${PI()} becomes <b>${piStr(e.pi)}</b>.`, why: e.k > 0 ? "Any multipliers already stored in these rows travel with them. That is why whole rows are swapped." : "P gets the same news: its rows record the new order.", lines: `${R}:14`, notes: { [`${R}:12`]: `π = ${e.pi.map((v) => v + 1).join(", ")}` } }));
         }
       } else if (e.type === "row") {
         maxM = Math.max(maxM, Math.abs(e.m));
         const row = e.after[e.i].slice(e.k + 1).map(shown).join(", ");
-        out.push(mk(e.after, e.pi, { stair: e.k, rowHot: e.pi[e.i], rowPart: e.pi[e.k], k: e.k, newL: [e.pi[e.i], e.k], i: e.i, m: e.m, say: `Place ${e.i + 1}: the multiplier is <b>${num(e.m)}</b>, stored where the cleared number was. The rest of that row becomes ${row}.`, why: Math.abs(e.m) > 1 ? "Larger than 1: this multiplier scales numbers up, and that is what the largest-first rule avoids." : "", lines: `${R}:18`, notes: { [`${R}:16`]: `a_${e.i + 1}${e.k + 1} = ${num(e.m)}` } }));
+        out.push(mk(e.after, e.pi, { stair: e.k, rowHot: e.pi[e.i], rowPart: e.pi[e.k], k: e.k, newL: [e.pi[e.i], e.k], i: e.i, m: e.m, say: `Place ${ix(e.i)}: the multiplier is <b>${num(e.m)}</b>, stored where the cleared number was. The rest of that row becomes ${row}.`, why: Math.abs(e.m) > 1 ? "Larger than 1: this multiplier scales numbers up, and that is what the largest-first rule avoids." : "", lines: `${R}:18`, notes: { [`${R}:16`]: `a_${e.i + 1}${e.k + 1} = ${num(e.m)}` } }));
       }
     });
     const pa = F.pi.map((p) => A0[p]), good = sameM(mmul(F.L, F.U), pa);
     k = N;
-    out.push(mk(F.a, F.pi, { stair: N, done: true, L: strM(F.L), U: strM(F.U), phase: "Result", tone: good ? "good" : "bad", lines: `${R}:18`, notes: {}, say: `Finished with <b>π = ${F.pi.map((v) => v + 1).join(", ")}</b>, and P A = L U holds, number for number. The largest multiplier was <b>${num(maxM)}</b>.`, why: mode === 0 ? "Choosing the largest in each column keeps every multiplier at 1 or less. This is the factorization in Figure 28.2." : "This also gives a correct factorization. But its multipliers grew, and on a real machine that lets rounding errors grow too." }));
+    out.push(mk(F.a, F.pi, { stair: N, done: true, L: strM(F.L), U: strM(F.U), phase: "Result", tone: good ? "good" : "bad", lines: `${R}:18`, notes: {}, say: `Finished with <b>${PI()} = ${piStr(F.pi)}</b>, and P A = L U holds, number for number. The largest multiplier was <b>${num(maxM)}</b>.`, why: mode === 0 ? "Choosing the largest in each column keeps every multiplier at 1 or less. This is the factorization in Figure 28.2." : "This also gives a correct factorization. But its multipliers grew, and on a real machine that lets rounding errors grow too." }));
     return out;
   }
   function paint(f) {
@@ -2626,20 +2655,21 @@ function workList(g, x, y, rows, o = {}) {
       if (f.rowHot != null) { if (r === f.rowHot) return c === f.k ? "sorted" : c > f.k ? "on" : kind === "L" ? "sorted" : "dim"; if (r === f.rowPart) return c >= f.k ? "on2" : kind === "L" ? "sorted" : "dim"; return kind === "L" ? "sorted" : "dim"; }
       return kind === "L" ? "sorted" : "";
     };
-    const G = mxGlide(g, { x: X.A, y: Y0, cw: CW, ch: CH, gap: GAP, A: f.A, pos: f.pos, size: 13.5, label: "A, holding L and U", lift: f.lift, mark });
-    mxGlide(g, { x: X.pi, y: Y0, cw: 30, ch: CH, gap: GAP, A: f.A.map((_, r) => [String(r + 1)]), pos: f.pos, size: 13.5, label: "π", lift: f.lift, mark: (r) => (f.swapHot && f.swapHot.includes(r) ? "on" : "sorted") });
+    const G = mxGlide(g, { x: X.A, y: Y0, cw: CW, ch: CH, gap: GAP, A: f.A, pos: f.pos, size: 13.5, label: `${CODE_LANG.rust ? "a" : "A"}, holding L and U`, lift: f.lift, mark });
+    mxGlide(g, { x: X.pi, y: Y0, cw: 30, ch: CH, gap: GAP, A: f.A.map((_, r) => [String(ix(r))]), pos: f.pos, size: 13.5, label: PI(), lift: f.lift, mark: (r) => (f.swapHot && f.swapHot.includes(r) ? "on" : "sorted") });
     if (f.scan != null) {
       const cand = f.cand || [], CX = 356;
-      txt(g, CX, 66, `Candidates in column ${f.scan + 1}`, { anchor: "start", bold: true, size: 14 });
+      txt(g, CX, 66, `Candidates in column ${ix(f.scan)}`, { anchor: "start", bold: true, size: 14 });
       const sg = s("g"); g.appendChild(sg);
-      bars(sg, { x: CX, y: 80, w: 286, labelW: 50, valueW: 56, h: 22, gap: 6, max: 6, items: cand.map((v, i) => ({ label: `row ${f.candRows[i] + 1}`, v: Math.abs(v), tone: i === f.candPick ? "on" : "on2", text: `|${num(v)}|` })) });
+      bars(sg, { x: CX, y: 80, w: 286, labelW: 50, valueW: 56, h: 22, gap: 6, max: 6, items: cand.map((v, i) => ({ label: `row ${ix(f.candRows[i])}`, v: Math.abs(v), tone: i === f.candPick ? "on" : "on2", text: `|${num(v)}|` })) });
     } else if (f.rowHot != null) {
       txt(g, 356, 80, `Multiplier = ${num(f.m)}`, { anchor: "start", cls: "m28-big" });
       txt(g, 356, 104, `Stored in place, under the diagonal`, { anchor: "start", mono: true, size: 12.5, fill: "var(--ink-2)" });
     } else if (f.swapHot) {
-      txt(g, 356, 80, `π = ${f.piNow.join(", ")}`, { anchor: "start", cls: "m28-big" });
-      txt(g, 356, 104, `Place 1 now holds row ${f.piNow[0]}, place 2 row ${f.piNow[1]},`, { anchor: "start", mono: true, size: 12.5, fill: "var(--ink-2)" });
-      txt(g, 356, 124, `place 3 row ${f.piNow[2]} and place 4 row ${f.piNow[3]}.`, { anchor: "start", mono: true, size: 12.5, fill: "var(--ink-2)" });
+      const p0 = f.piNow.map((v) => v - 1);
+      txt(g, 356, 80, `${PI()} = ${piStr(p0)}`, { anchor: "start", cls: "m28-big" });
+      txt(g, 356, 104, `Place ${ix(0)} now holds row ${ix(p0[0])}, place ${ix(1)} row ${ix(p0[1])},`, { anchor: "start", mono: true, size: 12.5, fill: "var(--ink-2)" });
+      txt(g, 356, 124, `place ${ix(2)} row ${ix(p0[2])} and place ${ix(3)} row ${ix(p0[3])}.`, { anchor: "start", mono: true, size: 12.5, fill: "var(--ink-2)" });
     }
     legend(g, 356, 216, [["on", "active"], ["on2", "partner"], ["sorted", "stored multiplier"]], { gap: 10 });
     // P: a 1 in column π[i] of row i. It is rebuilt from π on every step.
@@ -2651,13 +2681,14 @@ function workList(g, x, y, rows, o = {}) {
       mx(g, Object.assign({}, b, { x: 218, y: BY, cw: 46, size: 12, A: Lr, label: "L", mark: (r, c) => (c > r ? "dim" : "sorted") }));
       mx(g, Object.assign({}, b, { x: 432, y: BY, cw: 46, size: 12, A: Ur, label: "U", mark: (r, c) => (c < r ? "dim" : "good") }));
     } else {
-      txt(g, 218, BY + 44, "P is the same fact as π, written as a table:", { anchor: "start", cls: "sv-label" });
+      txt(g, 218, BY + 44, `P is the same fact as ${PI()}, written as a table:`, { anchor: "start", cls: "sv-label" });
       txt(g, 218, BY + 62, "each row has a single 1, in the column π names.", { anchor: "start", cls: "sv-label" });
     }
-    stM.set(f.maxM, f.maxM !== "none" && Number(f.maxM.replace("−", "-")) > 1 ? "warn" : ""); stS.set(f.swaps); stPi.set(f.piNow.join(", "));
+    stM.set(f.maxM, f.maxM !== "none" && Number(f.maxM.replace("−", "-")) > 1 ? "warn" : ""); stS.set(f.swaps); stPi.set(piStr(f.piNow.map((v) => v - 1))); stPi.querySelector(".k").textContent = PI();
   }
   const W = walk({ id: "s8", svg: "#s8-svg", code: cv, frames, paint, enter: async (w, f) => { if (f.glide) await w.morph(540); } });
   K.$("#s8-seg").appendChild(seg(["Largest in column", "First nonzero"], mode, (i) => { mode = i; W.rebuild(); }));
+  CODE_LANG.on(() => W.rebuild()); // repaint the names for the language shown
 })();
 
 /* ================= 28.2 · the inverse, one column at a time; and the cost of reusing the split ================= */

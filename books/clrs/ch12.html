@@ -215,7 +215,7 @@ root 6 has parent None
         <h2>Left, root, right: sorted for free</h2>
         <p class="story">Every left subtree holds the small keys and every right subtree the large ones. So a three-line recursive procedure prints a whole binary search tree in sorted order: print the left subtree, then the root, then the right subtree. That is an <b>inorder tree walk</b>. Print the root before both subtrees and you have a <b>preorder</b> walk; print it after them and you have a <b>postorder</b> walk. The three procedures differ in where a single line sits.</p>
         <p class="story">What does it cost? After the first call, every node makes exactly two recursive calls, one per child, and the empty subtrees are called too. Each of those NIL calls costs only the test <i>x</i> ≠ NIL. Six nodes make 2·6 + 1 = 13 calls, and the book's Theorem 12.1 proves the walk takes <b>Θ(<i>n</i>)</b> time on <i>n</i> nodes.</p>
-        <p class="story">The recursion keeps its place on the <b>call stack</b>: one frame for each node on the path from the root to where the walk is now, plus one for a NIL call at the bottom. A tree of height <i>h</i> never has more than <i>h</i> + 2 walk frames live at once. In the Rust program each frame holds just <code>x</code>, an index into the node arena. The printing is a closure the caller passes in, which pushes onto a <code>Vec</code> it borrows.</p>
+        <p class="story">The recursion keeps its place on the <b>call stack</b>: one frame for each node on the path from the root to where the walk is now, plus one for a NIL call at the bottom. A tree of height <i>h</i> never has more than <i>h</i> + 2 walk frames live at once. In the Rust program each frame holds <code>x</code>, an index into the node arena, and two borrows it passes down: the tree, and <code>out</code>, the one <code>Vec</code> that <code>main</code> owns. Printing is a push onto <code>out</code>, so no call builds a <code>Vec</code> of its own to copy upward.</p>
         <p class="imagine"><b>Try it:</b> press <b>Play</b> and watch the output row fill in. In <b>Inorder</b> each key drops straight down into its own column, because the tree is laid out in sorted order. Switch to <b>Preorder</b> and <b>Postorder</b> and play again. The calls and the stack stay the same, and only the moment of printing moves. In the memory strip a frame is pushed for every call, the 7 NIL calls included, and <code>out</code> gets a heap buffer only at its first push.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -261,10 +261,8 @@ if x ≠ NIL
 </script>
 <script type="text/x-rust" id="rs-s2">
 // The three walks on the arena tree of Figure 12.1(a).
-#[allow(dead_code)] // p goes unread until TREE-SUCCESSOR (12.2)
 struct Node {
     key: i32,
-    p: Option<usize>,
     left: Option<usize>,
     right: Option<usize>,
 }
@@ -286,7 +284,7 @@ impl Tree {
                 x = if key < n.key { n.left } else { n.right };
             }
             let z = t.nodes.len(); // the new node's index
-            t.nodes.push(Node { key, p: y, left: None, right: None });
+            t.nodes.push(Node { key, left: None, right: None });
             match y {
                 None => t.root = Some(z),
                 Some(i) if key < t.nodes[i].key => t.nodes[i].left = Some(z),
@@ -304,21 +302,21 @@ enum Order {
     Post,
 }
 
-// `visit` is any closure that takes a key: the walk doesn't know or care
-// what it does with it. `&mut` because a closure may change what it holds.
-fn walk(t: &Tree, x: Option<usize>, o: Order, visit: &mut impl FnMut(i32)) {
+// `out` is main's one Vec, borrowed mutably and passed down: every call
+// pushes onto it, so no call builds a Vec of its own to copy upward.
+fn walk(t: &Tree, x: Option<usize>, o: Order, out: &mut Vec<i32>) {
     if let Some(i) = x {
         let n = &t.nodes[i];
         if o == Order::Pre {
-            visit(n.key); // preorder: the root first
+            out.push(n.key); // preorder: the root first
         }
-        walk(t, n.left, o, visit);
+        walk(t, n.left, o, out);
         if o == Order::In {
-            visit(n.key); // inorder: between the two subtrees
+            out.push(n.key); // inorder: between the two subtrees
         }
-        walk(t, n.right, o, visit);
+        walk(t, n.right, o, out);
         if o == Order::Post {
-            visit(n.key); // postorder: the root last
+            out.push(n.key); // postorder: the root last
         }
     }
 }
@@ -328,8 +326,8 @@ fn main() {
     for (name, o) in [("inorder", Order::In), ("preorder", Order::Pre),
                       ("postorder", Order::Post)] {
         let mut out = Vec::new();
-        // The closure borrows `out` mutably until the walk returns.
-        walk(&t, t.root, o, &mut |k| out.push(k));
+        // The walk borrows `out` mutably until it returns.
+        walk(&t, t.root, o, &mut out);
         println!("{name:>9}: {out:?}");
     }
 }
@@ -349,7 +347,7 @@ postorder: [2, 5, 5, 8, 7, 6]
         <h2>Higher or lower, one level at a time</h2>
         <p class="story">Searching a binary search tree is a game of higher-or-lower. Start at the root and compare the key <i>k</i> with <i>x</i>.key. If they are equal, you have found it. If <i>k</i> is smaller, the binary-search-tree property says <i>k</i> can't be anywhere in the right subtree, so go left. If it is larger, go right. Every comparison throws away a whole subtree, so the search traces a <b>simple path</b> down from the root and stops at the key or at a NIL. On a tree of height <i>h</i>, TREE-SEARCH runs in <b>O(<i>h</i>)</b> time.</p>
         <p class="story">TREE-SEARCH is written recursively, but each call makes at most one more call and then only passes its answer back. A recursion like that can be <b>unrolled</b> into a loop that moves one pointer down the tree: ITERATIVE-TREE-SEARCH. The path and the comparisons are the same. The difference is one stack frame instead of one per level, and no climb back up to hand the answer along. The book notes that on most computers the loop is the faster of the two.</p>
-        <p class="story">The two Rust programs also show two ways to build a tree. The recursive one uses the <b>owned</b> form: each node owns its children through <code>Option&lt;Box&lt;Node&gt;&gt;</code>, every node is its own heap block, and <code>as_deref()</code> borrows down the chain. The iterative one uses the <b>arena</b> from 12.1. Its links are indices, so a node can also point back up at its parent.</p>
+        <p class="story">Both Rust programs search the same <b>owned</b> tree: each node owns its children through <code>Option&lt;Box&lt;Node&gt;&gt;</code>, every node is its own heap block, and <code>as_deref()</code> borrows down the chain, so no node is moved or copied. The recursive one hands each child to a new call. The iterative one overwrites a single <code>x: Option&lt;&amp;Node&gt;</code>, which is <code>Copy</code>.</p>
         <p class="imagine"><b>Try it:</b> press <b>Play</b> to search for 13, as in the book's Figure 12.2(a): 15 → 6 → 7 → 13. Each subtree the search rules out fades. Drag <b>k</b> to a key that isn't in the tree, such as 16, and the search ends at a NIL. Click any node to search for its key. Then switch between <b>Recursive</b> and <b>Iterative</b> and compare the stack. The recursive search pushes one frame per level and hands the answer back up through all of them; the loop keeps a single frame whose <code>x</code> moves.</p>
         <details class="book">
           <summary>What the book says</summary>
@@ -422,8 +420,9 @@ fn main() {
     for k in [15, 6, 18, 3, 7, 17, 20, 2, 4, 13, 9] {
         insert(&mut root, k);
     }
+    let t = root.as_deref(); // borrow the root: Option<&Node>
     for k in [13, 16] {
-        match tree_search(root.as_deref(), k) {
+        match tree_search(t, k) {
             Some(n) => {
                 let l = n.left.as_ref().map(|c| c.key); // borrow, read
                 println!("search {k}: found {}, left child {l:?}", n.key);
@@ -442,82 +441,58 @@ search 16: NIL
 Option<Box<Node>> takes 8 bytes
 </script>
 <script type="text/x-rust" id="rs-s3">
-// ITERATIVE-TREE-SEARCH on the arena: one stack frame, x moves down.
+// ITERATIVE-TREE-SEARCH on the same owned tree: one stack frame, x moves down.
 struct Node {
     key: i32,
-    p: Option<usize>,
-    left: Option<usize>,
-    right: Option<usize>,
+    left: Option<Box<Node>>,
+    right: Option<Box<Node>>,
 }
 
-struct Tree {
-    nodes: Vec<Node>,
-    root: Option<usize>,
-}
-
-impl Tree {
-    // Insert the keys one by one: TREE-INSERT, section 12.3.
-    fn from_keys(keys: &[i32]) -> Tree {
-        let mut t = Tree { nodes: Vec::new(), root: None };
-        for &key in keys {
-            let (mut x, mut y) = (t.root, None);
-            while let Some(i) = x {
-                y = x;
-                let n = &t.nodes[i];
-                x = if key < n.key { n.left } else { n.right };
-            }
-            let z = t.nodes.len(); // the new node's index
-            t.nodes.push(Node { key, p: y, left: None, right: None });
-            match y {
-                None => t.root = Some(z),
-                Some(i) if key < t.nodes[i].key => t.nodes[i].left = Some(z),
-                Some(i) => t.nodes[i].right = Some(z),
-            }
+// TREE-INSERT (12.3) for this form: a cursor walks down the links
+// and fills the empty one where key belongs.
+fn insert(root: &mut Option<Box<Node>>, key: i32) {
+    let mut x = root;
+    while let Some(n) = x {
+        if key < n.key {
+            x = &mut n.left;
+        } else {
+            x = &mut n.right;
         }
-        t
     }
+    *x = Some(Box::new(Node { key, left: None, right: None }));
 }
 
-fn iterative_tree_search(t: &Tree, mut x: Option<usize>, k: i32)
-    -> Option<usize> {
-    while let Some(i) = x {
-        if k == t.nodes[i].key {
+fn iterative_tree_search(mut x: Option<&Node>, k: i32) -> Option<&Node> {
+    while let Some(n) = x {
+        if k == n.key {
             break; // the loop test's second half: k == x.key
         }
-        x = if k < t.nodes[i].key {
-            t.nodes[i].left // Option<usize> is Copy: x gets its own copy
+        x = if k < n.key {
+            n.left.as_deref() // Option<&Node> is Copy: x is overwritten
         } else {
-            t.nodes[i].right
+            n.right.as_deref()
         };
     }
     x
 }
 
 fn main() {
-    let t = Tree::from_keys(&[15, 6, 18, 3, 7, 17, 20, 2, 4, 13, 9]);
+    let mut root = None; // Figure 12.2's tree
+    for k in [15, 6, 18, 3, 7, 17, 20, 2, 4, 13, 9] {
+        insert(&mut root, k);
+    }
+    let t = root.as_deref(); // borrow the root: Option<&Node>
     for k in [13, 16] {
-        match iterative_tree_search(&t, t.root, k) {
-            Some(i) => {
-                // Climb the parent pointers: the search path, read upward.
-                let mut up = Vec::new();
-                let mut y = Some(i);
-                while let Some(j) = y {
-                    up.push(t.nodes[j].key.to_string());
-                    y = t.nodes[j].p;
-                }
-                println!("search {k}: found, path {}", up.join(" <- "));
-            }
+        match iterative_tree_search(t, k) {
+            Some(n) => println!("search {k}: found {}", n.key),
             None => println!("search {k}: NIL"),
         }
     }
-    let size = std::mem::size_of::<Option<usize>>();
-    println!("Option<usize> takes {size} bytes: a padded tag + the index");
 }
 </script>
 <script type="text/x-rust-out" id="rs-s3-out">
-search 13: found, path 13 <- 7 <- 6 <- 15
+search 13: found 13
 search 16: NIL
-Option<usize> takes 16 bytes: a padded tag + the index
 </script>
   </section>
 
@@ -799,7 +774,7 @@ predecessor(15) = Some(13)
         <p class="story">A new book arrives at a library shelved as a tree. At each shelf the librarian asks one question, <i>smaller or not?</i>, and turns left or right, until the next turn leads nowhere. That empty spot, a NIL, is where the book goes. But by then she has stepped <i>past</i> the shelf the book must hang from. So a friend walks one step behind her: <i>x</i> searches, and the <b>trailing pointer</b> <i>y</i> remembers <i>x</i>'s parent.</p>
         <p class="story">That is all of <b>TREE-INSERT</b>: <i>x</i> and <i>y</i> walk down one simple path, then the new node <i>z</i> gets <i>y</i> as its parent and becomes <i>y</i>'s left or right child (or the root, if the tree was empty). It never moves an existing node, and the binary-search-tree property still holds. Cost: one comparison per level, <b>O(<i>h</i>)</b>.</p>
         <p class="story">The catch is <i>h</i>. The same ten keys make a bushy tree of height 3 in one order and a <b>linear chain</b> of height 9 in sorted order, where every later insert walks the whole chain. Sorting by inserting into a tree and then walking it inorder (Exercise 12.3-3) is fast or slow for exactly this reason.</p>
-        <p class="imagine"><b>Try it:</b> <b>Step</b> through Figure 12.3: <i>x</i> and <i>y</i> walk 12 → 18 → 15, <i>x</i> falls off to NIL, and 13 hangs under <i>y</i>. Then pick <b>Shuffled</b> and <b>Sorted</b>, press <b>Play</b>, and compare their heights. In <b>Rust</b>, watch the memory strip at the ninth push: the Vec moves to a bigger buffer, which is harmless because the code holds indices, not references.</p>
+        <p class="imagine"><b>Try it:</b> <b>Step</b> through Figure 12.3: <i>x</i> and <i>y</i> walk 12 → 18 → 15, <i>x</i> falls off to NIL, and 13 hangs under <i>y</i>. Then pick <b>Shuffled</b> and <b>Sorted</b>, press <b>Play</b>, and compare their heights. In <b>Rust</b>, each node is its own <code>Box</code> on the heap, and <i>x</i> is a cursor, a <code>&amp;mut</code> borrow of a link: the memory strip shows it moving from link to link and landing on the empty one, which it then fills. That is why the Rust needs no trailing <i>y</i>.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -838,77 +813,62 @@ elseif z.key < y.key
 else y.right = z
 </script>
 <script type="text/x-rust" id="rs-s6">
+// The owned form: each node owns its children through Box. A Box has
+// one owner, so there is no parent pointer p back up the tree.
 struct Node {
     key: i32,
-    p: Option<usize>,
-    left: Option<usize>,
-    right: Option<usize>,
+    left: Option<Box<Node>>,
+    right: Option<Box<Node>>,
 }
 
-struct Tree { nodes: Vec<Node>, root: Option<usize> }
-
-impl Tree {
-    fn insert(&mut self, key: i32) -> usize {
-        // push returns (): the new node's index is the old length
-        let z = self.nodes.len();
-        self.nodes.push(Node { key, p: None, left: None, right: None });
-        let mut x = self.root; // node being compared with z
-        let mut y = None; // y will be parent of z
-        while let Some(i) = x {
-            y = x;
-            if key < self.nodes[i].key {
-                x = self.nodes[i].left;
-            } else {
-                x = self.nodes[i].right;
-            }
-        }
-        self.nodes[z].p = y; // found the location: insert z with parent y
-        // a match guard (`if …`) refines a pattern; arms are tried in order
-        match y {
-            None => self.root = Some(z), // tree T was empty
-            Some(i) if key < self.nodes[i].key => self.nodes[i].left = Some(z),
-            Some(i) => self.nodes[i].right = Some(z),
-        }
-        z // indices survive the Vec moving to a bigger buffer; &Node wouldn't
-    }
-    fn height(&self, x: Option<usize>) -> i32 {
-        match x {
-            None => -1, // the empty tree has height −1
-            Some(i) => {
-                let n = &self.nodes[i];
-                1 + self.height(n.left).max(self.height(n.right))
-            }
+// x is a cursor, a mutable borrow of a link: it ends on the empty link
+// where key belongs, and we write through it, so no trailing y.
+fn insert(
+    root: &mut Option<Box<Node>>,
+    key: i32,
+) -> usize {
+    let mut x = root;
+    let mut depth = 0;
+    while let Some(n) = x {
+        depth += 1; // one comparison per level
+        if key < n.key {
+            x = &mut n.left;
+        } else {
+            x = &mut n.right;
         }
     }
-}
-
-fn build(keys: &[i32]) -> Tree {
-    let mut t = Tree { nodes: Vec::new(), root: None };
-    for &k in keys {
-        t.insert(k);
-    }
-    t
+    *x = Some(Box::new(Node {
+        key,
+        left: None,
+        right: None,
+    }));
+    depth // links from the root down to the new node
 }
 
 fn main() {
-    let mut t = build(&[12, 5, 18, 2, 9, 15, 19, 17]); // Figure 12.3
-    println!("len {} cap {}", t.nodes.len(), t.nodes.capacity());
-    let z = t.insert(13);
-    let p = t.nodes[z].p.map(|i| t.nodes[i].key);
-    println!("13's parent: {:?} · len {} cap {}", p, t.nodes.len(),
-        t.nodes.capacity());
-    let sorted: Vec<i32> = (1..=10).collect();
-    for keys in [&[6, 3, 8, 2, 5, 7, 9, 1, 4, 10][..], &sorted] {
-        let t = build(keys);
-        println!("{:?} → height {}", keys, t.height(t.root));
+    let mut root = None; // Figure 12.3's tree
+    for k in [12, 5, 18, 2, 9, 15, 19, 17] {
+        insert(&mut root, k);
+    }
+    let d = insert(&mut root, 13);
+    println!("13 at depth {}", d);
+    for keys in [
+        [6, 3, 8, 2, 5, 7, 9, 1, 4, 10],
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    ] {
+        let mut t = None;
+        let mut total = 0;
+        for k in keys {
+            total += insert(&mut t, k);
+        }
+        println!("{:?}: {}", keys, total);
     }
 }
 </script>
 <script type="text/x-rust-out" id="rs-s6-out">
-len 8 cap 8
-13's parent: Some(15) · len 9 cap 16
-[6, 3, 8, 2, 5, 7, 9, 1, 4, 10] → height 3
-[1, 2, 3, 4, 5, 6, 7, 8, 9, 10] → height 9
+13 at depth 3
+[6, 3, 8, 2, 5, 7, 9, 1, 4, 10]: 19
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]: 45
 </script>
   </section>
 
@@ -920,8 +880,8 @@ len 8 cap 8
         <h2>Who takes the empty chair?</h2>
         <p class="story">A manager leaves a company drawn as a tree. With no reports, the desk is simply cleared. With one report, that person moves up into the desk and brings their whole team along. With two, someone must take the chair who is bigger than everyone on the left and smaller than everyone on the right: the <b>successor</b>, the smallest key of the right subtree. It sits at the end of a left-going path, so it has <i>no left child</i>, and moving it is easy.</p>
         <p class="story">The book builds all of this from one move, <b>TRANSPLANT</b>(<i>T</i>, <i>u</i>, <i>v</i>): u's parent now points to <i>v</i> instead, and <i>v</i>'s parent pointer is fixed. It never touches <i>v</i>'s children. <b>TREE-DELETE</b> then has four cases, Figure 12.4's pictures: (a) no left child, so the right child (maybe NIL) moves up; (b) only a left child, so it moves up; (c) two children and the successor <i>y</i> is <i>z</i>'s right child: <i>y</i> moves up and takes <i>z</i>'s left subtree; (d) <i>y</i> is deeper: first its right child <i>x</i> takes <i>y</i>'s place, then <i>y</i> adopts <i>z</i>'s right subtree, then case (c).</p>
-        <p class="story">Every line is a constant number of pointer writes except finding <i>y</i>, so delete is <b>O(<i>h</i>)</b>. In the Rust arena the deleted node's slot is never reused: it stays in the Vec, unreachable. A <b>free list</b> of dead indices would fix that.</p>
-        <p class="imagine"><b>Try it:</b> <b>15</b>, the root, is picked: it is case (d). Press <b>Step</b> and watch <i>y</i> = 17 leave its place, adopt 18, then take the root's chair. Then click <b>13</b> (case (b)), <b>7</b> (case (a)) and <b>6</b> (case (c)), pressing <b>Play</b> after each. <b>Random</b> builds another tree. In <b>Rust</b>, the memory strip keeps every deleted node's slot, dead.</p>
+        <p class="story">Every line is a constant number of pointer writes except finding <i>y</i>, so delete is <b>O(<i>h</i>)</b>. In Rust, each node is its own <code>Box</code> and has no parent pointer, so <code>delete</code> calls itself down to the link that owns <i>z</i>. Every move of a subtree is <code>Option::take</code> into another link, which moves one pointer and copies no node, and dropping <i>z</i>'s <code>Box</code> frees its block.</p>
+        <p class="imagine"><b>Try it:</b> <b>15</b>, the root, is picked: it is case (d). Press <b>Step</b> and watch <i>y</i> = 17 leave its place, adopt 18, then take the root's chair. Then click <b>13</b> (case (b)), <b>7</b> (case (a)) and <b>6</b> (case (c)), pressing <b>Play</b> after each. <b>Random</b> builds another tree. In <b>Rust</b>, the memory strip shows each node's own heap block, and a deleted node's block is freed.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -975,98 +935,95 @@ return x
 <script type="text/x-rust" id="rs-s7">
 struct Node {
     key: i32,
-    p: Option<usize>,
-    left: Option<usize>,
-    right: Option<usize>,
+    left: Option<Box<Node>>,
+    right: Option<Box<Node>>,
 }
 
-struct Tree { nodes: Vec<Node>, root: Option<usize> }
+fn delete(
+    x: &mut Option<Box<Node>>,
+    k: i32,
+) {
+    let z = x.as_mut().unwrap();
+    if k < z.key {
+        delete(&mut z.left, k);
+    } else if k > z.key {
+        delete(&mut z.right, k);
+    } else if z.left.is_none() {
+        *x = z.right.take();
+    } else if z.right.is_none() {
+        *x = z.left.take();
+    } else {
+        let mut y = take_min(&mut z.right);
+        y.right = z.right.take();
+        y.left = z.left.take();
+        *x = Some(y);
+    }
+}
 
-impl Tree {
-    fn transplant(&mut self, u: usize, v: Option<usize>) {
-        // Copy u.p out first: `&mut` to two nodes of one Vec isn't allowed.
-        let up = self.nodes[u].p;
-        match up {
-            None => self.root = v,
-            Some(q) if self.nodes[q].left == Some(u) => self.nodes[q].left = v,
-            Some(q) => self.nodes[q].right = v,
-        }
-        if let Some(v) = v {
-            self.nodes[v].p = up;
+fn take_min(
+    mut x: &mut Option<Box<Node>>,
+) -> Box<Node> {
+    while x.as_ref().unwrap().left.is_some() {
+        x = &mut x.as_mut().unwrap().left;
+    }
+    let mut y = x.take().unwrap();
+    *x = y.right.take();
+    y
+}
+
+fn insert(
+    root: &mut Option<Box<Node>>,
+    key: i32,
+) {
+    let mut x = root;
+    while let Some(n) = x {
+        if key < n.key {
+            x = &mut n.left;
+        } else {
+            x = &mut n.right;
         }
     }
-    fn minimum(&self, mut x: usize) -> usize {
-        while let Some(l) = self.nodes[x].left {
-            x = l;
-        }
-        x
-    }
-    fn delete(&mut self, z: usize) {
-        let (zl, zr) = (self.nodes[z].left, self.nodes[z].right);
-        match (zl, zr) {
-            (None, _) => self.transplant(z, zr), // replace z by its right child
-            (_, None) => self.transplant(z, zl), // replace z by its left child
-            (Some(l), Some(r)) => {
-                let y = self.minimum(r); // y is z's successor
-                if y != r {
-                    let yr = self.nodes[y].right;
-                    self.transplant(y, yr); // replace y by its right child
-                    self.nodes[y].right = Some(r); // z's right child becomes
-                    self.nodes[r].p = Some(y); // y's right child
-                }
-                self.transplant(z, Some(y)); // replace z by its successor y
-                self.nodes[y].left = Some(l); // and give z's left child to y,
-                self.nodes[l].p = Some(y); // which had no left child
-            }
-        }
-        // z's slot stays in the Vec, dead; a free list would reuse it
-    }
-    fn insert(&mut self, key: i32) {
-        let z = self.nodes.len();
-        let (mut y, mut x) = (None, self.root);
-        while let Some(i) = x {
-            y = x;
-            let n = &self.nodes[i];
-            x = if key < n.key { n.left } else { n.right };
-        }
-        self.nodes.push(Node { key, p: y, left: None, right: None });
-        match y {
-            None => self.root = Some(z),
-            Some(i) if key < self.nodes[i].key => self.nodes[i].left = Some(z),
-            Some(i) => self.nodes[i].right = Some(z),
-        }
-    }
-    fn inorder(&self, x: Option<usize>, out: &mut Vec<i32>) {
-        if let Some(i) = x {
-            self.inorder(self.nodes[i].left, out);
-            out.push(self.nodes[i].key);
-            self.inorder(self.nodes[i].right, out);
-        }
+    *x = Some(Box::new(Node {
+        key,
+        left: None,
+        right: None,
+    }));
+}
+
+fn walk(
+    x: &Option<Box<Node>>,
+    out: &mut Vec<i32>,
+) {
+    if let Some(n) = x {
+        walk(&n.left, out);
+        out.push(n.key);
+        walk(&n.right, out);
     }
 }
 
 fn main() {
-    let mut t = Tree { nodes: Vec::new(), root: None };
-    for k in [15, 6, 18, 3, 7, 17, 20, 2, 4, 13, 9] {
-        t.insert(k); // Figure 12.2's keys again
+    let keys = [
+        15, 6, 18, 3, 7, 17, 20, 2, 4, 13, 9,
+    ];
+    let mut root = None;
+    for k in keys {
+        insert(&mut root, k);
     }
-    // 13: case (b) · 18: case (c) · 15: case (d), successor 17
-    for k in [13, 18, 15] {
-        let z = t.nodes.iter().position(|n| n.key == k).unwrap();
-        t.delete(z);
-        let mut keys = Vec::new();
-        t.inorder(t.root, &mut keys);
-        let root = t.nodes[t.root.unwrap()].key;
-        println!("delete {}: root {} · {:?}", k, root, keys);
+    for k in [7, 13, 15] {
+        delete(&mut root, k);
+        let mut out = Vec::new();
+        walk(&root, &mut out);
+        println!("{} gone: {:?}", k, out);
     }
-    println!("{} slots, 3 of them dead", t.nodes.len());
+    let r = root.as_ref().unwrap();
+    println!("root: {}", r.key);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s7-out">
-delete 13: root 15 · [2, 3, 4, 6, 7, 9, 15, 17, 18, 20]
-delete 18: root 15 · [2, 3, 4, 6, 7, 9, 15, 17, 20]
-delete 15: root 17 · [2, 3, 4, 6, 7, 9, 17, 20]
-11 slots, 3 of them dead
+7 gone: [2, 3, 4, 6, 9, 13, 15, 17, 18, 20]
+13 gone: [2, 3, 4, 6, 9, 15, 17, 18, 20]
+15 gone: [2, 3, 4, 6, 9, 17, 18, 20]
+root: 17
 </script>
   </section>
 
@@ -1991,13 +1948,16 @@ K.page(12);
   const L = T.layout(N, root, { x: TX, w: TW, y: TY, dy: DY });
   // the order of the three parts of a call, and the book line each part is on
   const MODES = [
-    { name: "INORDER-TREE-WALK", word: "inorder", parts: ["L", "P", "R"], ps: "ps-s2", map: { "INORDER-TREE-WALK": 47, 1: 48, 2: 53, 3: [54, 55], 4: 57 } },
-    { name: "PREORDER-TREE-WALK", word: "preorder", parts: ["P", "L", "R"], ps: "ps-s2-pre", map: { "PREORDER-TREE-WALK": 47, 1: 48, 2: [50, 51], 3: 53, 4: 57 } },
-    { name: "POSTORDER-TREE-WALK", word: "postorder", parts: ["L", "R", "P"], ps: "ps-s2-post", map: { "POSTORDER-TREE-WALK": 47, 1: 48, 2: 53, 3: 57, 4: [58, 59] } },
+    { name: "INORDER-TREE-WALK", word: "inorder", parts: ["L", "P", "R"], ps: "ps-s2", map: { "INORDER-TREE-WALK": 45, 1: 46, 2: 51, 3: [52, 53], 4: 55 } },
+    { name: "PREORDER-TREE-WALK", word: "preorder", parts: ["P", "L", "R"], ps: "ps-s2-pre", map: { "PREORDER-TREE-WALK": 45, 1: 46, 2: [48, 49], 3: 51, 4: 55 } },
+    { name: "POSTORDER-TREE-WALK", word: "postorder", parts: ["L", "R", "P"], ps: "ps-s2-post", map: { "POSTORDER-TREE-WALK": 45, 1: 46, 2: 51, 3: 55, 4: [56, 57] } },
   ];
   const fileOf = (m) => ({ name: m.name + (m.word === "inorder" ? "" : " (sketch)"), src: src(m.ps), rs: { name: "tree_walks.rs", src: src("rs-s2"), out: src("rs-s2-out"), map: m.map } });
   const gTree = s("g"), gDeco = s("g"), gRow = s("g"), gTxt = s("g"), layer = s("g");
-  svg.append(gDeco, gTree, gRow, gTxt, layer);
+  // an invisible box as wide as the NIL ghosts can reach, so a view that fits the picture to its drawn size leaves room for them
+  const xs = [...L.pos.values()].map((q) => q.x), gx = L.step * 0.36 + 13;
+  const room = s("rect", { x: Math.min(...xs) - gx, y: TY, width: Math.max(...xs) - Math.min(...xs) + 2 * gx, height: 1, fill: "none", stroke: "none", "aria-hidden": "true" });
+  svg.append(room, gDeco, gTree, gRow, gTxt, layer);
   const ctr = K.$("#s2-controls"), stats = K.$("#s2-stats");
   const stC = stat("calls", 0), stD = stat("walk frames", 0), stP = stat("printed", "0 of 6");
   stats.append(stC, stD, stP);
@@ -2082,13 +2042,22 @@ K.page(12);
   function renderMem() {
     const e = st.e;
     const len = st.out.length, capN = capOf(len);
-    const frames = [{ fn: "main", vars: [{ n: "t", t: "Tree", v: "nodes: 6 × 56 B", ptr: "arena" }, { n: "out", t: "Vec<i32>", v: `len ${len} · cap ${capN}`, ptr: capN ? "out" : null }] }];
+    const frames = [{ fn: "main", vars: [{ n: "t", t: "Tree", v: "nodes: 6 × 40 B", ptr: "arena" }, { n: "out", t: "Vec<i32>", v: `len ${len} · cap ${capN}`, ptr: capN ? "out" : null }] }];
     const stack = e ? e.stack : [];
     const SHOW = 4;
     if (stack.length > SHOW) frames.push({ fn: `… ${stack.length - SHOW} older walk frame${stack.length - SHOW > 1 ? "s" : ""}`, vars: [] });
+    // what a frame is doing, in the Rust's words (the pseudocode's line numbers aren't the listing's)
+    const doing = (f, top) => {
+      if (f.x == null) return "x is None: returns at once";
+      if (f.line === 1) return "if let Some(i) = x";
+      const part = MODES[mode].parts[f.line - 2];
+      if (part === "P") return `out.push(${N[f.x].key})`;
+      const side = part === "L" ? "left" : "right";
+      return top ? `calls walk on n.${side}` : `waits on its ${side} call`;
+    };
     stack.slice(-SHOW).forEach((f, i, arr) => {
       const top = i === arr.length - 1;
-      frames.push({ fn: "walk", sub: f.x == null ? "x == NIL: returns at once" : top ? `line ${f.line}` : `waits on line ${f.line}`, top, vars: [{ n: "x", t: "Option<usize>", v: f.x == null ? "None" : `Some(${f.x})`, ptr: f.x == null || !top ? null : "arena:" + f.x, hot: top }] });
+      frames.push({ fn: "walk", sub: doing(f, top), top, vars: [{ n: "x", t: "Option<usize>", v: f.x == null ? "None" : `Some(${f.x})`, ptr: f.x == null || !top ? null : "arena:" + f.x, hot: top }] });
     });
     const amarks = {};
     st.out.forEach((o) => { amarks[o.id] = "good"; });
@@ -2098,10 +2067,10 @@ K.page(12);
     if (capN) heap.push({ id: "out", label: `out's buffer · cap ${capN} × i32`, cells: Array.from({ length: capN }, (_, i) => (st.out[i] ? st.out[i].key : "")), marks: Object.fromEntries(st.out.map((_, i) => [i, "good"])), cw: 30 });
     m.set({
       note: !e ? "The top heap row is the arena <code>t.nodes</code>, keys shown in index order. <code>out</code> is an empty <code>Vec</code>: <code>Vec::new()</code> allocates nothing until the first push."
-        : e.done ? `All ${e.calls} frames have returned. The closure's borrow of <code>out</code> ended with the walk, so <code>main</code> can print it.`
+        : e.done ? `All ${e.calls} frames have returned. The walk's borrow of <code>out</code> ended with it, so <code>main</code> can print it.`
         : e.nil ? "A call on <code>None</code> still gets a frame. It tests <code>x</code> and returns at once: the constant <i>c</i> in Theorem 12.1."
-        : e.print ? `<code>visit(${N[e.x].key})</code> runs the closure, which pushes onto <code>out</code> through its <code>&amp;mut</code> borrow.`
-        : "Each frame holds only an index into the arena. Every frame shares the same <code>&amp;Tree</code>, so nothing is copied.",
+        : e.print ? `<code>out.push(${N[e.x].key})</code> writes into <code>main</code>'s one <code>Vec</code> through the <code>&amp;mut</code> borrow every call passes down.`
+        : "Each frame holds <code>x</code>, an index into the arena, beside two borrows passed down unchanged: <code>t</code> and <code>out</code>. Nothing is copied.",
       stack: frames,
       heap,
     });
@@ -2143,7 +2112,7 @@ K.page(12);
   redraw();
 })();
 
-/* ================= 12.2 · searching: TREE-SEARCH (recursive, Box) vs ITERATIVE-TREE-SEARCH (loop, arena) ================= */
+/* ================= 12.2 · searching: TREE-SEARCH (recursive, Box) vs ITERATIVE-TREE-SEARCH (loop), both on one Box tree ================= */
 (function s3() {
   const svg = K.$("#s3-svg");
   const T = AL.tree;
@@ -2160,7 +2129,7 @@ K.page(12);
   const subtree = (x, out = new Set()) => { if (x == null) return out; out.add(x); subtree(N[x].l, out); subtree(N[x].r, out); return out; };
   const FILES = [
     { name: "TREE-SEARCH", src: src("ps-s3-r"), rs: { name: "box_search.rs", src: src("rs-s3-r"), out: src("rs-s3-r-out"), map: { "TREE-SEARCH": 20, 4: 24, 5: 25 } } },
-    { name: "ITERATIVE-TREE-SEARCH", src: src("ps-s3"), rs: { name: "arena_search.rs", src: src("rs-s3"), out: src("rs-s3-out"), map: { "ITERATIVE-TREE-SEARCH": 37 } } },
+    { name: "ITERATIVE-TREE-SEARCH", src: src("ps-s3"), rs: { name: "iterative_search.rs", src: src("rs-s3"), out: src("rs-s3-out"), map: { "ITERATIVE-TREE-SEARCH": 22 } } },
   ];
   const gTree = s("g"), gDeco = s("g"), gTxt = s("g");
   svg.append(gDeco, gTree, gTxt);
@@ -2208,21 +2177,22 @@ K.page(12);
     let x = root, parent = null, side = null;
     for (;;) {
       const test = x == null ? "nil" : k === N[x].key ? "eq" : "ne";
-      ev.push({ line: 1, x, test, parent, side, frames: [{ x }], rs: test === "nil" ? [39] : test === "eq" ? [40, 41] : [39, 40] });
+      ev.push({ line: 1, x, test, parent, side, frames: [{ x }], rs: test === "nil" ? [23] : test === "eq" ? [24, 25] : [23, 24] });
       if (test !== "ne") break;
       const lt = k < N[x].key;
-      ev.push({ line: 2, x, lt, frames: [{ x }], rs: [43] });
-      ev.push({ line: lt ? 3 : 4, x, go: lt ? "l" : "r", frames: [{ x }], rs: [lt ? 44 : 46] });
+      ev.push({ line: 2, x, lt, frames: [{ x }], rs: [27] });
+      const to = lt ? N[x].l : N[x].r; // the loop has already overwritten x with the child
+      ev.push({ line: lt ? 3 : 4, x, go: lt ? "l" : "r", to, frames: [{ x: to }], rs: [lt ? 28 : 30] });
       parent = x; side = lt ? "l" : "r"; x = lt ? N[x].l : N[x].r;
     }
-    ev.push({ line: 5, x, ret: x, parent, side, frames: [{ x }], rs: [49] });
+    ev.push({ line: 5, x, ret: x, parent, side, frames: [{ x }], rs: [33] });
     ev.push({ done: true, frames: [] });
     return ev;
   }
   function fresh() { st = { k: 0, e: null, path: [], pruned: new Set(), examined: 0, maxF: 0, result: undefined, nilAt: null }; events = mode === 0 ? traceRec() : traceIt(); }
 
   function render() {
-    const e = st.e, cur = e && !e.done && e.x != null && !e.unwind ? e.x : null;
+    const e = st.e, at = e && e.to !== undefined ? e.to : e && e.x, cur = e && !e.done && at != null && !e.unwind ? at : null;
     const onPath = new Set(st.path);
     const found = st.result != null ? st.result : null;
     const gs = T.draw(gTree, N, L.pos, {
@@ -2268,52 +2238,43 @@ K.page(12);
       if (e.line === 2) { n[2] = [e.ret == null ? "return NIL" : `return ${key}`, e.ret == null ? "bad" : "good"]; }
       if (e.unwind) { n[e.line] = `pass back ${res}`; r[e.rs[0]] = `pass back ${res}`; }
     } else {
-      if (e.line === 2) { n[2] = `${k} < ${key}? ${e.lt ? "yes" : "no"}`; r[43] = `${k} < ${key}: ${e.lt}`; }
-      if (e.line === 3 || e.line === 4) { const c = e.go === "l" ? N[e.x].l : N[e.x].r; const t = c == null ? "x = NIL" : `x = ${N[c].key}`; n[e.line] = t; r[e.rs[0]] = c == null ? "None" : `Some(${c})`; }
-      if (e.line === 5) { n[5] = [e.ret == null ? "return NIL" : `return ${N[e.ret].key}`, e.ret == null ? "bad" : "good"]; r[49] = [e.ret == null ? "None" : `Some(${e.ret})`, e.ret == null ? "bad" : "good"]; }
+      if (e.line === 2) { n[2] = `${k} < ${key}? ${e.lt ? "yes" : "no"}`; r[27] = `${k} < ${key}: ${e.lt}`; }
+      if (e.line === 3 || e.line === 4) { const c = e.go === "l" ? N[e.x].l : N[e.x].r; const t = c == null ? "x = NIL" : `x = ${N[c].key}`; n[e.line] = t; r[e.rs[0]] = c == null ? "None" : `Some(&${N[c].key})`; }
+      if (e.line === 5) { n[5] = [e.ret == null ? "return NIL" : `return ${N[e.ret].key}`, e.ret == null ? "bad" : "good"]; r[33] = [e.ret == null ? "None" : `Some(&${N[e.ret].key})`, e.ret == null ? "bad" : "good"]; }
     }
     cv.notes(n, r);
     cv.out(null);
   }
   function renderMem() {
     const e = st.e;
-    if (mode === 0) {
-      const frames = [{ fn: "main", vars: [{ n: "root", t: "Option<Box<Node>>", v: "", ptr: "b" + root }] }];
-      (e ? e.frames : []).forEach((f, i, arr) => frames.push({ fn: "tree_search", top: i === arr.length - 1, vars: [{ n: "x", t: "Option<&Node>", v: f.x == null ? "None" : `&${N[f.x].key}`, ptr: f.x == null ? null : "b" + f.x, hot: i === arr.length - 1 }] }));
-      // the Box blocks along the path so far (the other nodes are blocks too, not drawn)
-      const blocks = [root].concat(st.path.filter((x) => x !== root));
-      const heap = blocks.map((x, i) => {
-        const nx = blocks[i + 1];
-        const from = nx == null ? null : N[x].l === nx ? 1 : 2;
-        return { id: "b" + x, label: i === 0 ? "Box<Node> blocks · key, left, right" : null, x: i * 36, cw: 40, cells: [N[x].key, N[x].l == null ? "None" : "Some", N[x].r == null ? "None" : "Some"], marks: { 0: x === st.result && e && (e.done || e.ret != null || e.unwind) ? "good" : x === (e && e.x) ? "on" : "" }, ptrs: from == null ? [] : [{ from, to: "b" + nx }] };
-      });
-      m.set({
-        note: !e ? "The owned form: <code>root</code> owns the root's <code>Box</code>, each node owns its children's, and every node is a separate heap block."
-          : e.done ? `The frames are gone and <code>main</code> got ${st.result == null ? "<code>None</code>" : "a <code>&amp;Node</code> borrowed from the tree"}. Nothing was copied or freed.`
-          : e.unwind ? "Unwinding: each frame returns what the frame above it returned. Rust doesn't promise to turn this tail call into a jump."
-          : "Each call pushes a frame holding <code>x: Option&lt;&amp;Node&gt;</code>, a borrowed pointer into a <code>Box</code> owned further up.",
-        stack: frames,
-        heap,
-      });
-    } else {
-      const f = e && !e.done ? e.frames[0] : null;
-      const frames = [{ fn: "main", vars: [{ n: "t", t: "Tree", v: "11 nodes", ptr: "arena" }] }];
-      if (f) frames.push({ fn: "iterative_tree_search", top: true, vars: [{ n: "x", t: "Option<usize>", v: f.x == null ? "None" : `Some(${f.x})`, ptr: f.x == null ? null : "arena:" + f.x, hot: true }, { n: "k", t: "i32", v: k }] });
-      const marks = {};
-      st.path.forEach((x) => { marks[x] = "dim"; });
-      if (f && f.x != null) marks[f.x] = st.result === f.x ? "good" : "on";
-      m.set({
-        note: !e ? "The arena: one heap buffer holds all 11 nodes in insertion order, keys shown. A link is an index into it."
-          : e.done ? "One frame did the whole search, and it has returned. The tree was only borrowed."
-          : "One frame for the whole search: the loop overwrites <code>x</code> with a child's index. <code>Option&lt;usize&gt;</code> is <code>Copy</code>, so that is a plain copy.",
-        stack: frames,
-        heap: [{ id: "arena", cells: KEYS, marks, cw: 26 }],
-      });
-    }
+    // both modes search the same owned tree: main's root owns it, and t borrows the root
+    const frames = [{ fn: "main", vars: [{ n: "root", t: "Option<Box<Node>>", v: "", ptr: "b" + root }, { n: "t", t: "Option<&Node>", v: `&${N[root].key}`, ptr: "b" + root }] }];
+    const xv = (x) => (x == null ? "None" : `&${N[x].key}`), xp = (x) => (x == null ? null : "b" + x);
+    if (mode === 0) (e ? e.frames : []).forEach((f, i, arr) => frames.push({ fn: "tree_search", top: i === arr.length - 1, vars: [{ n: "x", t: "Option<&Node>", v: xv(f.x), ptr: xp(f.x), hot: i === arr.length - 1 }] }));
+    else if (e && !e.done) frames.push({ fn: "iterative_tree_search", top: true, vars: [{ n: "x", t: "Option<&Node>", v: xv(e.frames[0].x), ptr: xp(e.frames[0].x), hot: true }] });
+    // the Box blocks along the path so far (the other nodes are blocks too, not drawn)
+    const blocks = [root].concat(st.path.filter((x) => x !== root));
+    if (e && e.to != null && !blocks.includes(e.to)) blocks.push(e.to); // the loop's x is already on the child
+    const heap = blocks.map((x, i) => {
+      const nx = blocks[i + 1];
+      const from = nx == null ? null : N[x].l === nx ? 1 : 2;
+      return { id: "b" + x, label: i === 0 ? "Box<Node> blocks · key, left, right" : null, x: i * 36, cw: 40, cells: [N[x].key, N[x].l == null ? "None" : "Some", N[x].r == null ? "None" : "Some"], marks: { 0: x === st.result && e && (e.done || e.ret != null || e.unwind) ? "good" : x === (e && (e.to !== undefined ? e.to : e.x)) ? "on" : "" }, ptrs: from == null ? [] : [{ from, to: "b" + nx }] };
+    });
+    const got = `<code>main</code> got ${st.result == null ? "<code>None</code>" : "a <code>&amp;Node</code> borrowed from the tree"}. Nothing was copied or freed.`;
+    m.set({
+      note: !e ? "The owned form: <code>root</code> owns the root's <code>Box</code>, each node owns its children's, and every node is a separate heap block. <code>t</code> borrows the root."
+        : e.done ? (mode === 0 ? `The frames are gone and ${got}` : `One frame did the whole search, and ${got}`)
+        : mode === 1 ? "One frame for the whole search: the loop overwrites <code>x</code> with a child's <code>Option&lt;&amp;Node&gt;</code>, which is <code>Copy</code>, so that is a plain copy."
+        : e.unwind ? "Unwinding: each frame returns what the frame above it returned. Rust doesn't promise to turn this tail call into a jump."
+        : "Each call pushes a frame holding <code>x: Option&lt;&amp;Node&gt;</code>, a borrowed pointer into a <code>Box</code> owned further up.",
+      stack: frames,
+      heap,
+    });
   }
+
   const CAP = (e) => {
     const key = e.x != null ? N[e.x].key : null;
-    if (e.done) return st.result == null ? `<b>${k}</b> is not in the tree: the search fell off at a NIL after ${st.examined} comparisons, one per level it went down.` : `Found <b>${k}</b> after examining ${st.examined} nodes on a simple path down from the root. ${mode === 0 ? `The recursion needed ${st.maxF} frames at its deepest.` : "The loop used one frame the whole time."}`;
+    if (e.done) return st.result == null ? `<b>${k}</b> is not in the tree: the search fell off at a NIL after examining ${st.examined} nodes, one per level it went down.` : `Found <b>${k}</b> after examining ${st.examined} nodes on a simple path down from the root. ${mode === 0 ? `The recursion needed ${st.maxF} frames at its deepest.` : "The loop used one frame the whole time."}`;
     if (e.unwind) return `The call on the ${key} receives the answer and returns it unchanged. ${e.frames.length - 1} frame${e.frames.length - 1 === 1 ? "" : "s"} left to unwind.`;
     if (e.test === "nil") return `x = NIL: there is nowhere left to look, so ${k} is not in the tree.`;
     if (e.test === "eq") return `${k} == ${key}: found it.`;
@@ -2751,12 +2712,13 @@ K.page(12);
   const RS = src("rs-s6"), RSL = RS.split("\n");
   const RL = (needle, after) => { const a = after ? RL(after) : 0; return RSL.findIndex((l, i) => i >= a && l.includes(needle)) + 1; };
   const RX = {
-    hd: RL("fn insert"), z: RL("let z = self.nodes.len()"), push: RL("self.nodes.push"), 1: RL("let mut x = self.root"), 2: RL("let mut y = None"),
-    3: RL("while let Some(i) = x"), 4: RL("y = x;"), 5: RL("if key < self.nodes[i].key {"), 6: RL("x = self.nodes[i].left"), 7: RL("x = self.nodes[i].right"),
-    8: RL("self.nodes[z].p = y"), 9: RL("match y {"), 10: RL("None => self.root = Some(z)"), 11: RL("Some(i) if key <"), 13: RL("Some(i) => self.nodes[i].right"),
+    hd: RL("fn insert"), 1: RL("let mut x = root"), 2: RL("let mut depth = 0"), 3: RL("while let Some(n) = x"), 4: RL("depth += 1"),
+    5: RL("if key < n.key"), 6: RL("x = &mut n.left"), 7: RL("x = &mut n.right"), w: RL("*x = Some(Box::new"),
   };
+  const W = [RX.w, RX.w + 1, RX.w + 2, RX.w + 3, RX.w + 4]; // *x = Some(Box::new(Node { … }));
+  // The Rust has no trailing y and no parent pointer: book lines 8, 9 and 11 have no Rust, and every link (10, 12, 13) is the one write *x = ….
   const cv = code("#s6-code", { files: [{ name: "TREE-INSERT", src: src("ps-s6"), rs: { name: "tree_insert.rs", src: RS, out: src("rs-s6-out"), map: {
-    "TREE-INSERT": [RX.hd, RX.z, RX.push], 1: RX[1], 2: RX[2], 3: RX[3], 4: RX[4], 5: RX[5], 6: RX[6], 7: [RX[7] - 1, RX[7]], 8: RX[8], 9: RX[9], 10: RX[10], 11: RX[11], 12: RX[11], 13: RX[13] } } }] });
+    "TREE-INSERT": RX.hd, 1: RX[1], 2: RX[2], 3: RX[3], 4: RX[4], 5: RX[5], 6: RX[6], 7: [RX[7] - 1, RX[7]], 10: W, 12: W, 13: W } } }] });
   const m = mem("#s6-mem");
   let preset = 0, st, busy = [], epoch = 0;
   const S = session((b) => busy.forEach((x) => (x.disabled = b)));
@@ -2783,29 +2745,36 @@ K.page(12);
     P.pre.forEach((k) => { if (Object.keys(N).length === cap) cap = growCap(cap); insertNow(N, rr, k); });
     const Hf = heightOf(P.pre.concat(keys));
     const dy = Math.min(54, 206 / Math.max(1, Hf)), r = Hf > 5 ? 14 : 17;
-    st = { last: null, N, root: rr.root, queue: keys, all: P.pre.concat(keys), cap, grew: null, dy, r, ev: [], k: 0, e: null, z: null, slot: null, path: new Set(), cmp: 0, linked: null, xFly: null };
+    st = { last: null, N, root: rr.root, queue: keys, all: P.pre.concat(keys), cap, grew: null, dy, r, ev: [], k: 0, e: null, z: null, slot: null, path: new Set(), cmp: 0, linked: null, xFly: null, total: 0 };
   }
   const lay = () => T.layout(st.N, st.root, { x: 30, w: 600, y: TY, dy: st.dy });
   const key = (id) => (id == null ? "NIL" : st.N[id].key);
   const opt = (id) => (id == null ? "None" : `Some(${id})`);
 
-  /** TREE-INSERT(T, z) line by line, from the tree as it is now */
+  /** TREE-INSERT(T, z) line by line, from the tree as it is now. In Rust (insert(&mut root, key)), line 2 is
+      `let mut depth = 0`, line 4 is `depth += 1`, and the walk ends with the one write `*x = Some(Box::new(…))`:
+      lp/ls name the link the cursor x borrows (lp = null: main's root variable). */
   function trace(z) {
-    const N = st.N, k = N[z].key, ev = [{ line: "TREE-INSERT", z }];
-    let x = st.root, y = null;
-    ev.push({ line: 1, z, x, y });
-    ev.push({ line: 2, z, x, y });
+    const N = st.N, k = N[z].key, rs = !!CODE_LANG.rust, ev = [{ line: "TREE-INSERT", z, rs, d: 0 }];
+    let x = st.root, y = null, d = 0, lp = null, ls = null;
+    ev.push({ line: 1, z, x, y, d, lp, ls, rs });
+    ev.push({ line: 2, z, x, y, d, lp, ls, rs });
     while (x != null) {
-      ev.push({ line: 3, z, x, y, test: true });
-      y = x;
-      ev.push({ line: 4, z, x, y });
+      ev.push({ line: 3, z, x, y, test: true, d, lp, ls, rs });
+      y = x; d++;
+      ev.push({ line: 4, z, x, y, d, lp, ls, rs });
       const lt = k < N[x].key;
-      ev.push({ line: 5, z, x, y, lt, cmp: true });
+      ev.push({ line: 5, z, x, y, lt, cmp: true, d, lp, ls, rs });
       const from = x;
-      x = lt ? N[x].l : N[x].r;
-      ev.push({ line: lt ? 6 : 7, z, x, y, from, edge: x });
+      x = lt ? N[x].l : N[x].r; lp = from; ls = lt ? "l" : "r";
+      ev.push({ line: lt ? 6 : 7, z, x, y, from, edge: x, d, lp, ls, rs });
     }
-    ev.push({ line: 3, z, x, y, test: false, nil: true });
+    ev.push({ line: 3, z, x, y, test: false, nil: true, d, lp, ls, rs });
+    if (rs) {
+      const lt = y != null && k < N[y].key;
+      ev.push({ line: y == null ? 10 : lt ? 12 : 13, z, x, y, link: true, lt, d, lp, ls, rs });
+      return ev;
+    }
     ev.push({ line: 8, z, x, y });
     ev.push({ line: 9, z, x, y, test: y == null });
     if (y == null) ev.push({ line: 10, z, x, y, link: true });
@@ -2840,26 +2809,27 @@ K.page(12);
     if (st.z != null && !st.slot) {
       gBand.appendChild(s("circle", { cx: 52, cy: 31, r: 15, class: "sv-data-soft" }));
       txt(gBand, 52, 36, String(key(st.z)), { mono: true, bold: true, size: 13 });
-      txt(gBand, 78, 35, "= z", { cls: "sv-label", anchor: "start" });
+      txt(gBand, 78, 35, rs ? "= key" : "= z", { cls: "sv-label", anchor: "start" });
     } else {
       gBand.appendChild(s("circle", { cx: 52, cy: 31, r: 15, class: "sv-box", style: { strokeDasharray: "3 3" } }));
-      txt(gBand, 78, 35, "= z", { cls: "sv-label", anchor: "start" });
+      txt(gBand, 78, 35, rs ? "= key" : "= z", { cls: "sv-label", anchor: "start" });
     }
-    if (st.root == null && !st.slot) txt(gBand, 330, TY + 4, "T.root = NIL: the tree is empty", { cls: "sv-label" });
+    if (st.root == null && !st.slot) txt(gBand, 330, TY + 4, rs ? `${mainVar()} = None: the tree is empty` : "T.root = NIL: the tree is empty", { cls: "sv-label" });
     const q = st.queue.slice(0, 10).join(" · ");
-    txt(gBand, 116, 35, st.queue.length ? `next: ${q}` : done ? "all keys inserted" : "", { cls: "sv-label", anchor: "start", mono: true });
+    txt(gBand, rs ? 126 : 116, 35, st.queue.length ? `next: ${q}` : done ? "all keys inserted" : "", { cls: "sv-label", anchor: "start", mono: true });
     let say = "";
     if (e && e.line === 5) say = `${key(e.z)} < ${key(e.x)}? ${e.lt ? "yes → left" : "no → right"}`;
     else if (e && e.line === 11) say = `${key(e.z)} < ${key(e.y)}? ${e.lt ? "yes → y.left" : "no → y.right"}`;
-    else if (e && e.nil) say = "x = NIL: stop";
-    else if (e && e.line === 10) say = "empty tree: z is the root";
+    else if (e && e.nil) say = rs ? "x holds None: stop" : "x = NIL: stop";
+    else if (e && e.line === 10) say = rs ? "empty tree: key is the root" : "empty tree: z is the root";
+    else if (e && e.link && rs) say = `*x = Some(Box: ${key(e.z)})`;
     if (say) txt(gBand, 632, 35, say, { anchor: "end", mono: true, size: 12, bold: true });
     // pointer tags: x left of its node, y right of its node
     const tag = (cx, cy, label, cls) => { const w = 8 + label.length * 7.2; gTags.appendChild(s("rect", { x: cx - w / 2, y: cy - 9, width: w, height: 18, rx: 6, class: cls })); txt(gTags, cx, cy + 4, label, { mono: true, size: 11.5, bold: true }); };
     if (e && !e.link && e.line !== "TREE-INSERT") {
       const R = st.r;
       if (e.x != null && pos.has(e.x) && !st.xFly) { const p = pos.get(e.x); tag(p.x - R - 14, p.y, "x", "sv-server"); }
-      if (e.y != null && pos.has(e.y)) { const p = pos.get(e.y); tag(p.x + R + 14, p.y, "y", "sv-box"); }
+      if (!rs && e.y != null && pos.has(e.y)) { const p = pos.get(e.y); tag(p.x + R + 14, p.y, "y", "sv-box"); }
       if (e.x == null && st.slot && e.line !== 1 && e.line !== 2) { const p = st.slot; tag(p.x - R - 14, p.y, "x", "sv-server"); }
     }
     const n = Object.keys(N).filter((id) => Number(id) !== st.z || st.linked).length;
@@ -2873,51 +2843,79 @@ K.page(12);
     cv.at(e.link ? [] : [e.line], "on");
     cv.at(e.link ? [e.line] : [], "good", !!e.link);
     const n = {}, r = {}, k = key(e.z);
-    if (e.line === "TREE-INSERT") { n["TREE-INSERT"] = `z.key = ${k}`; r[RX.push] = `z = ${e.z}`; }
-    if (e.line === 1) { n[1] = `x = ${key(e.x)}`; r[RX[1]] = `x = ${opt(e.x)}`; }
-    if (e.line === 2) { n[2] = "y = NIL"; r[RX[2]] = "y = None"; }
-    if (e.line === 3) { n[3] = [e.test ? `x = ${key(e.x)}` : "x = NIL: leave", e.test ? "" : "good"]; r[RX[3]] = [e.test ? `Some(${e.x})` : "None: leave", e.test ? "" : "good"]; }
-    if (e.line === 4) { n[4] = `y = ${key(e.y)}`; r[RX[4]] = `y = ${opt(e.y)}`; }
-    if (e.line === 5) { n[5] = [`${k} < ${key(e.x)}? ${e.lt ? "yes" : "no"}`, "warn"]; r[RX[5]] = [`${k} < ${key(e.x)}: ${e.lt}`, "warn"]; }
-    if (e.line === 6) { n[6] = `x = ${key(e.x)}`; r[RX[6]] = `x = ${opt(e.x)}`; }
-    if (e.line === 7) { n[7] = `x = ${key(e.x)}`; r[RX[7]] = `x = ${opt(e.x)}`; }
-    if (e.line === 8) { n[8] = `z.p = ${key(e.y)}`; r[RX[8]] = `p = ${opt(e.y)}`; }
-    if (e.line === 9) { n[9] = `y = ${key(e.y)}`; r[RX[9]] = `y = ${opt(e.y)}`; }
-    if (e.line === 10) { n[10] = ["root = z", "good"]; r[RX[10]] = [`root = Some(${e.z})`, "good"]; }
-    if (e.line === 11) { n[11] = [`${k} < ${key(e.y)}? ${e.lt ? "yes" : "no"}`, "warn"]; r[RX[11]] = [`${k} < ${key(e.y)}: ${e.lt}`, "warn"]; }
-    if (e.line === 12) { n[12] = [`${key(e.y)}.left = ${k}`, "good"]; r[RX[11]] = [`left = Some(${e.z})`, "good"]; }
-    if (e.line === 13) { n[13] = [`${key(e.y)}.right = ${k}`, "good"]; r[RX[13]] = [`right = Some(${e.z})`, "good"]; }
+    if (e.line === "TREE-INSERT") { n["TREE-INSERT"] = `z.key = ${k}`; r[RX.hd] = `key = ${k}`; }
+    if (e.line === 1) { n[1] = `x = ${key(e.x)}`; r[RX[1]] = `x = &mut ${mainVar()}`; }
+    if (e.line === 2) { n[2] = "y = NIL"; r[RX[2]] = "depth = 0"; }
+    if (e.line === 3) { n[3] = [e.test ? `x = ${key(e.x)}` : "x = NIL: leave", e.test ? "" : "good"]; r[RX[3]] = [e.test ? `n = ${key(e.x)}` : "None: leave", e.test ? "" : "good"]; }
+    if (e.line === 4) { n[4] = `y = ${key(e.y)}`; r[RX[4]] = `depth = ${e.d}`; }
+    if (e.line === 5) { n[5] = [`${k} < ${key(e.x)}? ${e.lt ? "yes" : "no"}`, "warn"]; r[RX[5]] = [`${k} < ${key(e.from != null ? e.from : e.x)}: ${e.lt}`, "warn"]; }
+    if (e.line === 6 || e.line === 7) { n[e.line] = `x = ${key(e.x)}`; r[RX[e.line]] = `x → ${key(e.from)}.${e.line === 6 ? "left" : "right"}`; }
+    if (e.line === 8) n[8] = `z.p = ${key(e.y)}`;
+    if (e.line === 9) n[9] = `y = ${key(e.y)}`;
+    if (e.line === 10) { n[10] = ["root = z", "good"]; r[RX.w] = [`${mainVar()} = Some(Box: ${k})`, "good"]; }
+    if (e.line === 11) n[11] = [`${k} < ${key(e.y)}? ${e.lt ? "yes" : "no"}`, "warn"];
+    if (e.line === 12 || e.line === 13) { const side = e.line === 12 ? "left" : "right"; n[e.line] = [`${key(e.y)}.${side} = ${k}`, "good"]; r[RX.w] = [`${key(e.y)}.${side} = Some(Box: ${k})`, "good"]; }
     cv.notes(n, r);
     cv.out(st.queue.length === 0 && e.link ? `inorder ⟨${T.layout(st.N, st.root).order.map(key).join(", ")}⟩ · height ${T.layout(st.N, st.root).height}` : null);
   }
+  /** the Rust run: every node is its own Box block (key, left, right), drawn in allocation order, three to a row.
+      The cursor x borrows a link: main's root variable (named, no arrow), or one child field of a block (an arrow to it). */
   function renderMem() {
-    const e = st.e, N = st.N, len = Object.keys(N).length, cap = st.cap;
-    const inCall = e && !e.link;
-    const frames = [{ fn: "main", vars: [{ n: "t.nodes", t: "Vec<Node>", v: `len ${len} · cap ${cap}`, ptr: cap ? "buf" : undefined }, { n: "t.root", t: "Option<usize>", v: opt(st.root) }] }];
-    if (inCall) {
-      const vars = [{ n: "key", t: "i32", v: key(e.z) }, { n: "z", t: "usize", v: e.z, hot: e.line === "TREE-INSERT" }];
-      if (e.line !== "TREE-INSERT") vars.push({ n: "x", t: "Option<usize>", v: opt(e.x), hot: [1, 6, 7].includes(e.line) });
-      if (e.line !== "TREE-INSERT" && e.line !== 1) vars.push({ n: "y", t: "Option<usize>", v: opt(e.y), hot: [2, 4].includes(e.line) });
-      frames.push({ fn: "insert(&mut self, key)", top: true, vars });
+    const e = st.e, N = st.N, v = mainVar();
+    const ids = Object.keys(N).map(Number).filter((id) => id !== st.z || st.linked).sort((a, b) => a - b);
+    const at = new Map(ids.map((id, i) => [id, i]));
+    const main = [{ n: v, t: "Option<Box<Node>>", v: st.root == null ? "None" : "", ptr: st.root == null ? undefined : "b" + st.root }];
+    if (preset !== 0) main.push({ n: "total", t: "usize", v: st.total });
+    const frames = [{ fn: "main", vars: main }];
+    const marks = {};
+    if (e) {
+      const vars = [{ n: "key", t: "i32", v: key(e.z), hot: e.line === "TREE-INSERT" }];
+      if (e.line !== "TREE-INSERT") {
+        const onRoot = e.lp == null;
+        vars.push({ n: "x", t: "&mut Option<Box<Node>>", v: onRoot ? `&mut ${v}` : "", ptr: onRoot ? undefined : `b${e.lp}:${e.ls === "l" ? 1 : 2}`, hot: [1, 6, 7].includes(e.line) || !!e.nil || !!e.link });
+        if (!onRoot) marks[`b${e.lp}:${e.ls === "l" ? 1 : 2}`] = e.link ? "good" : "on2";
+        if (e.line !== 1) vars.push({ n: "depth", t: "usize", v: e.d, hot: e.line === 2 || e.line === 4 });
+        if (e.x != null && (e.test || e.line === 4 || e.line === 5)) { vars.push({ n: "n", t: "&mut Box<Node>", v: "", ptr: "b" + e.x }); marks[`b${e.x}:0`] = "on"; }
+      }
+      frames.push({ fn: `insert(&mut ${v}, key)`, top: true, sub: e.link ? `returns ${e.d}` : "", vars });
     }
-    const cells = [], marks = {};
-    for (let i = 0; i < cap; i++) { cells.push(i < len ? N[i].key : ""); if (i >= len) marks[i] = "free"; }
-    if (inCall) { marks[e.z] = "on"; if (e.x != null) marks[e.x] = "on2"; }
-    const cw = Math.max(16, Math.min(30, Math.floor(288 / Math.max(1, cap))));
-    const heap = [];
-    if (st.grew && e && e.line === "TREE-INSERT") heap.push({ id: "old", label: `old buffer · cap ${st.grew} · moved, then freed`, cells: cells.slice(0, st.grew).map((v, i) => (i < len - 1 ? v : "")), free: true, cw });
-    if (cap) heap.push({ id: "buf", label: `t.nodes buffer · cap ${cap} × Node`, cells, marks, cw });
+    if (e && e.link) marks[`b${e.z}:0`] = "good";
+    const heap = ids.map((id, i) => {
+      const c = N[id], cm = {};
+      [0, 1, 2].forEach((j) => { if (marks[`b${id}:${j}`]) cm[j] = marks[`b${id}:${j}`]; });
+      // a Some link names the block it points to (→ key), so no arrows cross the grid
+      const link = (ch) => (ch == null ? "None" : `→${N[ch].key}`);
+      return { id: "b" + id, label: i === 0 ? "a Box<Node> block per node: key, left, right" : null, x: (i % 3) * 102, y: Math.floor(i / 3) * 40, cw: 32,
+        cells: [c.key, link(c.l), link(c.r)], marks: cm };
+    });
     m.set({
-      note: !e ? (cap ? `The tree's ${len} nodes sit in one Vec buffer with room for ${cap}.` : "An empty Vec owns no buffer yet: capacity 0.")
-        : e.line === "TREE-INSERT" ? (st.grew ? `<code>push</code> found len = cap = ${st.grew}, so the Vec allocated a buffer for ${cap}, moved the nodes over and freed the old one. Indices still name the same nodes; a <code>&amp;Node</code> into the old buffer would now dangle, which is why the borrow checker forbids holding one across a <code>push</code>.` : `<code>push</code> appends z at index ${e.z}; ${cap - len} free slot${cap - len === 1 ? "" : "s"} left before the next reallocation.`)
-        : inCall ? "<code>x</code> and <code>y</code> are <code>Option&lt;usize&gt;</code>: an index or <code>None</code>. Copying one is free and borrows nothing."
-        : "The call returned the index <code>z</code>. Only two fields changed: <code>z.p</code> and one child slot of <code>y</code> (or <code>t.root</code>).",
+      note: !e ? (ids.length ? `<code>${v}</code> owns the root's <code>Box</code>, and each node owns its children's: one heap block per node, freed when its owner is dropped.` : `<code>${v}</code> is <code>None</code>: an empty tree owns no heap blocks.`)
+        : e.line === "TREE-INSERT" ? `<code>insert</code> borrows the link <code>${v}</code> with <code>&amp;mut</code>, so it may change it.`
+        : e.link ? `<code>Box::new</code> allocated one block for ${key(e.z)}, and <code>*x = …</code> wrote it into the link <code>x</code> borrows. No other block moved or changed.`
+        : e.nil ? `<code>x</code> borrows an empty link (<code>None</code>): the place where ${key(e.z)} belongs.`
+        : e.line === 1 || e.lp == null ? `The cursor <code>x</code> borrows the root link itself, <code>${v}</code> in <code>main</code>.`
+        : `<code>x</code> borrows a field inside ${key(e.lp)}'s block: its ${e.ls === "l" ? "left" : "right"} link.`,
       stack: frames,
       heap,
     });
   }
 
+  function mainVar() { return preset === 0 ? "root" : "t"; } // the Rust main's names: root for the example, t for the ten keys
+  function capForRust(e) {
+    const k = key(e.z), v = mainVar(), side = (s2) => (s2 === "l" ? "left" : "right");
+    switch (e.line) {
+      case "TREE-INSERT": return `insert(&amp;mut ${v}, ${k}): the new key is <b>${k}</b>.`;
+      case 1: return e.x == null ? `x = &amp;mut ${v}: the cursor x borrows the root link, which is None: the tree is empty.` : `x = &amp;mut ${v}: the cursor x borrows the root link, which holds ${key(e.x)}.`;
+      case 2: return "depth = 0: it counts the levels walked.";
+      case 3: return e.test ? `x holds Some, so n borrows the node inside, ${key(e.x)}.` : `x holds None: this empty link${e.y == null ? ", the root," : ` of ${key(e.y)}`} is where ${k} belongs, and x borrows it.`;
+      case 4: return `depth = ${e.d}: one level further down.`;
+      case 5: return `Is ${k} < ${key(e.x)}? ${e.lt ? "Yes, so go left." : "No, so go right."} That is comparison ${st.cmp}.`;
+      case 6: case 7: return `x = &amp;mut n.${side(e.ls)}: the cursor moves onto ${key(e.from)}'s ${side(e.ls)} link, which ${e.x == null ? "is None" : `holds ${key(e.x)}`}.`;
+      default: return `*x = Some(Box::new(…)): ${k} gets its own heap block, written into ${e.y == null ? "the root link" : `${key(e.y)}'s ${side(e.ls)} link`}. No other node moved. It returns depth ${e.d}.${st.queue.length ? "" : doneText()}`;
+    }
+  }
   function capFor(e) {
+    if (e.rs) return capForRust(e);
     const k = key(e.z);
     switch (e.line) {
       case "TREE-INSERT": return `TREE-INSERT(T, z) with <b>z.key = ${k}</b>; z.left and z.right are NIL.`;
@@ -2993,7 +2991,7 @@ K.page(12);
   async function stepOnce(w, fast) {
     if (!nextEvents()) return false;
     await apply(st.ev[st.k++], w, fast);
-    if (st.k >= st.ev.length) { st.last = st.z; st.z = null; render(); }
+    if (st.k >= st.ev.length) { st.last = st.z; st.z = null; if (st.e && st.e.rs) st.total += st.e.d; render(); }
     return st.k < st.ev.length || st.queue.length > 0;
   }
   const step = () => S.run(async (w) => { await stepOnce(w, false); });
@@ -3007,13 +3005,13 @@ K.page(12);
   function redraw() {
     K.clear(layer); fresh(); render();
     const P = PRESETS[preset];
-    cap("#s6-cap", preset === 0 ? "Figure 12.3's tree. The key 13 is waiting to go in. Press Step to follow x and y, or Play." : `An empty tree and ten keys, 1 to 10, in ${P.name.toLowerCase()} order${preset === 3 ? " (a fresh shuffle each time)" : ""}. Press Play.`);
+    cap("#s6-cap", preset === 0 ? `Figure 12.3's tree. The key 13 is waiting to go in. Press Step to follow ${CODE_LANG.rust ? "the cursor x" : "x and y"}, or Play.` : `An empty tree and ten keys, 1 to 10, in ${P.name.toLowerCase()} order${preset === 3 ? " (a fresh shuffle each time)" : ""}. Press Play.`);
   }
   function reset() { S.cancel(); epoch++; redraw(); }
   busy = [button(ctr, "Step", "", step), button(ctr, "Play", "primary", play)];
   button(ctr, "Reset", "", reset);
   K.$("#s6-seg").appendChild(seg(PRESETS.map((p) => p.name), 0, (k) => { preset = k; reset(); }));
-  CODE_LANG.on(() => render());
+  CODE_LANG.on(() => { if (st.k > 0 && st.k < st.ev.length) reset(); else render(); }); // the two languages walk different lines
   redraw();
 })();
 
@@ -3029,24 +3027,26 @@ K.page(12);
   const stK = stat("case", "–"), stN = stat("nodes n", 0), stH = stat("height h", 0), stW = stat("pointer writes", 0);
   stats.append(stK, stN, stH, stW);
 
+  /* The Rust is an owned tree, Option<Box<Node>> links and no parent pointer. delete(x, k) takes the link x that holds
+     the subtree and calls itself down to the link that owns z; every move of a subtree is Option::take into a link, and
+     assigning into the link that held z drops z's Box. The Rust view walks these lines (rtrace), not the book's. */
   const RS = src("rs-s7"), RSL = RS.split("\n");
   const RL = (needle, after) => { const a = after ? RL(after) : 0; return RSL.findIndex((l, i) => i >= a && l.includes(needle)) + 1; };
   const RX = {
-    hd: RL("fn delete"), 1: RL("(None, _) =>"), 3: RL("(_, None) =>"), arm: RL("(Some(l), Some(r)) =>"), 5: RL("let y = self.minimum(r)"), 6: RL("if y != r {"),
-    7: RL("self.transplant(y, yr)"), yr: RL("let yr = self.nodes[y].right"), 8: RL("self.nodes[y].right = Some(r)"), 9: RL("self.nodes[r].p = Some(y)"),
-    10: RL("self.transplant(z, Some(y))"), 11: RL("self.nodes[y].left = Some(l)"), 12: RL("self.nodes[l].p = Some(y)"),
-    thd: RL("fn transplant"), up: RL("let up = self.nodes[u].p"), t1: RL("match up {"), t2: RL("None => self.root = v"), t3: RL("Some(q) if self.nodes[q].left"), t5: RL("Some(q) => self.nodes[q].right = v"),
-    t6: RL("if let Some(v) = v {"), t7: RL("self.nodes[v].p = up"),
-    mhd: RL("fn minimum"), m1: RL("while let Some(l) = self.nodes[x].left"), m2: RL("x = l;"),
+    hd: RL("fn delete"), z: RL("let z = x.as_mut().unwrap()"), lt: RL("if k < z.key"), lcall: RL("delete(&mut z.left, k)"), gt: RL("} else if k > z.key"),
+    rcall: RL("delete(&mut z.right, k)"), nl: RL("} else if z.left.is_none()"), a: RL("*x = z.right.take()"), nr: RL("} else if z.right.is_none()"),
+    b: RL("*x = z.left.take()"), tm: RL("let mut y = take_min(&mut z.right)"), yr: RL("y.right = z.right.take()"), yl: RL("y.left = z.left.take()"), put: RL("*x = Some(y)"),
+    thd: RL("fn take_min"), tw: RL("while x.as_ref().unwrap().left.is_some()"), tx: RL("x = &mut x.as_mut().unwrap().left"), tt: RL("let mut y = x.take().unwrap()"),
+    tr: RL("*x = y.right.take()"), tret: RL("    y", "*x = y.right.take()"),
   };
   const cv = code("#s7-code", { files: [{ name: "TREE-DELETE", src: src("ps-s7"), rs: { name: "tree_delete.rs", src: RS, out: src("rs-s7-out"), map: {
-    "TREE-DELETE": RX.hd, 1: RX[1], 2: RX[1], 3: RX[3], 4: RX[3], 5: [RX.arm, RX[5]], 6: RX[6], 7: [RX.yr, RX[7]], 8: RX[8], 9: RX[9], 10: RX[10], 11: RX[11], 12: RX[12],
-    TRANSPLANT: RX.thd, "TRANSPLANT:1": [RX.up, RX.t1], "TRANSPLANT:2": RX.t2, "TRANSPLANT:3": RX.t3, "TRANSPLANT:4": RX.t3, "TRANSPLANT:5": RX.t5, "TRANSPLANT:6": RX.t6, "TRANSPLANT:7": RX.t7,
-    "TREE-MINIMUM": RX.mhd, "TREE-MINIMUM:1": RX.m1, "TREE-MINIMUM:2": RX.m2 } } }] });
+    "TREE-DELETE": RX.hd, 1: RX.nl, 2: RX.a, 3: RX.nr, 4: RX.b, 5: RX.tm, 7: [RX.tt, RX.tr], 8: RX.yr, 10: RX.put, 11: RX.yl,
+    "TREE-MINIMUM": RX.thd, "TREE-MINIMUM:1": RX.tw, "TREE-MINIMUM:2": RX.tx, "TREE-MINIMUM:3": RX.tret } } }] });
   const m = mem("#s7-mem");
   let mode = 0, st, busy = [], epoch = 0;
   const S = session((b) => busy.forEach((x) => (x.disabled = b)));
   const CASE = { a: "no left child", b: "only a left child", c: "y is z's right child", d: "y is deeper" };
+  const CASE_RS = { a: "no left child", b: "only a left child", c: "two children · successor is z's right child", d: "two children · successor is deeper" };
 
   function build(keys) {
     const N = {};
@@ -3075,6 +3075,7 @@ K.page(12);
   const key = (id) => (id == null ? "NIL" : st.N[id].key);
   const opt = (id) => (id == null ? "None" : `Some(${id})`);
   const live = () => Object.keys(st.N).map(Number).filter((id) => !st.dead.has(id));
+  const rust = () => !!CODE_LANG.rust;
 
   /** What to draw: an edge only where child and parent agree (c.p points back), so stale pointers vanish;
       a piece cut loose mid-delete hangs, dashed, where its keys belong. */
@@ -3118,6 +3119,76 @@ K.page(12);
     ev.push({ done: true });
     return ev;
   }
+
+  /** delete(&mut root, k) in Rust, line by line, simulated on a copy of the tree. Each event carries the stack as it is
+      after the event (fr: delete's frames, each with the link x borrows, lp/ls, and the node z borrows; tm: take_min's
+      frame; y and where it lives), the moves it makes (ops: ["link", lp, ls, child] writes a link, lp = null being
+      main's root; ["set", id, side, child] writes a child field), and the edges the cursor has walked. */
+  function rtrace(target) {
+    const C = clone(st.N), k = C[target].key, ev = [], path = [];
+    let root = st.root;
+    const get = (l) => (l.lp == null ? root : C[l.lp][l.ls]);
+    const fr = [{ lp: null, ls: null, z: null }];
+    let tm = null, y = null, yAt = null;
+    const push = (e) => ev.push(Object.assign({ rs: true, k, fr: fr.map((f) => Object.assign({}, f)), tm: tm && Object.assign({}, tm), y, yAt, path: path.slice() }, e));
+    const link = (ops, l, c) => { ops.push(["link", l.lp, l.ls, c]); if (l.lp == null) root = c; else C[l.lp][l.ls] = c; if (c != null) C[c].p = l.lp; };
+    const set = (ops, id, sd, c) => { ops.push(["set", id, sd, c]); C[id][sd] = c; if (c != null) C[c].p = id; };
+    for (;;) {
+      const f = fr[fr.length - 1], z = get(f);
+      f.z = z;
+      push({ at: "z", lines: ["z"], zk: C[z].key });
+      if (k === C[z].key) break;
+      const lt = k < C[z].key, sd = lt ? "l" : "r";
+      path.push(C[z][sd]);
+      fr.push({ lp: z, ls: sd, z: null });
+      push({ at: lt ? "lcall" : "rcall", lines: lt ? ["lt", "lcall"] : ["lt", "gt", "rcall"], zk: C[z].key, lt });
+    }
+    const f = fr[fr.length - 1], z = f.z, n = C[z];
+    const kase = n.l == null ? "a" : n.r == null ? "b" : "two";
+    push({ at: "tests", lines: kase === "a" ? ["lt", "gt", "nl"] : ["lt", "gt", "nl", "nr"], kase });
+    if (kase === "a" || kase === "b") {
+      const ops = [], sd = kase === "a" ? "r" : "l", c = n[sd];
+      set(ops, z, sd, null); link(ops, f, c);
+      fr[fr.length - 1].z = null;
+      push({ at: kase, lines: [kase], ops, moved: c, kill: z });
+    } else {
+      tm = { lp: z, ls: "r" };
+      path.push(n.r);
+      push({ at: "tm", lines: ["tm"], on2: ["thd"], hold: n.r });
+      while (C[get(tm)].l != null) {
+        const from = get(tm);
+        tm = { lp: from, ls: "l" };
+        path.push(C[from].l);
+        push({ at: "tx", lines: ["tw", "tx"], on2: ["tm"], from });
+      }
+      push({ at: "twno", lines: ["tw"], on2: ["tm"], min: get(tm) });
+      y = get(tm); yAt = "tm";
+      let ops = [];
+      link(ops, tm, null);
+      push({ at: "tt", lines: ["tt"], on2: ["tm"], ops });
+      ops = [];
+      const yr = C[y].r;
+      set(ops, y, "r", null); link(ops, tm, yr);
+      push({ at: "tr", lines: ["tr"], on2: ["tm"], ops, moved: yr });
+      tm = null; yAt = "del";
+      push({ at: "tret", lines: ["tm"], on2: ["tret"] });
+      ops = [];
+      const zr = C[z].r;
+      set(ops, z, "r", null); set(ops, y, "r", zr);
+      push({ at: "yr", lines: ["yr"], ops, moved: zr });
+      ops = [];
+      const zl = C[z].l;
+      set(ops, z, "l", null); set(ops, y, "l", zl);
+      push({ at: "yl", lines: ["yl"], ops, moved: zl });
+      ops = [];
+      link(ops, f, y);
+      const yy = y;
+      y = null; yAt = null; fr[fr.length - 1].z = null;
+      push({ at: "put", lines: ["put"], ops, moved: yy, kill: z, y: yy, yAt: "del" });
+    }
+    ev.push({ rs: true, done: true, k });
+    return ev;
+  }
   function caseOf(z) {
     const n = st.N[z];
     if (n.l == null) return { k: "a" };
@@ -3144,12 +3215,18 @@ K.page(12);
     if (id == null || st.dead.has(id)) { st.z = null; st.ev = []; st.kase = null; st.roles = {}; render(); return; }
     const c = caseOf(id);
     st.kase = c.k; st.y = c.y; st.roles = rolesOf(id, c);
-    st.ev = trace(id);
+    st.ev = rust() ? rtrace(id) : trace(id);
     render();
     cap("#s7-cap", introCap());
   }
   function introCap() {
     const z = st.z, n = st.N[z];
+    if (rust()) {
+      const how = st.kase === "a" ? `it has no left child, so its right subtree${n.r == null ? " (None: it is a leaf)" : `, ${key(n.r)}'s,`} will move up into its link`
+        : st.kase === "b" ? `it has only a left child, so ${key(n.l)}'s subtree will move up into its link`
+        : `it has two children, so its successor ${key(st.y)}, the smallest key in its right subtree, will take its place`;
+      return `delete(&amp;mut root, ${key(z)}): ${how}. Press Step or Play.`;
+    }
     if (st.kase === "a") return `Delete <b>${key(z)}</b>: it has no left child, case (a). Its right child${n.r == null ? ", here NIL," : ` ${key(n.r)}`} takes its place${n.r == null ? ": a leaf simply goes" : ", bringing its subtree along"}. Press Step or Play.`;
     if (st.kase === "b") return `Delete <b>${key(z)}</b>: only a left child, case (b). ${key(n.l)} moves up into its place. Press Step or Play.`;
     if (st.kase === "c") return `Delete <b>${key(z)}</b>: two children, and its successor y = ${key(st.y)} is its right child, case (c). y moves up and adopts ${key(n.l)}. Press Step or Play.`;
@@ -3168,83 +3245,149 @@ K.page(12);
     return { lines, up, side, w, u, v };
   }
 
+  /** the node each Rust variable names now: the top delete frame's z, take_min's y */
+  function rNames(e) {
+    const R = {};
+    if (!e || !e.rs || e.done) return R;
+    const f = e.fr[e.fr.length - 1];
+    if (f.z != null && !st.dead.has(f.z)) R[f.z] = "z";
+    if (e.y != null && !e.kill) R[e.y] = "y";
+    return R;
+  }
   function render(posOverride, Vo) {
     const V = Vo || view();
     const L = layout(V);
     const pos = posOverride || L.pos;
     st.pos = L.pos;
-    const e = st.e, running = st.z != null;
+    const e = st.e, running = st.z != null, rs = rust();
     const repl = st.kase === "a" ? st.N[st.z] && st.N[st.z].r : st.kase === "b" ? st.N[st.z] && st.N[st.z].l : st.y;
+    const names = rNames(e);
     const g = T.draw(gTree, V.D, pos, {
       r: 17,
-      cls: (id) => (!running ? "" : id === st.z ? "bad" : id === repl ? "on" : ""),
+      cls: (id) => (!running ? "" : rs ? (names[id] === "y" ? "on" : names[id] === "z" ? (id === st.z ? "bad" : "on2") : "") : id === st.z ? "bad" : id === repl ? "on" : ""),
       edge: (c) => (V.ghost.has(c) ? "ghost" : st.fresh.has(c) ? "on" : st.path.has(c) ? "on2" : ""),
-      sub: (id) => (running ? st.roles[id] || "" : ""),
+      sub: (id) => (!running ? "" : rs ? names[id] || "" : st.roles[id] || ""),
     });
     for (const [id, ng] of g) clickable(ng, `Delete ${key(id)}`, () => select(id));
     K.clear(gBadge);
     if (running && st.kase) {
-      const label = `case (${st.kase}) · ${CASE[st.kase]}`, w = label.length * 7.4 + 26;
+      const label = rs ? CASE_RS[st.kase] : `case (${st.kase}) · ${CASE[st.kase]}`, w = label.length * 7.4 + 26;
       gBadge.appendChild(s("rect", { x: 14, y: 12, width: w, height: 28, rx: 9, class: st.kase === "d" ? "sv-data-soft" : "sv-panel" }));
       txt(gBadge, 14 + w / 2, 31, label, { mono: true, size: 12.5, bold: true });
     } else if (!live().length) txt(gBadge, 330, 170, "the tree is empty: press Reset", { cls: "sv-label" });
     const n = live().length;
     stK.set(st.kase ? `(${st.kase})` : st.lastCase ? `(${st.lastCase})` : "–");
     stN.set(n); stH.set(n ? L.height : "–"); stW.set(st.writes, e && e.done ? "good" : undefined);
-    K.$("#s7-title").textContent = st.z != null ? `TREE-DELETE(T, ${key(st.z)})` : "TREE-DELETE: click a node";
+    K.$("#s7-title").textContent = st.z != null ? (rs ? `delete(&mut root, ${key(st.z)})` : `TREE-DELETE(T, ${key(st.z)})`) : "TREE-DELETE: click a node";
     renderCode(); renderMem();
   }
   function renderCode() {
     const e = st.e;
     if (!e) { cv.clear(); cv.out(st.deleted.length ? inorderText() : null); return; }
+    if (e.rs) return renderCodeRust(e);
     if (e.done) { cv.at([], "on"); cv.at([], "on2", false); cv.at([e.lastLine], "good", true); cv.notes({}); cv.out(inorderText()); return; }
     cv.at([], "good", false);
     cv.at(e.lines || [e.line], "on");
     cv.at(st.tp ? st.tp.lines : e.line === 5 ? ["TREE-MINIMUM:1", "TREE-MINIMUM:2"] : [], "on2", false);
-    const n = {}, r = {}, z = st.z, N = st.N;
+    const n = {}, r = {};
     const both = (k, a, b) => { n[k] = a; if (b != null) r[typeof k === "number" ? RX[k] : k] = b; };
-    if (e.line === 1) { n[1] = [`z.left = ${key(st.snapL)}`, e.test ? "warn" : ""]; r[RX[1]] = [`z.left = ${opt(st.snapL)}`, e.test ? "warn" : ""]; }
-    if (e.line === 3) { n[3] = [`z.right = ${key(st.snapR)}`, e.test ? "warn" : ""]; r[RX[3]] = [`z.right = ${opt(st.snapR)}`, e.test ? "warn" : ""]; }
-    if (e.line === 5) both(5, `y = ${key(e.y)}`, `y = ${e.y} (key ${key(e.y)})`);
-    if (e.line === 6) both(6, [`${key(e.y)} ≠ ${key(st.snapR)}? ${e.test ? "yes" : "no"}`, "warn"], [`${e.test}`, "warn"]);
-    if (e.line === 8) { n[8] = `y.right = ${key(st.snapR)}`; r[RX[8]] = `right = Some(${st.snapR})`; }
-    if (e.line === 11) { n[11] = `y.left = ${key(st.snapL)}`; r[RX[11]] = `left = Some(${st.snapL})`; }
+    if (e.line === 1) n[1] = [`z.left = ${key(st.snapL)}`, e.test ? "warn" : ""];
+    if (e.line === 3) n[3] = [`z.right = ${key(st.snapR)}`, e.test ? "warn" : ""];
+    if (e.line === 5) both(5, `y = ${key(e.y)}`);
+    if (e.line === 6) both(6, [`${key(e.y)} ≠ ${key(st.snapR)}? ${e.test ? "yes" : "no"}`, "warn"]);
+    if (e.line === 8) n[8] = `y.right = ${key(st.snapR)}`;
+    if (e.line === 11) n[11] = `y.left = ${key(st.snapL)}`;
     if (st.tp) {
       const t = st.tp;
       n.TRANSPLANT = `u = ${key(t.u)}, v = ${key(t.v)}`;
-      r[RX.thd] = `u = ${t.u}, v = ${opt(t.v)}`;
       const w = t.side === "root" ? "TRANSPLANT:2" : t.side === "left" ? "TRANSPLANT:4" : "TRANSPLANT:5";
       n[w] = [t.side === "root" ? `root = ${key(t.v)}` : `${key(t.up)}.${t.side} = ${key(t.v)}`, "good"];
-      r[t.side === "root" ? RX.t2 : t.side === "left" ? RX.t3 : RX.t5] = [t.side === "root" ? `root = ${opt(t.v)}` : `${t.side} = ${opt(t.v)}`, "good"];
     }
     cv.notes(n, r);
     cv.out(null);
   }
+  const some = (id) => (id == null ? "None" : `Some(${key(id)})`);
+  function renderCodeRust(e) {
+    const L = (ks) => ks.map((k) => "rs:" + RX[k]);
+    if (e.done) { cv.at([], "on"); cv.at([], "on2", false); cv.at(L([st.lastAt]), "good", true); cv.notes({}, {}); cv.out(inorderText()); return; }
+    cv.at([], "good", false);
+    cv.at(L(e.lines), "on");
+    cv.at(L(e.on2 || []), "on2", false);
+    const r = {}, zk = e.zk;
+    if (e.at === "z") r[RX.z] = `z = ${zk}`;
+    if (e.at === "lcall") r[RX.lt] = [`${e.k} < ${zk}`, "warn"];
+    if (e.at === "rcall") r[RX.gt] = [`${e.k} > ${zk}`, "warn"];
+    if (e.at === "tests") r[e.kase === "a" ? RX.nl : RX.nr] = [e.kase === "a" ? "no left child" : e.kase === "b" ? "no right child" : "two children", "warn"];
+    if (e.at === "a" || e.at === "b" || e.at === "tr") r[RX[e.at]] = [`*x = ${some(e.moved)}`, "good"];
+    if (e.at === "tx") r[RX.tx] = `x → ${key(e.from)}.left`;
+    if (e.at === "twno") r[RX.tw] = [`${key(e.min)} has no left`, "warn"];
+    if (e.at === "tt") r[RX.tt] = `y = ${key(e.y)}`;
+    if (e.at === "tret") r[RX.tm] = `y = ${key(e.y)}`;
+    if (e.at === "yr" || e.at === "yl") r[RX[e.at]] = [some(e.moved), "good"];
+    if (e.at === "put") r[RX.put] = [`*x = Some(${key(e.y)})`, "good"];
+    cv.notes({}, r);
+    cv.out(null);
+  }
   const inorderText = () => { const V = view(); return "inorder ⟨" + (V.root == null ? "" : layout(V).order.map(key).join(", ")) + "⟩"; };
+
+  /** the Rust run: main's root owns the top Box, every node is its own heap block (key, left, right), at a fixed place
+      in allocation order, so a dropped node leaves a gap. delete's frames each hold x (the link it borrows: main's
+      root, or a child field of a block), k, and z (the node in x); take_min's frame holds its own x, and then y. */
   function renderMem() {
-    const e = st.e, N = st.N, ids = Object.keys(N).map(Number);
-    const frames = [{ fn: "main", vars: [{ n: "t.nodes", t: "Vec<Node>", v: `len ${ids.length}`, ptr: "buf" }, { n: "t.root", t: "Option<usize>", v: opt(st.root) }] }];
-    const inCall = e && !e.done;
-    if (inCall) {
-      const vars = [{ n: "z", t: "usize", v: `${st.z} · key ${key(st.z)}`, hot: e.line === 1 }];
-      if (st.y != null && e.line >= 5) vars.push({ n: "y", t: "usize", v: `${st.y} · key ${key(st.y)}`, hot: e.line === 5 });
-      frames.push({ fn: "delete(&mut self, z)", top: !st.tp, vars });
-      if (st.tp) frames.push({ fn: "transplant(&mut self, u, v)", top: true, vars: [{ n: "u", t: "usize", v: `${st.tp.u} · key ${key(st.tp.u)}` }, { n: "v", t: "Option<usize>", v: opt(st.tp.v) }, { n: "up", t: "Option<usize>", v: opt(st.tp.up), hot: true }] });
-    }
+    const e = st.e && st.e.rs && !st.e.done ? st.e : null, N = st.N, ids = live().sort((a, b) => a - b);
+    const frames = [{ fn: "main", vars: [{ n: "root", t: "Option<Box<Node>>", v: st.root == null ? "None" : "", ptr: st.root == null ? undefined : "b" + st.root }] }];
     const marks = {};
-    ids.forEach((id) => { if (st.dead.has(id)) marks[id] = "free"; });
-    if (inCall) { marks[st.z] = st.dead.has(st.z) ? "free" : "bad"; if (st.y != null && e.line >= 5) marks[st.y] = "on"; }
+    const cell = (l) => `b${l.lp}:${l.ls === "l" ? 1 : 2}`;
+    const xVar = (l, hot) => (l.lp == null ? { n: "x", t: "&mut Option<Box<Node>>", v: "&mut root", hot } : { n: "x", t: "&mut Option<Box<Node>>", v: "", ptr: cell(l), hot });
+    const hot = (...ats) => !!e && ats.includes(e.at);
+    if (e) {
+      e.fr.forEach((f, i) => {
+        const top = i === e.fr.length - 1;
+        const vars = [xVar(f, top && hot("lcall", "rcall", "a", "b", "put")), { n: "k", t: "i32", v: e.k }];
+        if (f.z != null) vars.push({ n: "z", t: "&mut Box<Node>", v: "", ptr: "b" + f.z, hot: top && hot("z", "tests") });
+        if (top && e.y != null && e.yAt === "del" && !e.kill) vars.push({ n: "y", t: "Box<Node>", v: "", ptr: "b" + e.y, hot: hot("tret", "yr", "yl") });
+        frames.push({ fn: "delete(x, k)", top: top && !e.tm, vars });
+        if (top && f.lp != null) marks[cell(f)] = hot("a", "b", "put") ? "good" : "on2";
+      });
+      if (e.tm) {
+        const vars = [xVar(e.tm, hot("tm", "tx", "tr"))];
+        if (e.y != null && e.yAt === "tm") vars.push({ n: "y", t: "Box<Node>", v: "", ptr: "b" + e.y, hot: hot("tt", "tr") });
+        frames.push({ fn: "take_min(x)", top: true, vars });
+        if (e.tm.lp != null) marks[cell(e.tm)] = hot("tt", "tr") ? "good" : "on2";
+      }
+      const f = e.fr[e.fr.length - 1];
+      if (f.z != null) marks[`b${f.z}:0`] = f.z === st.z ? "bad" : "on2";
+      if (e.y != null && !e.kill) marks[`b${e.y}:0`] = "on";
+    }
+    const heap = ids.map((id) => {
+      const c = N[id], cm = {};
+      [0, 1, 2].forEach((j) => { if (marks[`b${id}:${j}`]) cm[j] = marks[`b${id}:${j}`]; });
+      // a Some link names the block it points to (→ key), so no arrows cross the grid
+      const lk = (ch) => (ch == null || st.dead.has(ch) ? "None" : `→${N[ch].key}`);
+      return { id: "b" + id, label: id === 0 ? "a Box<Node> block per node: key, left, right" : null, x: (id % 3) * 102, y: Math.floor(id / 3) * 40, cw: 32,
+        cells: [c.key, lk(c.l), lk(c.r)], marks: cm };
+    });
+    const zk = st.z != null ? key(st.z) : null;
     m.set({
-      note: !e && !st.deleted.length ? "Eleven nodes in one Vec, named by index. Deleting will only rewrite a few <code>Option&lt;usize&gt;</code> fields."
-        : st.tp ? "<code>transplant</code> copied <code>u.p</code> into <code>up</code> before writing: holding <code>&amp;mut</code> to two nodes of the same Vec at once is a compile error, but copying an index out is free."
-        : inCall ? "Every step is a write of an index into some node's <code>p</code>, <code>left</code> or <code>right</code> field."
-        : `${st.dead.size === 1 ? "The dead slot (dashed) still holds its old key" : "The dead slots (dashed) still hold their old keys"}: the Vec never shrinks, and no index moves. A free list of dead indices would let <code>insert</code> reuse them.`,
+      note: !e ? (st.deleted.length ? `Each dropped <code>Box</code> freed its own block, and the other blocks never moved: only links changed.` : `<code>root</code> owns the root's <code>Box</code>, and each node owns its children's: one heap block per node.`)
+        : e.at === "z" ? `<code>z</code> borrows the node in the link <code>x</code>.`
+        : e.at === "lcall" || e.at === "rcall" ? `A new call of <code>delete</code>, whose <code>x</code> borrows a child link inside the block above it.`
+        : e.at === "tests" ? `${zk} is the key: now look at its children.`
+        : e.at === "a" || e.at === "b" ? `<code>take</code> moved ${e.moved == null ? "<code>None</code>" : `${key(e.moved)}'s subtree`} into <code>x</code>. The old value of <code>x</code>, ${zk}'s <code>Box</code>, was dropped, freeing its block.`
+        : e.at === "tm" || e.at === "tx" ? `<code>take_min</code>'s cursor <code>x</code> borrows one link at a time, going left.`
+        : e.at === "twno" ? `${key(e.min)} has no left child, so it is the smallest key here.`
+        : e.at === "tt" ? `<code>take</code> moved ${key(e.y)}'s <code>Box</code> out of its link into <code>y</code>, and left <code>None</code> there.`
+        : e.at === "tr" ? `${key(e.y)}'s right link moved into the gap: ${e.moved == null ? "<code>None</code>" : `${key(e.moved)}'s subtree`}.`
+        : e.at === "tret" ? `<code>take_min</code> returned the <code>Box</code>: <code>y</code> now lives in <code>delete</code>'s frame.`
+        : e.at === "yr" || e.at === "yl" ? `A subtree moved by moving one <code>Box</code> pointer. No node was copied.`
+        : e.at === "put" ? `<code>y</code> moved into <code>x</code>. The old value, ${zk}'s <code>Box</code>, was dropped, freeing its block.` : "",
       stack: frames,
-      heap: [{ id: "buf", label: `t.nodes · ${ids.length} slots · ${st.dead.size} dead`, cells: ids.map((id) => N[id].key), marks, cw: 26 }],
+      heap,
     });
   }
 
   function capFor(e) {
+    if (e.rs) return capForRust(e);
     const z = key(st.z), y = key(st.y), t = st.tp;
     const tpTxt = t ? (t.side === "root" ? `T.root = ${key(t.v)}` : `${key(t.up)}.${t.side} = ${key(t.v)}`) + (t.v != null ? `, and ${key(t.v)}.p = ${key(t.up)}` : " (v is NIL, so no parent to fix)") : "";
     switch (e.line) {
@@ -3261,6 +3404,27 @@ K.page(12);
       default: return "";
     }
   }
+  function capForRust(e) {
+    const k = e.k, zk = e.zk, sub = (id) => (id == null ? "None" : `${key(id)}'s subtree`);
+    switch (e.at) {
+      case "z": return `z = x.as_mut().unwrap(): z borrows the node in x, <b>${zk}</b>.`;
+      case "lcall": return `${k} < ${zk}, so delete calls itself on ${zk}'s left link.`;
+      case "rcall": return `${k} > ${zk}, so delete calls itself on ${zk}'s right link.`;
+      case "tests": return e.kase === "a" ? `${k} is z's key, and z has no left child.` : e.kase === "b" ? `${k} is z's key. z has a left child, but no right child.` : `${k} is z's key, and z has two children.`;
+      case "a": return `*x = z.right.take(): ${sub(e.moved)} moves up into x, and ${key(e.kill)}'s Box is dropped, freeing its block.`;
+      case "b": return `*x = z.left.take(): ${sub(e.moved)} moves up into x, and ${key(e.kill)}'s Box is dropped, freeing its block.`;
+      case "tm": return `take_min(&amp;mut z.right): its cursor x starts on z's right link, which holds ${key(e.hold)}.`;
+      case "tx": return `${key(e.from)} has a left child, so x moves down onto ${key(e.from)}'s left link.`;
+      case "twno": return `${key(e.min)} has no left child, so it is the smallest key in z's right subtree: z's successor.`;
+      case "tt": return `y = x.take().unwrap(): <b>${key(e.y)}</b> is cut out into y, and its link holds None.`;
+      case "tr": return `*x = y.right.take(): ${sub(e.moved)} fills the gap y left.`;
+      case "tret": return `take_min returns y, ${key(e.y)}, to delete.`;
+      case "yr": return `y.right = z.right.take(): ${sub(e.moved)} moves under ${key(e.y)}.`;
+      case "yl": return `y.left = z.left.take(): ${sub(e.moved)} moves under ${key(e.y)}.`;
+      case "put": return `*x = Some(y): ${key(e.y)} takes z's place, and ${key(e.kill)}'s Box is dropped, freeing its block.`;
+      default: return "";
+    }
+  }
   async function apply(e, w) {
     const N = st.N;
     if (e.done) {
@@ -3271,32 +3435,42 @@ K.page(12);
       st.deleted.push(done);
       render();
       const V = view();
-      cap("#s7-cap", `${key(done)} is deleted, case (${k}), with ${st.writes} pointer writes. The inorder walk still reads ${V.root == null ? "nothing" : "in sorted order"}${st.dead.size ? `; the arena has ${st.dead.size} dead slot${st.dead.size > 1 ? "s" : ""}` : ""}. Click another node to delete it.`);
+      cap("#s7-cap", e.rs ? `${key(done)} is deleted, and its block is freed. The inorder walk still reads ${V.root == null ? "nothing" : "in sorted order"}. Click another node to delete it.`
+        : `${key(done)} is deleted, case (${k}), with ${st.writes} pointer writes. The inorder walk still reads ${V.root == null ? "nothing" : "in sorted order"}${st.dead.size ? `; the arena has ${st.dead.size} dead slot${st.dead.size > 1 ? "s" : ""}` : ""}. Click another node to delete it.`);
       st.z = null; st.kase = null; st.y = null; st.roles = {}; st.snap = null;
       st.e = null; st.doneShown = true;
       render();
-      cv.at([st.lastLine], "good", false); cv.out(inorderText());
+      if (e.rs) cv.at(["rs:" + RX[st.lastAt]], "good", false); else cv.at([st.lastLine], "good", false);
+      cv.out(inorderText());
       return;
     }
-    if (e.line === 1) { st.snap = { N: clone(N), root: st.root, dead: new Set(st.dead) }; st.snapL = N[st.z].l; st.snapR = N[st.z].r; }
+    if (!st.snap) { st.snap = { N: clone(N), root: st.root, dead: new Set(st.dead) }; st.snapL = N[st.z].l; st.snapR = N[st.z].r; }
     st.e = e; st.tp = null; st.fresh = new Set();
-    st.lastLine = (e.lines || [e.line]).slice(-1)[0];
+    if (e.rs) { st.lastAt = e.lines[e.lines.length - 1]; st.path = new Set(e.path); }
+    else st.lastLine = (e.lines || [e.line]).slice(-1)[0];
     if (e.line === 5) {
       st.path = new Set();
       render();
       for (const id of e.path) { st.path.add(id); render(); await w(sleep(220)); }
     }
-    if (e.tp || e.sets) {
+    if (e.tp || e.sets || e.ops) {
       const A = new Map(st.pos);
       if (e.tp) { st.tp = transplant(e.tp[0], e.tp[1]); st.writes += st.tp.w; if (st.tp.v != null) st.fresh.add(st.tp.v); }
       if (e.sets) e.sets.forEach(([id, f, v]) => { N[id][f] = v; st.writes++; if (f !== "p") st.fresh.add(v); });
+      if (e.ops) e.ops.forEach(([op, a, b, c]) => {
+        if (op === "link") { if (a == null) st.root = c; else N[a][b] = c; }
+        else N[a][b] = c;
+        if (c != null) { N[c].p = a; st.fresh.add(c); }
+        st.writes++;
+      });
       let ghostZ = null;
-      if (e.kill) { st.dead.add(st.z); ghostZ = A.get(st.z); }
+      const gone = e.rs ? e.kill : e.kill ? st.z : null;
+      if (gone != null) { st.dead.add(gone); ghostZ = A.get(gone); st.snap = null; } // z is out: picking another node now keeps this delete
       const V = view(), B = layout(V).pos;
       if (ghostZ) {
         const gz = s("g", { transform: `translate(${ghostZ.x},${ghostZ.y})` });
         gz.appendChild(s("circle", { r: 17, class: "sv-bad" }));
-        txt(gz, 0, 5, String(key(st.z)), { mono: true, bold: true, size: 13 });
+        txt(gz, 0, 5, String(key(gone)), { mono: true, bold: true, size: 13 });
         layer.appendChild(gz);
         const ep = epoch;
         await w(tween(560, (t) => { if (ep !== epoch) return; render(T.lerp(A, B, t), V); gz.setAttribute("opacity", String(1 - t)); gz.setAttribute("transform", `translate(${ghostZ.x},${ghostZ.y + 24 * t})`); }));
@@ -3314,7 +3488,7 @@ K.page(12);
   busy = [button(ctr, "Step", "", step), button(ctr, "Play", "primary", play)];
   button(ctr, "Reset", "", reset);
   K.$("#s7-seg").appendChild(seg(["Book's tree", "Random"], 0, (k) => { mode = k; reset(); }));
-  CODE_LANG.on(() => render());
+  CODE_LANG.on(() => { if (st.z != null) select(st.z); else render(); }); // the two languages walk different lines
   redraw();
 })();
 

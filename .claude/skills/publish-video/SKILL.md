@@ -16,9 +16,12 @@ block names the outputs, their playlists and title formats, the schedule and the
 
 One video per run: `--long-form chNN` for a chapter video. `--long-form chNN/sMM` still addresses a retired CLRS
 section video (`chNN-sMM-<section>.mp4`, by `book.json` `videos.section`), for editing one already up; don't upload new
-ones. A Short is `node tools/video/studio_upload.js videos/shorts/<book> --short NNN|all [--plan]`, and goes up as a
-**draft** (never scheduled or published; the user publishes it from Studio): title from the script's front matter, the
-one-line `description.txt` beside it (hook only, never the book or a channel), captions, not made for kids, English,
+ones. A Short is `node tools/video/studio_upload.js videos/shorts/<book> --short NNN|NNN,NNN,…|all [--day YYYY-MM-DD
+[--time HH:MM]] [--plan]`. Without `--day` it goes up as a **draft**. With `--day` the Shorts named are **scheduled**,
+one a day in the order given, from that day at `videos.shorts.time` (CLRS: one a day at 18:00, decided 2026-11-25),
+and a draft already up is opened and scheduled in place rather than uploaded again. Ask the user the first day. It
+sets the title from the script's front matter, the description from `description.txt` beside it (a hook, then how the
+algorithm works, its Rust and a hashtag line; **no links**, never the book or a channel), captions, not made for kids, English,
 the playlist `videos.shorts.playlist` (it must already exist in Studio), no thumbnail (a Short's cover is a frame chosen
 in Studio). It refuses a video that isn't vertical or runs over 3:00. `--plan` uploads nothing: it prints the title, playlist, publish time, description, judgement, QA
 and every problem, and exits 1 if there is one. The real run refuses on any problem too.

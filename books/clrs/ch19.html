@@ -51,7 +51,7 @@
 #s3-svg .s3-q { fill: var(--ink); font-family: var(--f-mono); font-size: 12px; font-weight: 700; }
 #s3-svg .ac-cell.rep { fill: var(--lilac-soft); stroke: var(--lilac); stroke-width: 2.5; }
 #s3-svg .ac-cell.on { fill: var(--sun-soft); stroke: var(--sun); stroke-width: 3; }
-#s5-svg .s5-rk { font-size: 9.5px; font-weight: 700; }
+#s4-svg .s4-rk, #s5-svg .s5-rk { font-size: 9.5px; font-weight: 700; }
 #s6-svg .s6-target circle { stroke-dasharray: 4 3; stroke: var(--blue); stroke-width: 3; }
 #s7-stats .stat .k .keep { text-transform: none; }
 .s8-hit { fill: transparent; cursor: pointer; }
@@ -522,7 +522,7 @@ bound per element: ceil(lg 16) = 4
         <p class="story">Lists made FIND-SET instant and UNION slow. Trees turn that around. Give every element exactly one thing to remember: <b>its parent</b>. The element at the top of a tree remembers itself, and that element is the set's <b>representative</b>. A whole collection of such trees is a <b>disjoint-set forest</b>.</p>
         <p class="story">To find an element's set, follow parent pointers until you reach an element that is its own parent. The elements you pass through are the <b>find path</b>. To merge two sets, find both roots and make one root point at the other: a single pointer write, with no list copied and no element relabelled.</p>
         <p class="story">The catch: nothing says <i>which</i> root should hang under which. Merge in an unlucky order and the forest becomes a chain, and then one FIND-SET walks the whole chain. The book says it plainly: this version is no faster than linked lists, and the next two scenes fix it.</p>
-        <p class="imagine"><b>Try it:</b> press <b>Step</b> to make eight one-element trees, then keep stepping through the seven UNIONs: each one is two FIND-SET walks and one pointer write. In <b>Chain order</b> every union hangs the old root under the next element, so the sets pile into one long path; press <b>Find deepest</b> and watch the walk. Then switch to <b>Pairs order</b>, which does the same number of unions in another order, and compare the tallest tree and the hops. In the Rust view the elements become indices, and the pointers are the cells of one <code>Vec</code>.</p>
+        <p class="imagine"><b>Try it:</b> press <b>Step</b> to make eight one-element trees, then keep stepping through the seven UNIONs: each one is two FIND-SET walks and one pointer write. In <b>Chain order</b> every union hangs the old root under the next element, so the sets pile into one long path; press <b>Find deepest</b> and watch the walk. Then switch to <b>Pairs order</b>, which does the same number of unions in another order, and compare the tallest tree and the hops. In the Rust view the elements become indices, and the pointers are the cells of one <code>Vec</code>. Last, switch <b>Plain</b> to <b>Rank + compression</b> for a preview of the book's final version (the next two scenes explain it): the small number in each node is its rank, LINK hangs the lower rank under the higher, and every FIND-SET re-points the path it walked straight at the root, in two loops instead of a recursion.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -624,6 +624,103 @@ chain: parent [1, 2, 3, 4, 5, 6, 7, 7]
   FIND-SET(0) = 7 after 7 hops
 pairs: parent [1, 3, 3, 7, 5, 7, 7, 7]
   FIND-SET(0) = 7 after 3 hops
+</script>
+<script type="text/x-clrs" id="ps-s4-full">
+MAKE-SET(x)
+1 x.p = x
+2 x.rank = 0
+
+UNION(x, y)
+1 x = FIND-SET(x)
+2 y = FIND-SET(y)
+3 if x ≠ y            // already one set: nothing to link
+4     LINK(x, y)
+
+LINK(x, y)
+1 if x.rank > y.rank
+2     y.p = x
+3 else x.p = y
+4     if x.rank == y.rank
+5         y.rank = y.rank + 1
+
+FIND-SET(x)           // two loops instead of the book's recursion
+1 root = x
+2 while root ≠ root.p // pass one: climb to the root
+3     root = root.p
+4 while x ≠ root      // pass two: hang the path on the root
+5     next = x.p
+6     x.p = root
+7     x = next
+8 return root
+</script>
+<script type="text/x-rust" id="rs-s4-full">
+// Union by rank and path compression. Elements are indices, so the
+// forest is two Vecs: one block each, with no Box and no Rc.
+struct DisjointSet {
+    parent: Vec<usize>,
+    rank: Vec<u8>, // a rank never passes lg n, so a byte is plenty
+}
+
+impl DisjointSet {
+    fn make_set(&mut self) {
+        let x = self.parent.len();
+        self.parent.push(x); // a new root is its own parent
+        self.rank.push(0);
+    }
+    // Two loops instead of the book's recursion: no frame per hop.
+    fn find_set(&mut self, mut x: usize) -> usize {
+        let mut root = x;
+        while root != self.parent[root] {
+            root = self.parent[root];
+        }
+        while x != root {
+            let next = self.parent[x]; // saved: the next line overwrites it
+            self.parent[x] = root;
+            x = next;
+        }
+        root
+    }
+    fn union(&mut self, x: usize, y: usize) {
+        let rx = self.find_set(x);
+        let ry = self.find_set(y);
+        if rx != ry {
+            self.link(rx, ry);
+        }
+    }
+    fn link(&mut self, x: usize, y: usize) {
+        if self.rank[x] > self.rank[y] {
+            self.parent[y] = x;
+        } else {
+            self.parent[x] = y;
+            if self.rank[x] == self.rank[y] {
+                self.rank[y] += 1;
+            }
+        }
+    }
+}
+
+fn main() {
+    let chain = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)];
+    let pairs = [(0, 1), (2, 3), (4, 5), (6, 7), (1, 3), (5, 7), (3, 7)];
+    for (name, order) in [("chain", chain), ("pairs", pairs)] {
+        let mut ds = DisjointSet { parent: Vec::new(), rank: Vec::new() };
+        for _ in 0..8 {
+            ds.make_set();
+        }
+        for (x, y) in order {
+            ds.union(x, y);
+        }
+        println!("{name}: parent {:?}  rank {:?}", ds.parent, ds.rank);
+        let root = ds.find_set(0);
+        println!("  FIND-SET(0) = {root}, then parent {:?}", ds.parent);
+    }
+}
+</script>
+<script type="text/x-rust-out" id="rs-s4-full-out">
+chain: parent [1, 1, 1, 1, 1, 1, 1, 1]  rank [0, 1, 0, 0, 0, 0, 0, 0]
+  FIND-SET(0) = 1, then parent [1, 1, 1, 1, 1, 1, 1, 1]
+pairs: parent [1, 3, 3, 7, 5, 7, 7, 7]  rank [0, 1, 0, 2, 0, 1, 0, 3]
+  FIND-SET(0) = 7, then parent [7, 7, 3, 7, 5, 7, 7, 7]
 </script>
   </section>
 
@@ -2370,28 +2467,43 @@ K.page(19);
   const nm = (i) => (CODE_LANG.rust ? String(i) : "abcdefgh"[i]);
   const RL = { "MAKE-SET:1": 13, "FIND-SET:1": 18, "FIND-SET:2": 19, "FIND-SET:3": 21, "UNION:1": 24, "UNION:2": 25, "UNION:3": 26 };
   const gTop = s("g"), gF = s("g"), gLeg = s("g");
-  svg.append(gTop, gF, gLeg);
+  // an invisible frame round the whole stage, so a picture measured while the forest is still empty takes in all of it
+  svg.append(s("rect", { x: 14, y: 8, width: 632, height: FY0 + 7 * DY + R + 6, fill: "none", "pointer-events": "none" }), gTop, gF, gLeg);
   const ctr = K.$("#s4-controls"), stats = K.$("#s4-stats");
   const stSets = stat("sets", 0), stTall = stat("tallest tree", 0), stLast = stat("last FIND-SET", "–"), stTot = stat("hops so far", 0);
   stats.append(stSets, stTall, stLast, stTot);
-  const cv = code("#s4-code", { files: [{ name: "FOREST (sketch)", src: src("ps-s4"), rs: { name: "forest.rs", src: src("rs-s4"), out: src("rs-s4-out"), map: Object.assign({ "MAKE-SET": 11, "FIND-SET": 17, "UNION": 23 }, RL) } }] });
+  // Rank + compression: the book's final MAKE-SET, UNION, LINK, with FIND-SET as two loops (Exercise 19.3-2)
+  const RLF = { "MAKE-SET:1": 11, "MAKE-SET:2": 12, "FIND-SET:1": 16, "FIND-SET:2": 17, "FIND-SET:3": 18, "FIND-SET:4": 20, "FIND-SET:5": 21, "FIND-SET:6": 22, "FIND-SET:7": 23, "FIND-SET:8": 25,
+    "UNION:1": 28, "UNION:2": 29, "UNION:3": 30, "UNION:4": 31, "LINK:1": 35, "LINK:2": 36, "LINK:3": 38, "LINK:4": 39, "LINK:5": 40 };
+  const FILES = [
+    { name: "FOREST (sketch)", src: src("ps-s4"), rs: { name: "forest.rs", src: src("rs-s4"), out: src("rs-s4-out"), map: Object.assign({ "MAKE-SET": 11, "FIND-SET": 17, "UNION": 23 }, RL) } },
+    { name: "UNION-FIND (sketch)", src: src("ps-s4-full"), rs: { name: "union_find.rs", src: src("rs-s4-full"), out: src("rs-s4-full-out"), map: Object.assign({ "MAKE-SET": 9, "FIND-SET": 15, "UNION": 27, "LINK": 34 }, RLF) } },
+  ];
+  const cv = code("#s4-code", { files: [FILES[0]] });
   const m = mem("#s4-mem", { label: "Stack and heap · the forest in forest.rs" });
-  let mode = 0, st, events, k, P, busyBtns = [];
+  let mode = 0, full = false, st, events, k, P, busyBtns = [];
+  const rs = () => full && CODE_LANG.rust; // the full mode's labels and captions use the program's names in the Rust view
+  const F = { make: () => (rs() ? "make_set" : "MAKE-SET"), find: () => (rs() ? "find_set" : "FIND-SET"), union: () => (rs() ? "union" : "UNION"), link: () => (rs() ? "link" : "LINK") };
   const S = session((b) => { busyBtns.forEach((x) => (x.disabled = b)); if (!b && st) render(); });
 
   /* ---- the model: parent[i] for the first `made` elements ---- */
   function trace(order) {
-    const p = Array.from({ length: N }, (_, i) => i), ev = [{ t: "make" }];
+    const p = Array.from({ length: N }, (_, i) => i), r = p.map(() => 0), ev = [{ t: "make" }];
     const path = (x) => { const a = [x]; while (p[x] !== x) { x = p[x]; a.push(x); } return a; };
+    const squash = (a) => { if (full) a.forEach((v) => { p[v] = a[a.length - 1]; }); }; // path compression
     order.forEach(([x, y], u) => {
-      const px = path(x), py = path(y), rx = px[px.length - 1], ry = py[py.length - 1];
-      ev.push({ t: "fx", u, x, y, path: px }, { t: "fy", u, x, y, path: py }, { t: "link", u, x, y, rx, ry });
-      p[rx] = ry;
+      const px = path(x); squash(px);
+      const py = path(y); squash(py);
+      const rx = px[px.length - 1], ry = py[py.length - 1];
+      let win = ry, lose = rx, bump = false; // plain linking: x.p = y
+      if (full && r[rx] > r[ry]) { win = rx; lose = ry; } else if (full && r[rx] === r[ry]) bump = true;
+      ev.push({ t: "fx", u, x, y, path: px }, { t: "fy", u, x, y, path: py }, { t: "link", u, x, y, rx, ry, win, lose, bump, rk: [r[rx], r[ry]] });
+      if (rx !== ry) { p[lose] = win; if (bump) r[win]++; }
     });
     return ev;
   }
   function fresh() {
-    st = { parent: [], made: 0, mark: {}, emark: {}, label: "", hops: null, total: 0, fr: [], buf: {}, note: null, capFn: null, line: false };
+    st = { parent: [], rank: [], made: 0, mark: {}, emark: {}, rmark: {}, label: "", hops: null, total: 0, fr: [], buf: {}, note: null, capFn: null, line: false };
     events = trace(ORDERS[mode]); k = 0; P = new Map();
   }
   const depthOf = (i) => { let d = 0; while (st.parent[i] !== i) { i = st.parent[i]; d++; } return d; };
@@ -2443,10 +2555,12 @@ K.page(19);
       node: (id) => st.mark[id] || (st.parent[id] === Number(id) ? "src" : ""),
       edge: (e, key) => st.emark[key] || "",
     });
+    // the rank sits in the node as a small subscript, as in the union-by-rank scene
+    if (full) out.nodes.forEach((n, id) => { const t = n.querySelector(".gr-k"); t.textContent = nm(Number(id)); t.appendChild(s("tspan", { class: "s4-rk", dy: 4 }, String(st.rank[Number(id)]))); });
     if (!S.busy && st.made === N) out.nodes.forEach((g, id) => clickable(g, `FIND-SET(${nm(Number(id))}): follow the pointers to the root`, () => query(Number(id))));
     K.clear(gTop); K.clear(gLeg);
     if (st.label) txt(gTop, 24, 24, st.label, { anchor: "start", mono: true, size: 13, bold: true });
-    txt(gLeg, 636, 24, "lilac = root · arrows point to the parent", { anchor: "end", cls: "sv-label" });
+    txt(gLeg, 636, 24, full ? "lilac = root · small number = rank" : "lilac = root · arrows point to the parent", { anchor: "end", cls: "sv-label" });
     stSets.set(st.parent.filter((p, i) => p === i).length);
     stTall.set(tallest(), tallest() >= 5 ? "bad" : undefined);
     stLast.set(st.hops == null ? "–" : st.hops + (st.hops === 1 ? " hop" : " hops"));
@@ -2457,6 +2571,22 @@ K.page(19);
     const cells = st.parent.slice(), marks = {};
     Object.keys(st.mark).forEach((id) => { marks[id] = st.mark[id]; });
     const cap = st.made === 0 ? 0 : st.made <= 4 ? 4 : 8;
+    if (full) { // two Vecs in main's DisjointSet; a Vec<u8>'s first push already reserves 8 bytes
+      const stack = [{ fn: "main", vars: [
+        { n: "ds.parent", t: "Vec<usize>", v: `len ${st.made} · cap ${cap}`, ptr: st.made ? "buf" : undefined },
+        { n: "ds.rank", t: "Vec<u8>", v: `len ${st.made} · cap ${st.made ? 8 : 0}`, ptr: st.made ? "rk" : undefined },
+      ] }].concat(st.fr);
+      if (stack.length > 1) stack[stack.length - 1].top = true;
+      m.set({
+        note: st.note || "Before the first <code>make_set</code>, both Vecs are empty: no heap buffer yet.",
+        stack,
+        heap: st.made ? [
+          { id: "buf", label: `ds.parent · ${st.made} × usize`, cells, marks, cw: 32 },
+          { id: "rk", label: `ds.rank · ${st.made} × u8`, cells: st.rank.slice(), marks: Object.assign({}, st.rmark), cw: 32 },
+        ] : [],
+      });
+      return;
+    }
     const stack = [{ fn: "main", vars: [{ n: "f", t: "Forest", v: `len ${st.made} · cap ${cap}`, ptr: st.made ? "buf" : undefined }] }].concat(st.fr);
     if (stack.length > 1) stack[stack.length - 1].top = true;
     m.set({
@@ -2469,7 +2599,7 @@ K.page(19);
   function lines(on, dim, notes) {
     cv.at(on || [], "on"); cv.at(dim || [], "dim", false);
     const n = {}, r = {};
-    Object.entries(notes || {}).forEach(([ref, t]) => { n[ref] = t; r[RL[ref]] = t; });
+    Object.entries(notes || {}).forEach(([ref, t]) => { n[ref] = t; r[(full ? RLF : RL)[ref]] = t; });
     cv.notes(n, r);
   }
   function setCap(fn) { st.capFn = fn; cap("#s4-cap", fn()); }
@@ -2497,8 +2627,81 @@ K.page(19);
     st.hops = last; st.total += last;
   }
   const findFrame = (extra) => (cur) => (extra || []).concat([{ fn: "find_set(&self, x)", top: true, vars: [{ n: "self", t: "&Forest", v: "&f" }, { n: "x", t: "usize", v: cur, hot: true }] }]);
+  /** Rank + compression: pass one climbs `root` to the top, pass two walks x up the same path, hanging each node on
+      the root. Returns the nodes whose parent pointer changed. */
+  async function walkFull(w, path, dim, extra) {
+    const last = path.length - 1, x0 = path[0], root = path[last], moved = [];
+    const fr = (vars) => (extra || []).concat([{ fn: "find_set(&mut self, x)", top: true, vars: [{ n: "self", t: "&mut DisjointSet", v: "&mut ds" }].concat(vars) }]);
+    st.note = "<code>find_set</code> writes parent cells in its second loop, so it takes <code>&amp;mut self</code>. Two loops, not a recursion: one frame, however long the path.";
+    st.mark = { [x0]: "on2" }; st.emark = {};
+    st.fr = fr([{ n: "x", t: "usize", v: x0 }, { n: "root", t: "usize", v: x0, hot: true }]);
+    lines(["FIND-SET:1"], dim, { "FIND-SET:1": `root = ${nm(x0)}` });
+    render(); await w(sleep(160));
+    for (let i = 0; i <= last; i++) {
+      st.mark = {}; st.emark = {};
+      for (let j = 0; j < i; j++) { st.mark[path[j]] = "on"; st.emark[path[j] + ">" + path[j + 1]] = "on"; }
+      st.mark[path[i]] = "on2";
+      st.fr = fr([{ n: "x", t: "usize", v: x0 }, { n: "root", t: "usize", v: path[i], hot: true }]);
+      lines(["FIND-SET:2"], dim, { "FIND-SET:2": i < last ? `${nm(path[i])}.p = ${nm(path[i + 1])}` : `${nm(path[i])} is a root` });
+      render(); await w(sleep(190));
+      if (i < last) {
+        st.emark[path[i] + ">" + path[i + 1]] = "on";
+        lines(["FIND-SET:3"], dim, { "FIND-SET:3": `root = ${nm(path[i + 1])}` });
+        render(); await w(sleep(190));
+      }
+    }
+    st.mark[root] = "good";
+    for (let i = 0; i < last; i++) {
+      const x = path[i], next = path[i + 1];
+      st.mark[x] = "on2";
+      st.fr = fr([{ n: "x", t: "usize", v: x, hot: true }, { n: "root", t: "usize", v: root }, { n: "next", t: "usize", v: next, hot: true }]);
+      lines(["FIND-SET:5"], dim, { "FIND-SET:4": `${nm(x)} ≠ ${nm(root)}`, "FIND-SET:5": `next = ${nm(next)}` });
+      render(); await w(sleep(220));
+      lines(["FIND-SET:6"], dim, { "FIND-SET:6": `${nm(x)}.p = ${nm(root)}` });
+      if (st.parent[x] !== root) {
+        moved.push(x);
+        delete st.emark[x + ">" + next];
+        await morph(w, 520, () => { st.parent[x] = root; st.emark[x + ">" + root] = "good"; });
+      } else { st.emark[x + ">" + root] = "good"; render(); await w(sleep(220)); }
+      st.mark[x] = "good";
+      st.fr = fr([{ n: "x", t: "usize", v: next, hot: true }, { n: "root", t: "usize", v: root }, { n: "next", t: "usize", v: next }]);
+      lines(["FIND-SET:7"], dim, { "FIND-SET:7": `x = ${nm(next)}` });
+      render(); await w(sleep(160));
+    }
+    st.fr = fr([{ n: "x", t: "usize", v: root }, { n: "root", t: "usize", v: root, hot: true }]);
+    lines(["FIND-SET:8"], dim, { "FIND-SET:4": `x == root`, "FIND-SET:8": [`returns ${nm(root)}`, "good"] });
+    render(); await w(sleep(240));
+    st.hops = last; st.total += last;
+    return moved;
+  }
+  /** "then pointed 0 and 1 straight at it" */
+  const said = (a) => (a.length === 1 ? nm(a[0]) : a.slice(0, -1).map(nm).join(", ") + " and " + nm(a[a.length - 1]));
+  function squashText(path, moved) {
+    const last = path.length - 1, root = path[last];
+    if (last === 0) return `climbs no pointers, because ${nm(root)} is already a root`;
+    const head = `climbs ${last} pointer${last === 1 ? "" : "s"} (${route(path)})`;
+    if (!moved.length) return `${head}. Every element on the path already points at the root, so pass two rewrites ${last === 1 ? "that pointer" : "those pointers"} with the same value`;
+    const kept = path.slice(0, last).filter((v) => !moved.includes(v));
+    return `${head}, then points ${said(moved)} straight at the root ${nm(root)}${kept.length ? ` (${said(kept)} already pointed there)` : ""}`;
+  }
 
+  async function doMakeFull(w) {
+    st.label = `${F.make()} × 8`;
+    for (let i = 0; i < N; i++) {
+      await morph(w, 150, () => { st.parent.push(i); st.rank.push(0); st.made++; st.mark = { [i]: "on" }; st.rmark = { [i]: "on" }; });
+      st.fr = [{ fn: "make_set(&mut self)", top: true, vars: [{ n: "x", t: "usize", v: i, hot: true }] }];
+      st.note = "<code>make_set</code> pushes the new element's own index onto <code>parent</code> and a 0 onto <code>rank</code>.";
+      lines(["MAKE-SET:1", "MAKE-SET:2"], [], { "MAKE-SET:1": `${nm(i)}.p = ${nm(i)}`, "MAKE-SET:2": "rank 0" });
+      render(); await w(sleep(120));
+    }
+    st.mark = {}; st.rmark = {}; st.fr = []; st.note = "Cell x of <code>parent</code> is x's parent, an index into the same buffer; cell x of <code>rank</code> is x's rank, one byte.";
+    lines([], [], {}); render();
+    setCap(() => rs()
+      ? "Eight <b>make_set</b> calls ran: each pushed its own index onto <b>parent</b> and a <b>0</b> onto <b>rank</b>. Every element is a root of rank 0."
+      : "Eight <b>MAKE-SET</b> calls ran: <b>x.p = x</b> and <b>x.rank = 0</b> for each, so every element is a root of rank 0.");
+  }
   async function doMake(w) {
+    if (full) return doMakeFull(w);
     st.label = "MAKE-SET × 8";
     for (let i = 0; i < N; i++) {
       await morph(w, 150, () => { st.parent.push(i); st.made++; st.mark = { [i]: "on" }; });
@@ -2511,7 +2714,46 @@ K.page(19);
     lines([], [], {}); render();
     setCap(() => "Eight <b>MAKE-SET</b> calls ran: <b>x.p = x</b> for each, so every element is a root and the forest is eight one-node trees. A root is its own parent (the book leaves that self-loop out of its pictures, and so does this one).");
   }
+  const unionFrame = (e, rx, ry, top) => [{ fn: "union(&mut self, x, y)", top, vars: [{ n: "x", t: "usize", v: e.x }, { n: "y", t: "usize", v: e.y }]
+    .concat(rx == null ? [] : [{ n: "rx", t: "usize", v: rx, hot: top && ry == null }], ry == null ? [] : [{ n: "ry", t: "usize", v: ry, hot: top }]) }];
+  async function doFindFull(e, w) {
+    const isX = e.t === "fx", x = isX ? e.x : e.y, which = isX ? "UNION:1" : "UNION:2";
+    const link = events.find((q) => q.t === "link" && q.u === e.u);
+    st.label = `${F.union()}(${nm(e.x)}, ${nm(e.y)}) · ${e.u + 1} of 7`;
+    const moved = await walkFull(w, e.path, [which], unionFrame(e, isX ? null : link.rx, null, false));
+    const root = e.path[e.path.length - 1];
+    lines([], [which], { [which]: [`${rs() ? (isX ? "rx" : "ry") : isX ? "x" : "y"} = ${nm(root)}`, "good"] });
+    st.fr = unionFrame(e, link.rx, isX ? null : link.ry, true);
+    render();
+    setCap(() => `<b>${F.union()}</b>: ${F.find()}(${nm(x)}) ${squashText(e.path, moved)}.${isX ? "" : " Both roots are known now."}`);
+  }
+  async function doLinkFull(e, w) {
+    const { rx, ry, win, lose, bump, rk } = e;
+    st.label = `${F.union()}(${nm(e.x)}, ${nm(e.y)}) · ${e.u + 1} of 7`;
+    st.mark = { [rx]: "on2", [ry]: "on2" }; st.emark = {}; st.rmark = { [rx]: "on", [ry]: "on" };
+    st.fr = unionFrame(e, rx, ry, false).concat([{ fn: "link(&mut self, x, y)", top: true, vars: [{ n: "x", t: "usize", v: rx, hot: true }, { n: "y", t: "usize", v: ry, hot: true }] }]);
+    st.note = "<code>link</code> compares the two roots' ranks, and the root of lower rank gets the other as its parent.";
+    lines(["LINK:1"], ["UNION:4"], { "UNION:3": `${nm(rx)} ≠ ${nm(ry)}`, "LINK:1": `rank ${rk[0]} > rank ${rk[1]}? ${rk[0] > rk[1] ? "yes" : "no"}` });
+    render(); await w(sleep(380));
+    const on = win === rx ? "LINK:2" : "LINK:3";
+    lines([on], ["UNION:4"], { [on]: `${nm(lose)}.p = ${nm(win)}` });
+    await morph(w, 720, () => { st.parent[lose] = win; st.emark = { [lose + ">" + win]: "good" }; });
+    if (bump) {
+      lines(["LINK:4"], ["UNION:4"], { "LINK:4": `ranks tie at ${rk[1]}` });
+      render(); await w(sleep(260));
+      st.rank[win]++; st.rmark = { [win]: "good" };
+      lines(["LINK:5"], ["UNION:4"], { "LINK:5": [`${nm(win)}.rank = ${st.rank[win]}`, "good"] });
+      render(); await w(sleep(260));
+    }
+    const h = tallest();
+    const why = rk[0] > rk[1] ? `rank ${rk[0]} beats rank ${rk[1]}, so ${nm(ry)} hangs under ${nm(rx)} and no rank changes`
+      : rk[0] < rk[1] ? `rank ${rk[0]} is below rank ${rk[1]}, so ${nm(rx)} hangs under ${nm(ry)} and no rank changes`
+      : `the ranks tie at ${rk[0]}, so ${nm(rx)} hangs under ${nm(ry)}, and ${nm(ry)}'s rank goes up to ${rk[0] + 1}`;
+    const tail = e.u === 6 ? (mode === 0 ? ` The order that built a chain before now leaves every element at most ${h} hop${h === 1 ? "" : "s"} from the root.` : ` Equal ranks met at every level, so the root ${nm(win)} has rank ${st.rank[win]}. Press <b>Find deepest</b>.`) : "";
+    setCap(() => `<b>${F.link()}(${nm(rx)}, ${nm(ry)})</b>: ${why}. The tallest tree has ${h} hop${h === 1 ? "" : "s"}.${tail}`);
+  }
   async function doFind(e, w) {
+    if (full) return doFindFull(e, w);
     const isX = e.t === "fx", x = isX ? e.x : e.y, which = isX ? "UNION:1" : "UNION:2";
     const link = events.find((q) => q.t === "link" && q.u === e.u);
     const uf = (xv, yv, hx, hy) => [{ fn: "union(&mut self, x, y)", vars: [{ n: "x", t: "usize", v: xv, hot: hx }, { n: "y", t: "usize", v: yv, hot: hy }] }];
@@ -2524,6 +2766,7 @@ K.page(19);
     setCap(() => `<b>${which.replace(":", " line ")}</b>: FIND-SET(${nm(x)}) ${hops === 0 ? "climbs no pointers, because " + nm(x) + " is already a root" : "climbs " + hops + " pointer" + (hops === 1 ? "" : "s") + ": " + route(e.path)}.${isX ? "" : " Both roots are known now."}`);
   }
   async function doLink(e, w) {
+    if (full) return doLinkFull(e, w);
     const { rx, ry } = e;
     st.label = `UNION(${nm(e.x)}, ${nm(e.y)}) · ${e.u + 1} of 7`;
     st.mark = { [rx]: "on2", [ry]: "on2" }; st.emark = {};
@@ -2538,6 +2781,14 @@ K.page(19);
   }
   async function doQuery(x, w) {
     const path = pathOf(x);
+    if (full) {
+      st.label = `${F.find()}(${nm(x)})`; st.rmark = {};
+      const moved = await walkFull(w, path, [], []);
+      st.fr = []; lines([], [], {}); render();
+      const h = tallest();
+      setCap(() => `<b>${F.find()}(${nm(x)})</b> ${squashText(path, moved)}. Ranks don't change. The tallest tree has ${h} hop${h === 1 ? "" : "s"} now.`);
+      return;
+    }
     st.label = `FIND-SET(${nm(x)})`;
     await walk(w, path, [], findFrame([]));
     const hops = path.length - 1;
@@ -2548,7 +2799,7 @@ K.page(19);
   }
 
   async function apply(e, w) {
-    st.mark = {}; st.emark = {};
+    st.mark = {}; st.emark = {}; st.rmark = {};
     if (e.t === "make") await doMake(w);
     else if (e.t === "link") await doLink(e, w);
     else await doFind(e, w);
@@ -2565,12 +2816,20 @@ K.page(19);
   function redraw() {
     K.clear(gF); fresh(); render(lay());
     lines([], [], {}); cv.out(null);
-    setCap(() => "Nothing has run yet. Press Step: <b>MAKE-SET</b> will create eight one-element trees. Then each <b>UNION(x, y)</b> takes three steps: find x's root, find y's root, link them.");
+    setCap(() => rs()
+      ? "Nothing has run yet. Press Step: <b>make_set</b> will create eight one-element trees of rank 0. Then each <b>union(x, y)</b> takes three steps: find x's root, find y's root, link them by rank."
+      : full ? "Nothing has run yet. Press Step: <b>MAKE-SET</b> will create eight one-element trees of rank 0. Then each <b>UNION(x, y)</b> takes three steps: find x's root, find y's root, link them by rank."
+      : "Nothing has run yet. Press Step: <b>MAKE-SET</b> will create eight one-element trees. Then each <b>UNION(x, y)</b> takes three steps: find x's root, find y's root, link them.");
   }
   function reset() { S.cancel(); redraw(); }
 
   busyBtns = [button(ctr, "Step", "", step), button(ctr, "Play", "primary", play), button(ctr, "Find deepest", "", deepest)];
   button(ctr, "Reset", "", reset);
+  ctr.appendChild(seg(["Plain", "Rank + compression"], 0, (i) => {
+    full = i === 1; cv.setFiles([FILES[i]]);
+    K.$("#s4-mem .mem-k").textContent = `Stack and heap · the forest in ${FILES[i].rs.name}`;
+    reset();
+  }));
   K.$("#s4-seg").appendChild(seg(["Chain order", "Pairs order"], 0, (i) => { mode = i; reset(); }));
   CODE_LANG.on(() => { render(); if (st.capFn) setCap(st.capFn); });
   redraw();

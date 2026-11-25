@@ -322,42 +322,37 @@ while R ≠ ∅
 return A
 </script>
 <script type="text/x-rust" id="rs-s3-it">
-// An activity holds the room during the half-open interval [s, f).
-struct Activity {
-    s: u32,
-    f: u32,
-}
-
-// Returns the chosen activities as indices into `acts`. The slice is only
-// borrowed: nothing is copied, and the caller keeps ownership.
-fn greedy_activity_selector(acts: &[Activity]) -> Vec<usize> {
-    let mut picked = vec![0];           // A = {a1}  (index 0 here)
-    let mut k = 0;                      // k = 1
-    for m in 1..acts.len() {            // for m = 2 to n
-        if acts[m].s >= acts[k].f {     // is a_m in S_k?
-            picked.push(m);             // yes, so choose it
-            k = m;                      // and continue from there
-        }
-    }
-    picked
+// Each activity is a tuple (start, finish): it holds the room during
+// [start, finish). The slice must be sorted by finish time.
+fn greedy_activity_selector(
+    acts: &[(u32, u32)],
+) -> Vec<(u32, u32)> {
+    let mut free_at = 0;                // the room is free from time 0
+    acts.iter()
+        .copied()
+        .filter(|&(s, f)| {             // called once per pair, in order
+            if s >= free_at {           // is it in S_k?
+                free_at = f;            // yes: the room is busy until f
+                true                    // so keep it
+            } else {
+                false                   // it overlaps the latest pick
+            }
+        })
+        .collect()                      // runs the chain, gathers the kept pairs
 }
 
 fn main() {
-    // Listed backwards on purpose: the book assumes finish-time order.
-    let times = [(12, 16), (2, 14), (8, 12), (7, 11), (6, 10), (5, 9),
-                 (3, 9), (5, 7), (0, 6), (3, 5), (1, 4)];
-    // |&(s, f)| takes each tuple apart right in the closure's parameter
-    let mut acts: Vec<Activity> =
-        times.iter().map(|&(s, f)| Activity { s, f }).collect();
-    acts.sort_by_key(|a| a.f);          // O(n lg n), and stable on ties
+    let acts = [
+        (1, 4), (3, 5), (0, 6), (5, 7),
+        (3, 9), (5, 9), (6, 10), (7, 11),
+        (8, 12), (2, 14), (12, 16),
+    ];
     let picked = greedy_activity_selector(&acts);
-    let names: Vec<String> =
-        picked.iter().map(|m| format!("a{}", m + 1)).collect();
-    println!("{}", names.join(" "));
+    println!("{:?}", picked);
 }
 </script>
 <script type="text/x-rust-out" id="rs-s3-it-out">
-a1 a4 a8 a11
+[(1, 4), (5, 7), (7, 11), (12, 16)]
 </script>
 <script type="text/x-rust" id="rs-s3-rec">
 // s and f keep the pretend a0 (finish time 0) in slot 0, then a1 ... a11.
@@ -902,7 +897,7 @@ B(T) = 224
         <p class="story">Huffman's idea is a tournament of the rarest. Put every letter in a <b>min-priority queue</b> keyed on its frequency. Then repeat: pull out the two least frequent items, hang them under a new parent whose frequency is their sum, and put the parent back in the queue. The rare letters are merged first, so they end up deepest in the tree and get the longest codewords.</p>
         <p class="story">After <i>n</i> − 1 merges a single tree is left: the code tree. Label each merge's left edge 0 and its right edge 1, and a letter's codeword is the path from the root to it. With the book's frequencies this rebuilds exactly the 224,000-bit code of the last scene. The choice made at every step is greedy: of all possible mergers, take the cheapest one.</p>
         <p class="story">Each merge is two EXTRACT-MINs and one INSERT, and there are <i>n</i> − 1 merges, so a binary min-heap gives <b>O(<i>n</i> lg <i>n</i>)</b> in all. When two trees tie on frequency the choice is free: swapping left and right anywhere gives a different code of the same cost. The machine breaks ties in favour of the older tree.</p>
-        <p class="imagine"><b>Try it:</b> press <b>Step</b> and watch the <b>Q</b> strip along the top: each merge takes the two leftmost trees, <b>x</b> and <b>y</b>, hangs them under a new <b>z</b>, and slides z to its sorted place. After the last merge the codewords appear under the leaves and the cost counter reads 224k bits. Then try <b>Skewed</b>, a deep lopsided tree, and <b>Four equal</b>: equal frequencies give a balanced tree and no saving at all. In <b>Rust</b> the memory strip shows <code>Box::new</code> moving x and y onto the heap under z.</p>
+        <p class="imagine"><b>Try it:</b> press <b>Step</b> and watch the <b>Q</b> strip along the top: each merge takes the two leftmost trees, <b>x</b> and <b>y</b>, hangs them under a new <b>z</b>, and slides z to its sorted place. After the last merge the codewords appear under the leaves and the cost counter reads 224k bits. Then try <b>Skewed</b>, a deep lopsided tree, and <b>Four equal</b>: equal frequencies give a balanced tree and no saving at all. In <b>Rust</b> the memory strip shows the tree as an arena: every node sits in one vector, and z's kids are the indices of x and y.</p>
         <details class="book">
           <summary>What the book says</summary>
           <div class="inner">
@@ -942,69 +937,73 @@ return EXTRACT-MIN(Q)  // the root of the tree is the only node left
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
-enum Node {
-    Leaf(char),
-    Inner(Box<Node>, Box<Node>),
+// The tree is an index arena: every node sits in one Vec, and a node's
+// kids are indices into it (None for a leaf). No Box per node.
+struct Node {
+    freq: u32,
+    kids: Option<(usize, usize)>,
 }
 
-// HUFFMAN: returns the root of the code tree and its cost B(T).
-fn huffman(freqs: &[(char, u32)]) -> (Node, u32) {
-    let n = freqs.len();
-    // The queue holds (freq, slot); the trees themselves wait in `slots`.
-    let mut slots: Vec<Option<Node>> = Vec::new();
+// HUFFMAN: returns the arena and the index of the root.
+fn huffman(
+    freqs: &[(char, u32)],
+) -> (Vec<Node>, usize) {
+    let mut tree = Vec::new();
     let mut q = BinaryHeap::new();
-    for &(c, f) in freqs {
-        q.push(Reverse((f, slots.len()))); // Reverse: max-heap acts as min
-        slots.push(Some(Node::Leaf(c)));
+    for &(_, freq) in freqs {               // Q = C: leaf i is tree[i]
+        q.push(Reverse((freq, tree.len()))); // Reverse: max-heap acts as min
+        tree.push(Node { freq, kids: None });
     }
-    let mut cost = 0;
-    for _ in 1..n {
-        let Reverse((fx, ix)) = q.pop().unwrap(); // x = EXTRACT-MIN(Q)
-        let Reverse((fy, iy)) = q.pop().unwrap(); // y = EXTRACT-MIN(Q)
-        // take() moves a node out of its slot and leaves None behind
-        let x = slots[ix].take().unwrap();
-        let y = slots[iy].take().unwrap();
-        // Box::new moves x and y to the heap: z is now their only owner
-        let z = Node::Inner(Box::new(x), Box::new(y));
-        cost += fx + fy; // each merge adds x.freq + y.freq to B(T)
-        q.push(Reverse((fx + fy, slots.len()))); // INSERT(Q, z)
-        slots.push(Some(z));
+    for _ in 1..freqs.len() {
+        // (freq, index) tuples: a tie in freq goes to the older tree
+        let Reverse((_, x)) = q.pop().unwrap();  // x = EXTRACT-MIN(Q)
+        let Reverse((_, y)) = q.pop().unwrap();  // y = EXTRACT-MIN(Q)
+        let freq = tree[x].freq + tree[y].freq;  // z.freq
+        let z = tree.len();                      // z's index
+        let kids = Some((x, y));                 // z.left = x, z.right = y
+        tree.push(Node { freq, kids });
+        q.push(Reverse((freq, z)));              // INSERT(Q, z)
     }
-    let Reverse((_, i)) = q.pop().unwrap();
-    (slots[i].take().unwrap(), cost) // the one tree left is the root
+    let Reverse((_, root)) = q.pop().unwrap();
+    (tree, root)
 }
 
-fn codes(t: &Node, path: &mut String, out: &mut Vec<(char, String)>) {
-    match t {
-        Node::Leaf(c) => out.push((*c, path.clone())),
-        Node::Inner(l, r) => {
-            path.push('0');
-            codes(l, path, out);
-            path.pop();
-            path.push('1');
-            codes(r, path, out);
-            path.pop();
-        }
+// A letter's code is its path from the root: 0 for left, 1 for right.
+fn codes(
+    t: &[Node],
+    i: usize,
+    path: String,
+    out: &mut [String],
+) {
+    if let Some((l, r)) = t[i].kids {
+        codes(t, l, path.clone() + "0", out); // the left call gets a copy
+        codes(t, r, path + "1", out);         // the right one takes path
+    } else {
+        out[i] = path;                        // a leaf: leaf i is letter i
     }
 }
 
 fn main() {
     let freqs = [
-        ('a', 45), ('b', 13), ('c', 12), ('d', 16), ('e', 9), ('f', 5),
+        ('a', 45), ('b', 13), ('c', 12),
+        ('d', 16), ('e', 9), ('f', 5),
     ];
-    let (root, cost) = huffman(&freqs);
-    let mut out = Vec::new();
-    codes(&root, &mut String::new(), &mut out);
-    out.sort(); // tuples sort by their first field, the letter
-    let list: Vec<String> =
-        out.iter().map(|(c, s)| format!("{}={}", c, s)).collect();
-    println!("{}", list.join(" "));
-    println!("B(T) = {}", cost);
+    let (tree, root) = huffman(&freqs);
+    let n = freqs.len();
+    let mut out = vec![String::new(); n];
+    codes(&tree, root, String::new(), &mut out);
+    for i in 0..n {
+        println!("{}: {}", freqs[i].0, out[i]);
+    }
 }
 </script>
 <script type="text/x-rust-out" id="rs-s7-out">
-a=0 b=101 c=100 d=111 e=1101 f=1100
-B(T) = 224
+a: 0
+b: 101
+c: 100
+d: 111
+e: 1101
+f: 1100
 </script>
   </section>
 
@@ -2197,8 +2196,12 @@ K.page(15);
   const EF = (I) => pickBy(I, (J, i) => J.f[i]).map((x) => x.m);
 
   /* ---- the code panel: four listings, two of them tabs of the sweep ---- */
+  /* the sweep's Rust is a filter whose closure keeps free_at, the finish of the latest pick: lines found by their text */
+  const GRL = src("rs-s3-it").split("\n"), GL = (needle) => GRL.findIndex((l) => l.includes(needle)) + 1;
+  const GR = { hd: GL("fn greedy_activity_selector"), free: GL("let mut free_at = 0"), filt: GL(".filter("), test: GL("if s >= free_at"), move: GL("free_at = f;"), keep: GL("true  "), skip: GL("false  "), coll: GL(".collect()") };
+  const RUSTY = () => CODE_LANG.rust && mode === 0 && !tab; // the sweep in Rust: the program's own steps and names
   const FILES = {
-    it: { name: "GREEDY-ACTIVITY-SELECTOR", src: src("ps-s3-it"), rs: { name: "greedy.rs", src: src("rs-s3-it"), out: src("rs-s3-it-out"), map: { "GREEDY-ACTIVITY-SELECTOR": 9, 1: 10, 2: 11, 3: 12, 4: 13, 5: 14, 6: 15, 7: 18 } } },
+    it: { name: "GREEDY-ACTIVITY-SELECTOR", src: src("ps-s3-it"), rs: { name: "activity_selector.rs", src: src("rs-s3-it"), out: src("rs-s3-it-out"), map: { "GREEDY-ACTIVITY-SELECTOR": GR.hd, 1: GR.free, 2: GR.free, 3: GR.filt, 4: GR.test, 5: GR.keep, 6: GR.move, 7: GR.coll } } },
     rec: { name: "RECURSIVE-ACTIVITY-SELECTOR", src: src("ps-s3-rec"), rs: { name: "recursive.rs", src: src("rs-s3-rec"), out: src("rs-s3-rec-out"), map: { "RECURSIVE-ACTIVITY-SELECTOR": 2, 1: 8, 2: 9, 3: 10, 4: 12, 5: [14, 15, 16], 6: 18 } } },
     ex: { name: "EXCHANGE (sketch)", src: src("ps-s3-ex"), rs: { name: "exchange.rs", src: src("rs-s3-ex"), out: src("rs-s3-ex-out"), map: { EXCHANGE: 15, 1: 17, 2: 19, 3: 20, 4: 21, 5: [23, 24, 25], 6: 26 } } },
     key: { name: "PICK-BY-KEY (sketch)", src: src("ps-s3-key"), rs: { name: "pick_by.rs", src: src("rs-s3-key"), out: src("rs-s3-key-out"), map: { "PICK-BY-KEY": 11, 1: 15, 2: 16, 3: 17, 4: 19, 5: 20, 6: 22, 7: 24 } } },
@@ -2249,7 +2252,11 @@ K.page(15);
       gOver.appendChild(s("rect", { x: g.x(I.s[i]), y, width: g.x(st.test.fk) - g.x(I.s[i]), height: g.bh, rx: 3, class: "sv-fill-coral", style: { opacity: 0.6 } }));
     }
     const line = (t, cls, y1) => gPtr.appendChild(s("line", { x1: g.x(t), y1: y1 == null ? g.Y0 - 14 : y1, x2: g.x(t), y2: g.Y0 + n * g.pitch - 2, class: cls }));
-    if (mode === 0 && st.kT != null) {
+    if (RUSTY() && st.kT != null) {
+      line(st.kT, "s3-edge");
+      txt(gTxt, 14, 24, `free_at = ${st.fk}`, { anchor: "start", mono: true, size: 13, bold: true, fill: "var(--blue)" });
+      if (st.test) txt(gTxt, 646, 24, `s = ${I.s[st.test.m]} ${st.test.ok ? ">=" : "<"} free_at`, { anchor: "end", mono: true, size: 13, bold: true, fill: st.test.ok ? "var(--mint)" : "var(--coral)" });
+    } else if (mode === 0 && st.kT != null) {
       line(st.kT, "s3-edge");
       txt(gTxt, 14, 24, `k = a${st.k}`, { anchor: "start", mono: true, size: 13, bold: true, fill: "var(--blue)" });
       txt(gTxt, 82, 24, `f_k = ${st.fk}`, { anchor: "start", mono: true, size: 13, bold: true, fill: "var(--blue)" });
@@ -2266,8 +2273,13 @@ K.page(15);
     }
     /* the result strip */
     const A = st.shown || st.A;
-    txt(gTxt, 14, INFO, st.primed ? "A′" : "A", { anchor: "start", cls: "sv-text", mono: true, size: 13, bold: true });
-    txt(gTxt, st.primed ? 34 : 28, INFO, "= " + setTxt(A), { anchor: "start", mono: true, size: 13, bold: true });
+    if (RUSTY()) {
+      txt(gTxt, 14, INFO, "picked", { anchor: "start", cls: "sv-text", mono: true, size: 13, bold: true });
+      txt(gTxt, 72, INFO, "= " + vecTxt(A), { anchor: "start", mono: true, size: 13, bold: true });
+    } else {
+      txt(gTxt, 14, INFO, st.primed ? "A′" : "A", { anchor: "start", cls: "sv-text", mono: true, size: 13, bold: true });
+      txt(gTxt, st.primed ? 34 : 28, INFO, "= " + setTxt(A), { anchor: "start", mono: true, size: 13, bold: true });
+    }
     if (st.verdict) txt(gTxt, 646, INFO, st.verdict.text, { anchor: "end", size: 13, bold: true, fill: st.verdict.good ? "var(--mint)" : "var(--coral)" });
     paintStats();
   }
@@ -2298,6 +2310,16 @@ K.page(15);
 
   /* ---- events: each mode's procedure, written as a list of steps ---- */
   function buildIt(I) {
+    if (RUSTY()) { // free_at starts at 0, so the first pair is tested too; a kept pair moves free_at to its finish
+      const e = [{ t: "init", lines: [1, 2] }]; let free = 0;
+      for (let m = 0; m < I.n; m++) {
+        const ok = I.s[m] >= free;
+        e.push({ t: "test", lines: [3, 4], m, free, ok });
+        if (ok) { e.push({ t: "keep", lines: [5, 6], m, free }); free = I.f[m]; }
+      }
+      e.push({ t: "ret", lines: [7] });
+      return e;
+    }
     const e = [{ t: "init", lines: [1, 2] }]; let k = 0;
     for (let m = 1; m < I.n; m++) {
       const ok = I.s[m] >= I.f[k];
@@ -2375,6 +2397,7 @@ K.page(15);
   }
   async function applyIt(e, w, I) {
     const sT = I.s, fT = I.f;
+    if (RUSTY()) return applyItRs(e, w, I);
     if (e.t === "init") {
       st.row[0] = "pick"; st.pop = 0; st.A = [0]; st.pk = 1; st.k = 1; st.kT = fT[0]; st.fk = fT[0];
       note([1, 2], { 1: "A = {a1}", 2: "k = 1" }, { 10: "A = {a1}", 11: "k = 0" });
@@ -2397,6 +2420,34 @@ K.page(15);
       st.done = true; st.test = null; st.verdict = { text: "✓ " + st.A.length + " activities", good: true };
       note([7], { 7: T(setTxt(st.A), "good") }, { 18: T(setTxt(st.A), "good") }); cv.out("A = " + setTxt(st.A));
       cap("#s3-cap", `Line 7: return <b>${setTxt(st.A)}</b>. Every activity was looked at once, so the pass took Θ(<i>n</i>) steps. The finish times of the picks strictly increase, and ${st.A.length} is the most any schedule can hold.`);
+    }
+  }
+  const tup = (i) => `(${cur.I.s[i]}, ${cur.I.f[i]})`;
+  const vecTxt = (A) => "[" + A.map(tup).join(", ") + "]";
+  async function applyItRs(e, w, I) {
+    const sT = I.s, fT = I.f;
+    if (e.t === "init") {
+      st.kT = 0; st.fk = 0;
+      note([1, 2], {}, { [GR.free]: "free_at = 0" });
+      cap("#s3-cap", `<code>free_at = 0</code>: the room is free from time 0. Times are <code>u32</code>, never below 0, so the first pair always passes.`);
+    } else if (e.t === "test") {
+      st.row[e.m] = "cand"; st.ex++; st.test = { m: e.m, ok: e.ok, fk: e.free };
+      note([3, 4], {}, { [GR.filt]: `(s, f) = ${tup(e.m)}`, [GR.test]: T(`${sT[e.m]} >= ${e.free}? ${e.ok ? "yes" : "no"}`, e.ok ? "good" : "bad") });
+      if (e.ok) cap("#s3-cap", `<b>${tup(e.m)}</b> starts at ${sT[e.m]}, no earlier than <code>free_at</code> = ${e.free}: the room is free, so it fits.`);
+      else {
+        st.row[e.m] = "skip"; st.sk++;
+        note([3, 4], {}, { [GR.filt]: `(s, f) = ${tup(e.m)}`, [GR.test]: T(`${sT[e.m]} >= ${e.free}? no`, "bad"), [GR.skip]: T("false: dropped", "bad") });
+        cap("#s3-cap", `<b>${tup(e.m)}</b> starts at ${sT[e.m]}, before <code>free_at</code> = ${e.free}. It overlaps the latest pick, so the closure returns <code>false</code> and <code>filter</code> drops it.`);
+      }
+    } else if (e.t === "keep") {
+      st.row[e.m] = "pick"; st.pop = e.m; st.A.push(e.m); st.pk++; st.test = null; st.fk = fT[e.m];
+      note([5, 6], {}, { [GR.move]: `free_at = ${fT[e.m]}`, [GR.keep]: T("true: kept", "good") });
+      cap("#s3-cap", `Keep <b>${tup(e.m)}</b>: <code>free_at = ${fT[e.m]}</code>, its finish, and the closure returns <code>true</code>, so <code>collect</code> pushes it.`);
+      render(); await moveTo(w, st.kT, fT[e.m], 360);
+    } else if (e.t === "ret") {
+      st.done = true; st.test = null; st.verdict = { text: "✓ " + st.A.length + " activities", good: true };
+      note([7], {}, { [GR.coll]: T(`${st.A.length} pairs`, "good") }); cv.out("A = " + setTxt(st.A), vecTxt(st.A));
+      cap("#s3-cap", `<code>collect</code> returns <b>${vecTxt(st.A)}</b>. Each pair was tested once, so the pass is Θ(<i>n</i>). ${st.A.length} is the most any schedule can hold.`);
     }
   }
   async function applyRec(e, w, I) {
@@ -2563,7 +2614,7 @@ K.page(15);
     drawControls(); reset();
   }
   segHost.appendChild(seg(["Sweep", "Why it's safe", "Shortest first", "Earliest start"], 0, setMode));
-  CODE_LANG.on(() => { if (cur) render(); });
+  CODE_LANG.on(() => { if (!cur) return; if (mode === 0 && !tab) reset(); else render(); }); // the sweep's Rust has its own steps
   setMode(0);
 })();
 
@@ -3420,11 +3471,13 @@ K.page(15);
   const RS = src("rs-s7"), RSL = RS.split("\n");
   const RL = (needle, after) => { const a = after ? RL(after) : 0; return RSL.findIndex((l, i) => i >= a && l.includes(needle)) + 1; };
   const R = {
-    hd: RL("fn huffman"), n: RL("let n = freqs.len()"), q: RL("for &(c, f) in freqs"), loop: RL("for _ in 1..n"),
-    px: RL("let Reverse((fx, ix))"), py: RL("let Reverse((fy, iy))"), tx: RL("let x = slots[ix].take()"), ty: RL("let y = slots[iy].take()"),
-    z: RL("let z = Node::Inner("), cost: RL("cost += fx + fy"), ins: RL("q.push(Reverse((fx + fy"), ret: RL("let Reverse((_, i)) = q.pop().unwrap();", "fn huffman"),
+    hd: RL("fn huffman"), q: RL("for &(_, freq) in freqs"), loop: RL("for _ in 1..freqs.len()"),
+    px: RL("let Reverse((_, x))"), py: RL("let Reverse((_, y))"), freq: RL("let freq = tree[x].freq"), z: RL("let z = tree.len()"),
+    kids: RL("let kids = Some((x, y))"), push: RL("tree.push(Node { freq, kids })"), ins: RL("q.push(Reverse((freq, z)))"),
+    ret: RL("let Reverse((_, root))"), codes: RL("codes(&tree, root"),
   };
-  const map = { HUFFMAN: R.hd, 1: R.n, 2: R.q, 3: R.loop, 4: R.z, 5: [R.px, R.tx], 6: [R.py, R.ty], 7: R.z, 8: R.z, 9: R.cost, 10: [R.ins, R.ins + 1], 11: [R.ret, R.ret + 1] };
+  /* the Rust run is the arena program: pop x and y, add their freqs, push z into tree (kids = indices), push z's key */
+  const map = { HUFFMAN: R.hd, 1: R.loop, 2: [R.q, R.q + 1, R.q + 2], 3: R.loop, 4: R.z, 5: R.px, 6: R.py, 7: [R.kids, R.push], 8: [R.kids, R.push], 9: R.freq, 10: R.ins, 11: [R.ret, R.ret + 1] };
   const cv = code("#s7-code", { files: [{ name: "HUFFMAN", src: src("ps-s7"), rs: { name: "huffman.rs", src: RS, out: src("rs-s7-out"), map } }] });
   const m = mem("#s7-mem");
 
@@ -3436,7 +3489,7 @@ K.page(15);
   function fresh() {
     const chars = INPUTS[inp].chars, nodes = {}, order = [];
     chars.forEach(([ch, f], i) => { nodes["L" + i] = { l: null, r: null, freq: f, ch, seq: i }; order.push("L" + i); });
-    st = { nodes, order, inQ: new Set(), n: chars.length, k: 0, seq: chars.length, x: null, y: null, zg: false, zl: false, zr: false, zf: false, zid: null, justMade: null, taken: new Set(), merges: 0, cost: 0, done: false, codes: null, e: null, pos: null, slotsLen: 0, moved: false };
+    st = { nodes, order, inQ: new Set(), n: chars.length, k: 0, seq: chars.length, x: null, y: null, zg: false, zl: false, zr: false, zf: false, zid: null, justMade: null, taken: new Set(), merges: 0, cost: 0, done: false, codes: null, e: null, pos: null, slotsLen: 0, moved: false, zPushed: false, rootOut: false };
     st.pos = layout(st.order);
     T = trace();
     svg.setAttribute("viewBox", `0 0 660 ${Math.max(250, Y0 + height(chars) * DY + 46)}`);
@@ -3453,6 +3506,12 @@ K.page(15);
     return q[0].h;
   }
   function trace() {
+    if (CODE_LANG.rust) { // the program's order: no n, no empty z; the node is pushed once its freq is known
+      const ev = [{ t: "q", line: 2 }];
+      for (let i = 1; i < st.n; i++) ["for", "x", "y", "zf", "zk", "ins"].forEach((t, j) => ev.push({ t, line: [3, 5, 6, 9, 7, 10][j], i }));
+      ev.push({ t: "ret", line: 11 }, { t: "codes", line: null });
+      return ev;
+    }
     const ev = [{ t: "n", line: 1 }, { t: "q", line: 2 }];
     for (let i = 1; i < st.n; i++) ["for", "alloc", "x", "y", "zl", "zr", "zf", "ins"].forEach((t, j) => ev.push({ t, line: [3, 4, 5, 6, 7, 8, 9, 10][j], i }));
     ev.push({ t: "ret", line: 11 });
@@ -3524,7 +3583,7 @@ K.page(15);
     K.clear(gHead);
     const inQ = st.inQ.size > 0 || st.k > 1;
     const items = st.order.filter((id) => (inQ ? st.inQ.has(id) : true));
-    const parts = [s("tspan", { style: { fontWeight: 800 } }, inQ ? "Q " : "C "), s("tspan", { style: { fill: "var(--ink-3)" } }, inQ ? "⟨ " : "{ ")];
+    const parts = [s("tspan", { style: { fontWeight: 800 } }, CODE_LANG.rust ? (inQ ? "q " : "freqs ") : inQ ? "Q " : "C "), s("tspan", { style: { fill: "var(--ink-3)" } }, inQ ? "⟨ " : "{ ")];
     items.forEach((id, i) => parts.push(s("tspan", { dx: i ? 12 : 0 }, lab(id))));
     parts.push(s("tspan", { dx: 8, style: { fill: "var(--ink-3)" } }, inQ ? "⟩" : "}"));
     if (!items.length) parts.splice(2, 1, s("tspan", { style: { fill: "var(--ink-3)" } }, "⟩ empty"));
@@ -3559,52 +3618,65 @@ K.page(15);
     if (e.t === "zf") set(9, R.cost, `z.freq = ${st.nodes[st.order[0]].freq + st.nodes[st.order[1]].freq}`);
     if (e.t === "ins") set(10, R.ins, `|Q| = ${qn}`);
     if (e.t === "ret") set(11, R.ret, [`root = ${st.nodes[st.order[0]].freq}`, "good"]);
+    if (CODE_LANG.rust) { // the program's own values, by its own names
+      Object.keys(r).forEach((k) => delete r[k]);
+      if (e.t === "q") r[R.q] = `${st.n} leaves`;
+      if (e.t === "for") r[R.loop] = `merge ${e.i} of ${st.n - 1}`;
+      if (e.t === "x") r[R.px] = `x = ${ixOf(st.x)} (${lab(st.x)})`;
+      if (e.t === "y") r[R.py] = `y = ${ixOf(st.y)} (${lab(st.y)})`;
+      if (e.t === "zf") r[R.freq] = `freq = ${sum()}`;
+      if (e.t === "zk") { r[R.z] = `z = ${st.seq}`; r[R.kids] = `Some((${ixOf(st.order[0])}, ${ixOf(st.order[1])}))`; }
+      if (e.t === "ins") r[R.ins] = `q.len() = ${qn}`;
+      if (e.t === "ret") r[R.ret] = [`root = ${ixOf(st.order[0])}`, "good"];
+      if (e.t === "codes") r[R.codes] = ["out filled", "good"];
+    }
     cv.notes(n, r);
     ["on", "good", "bad"].forEach((c) => cv.at([], c));
-    cv.at([e.line], e.t === "ret" ? "good" : "on");
+    cv.at(e.line == null ? [] : [e.line], e.t === "ret" ? "good" : "on");
     cv.out(st.done ? Object.keys(st.codes).map((id) => `${st.nodes[id].ch}=${st.codes[id]}`).sort().join(" ") + `\nB(T) = ${st.cost}` : null);
   }
 
-  /** the Rust run: keys in q, trees in slots, Boxes on the heap */
+  /** the Rust run: (freq, index) keys in q, every node in one Vec, tree (an index arena) */
+  const ixOf = (id) => st.nodes[id].seq; // a node's index in tree: leaves 0..n-1 in input order, then one per merge
   function renderMem() {
     const e = st.e;
-    if (!e) { m.set({ note: "Before the call: nothing yet. Press Step to run <code>huffman(&amp;freqs)</code>.", stack: [{ fn: "main", top: true, vars: [{ n: "freqs", t: "[(char, u32); " + st.n + "]", v: st.n + " pairs" }] }], heap: [] }); return; }
+    const mainFreqs = { n: "freqs", t: `[(char, u32); ${st.n}]`, v: `${st.n} pairs` };
+    if (!e) { m.set({ note: "Before the call: nothing yet. Press Step to run <code>huffman(&amp;freqs)</code>.", stack: [{ fn: "main", top: true, vars: [mainFreqs] }], heap: [] }); return; }
     const qItems = st.order.filter((id) => st.inQ.has(id));
-    const slotLabel = (id) => (st.nodes[id].ch != null ? st.nodes[id].ch : String(st.nodes[id].freq));
-    const made = Object.keys(st.nodes).sort((a, b) => st.nodes[a].seq - st.nodes[b].seq); // slot k holds the k-th node made
-    const cells = made.map((id) => (st.taken.has(id) ? "·" : slotLabel(id)));
+    const made = Object.keys(st.nodes).sort((a, b) => ixOf(a) - ixOf(b));
+    const pend = st.zPushed ? { freq: st.nodes[st.order[0]].freq + st.nodes[st.order[1]].freq, kids: [ixOf(st.order[0]), ixOf(st.order[1])] } : null;
+    const fr = made.map((id) => st.nodes[id].freq), kd = made.map((id) => (st.nodes[id].l == null ? "–" : `${ixOf(st.nodes[id].l)},${ixOf(st.nodes[id].r)}`));
+    if (pend) { fr.push(pend.freq); kd.push(pend.kids.join(",")); }
     const marks = {};
-    made.forEach((id, i) => { if (st.taken.has(id)) marks[i] = "dim"; });
-    if (st.x != null && e.t === "x") marks[made.indexOf(st.x)] = "on";
-    if (st.y != null && e.t === "y") marks[made.indexOf(st.y)] = "on";
-    if (e.t === "ins" || e.t === "for") { const jm = st.justMade && made.indexOf(st.justMade); if (jm >= 0) marks[jm] = "good"; }
-    const heap = [
-      { id: "q", label: "q · min-heap of (freq, slot), shown sorted", cells: qItems.map((id) => `${st.nodes[id].freq}·${st.nodes[id].seq}`), cw: 44, y: 0 },
-      { id: "slots", label: "slots · Vec<Option<Node>>", cells, marks, cw: 26, y: 49 },
-    ];
-    const boxes = st.zl && !st.moved;
-    if (boxes) {
-      const ln = (id) => (st.nodes[id].l == null ? `Leaf(${st.nodes[id].ch})` : `Inner(${st.nodes[id].freq})`);
-      heap.push({ id: "bx", label: "Box::new(x)", cells: [ln(st.order[0])], cw: 64, x: 0, y: 98 });
-      heap.push({ id: "by", label: "Box::new(y)", cells: [ln(st.order[1])], cw: 64, x: 100, y: 98 });
-    }
-    const hot = (t) => e.t === t;
-    const xs = st.x != null && !boxes ? lab(st.x) : st.x != null ? "moved" : "–";
-    const ys = st.y != null && !boxes ? lab(st.y) : st.y != null ? "moved" : "–";
-    const vars = [
+    if (st.x != null) marks[ixOf(st.x)] = "on";
+    if (st.y != null) marks[ixOf(st.y)] = "on";
+    const zi = pend ? made.length : e.t === "ins" && st.justMade ? ixOf(st.justMade) : null;
+    if (zi != null) marks[zi] = "good";
+    if (st.rootOut && !st.done) marks[ixOf(st.order[0])] = "good";
+    const heap = [];
+    if (!st.rootOut) heap.push({ id: "q", label: "q · (freq, index) keys, smallest first", cells: qItems.map((id) => `${st.nodes[id].freq},${ixOf(id)}`), cw: 40, y: 0 });
+    heap.push({ id: "tf", label: "tree · Vec<Node> · .freq, index 0 first", cells: fr, marks, cw: 26, y: st.rootOut ? 0 : 49 });
+    heap.push({ id: "tk", label: ".kids · Some((x, y)) or None (–)", cells: kd, marks: Object.assign({}, marks), cw: 26, y: st.rootOut ? 43 : 92 });
+    if (st.done) heap.push({ id: "out", label: "out · Vec<String> · each text in its own buffer", cells: st.codes ? Object.keys(st.codes).sort((a, b) => ixOf(a) - ixOf(b)).map((id) => st.codes[id]) : [], cw: 44, y: 92 });
+    const hot = (k) => e.t === k;
+    const num = (id) => (id == null ? "–" : ixOf(id));
+    const zv = pend ? made.length : e.t === "ins" && st.justMade ? ixOf(st.justMade) : "–";
+    const fv = st.zf ? st.nodes[st.order[0]].freq + st.nodes[st.order[1]].freq : e.t === "ins" && st.justMade ? st.nodes[st.justMade].freq : "–";
+    const frames = [{ fn: "main", vars: st.rootOut ? [mainFreqs, { n: "tree", t: "Vec<Node>", v: `len ${made.length}`, ptr: "tf" }, { n: "root", t: "usize", v: ixOf(st.order[0]), hot: hot("ret") }].concat(st.done ? [{ n: "out", t: "Vec<String>", v: `len ${st.n}`, ptr: "out", hot: true }] : []) : [mainFreqs] }];
+    if (!st.rootOut) frames.push({ fn: "huffman(&freqs)", top: true, vars: [
+      { n: "tree", t: "Vec<Node>", v: `len ${fr.length}`, ptr: "tf" },
       { n: "q", t: "BinaryHeap", v: `len ${qItems.length}`, ptr: "q" },
-      { n: "slots", t: "Vec<Option<Node>>", v: `len ${made.length}`, ptr: "slots" },
-      { n: "x", t: "Node", v: xs, hot: hot("x") },
-      { n: "y", t: "Node", v: ys, hot: hot("y") },
-    ];
-    if (boxes) { vars.push({ n: "z.0", t: "Box<Node>", v: "", ptr: "bx", hot: hot("zl") }); vars.push({ n: "z.1", t: "Box<Node>", v: "", ptr: "by", hot: hot("zr") }); } else vars.push({ n: "z", t: "Node", v: st.done ? "moved" : "–" });
-    const frames = [{ fn: "main", vars: [{ n: "root", t: "Node", v: st.done ? `Inner(${st.nodes[st.order[0]].freq})` : "–" }] }];
-    if (!st.done) frames.push({ fn: "huffman(&freqs)", top: true, vars });
-    const note = st.done ? "The call returned the root: one <code>Node</code> that owns the whole tree through its <code>Box</code>es. Dropping it would free every box."
-      : boxes ? "<code>Box::new</code> moves <code>x</code> and <code>y</code> onto the heap. <code>z</code> is a <code>Node::Inner</code> holding two box pointers, so it is now their only owner."
-        : e.t === "x" || e.t === "y" ? "<code>pop()</code> returns only the small key. <code>take()</code> then moves the node out of its slot, leaving <code>None</code> behind."
-          : e.t === "ins" ? "<code>z</code> moves into <code>slots</code> and its key goes into <code>q</code>. At every moment each node has exactly one owner."
-            : "<code>q</code> holds small <code>(freq, slot)</code> keys, while the trees wait in <code>slots</code>. On a tie in freq, the smaller slot (the older tree) comes out first.";
+      { n: "x", t: "usize", v: num(st.x), hot: hot("x") },
+      { n: "y", t: "usize", v: num(st.y), hot: hot("y") },
+      { n: "freq", t: "u32", v: fv, hot: hot("zf") },
+      { n: "z", t: "usize", v: zv, hot: hot("zk") },
+    ] });
+    const note = st.done ? "<code>codes</code> walked from the root, adding 0 for a left edge and 1 for a right one. Leaf i is letter i, so <code>out[i]</code> is its code."
+      : st.rootOut ? "The last key out of <code>q</code> is the root's index. <code>huffman</code> returns the arena itself, moved out to <code>main</code>: no node is copied."
+        : e.t === "zk" ? "<code>z</code> is the next free index. The new node stores its kids as the indices of <code>x</code> and <code>y</code>: they are not moved into z, z only names them."
+          : e.t === "x" || e.t === "y" ? "<code>pop()</code> returns the smallest key, and its index names the tree in the arena. The node itself stays where it is."
+            : e.t === "ins" ? "z's key goes into <code>q</code>. Keys are <code>(freq, index)</code> tuples, so on a tie in freq the smaller index, the older tree, comes out first."
+              : "<code>q</code> holds small <code>(freq, index)</code> keys, and every node lives in one vector, <code>tree</code>. A leaf's kids are <code>None</code>.";
     m.set({ note, stack: frames, heap });
   }
 
@@ -3625,6 +3697,19 @@ K.page(15);
       return `Line 11: the queue holds one tree, the root (${st.nodes[st.order[0]].freq}). The codewords are the 0/1 paths. <b><i>B</i>(<i>T</i>) = ${rs}${u}</b> against ${fixed}${u} for fixed-length codes` + (rs < fixed ? ` (${Math.round(((fixed - rs) / fixed) * 100)}% less).` : `: no saving, because equal frequencies need equal lengths.`) + (INPUTS[inp].book ? " The sum of the merge costs is the cost of the tree." : "");
     },
   };
+  const sum = () => st.nodes[st.order[0]].freq + st.nodes[st.order[1]].freq;
+  const RCAP = {
+    q: () => `Each letter's freq goes into <code>q</code> as the key <code>Reverse((freq, index))</code>, and a leaf goes into <code>tree</code>: leaf i is <code>tree[i]</code>.`,
+    for: (e) => `Merge <b>${e.i}</b> of ${st.n - 1}.`,
+    x: () => `<code>q.pop()</code> gives the smallest key: <b>x = ${ixOf(st.x)}</b>, the tree ${lab(st.x)}.`,
+    y: () => `The next pop gives the next smallest: <b>y = ${ixOf(st.y)}</b>, the tree ${lab(st.y)}.`,
+    zf: () => `<b>freq = ${st.nodes[st.order[0]].freq} + ${st.nodes[st.order[1]].freq} = ${sum()}</b>. The cost of this merge is that sum.`,
+    zk: () => `<b>z = ${st.seq}</b>, the next free index. <code>tree.push</code> stores z with <code>kids = Some((${ixOf(st.order[0])}, ${ixOf(st.order[1])}))</code>: x on the left, y on the right.`,
+    ins: () => { const z = st.nodes[st.justMade]; return `<code>q.push(Reverse((${z.freq}, ${ixOf(st.justMade)})))</code>: the new tree takes its sorted place among the keys. Cost so far: ${st.cost}${INPUTS[inp].unit}.`; },
+    ret: () => `One key is left: <b>root = ${ixOf(st.order[0])}</b>, the tree of ${st.nodes[st.order[0]].freq}. <code>huffman</code> returns the arena and the root's index.`,
+    codes: () => CAP.ret().replace(/^Line 11: the queue holds one tree, the root \(\d+\)\. /, "<code>codes</code> walks down from the root. "),
+  };
+  CODE_LANG.on(() => reset()); // the Rust run has its own steps
   async function apply(e, w) {
     st.e = e;
     if (e.t === "q") {
@@ -3640,8 +3725,10 @@ K.page(15);
     if (e.t === "y") { st.y = st.order[1]; st.inQ.delete(st.y); st.taken.add(st.y); }
     if (e.t === "zl") st.zl = true;
     if (e.t === "zr") st.zr = true;
-    if (e.t === "zf") st.zf = true;
+    if (e.t === "zf") { st.zf = true; if (CODE_LANG.rust) st.zg = true; } // Rust: freq is known before z exists
+    if (e.t === "zk") { st.zl = st.zr = true; st.zPushed = true; } // Rust: tree.push(Node { freq, kids })
     if (e.t === "ins") {
+      st.zPushed = false;
       const a = st.order[0], b = st.order[1], zid = "Z" + e.i;
       const F1 = layout(st.order);
       const pa = F1.get(a), pb = F1.get(b);
@@ -3657,10 +3744,11 @@ K.page(15);
       await w(tween(900, (t) => { if (st === mine) drawForest(TR.lerp(F1, F2, t)); }));
       st.pos = F2;
     }
-    if (e.t === "ret") { st.codes = codesOf(); st.done = true; st.inQ.delete(st.order[0]); st.taken.add(st.order[0]); st.justMade = null; }
+    if (e.t === "ret") { st.rootOut = true; st.inQ.delete(st.order[0]); st.taken.add(st.order[0]); st.justMade = null; if (!CODE_LANG.rust) { st.codes = codesOf(); st.done = true; } }
+    if (e.t === "codes") { st.codes = codesOf(); st.done = true; }
     st.k++;
     render();
-    cap("#s7-cap", CAP[e.t](e));
+    cap("#s7-cap", (CODE_LANG.rust ? RCAP : CAP)[e.t](e));
   }
   async function stepOnce(w) { if (st.k >= T.length) return false; await apply(T[st.k], w); return st.k < T.length; }
   const step = () => S.run(async (w) => { await stepOnce(w); });

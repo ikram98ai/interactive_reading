@@ -305,14 +305,14 @@ return B
 </script>
 <script type="text/x-rust" id="rs-s3">
 // A record: a key in 0..=k plus satellite data (here one letter).
-type Rec = (usize, char); // a type alias: just a second name for the tuple
+type Rec = (u32, char); // a type alias: just a second name for the tuple
 
 fn counting_sort(a: &[Rec], k: usize) -> Vec<Rec> {
     let n = a.len();
     let mut b = vec![(0, ' '); n]; // a tuple of Copy types is Copy
-    let mut c = vec![0usize; k + 1]; // c[0..=k], all zero
+    let mut c = vec![0; k + 1]; // c[0..=k], all zero; usize, as it indexes b
     for j in 0..n {
-        c[a[j].0] += 1; // .0: the tuple's first field
+        c[a[j].0 as usize] += 1; // .0: the key; as usize: an index
     }
     // c[i] now contains the number of elements equal to i.
     for i in 1..=k {
@@ -321,7 +321,7 @@ fn counting_sort(a: &[Rec], k: usize) -> Vec<Rec> {
     // c[i] now contains the number of elements less than or equal to i.
     // Copy a to b from the end: (0..n).rev() runs n − 1 down to 0.
     for j in (0..n).rev() {
-        let key = a[j].0;
+        let key = a[j].0 as usize;
         b[c[key] - 1] = a[j]; // B[C[key]], 0-based
         c[key] -= 1; // to handle duplicate values
     }
@@ -332,29 +332,29 @@ fn main() {
     let a: Vec<Rec> = vec![(2, 'a'), (5, 'b'), (3, 'c'), (0, 'd'),
                            (2, 'e'), (3, 'f'), (0, 'g'), (3, 'h')];
     let b = counting_sort(&a, 5); // Figure 8.2, k = 5
-    let keys: Vec<usize> = b.iter().map(|r| r.0).collect();
+    let keys: Vec<u32> = b.iter().map(|r| r.0).collect();
     let tags: String = b.iter().map(|r| r.1).collect();
     println!("keys {:?}", keys);
     println!("tags {}", tags); // ties keep their input order
-    // usize (8 bytes) + char (4) + 4 bytes of padding for alignment:
+    // u32 (4 bytes) + char (4 bytes), with no padding:
     println!("one record: {} bytes", std::mem::size_of::<Rec>());
 }
 </script>
 <script type="text/x-rust-out" id="rs-s3-out">
 keys [0, 0, 2, 2, 3, 3, 3, 5]
 tags dgaecfhb
-one record: 16 bytes
+one record: 8 bytes
 </script>
 <script type="text/x-rust" id="rs-s3-f">
 // A record: a key in 0..=k plus satellite data (here one letter).
-type Rec = (usize, char); // a type alias: just a second name for the tuple
+type Rec = (u32, char); // a type alias: just a second name for the tuple
 
 fn counting_sort(a: &[Rec], k: usize) -> Vec<Rec> {
     let n = a.len();
     let mut b = vec![(0, ' '); n]; // a tuple of Copy types is Copy
-    let mut c = vec![0usize; k + 1]; // c[0..=k], all zero
+    let mut c = vec![0; k + 1]; // c[0..=k], all zero; usize, as it indexes b
     for j in 0..n {
-        c[a[j].0] += 1; // .0: the tuple's first field
+        c[a[j].0 as usize] += 1; // .0: the key; as usize: an index
     }
     // c[i] now contains the number of elements equal to i.
     for i in 1..=k {
@@ -363,7 +363,7 @@ fn counting_sort(a: &[Rec], k: usize) -> Vec<Rec> {
     // c[i] now contains the number of elements less than or equal to i.
     // Copy a to b, starting from the front of a.
     for j in 0..n { // Exercise 8.2-3
-        let key = a[j].0;
+        let key = a[j].0 as usize;
         b[c[key] - 1] = a[j]; // B[C[key]], 0-based
         c[key] -= 1; // to handle duplicate values
     }
@@ -374,18 +374,18 @@ fn main() {
     let a: Vec<Rec> = vec![(2, 'a'), (5, 'b'), (3, 'c'), (0, 'd'),
                            (2, 'e'), (3, 'f'), (0, 'g'), (3, 'h')];
     let b = counting_sort(&a, 5); // Figure 8.2, k = 5
-    let keys: Vec<usize> = b.iter().map(|r| r.0).collect();
+    let keys: Vec<u32> = b.iter().map(|r| r.0).collect();
     let tags: String = b.iter().map(|r| r.1).collect();
     println!("keys {:?}", keys);
     println!("tags {}", tags); // ties come out reversed
-    // usize (8 bytes) + char (4) + 4 bytes of padding for alignment:
+    // u32 (4 bytes) + char (4 bytes), with no padding:
     println!("one record: {} bytes", std::mem::size_of::<Rec>());
 }
 </script>
 <script type="text/x-rust-out" id="rs-s3-f-out">
 keys [0, 0, 2, 2, 3, 3, 3, 5]
 tags gdeahfcb
-one record: 16 bytes
+one record: 8 bytes
 </script>
   </section>
 
@@ -427,39 +427,43 @@ for i = 1 to d
 </script>
 <script type="text/x-rust" id="rs-s4">
 // Radix sort on decimal digits, least significant digit first.
-fn digit(x: u32, i: u32) -> usize {
-    // 10u32 types the literal; pow(i) is 10^i, so i = 0 is the ones digit
-    ((x / 10u32.pow(i)) % 10) as usize
-}
-
-// One stable pass: counting sort of `from` into `to` on digit i.
-fn counting_pass(from: &[u32], to: &mut [u32], i: u32) {
-    let mut c = [0usize; 10]; // a fixed-size array: lives on the stack
-    for &x in from { // the pattern &x copies each u32 out of the borrow
-        c[digit(x, i)] += 1;
-    }
-    for v in 1..10 {
-        c[v] += c[v - 1];
-    }
-    for &x in from.iter().rev() { // from the end, so ties keep their order
-        let v = digit(x, i);
-        c[v] -= 1;
-        to[c[v]] = x;
-    }
-}
-
 fn radix_sort(a: &mut Vec<u32>, d: u32) {
     let mut b = vec![0; a.len()]; // the second buffer, allocated once
     for i in 0..d {
-        // a (&mut Vec<u32>) coerces to &[u32]; swap trades headers only
-        counting_pass(a, &mut b, i);
-        std::mem::swap(a, &mut b);
+        let p = 10u32.pow(i); // 10^i, so i = 0 is the ones digit
+        // key closure, borrows p: x / p drops lower digits, % 10 keeps one
+        counting_pass(a, &mut b, |&x| {
+            (x / p % 10) as usize
+        });
+        std::mem::swap(a, &mut b); // trades Vec headers, not the numbers
         println!("digit {}: {:?}", i + 1, a);
     }
 } // b goes out of scope: the older buffer is freed
 
+// One stable pass: counting sort of `from` into `to`, by a key from 0 to 9.
+fn counting_pass<T: Copy>(
+    from: &[T],
+    to: &mut [T],
+    key: impl Fn(&T) -> usize, // any closure or fn taking &T, returning usize
+) {
+    let mut c = [0usize; 10]; // a fixed-size array: lives on the stack
+    for x in from {
+        c[key(x)] += 1;
+    }
+    for v in 1..10 {
+        c[v] += c[v - 1];
+    }
+    for x in from.iter().rev() { // from the end, so ties keep their order
+        let v = key(x);
+        c[v] -= 1;
+        to[c[v]] = *x; // T: Copy, so *x copies the item out of the borrow
+    }
+}
+
 fn main() {
-    let mut v = vec![329, 457, 657, 839, 436, 720, 355]; // Figure 8.3
+    let mut v = vec![
+        329, 457, 657, 839, 436, 720, 355, // Figure 8.3
+    ];
     radix_sort(&mut v, 3);
 }
 </script>
@@ -1103,7 +1107,7 @@ fn main() {
         <div class="word"><dt>checked_mul</dt><dd>Multiplies and returns <code>None</code> on overflow instead of wrapping: 21! no longer fits in a <code>u64</code>.</dd></div>
         <div class="word"><dt>[v; n] and vec![v; n]</dt><dd>n copies of v: a fixed-size array on the stack, or a <code>Vec</code> on the heap. Counters are usually one or the other.</dd></div>
         <div class="word"><dt>(0..n).rev()</dt><dd>A range run backwards, n − 1 down to 0: counting sort's last loop.</dd></div>
-        <div class="word"><dt>tuples and type aliases</dt><dd><code>type Rec = (usize, char)</code> names a key-plus-data pair; <code>r.0</code> is its first field.</dd></div>
+        <div class="word"><dt>tuples and type aliases</dt><dd><code>type Rec = (u32, char)</code> names a key-plus-data pair; <code>r.0</code> is its first field.</dd></div>
         <div class="word"><dt>std::mem::swap</dt><dd>Exchanges two values in place. On two <code>Vec</code>s it trades their headers, so whole buffers change owner without copying.</dd></div>
         <div class="word"><dt>chunks_mut(r)</dt><dd>Splits a slice into back-to-back <code>&amp;mut</code> pieces of length r: the columns of a grid stored column by column.</dd></div>
         <div class="word"><dt>&gt;&gt; and &amp; masks</dt><dd><code>(x &gt;&gt; shift) &amp; mask</code> pulls out one r-bit digit of a key.</dd></div>
@@ -1622,34 +1626,36 @@ K.page(8);
     });
   }
   const PHASE = ["C[i] = 0", "counting: C[i] = elements equal to i so far", "running sums: C[i] = elements ≤ i", "placing: C[key] = the slot for the next one"];
+  // Rust mode: the program's names (a, b, c), and b counts from 0, so the next key goes to b[c[key] − 1]
+  const PHASE_RS = ["c[i] = 0", "counting: c[i] = elements equal to i so far", "running sums: c[i] = elements ≤ i", "placing: c[key] − 1 = the slot for the next one"];
   function render() {
-    const e = st.e, rs = CODE_LANG.rust, ab = rs ? 0 : 1;
+    const e = st.e, rs = CODE_LANG.rust, ab = rs ? 0 : 1, nm = (x) => (rs ? x.toLowerCase() : x);
     K.clear(gTop);
     txt(gTop, 646, 22, `n = ${N} · k = ${K5}`, { anchor: "end", mono: true, size: 12, fill: "var(--ink-3)" });
     // A
     const mA = {};
     if (e && e.j != null && (e.phase === 1 || e.phase === 3)) mA[e.j - 1] = "on2";
     if (st.flyAt != null) mA[st.flyAt] = "on";
-    cellRow(gA, AX, AY, st.A, mA, ab, "A");
+    cellRow(gA, AX, AY, st.A, mA, ab, nm("A"));
     // C
     K.clear(gC);
     if (!st.alloc) {
       const g0 = s("g", { style: { opacity: 0.45 } }); gC.appendChild(g0);
       const gc = s("g"), gb = s("g"); g0.append(gc, gb);
-      cellRow(gc, CX, CY, Array(K5 + 1).fill(""), Object.fromEntries(Array.from({ length: K5 + 1 }, (_, i) => [i, "dim"])), 0, "C");
-      cellRow(gb, AX, BY, Array(N).fill(""), Object.fromEntries(Array.from({ length: N }, (_, i) => [i, "dim"])), ab, "B");
-      txt(g0, 330, CY - 14, "line 1 allocates C[0 : k] and B[1 : n]", { cls: "sv-label" });
+      cellRow(gc, CX, CY, Array(K5 + 1).fill(""), Object.fromEntries(Array.from({ length: K5 + 1 }, (_, i) => [i, "dim"])), 0, nm("C"));
+      cellRow(gb, AX, BY, Array(N).fill(""), Object.fromEntries(Array.from({ length: N }, (_, i) => [i, "dim"])), ab, nm("B"));
+      txt(g0, 330, CY - 14, rs ? "vec! allocates c[0..=k] and b[0..n]" : "line 1 allocates C[0 : k] and B[1 : n]", { cls: "sv-label" });
     }
     if (st.alloc) {
       if (e && e.phase != null && st.C && st.C[0] != null) {
-        if (!e.done) txt(gC, 330, CY - 14, PHASE[e.phase], { cls: "sv-label" });
+        if (!e.done) txt(gC, 330, CY - 14, (rs ? PHASE_RS : PHASE)[e.phase], { cls: "sv-label" });
       }
       const mC = {};
       if (e && e.phase === 1 && st.after) mC[e.key] = "on";
       if (e && e.phase === 2) { mC[e.i - 1] = "on2"; if (st.after) mC[e.i] = "on"; }
       if (e && e.phase === 3 && e.key != null) mC[e.key] = st.after ? "on" : "on2";
       const g2 = s("g"); gC.appendChild(g2);
-      cellRow(g2, CX, CY, (st.C || Array(K5 + 1).fill(null)).map((v) => (v == null ? "" : v)), mC, 0, "C");
+      cellRow(g2, CX, CY, (st.C || Array(K5 + 1).fill(null)).map((v) => (v == null ? "" : v)), mC, 0, nm("C"));
     }
     // B
     K.clear(gB);
@@ -1659,7 +1665,7 @@ K.page(8);
       (st.B || []).forEach((r, x) => { if (r) mB[x] = done ? (tc.bad[x] ? "bad" : "good") : "sorted"; });
       if (e && e.phase === 3 && e.pos && st.after) mB[e.pos - 1] = "on";
       const g3 = s("g"); gB.appendChild(g3);
-      cellRow(g3, AX, BY, (st.B || Array(N).fill(null)).map((r) => (r == null ? "" : r)), mB, ab, "B");
+      cellRow(g3, AX, BY, (st.B || Array(N).fill(null)).map((r) => (r == null ? "" : r)), mB, ab, nm("B"));
       if (done) {
         const ok = tc.ok === tc.pairs;
         const t = ok ? `✓ stable: all ${tc.pairs} tied neighbours kept their input order` : `✗ not stable: ${tc.pairs - tc.ok} of ${tc.pairs} tied neighbours swapped`;
@@ -1694,7 +1700,7 @@ K.page(8);
   function renderMem() {
     const e = st.e, started = !!e, done = e && e.done;
     const lab = (rec) => (rec ? rec.k + rec.t : "");
-    const heap = [{ id: "abuf", label: "a's buffer · 8 records × 16 bytes", cells: st.A.map(lab), cw: 34,
+    const heap = [{ id: "abuf", label: "a's buffer · 8 records × 8 bytes", cells: st.A.map(lab), cw: 34,
       marks: e && e.j != null && !done ? { [e.j - 1]: "on2" } : {} }];
     if (st.alloc) {
       heap.push({ id: "bbuf", label: done ? "b's buffer · now owned by main" : "b's buffer · 8 records", cells: (st.B || Array(N).fill(null)).map(lab), cw: 34,
@@ -1793,7 +1799,7 @@ K.page(8);
   const stP = stat("passes", `0 / ${D}`), stW = stat("work d(n + k)", 0), stC = stat("comparisons", 0), stS = stat("sorted?", "–");
   stats.append(stP, stW, stC, stS);
   const cv = code("#s4-code", { files: [{ name: "RADIX-SORT", src: src("ps-s4"), rs: { name: "radix_sort.rs", src: src("rs-s4"), out: src("rs-s4-out"),
-    map: { "RADIX-SORT": 23, 1: 25, 2: [27, 28] } } }] });
+    map: { "RADIX-SORT": 2, 1: 4, 2: [7, 10] } } }] });
   const m = mem("#s4-mem");
   const MODES = ["Stable · LSD", "Unstable pass", "Most significant first"];
   let mode = 0, input = BOOK.slice(), st, events, busy = [];
@@ -1879,19 +1885,19 @@ K.page(8);
     const e = st.e;
     if (!e) { cv.clear(); cv.out(null); return; }
     cv.at(e.done ? [] : [e.line], "on");
-    cv.at(st.lift ? ["rs:16", "rs:17", "rs:18", "rs:19"] : [], "on2", false);
+    cv.at(st.lift ? ["rs:28", "rs:29", "rs:30", "rs:31"] : [], "on2", false);
     const ok = e.done && isSorted(st.cols[3]);
     cv.at(e.done ? [1] : [], ok ? "good" : "bad", false);
     const n = {}, r = {};
     if (!e.done) {
       n[1] = [mode === 2 ? `i = ${e.d}  (highest first!)` : `i = ${e.d}`, mode === 2 ? "bad" : null];
-      r[25] = [mode === 2 ? `i = ${e.d - 1}  (the listing counts up)` : `i = ${e.d - 1}`, mode === 2 ? "bad" : null];
+      r[4] = [mode === 2 ? `i = ${e.d - 1}  (the listing counts up)` : `i = ${e.d - 1}`, mode === 2 ? "bad" : null];
       if (e.line === 2) {
         n[2] = mode === 1 ? ["unstable: ties reversed", "bad"] : `digit ${e.d}`;
-        r[27] = mode === 1 ? ["run forwards: unstable", "bad"] : `pass on digit ${e.d}`;
-        if (st.swapped > e.p) r[28] = "swapped: v ↔ b";
+        r[7] = mode === 1 ? ["run forwards: unstable", "bad"] : `pass on digit ${e.d}`;
+        if (st.swapped > e.p) r[10] = "swapped: v ↔ b";
       }
-    } else { n[1] = [`i = ${mode === 2 ? 0 : D + 1}: done`, ok ? "good" : "bad"]; r[25] = ["loop done", ok ? "good" : "bad"]; }
+    } else { n[1] = [`i = ${mode === 2 ? 0 : D + 1}: done`, ok ? "good" : "bad"]; r[4] = ["loop done", ok ? "good" : "bad"]; }
     cv.notes(n, r);
     cv.out(e.done ? `A = ⟨${st.cols[3].join(", ")}⟩${ok ? "" : "   ✗ not sorted"}` : null);
   }
@@ -1900,8 +1906,10 @@ K.page(8);
     // buffer 1 starts as v's; each pass writes the other one, then mem::swap trades owners
     const p = st.swapped; // passes whose swap has happened
     const vBuf = p % 2 === 0 ? "b1" : "b2", bBuf = p % 2 === 0 ? "b2" : "b1";
-    const val = (id) => st.bufs ? st.bufs[id] : (id === "b1" ? input.slice() : Array(N).fill(0));
     const inPass = e && e.line === 2 && st.lift;
+    const val0 = (id) => st.bufs ? st.bufs[id] : (id === "b1" ? input.slice() : Array(N).fill(0));
+    // during a pass, to[c[v]] = *x writes b's buffer one item at a time, as the picture's next column fills
+    const val = (id) => inPass && st.fill && id === bBuf ? val0(id).map((x, r) => (st.fill.vals[r] != null ? st.fill.vals[r] : x)) : val0(id);
     const heap = [
       { id: "b1", label: "buffer 1 · vec! in main · 7 × u32", cells: val("b1"), cw: 40, marks: inPass ? Object.fromEntries(val("b1").map((_, r) => [r, vBuf === "b1" ? "on2" : "on"])) : {} },
     ];
@@ -1914,11 +1922,14 @@ K.page(8);
         { n: "a", t: "&mut Vec<u32>", v: "→ main's v" },
         { n: "b", t: "Vec<u32>", v: "len 7", ptr: bBuf, hot: st.swapFlash },
         { n: "i", t: "u32", v: e.d != null ? (mode === 2 ? "–" : e.d - 1) : "–" },
+        { n: "p", t: "u32", v: e.d != null ? (mode === 2 ? "–" : Math.pow(10, e.d - 1)) : "–" },
       ] });
-      if (inPass) frames.push({ fn: "counting_pass(a, &mut b, i)", top: true, vars: [
+      // the key closure |&x| (x / p % 10) as usize: it borrows p, nothing else
+      if (inPass) frames.push({ fn: "counting_pass(a, &mut b, |&x| …)", top: true, vars: [
         { n: "from", t: "&[u32]", v: "len 7", ptr: vBuf },
         { n: "to", t: "&mut [u32]", v: "len 7", ptr: bBuf },
-        { n: "c", t: "[usize; 10]", v: "80 bytes, on the stack" },
+        { n: "key", t: "impl Fn(&u32) -> usize", v: "borrows p" },
+        { n: "c", t: "[usize; 10]", v: "80 bytes" },
       ] });
     }
     m.set({
@@ -2333,7 +2344,8 @@ K.page(8);
     const inCall = st.line != null && !st.done;
     if (st.done) frames[0].vars.push({ n: "out", t: "Vec<f64>", v: "len 10", ptr: "out" });
     if (inCall) {
-      frames.push({ fn: "bucket_sort(&a)", top: true, vars: [
+      const sorting = st.line === 7 && st.bk != null; // inside insertion_sort(list), called on bucket st.bk
+      frames.push({ fn: "bucket_sort(&a)", top: !sorting, vars: [
         { n: "a", t: "&[f64]", v: "len 10, borrows main's a" },
         { n: "b", t: "Vec<Vec<f64>>", v: "len 10", ptr: "b", hot: st.line === 1 || st.line === 23 },
       ] });
@@ -2342,9 +2354,10 @@ K.page(8);
       // Each bucket's buffer sits under its header. Place from bucket 9 down, and put a buffer below every
       // buffer to its right that it reaches under, so the header arrows never cross a buffer.
       const placed = [], CWI = 27;
+      const B = st.kept || st.b; // concat copies the buckets out: their buffers stay whole until b is dropped
       for (let k = N - 1; k >= 0; k--) {
-        const list = (st.b ? st.b[k] : []).filter((v) => v != null);
-        const len = st.b ? st.b[k].length : 0;
+        const list = (B ? B[k] : []).filter((v) => v != null);
+        const len = B ? B[k].length : 0;
         if (!len) continue;
         const x = Math.min(k * 29, 294 - len * CWI), x2 = x + len * CWI;
         let row = 0;
@@ -2353,11 +2366,17 @@ K.page(8);
         placed.push({ k, x, x2, row });
         const marks = {};
         if (st.bk === k) for (let j = 0; j < list.length; j++) marks[j] = "on";
-        heap.push({ id: `bk${k}`, cells: Array.from({ length: len }, (_, j) => (st.b[k][j] == null ? "" : f2(st.b[k][j]))), cw: CWI, x, y: 40 + row * 34, marks });
+        heap.push({ id: `bk${k}`, cells: Array.from({ length: len }, (_, j) => (B[k][j] == null ? "" : f2(B[k][j]))), cw: CWI, x, y: 40 + row * 34, marks });
       }
       for (let k = 0; k < N; k++) {
-        if (st.b && st.b[k].length) { outer.cells.push("•"); outer.ptrs.push({ from: k, to: `bk${k}:0` }); }
+        if (B && B[k].length) { outer.cells.push("•"); outer.ptrs.push({ from: k, to: `bk${k}:0` }); }
         else outer.cells.push("∅");
+      }
+      if (sorting) {
+        const len = st.b[st.bk].length;
+        frames.push({ fn: "insertion_sort(list)", top: true, vars: [
+          { n: "v", t: "&mut [f64]", v: `len ${len}, borrows b[${st.bk}]`, ptr: len ? `bk${st.bk}` : undefined, hot: true },
+        ] });
       }
       const rowsEnd = Array(placed.length ? Math.max(...placed.map((p) => p.row)) + 1 : 0);
       if (st.line === 8) {
@@ -2430,7 +2449,7 @@ K.page(8);
       if (list.length < 2) await w(sleep(120));
     }
     if (e.line === 8) {
-      st.bk = null; st.concat = true; st.outIdx = 0; paint(); cap("#s6-cap", CAP[8]());
+      st.bk = null; st.concat = true; st.outIdx = 0; st.kept = st.b.map((l) => l.slice()); paint(); cap("#s6-cap", CAP[8]());
       for (let k = 0; k < N; k++) {
         const list = st.b[k];
         while (list.length) {

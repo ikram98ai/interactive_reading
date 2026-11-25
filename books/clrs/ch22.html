@@ -295,6 +295,7 @@ after s>t, t>x, y>z: [0 3 9 ∞ ∞]
         <div class="controls" id="s3-controls"></div>
         <div class="statrow" id="s3-stats"></div>
         <div class="caption" id="s3-cap" aria-live="polite">Nothing has run yet. Press Step.</div>
+        <div id="s3-mem"></div>
         <div id="s3-code"></div>
       </div>
     </div>
@@ -321,55 +322,75 @@ for each vertex v in G.V
 s.d = 0
 </script>
 <script type="text/x-rust" id="rs-s3">
-const INF: i64 = i64::MAX / 2; // the book's ∞, with room to add weights
 type Edge = (usize, usize, i64); // (from, to, weight)
-type Tree = (Vec<i64>, Vec<Option<usize>>); // the arrays d and π
 
-fn relax(d: &mut [i64], pi: &mut [Option<usize>], (u, v, w): Edge) -> bool {
-    if d[u] != INF && d[v] > d[u] + w {
-        d[v] = d[u] + w;
-        pi[v] = Some(u);
-        true
-    } else {
-        false
+// d[v] is None while v is unreached: the book's ∞, which no sum can overflow
+struct Paths {
+    d: Vec<Option<i64>>,
+    pi: Vec<Option<usize>>,
+}
+
+// The book returns FALSE; Err(NegativeCycle) says so, and carries no data.
+#[derive(Debug)]
+struct NegativeCycle;
+
+// RELAX's test: the new d[v] through u, if it's shorter
+fn shorter(d: &[Option<i64>], e: Edge)
+    -> Option<i64> {
+    let (u, v, w) = e;
+    let t = d[u]?.checked_add(w)?; // ∞ + w is ∞; an overflow is None too
+    match d[v] {
+        Some(dv) if dv <= t => None,
+        _ => Some(t),
     }
 }
 
-// The book returns TRUE or FALSE. Option<Tree> says both at once:
-// Some(arrays) is TRUE with the answer, None is FALSE.
-fn bellman_ford(n: usize, edges: &[Edge], s: usize) -> Option<Tree> {
-    let mut d = vec![INF; n];       // INITIALIZE-SINGLE-SOURCE
+fn bellman_ford(
+    edges: &[Edge], n: usize, s: usize,
+) -> Result<Paths, NegativeCycle> {
+    let mut d = vec![None; n];
     let mut pi = vec![None; n];
-    d[s] = 0;
-    for _ in 1..n {                 // |V| - 1 passes; the counter is unused
-        for &e in edges {           // &e copies the small tuple out
-            relax(&mut d, &mut pi, e);
+    d[s] = Some(0);
+    for _ in 1..n {                 // |V| - 1 passes
+        for &e in edges {
+            if let Some(t) = shorter(&d, e) {
+                d[e.1] = Some(t);
+                pi[e.1] = Some(e.0);
+            }
         }
     }
-    for &(u, v, w) in edges {       // is any edge still relaxable?
-        if d[u] != INF && d[v] > d[u] + w {
-            return None;            // FALSE: a negative cycle
+    for &e in edges {               // is any edge still relaxable?
+        if shorter(&d, e).is_some() {
+            return Err(NegativeCycle);
         }
     }
-    Some((d, pi))                   // TRUE
+    Ok(Paths { d, pi })             // TRUE
 }
 
 fn main() {
-    // Figure 22.4: s t x y z are 0..5, in the figure's order of edges.
-    let edges = [
-        (1, 2, 5), (1, 3, 8), (1, 4, -4), (2, 1, -2), (3, 2, -3),
-        (3, 4, 9), (4, 2, 7), (4, 0, 2), (0, 1, 6), (0, 3, 7),
+    // s, t, x, y, z are 0 to 4, edges in Figure 22.4's order
+    let mut edges = [
+        (1, 2, 5), (1, 3, 8), (1, 4, -4),
+        (2, 1, -2), (3, 2, -3), (3, 4, 9),
+        (4, 2, 7), (4, 0, 2), (0, 1, 6),
+        (0, 3, 7),
     ];
-    match bellman_ford(5, &edges, 0) {
-        Some((d, pi)) => println!("TRUE\nd  = {:?}\npi = {:?}", d, pi),
-        None => println!("FALSE"),
+    for &w in &[2, -3] {
+        edges[7].2 = w; // the edge z to s
+        match bellman_ford(&edges, 5, 0) {
+            Ok(p) => {
+                println!("d: {:?}", p.d);
+                println!("pi: {:?}", p.pi);
+            }
+            Err(e) => println!("{:?}", e),
+        }
     }
 }
 </script>
 <script type="text/x-rust-out" id="rs-s3-out">
-TRUE
-d  = [0, 2, 4, 7, -2]
-pi = [None, Some(2), Some(3), Some(0), Some(1)]
+d: [Some(0), Some(2), Some(4), Some(7), Some(-2)]
+pi: [None, Some(2), Some(3), Some(0), Some(1)]
+NegativeCycle
 </script>
   </section>
 
@@ -719,13 +740,13 @@ if v.d > u.d + w(u, v)
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
-const INF: i64 = i64::MAX; // ∞: we only ever add to a reached vertex
+const INF: u64 = u64::MAX; // ∞: we only ever add to a reached vertex
 const NAMES: [char; 5] = ['s', 't', 'x', 'y', 'z'];
-type Adj = Vec<Vec<(usize, i64)>>;
+type Adj = Vec<Vec<(usize, u64)>>; // unsigned: no weight can be negative
 
 // std's BinaryHeap has no DECREASE-KEY: push a fresh entry instead and
 // skip the stale ones when they come out ("lazy deletion").
-fn dijkstra(adj: &Adj, s: usize) -> (Vec<i64>, Vec<Option<usize>>, u32) {
+fn dijkstra(adj: &Adj, s: usize) -> (Vec<u64>, Vec<Option<usize>>, u32) {
     let n = adj.len();
     let mut d = vec![INF; n]; // INITIALIZE-SINGLE-SOURCE
     let mut pi = vec![None; n];
@@ -2354,9 +2375,11 @@ K.page(22);
 
   const RS = src("rs-s3"), RSL = RS.split("\n");
   const rl = (needle, from) => RSL.findIndex((l, i) => i >= (from || 0) && l.includes(needle)) + 1;
-  const RX = { bf: rl("fn bellman_ford"), init: rl("let mut d = vec![INF; n];"), p2: rl("for _ in 1..n"), p3: rl("for &e in edges"), p4: rl("relax(&mut d, &mut pi, e);"),
-    c5: rl("for &(u, v, w) in edges"), c6: rl("if d[u] != INF", rl("for &(u, v, w) in edges")), c7: rl("return None;"), c8: rl("Some((d, pi))"),
-    relax: rl("fn relax"), r1: rl("if d[u] != INF"), r2: rl("d[v] = d[u] + w;"), r3: rl("pi[v] = Some(u);") };
+  const RX = { bf: rl("fn bellman_ford"), init: rl("let mut d = vec![None; n];"), p2: rl("for _ in 1..n"), p3: rl("for &e in edges"), p4: rl("if let Some(t) = shorter(&d, e)"),
+    c5: rl("for &e in edges", rl("if let Some(t) = shorter(&d, e)")), c6: rl("if shorter(&d, e).is_some()"), c7: rl("return Err(NegativeCycle);"), c8: rl("Ok(Paths { d, pi })"),
+    relax: rl("fn shorter"), r1: rl("let t = d[u]?.checked_add(w)?;"), r2: rl("d[e.1] = Some(t);"), r3: rl("pi[e.1] = Some(e.0);") };
+  const IDX = { s: 0, t: 1, x: 2, y: 3, z: 4 };   // the Rust program's vertex numbers
+  const m = mem("#s3-mem");
   const map = { "BELLMAN-FORD": RX.bf, 1: RX.init, 2: RX.p2, 3: RX.p3, 4: RX.p4, 5: RX.c5, 6: RX.c6, 7: RX.c7, 8: RX.c8,
     RELAX: RX.relax, "RELAX:1": RX.r1, "RELAX:2": RX.r2, "RELAX:3": RX.r3, "INITIALIZE-SINGLE-SOURCE": RX.init, "INITIALIZE-SINGLE-SOURCE:1": RX.init, "INITIALIZE-SINGLE-SOURCE:2": RX.init, "INITIALIZE-SINGLE-SOURCE:3": RX.init + 1, "INITIALIZE-SINGLE-SOURCE:4": RX.init + 2 };
   const cv = code("#s3-code", { files: [{ name: "BELLMAN-FORD", src: src("ps-s3"), rs: { name: "bellman_ford.rs", src: RS, out: src("rs-s3-out"), map } }] });
@@ -2403,18 +2426,48 @@ K.page(22);
       gRing.appendChild(s("circle", { cx: b.x, cy: b.y, r: RAD + 5, fill: "none", style: { stroke: "var(--sun)", strokeWidth: "3px", strokeDasharray: "4 3" } }));
     }
     // the edge order list: one chip per edge
-    const title = st.phase === "ready" ? "ready: press Step" : st.phase === "check" ? "check: lines 5–7" : st.phase === "done" ? (st.result ? "returned TRUE" : "returned FALSE") : `pass ${st.pass} of ${PASSES}`;
+    const rs = CODE_LANG.rust;
+    const title = st.phase === "ready" ? "ready: press Step" : st.phase === "check" ? (rs ? "check: any edge shorter?" : "check: lines 5–7") : st.phase === "done" ? (rs ? (st.result ? "returned Ok" : "returned Err") : st.result ? "returned TRUE" : "returned FALSE") : `pass ${st.pass} of ${PASSES}`;
     txt(gList, 462, 50, title, { anchor: "start", mono: true, size: 13, bold: true });
     edges().forEach(([u, v], i) => {
       const x = 462 + Math.floor(i / 5) * 96, y = 66 + (i % 5) * 31, c = st.chip[i], cur = e && (e.k === "relax" || e.k === "check") && e.i === i;
       gList.appendChild(s("rect", { x, y, width: 88, height: 25, rx: 8, class: "ac-cell" + (cur ? " on" : c === "dec" || c === "good" ? " good" : c === "bad" ? " bad" : c === "same" ? " dim" : "") }));
       txt(gList, x + 44, y + 17, u + " → " + v, { mono: true, size: 12.5, bold: true, cls: "ac-v" });
     });
-    txt(gList, 462, 240, "green: d decreased", { anchor: "start", mono: true, size: 10.5, cls: "sv-label" });
-    txt(gList, 462, 256, "grey: no change", { anchor: "start", mono: true, size: 10.5, cls: "sv-label" });
+    const checking = st.phase === "check" || st.phase === "done"; // the check's chips mean something else: green passes, red fails
+    txt(gList, 462, 240, checking ? "green: nothing shorter" : "green: d decreased", { anchor: "start", mono: true, size: 10.5, cls: "sv-label" });
+    txt(gList, 462, 256, checking ? "red: still shorter" : "grey: no change", { anchor: "start", mono: true, size: 10.5, cls: "sv-label" });
     stP.set(st.pass === 0 ? "–" : st.phase === "check" ? "check" : st.phase === "done" ? "done" : `${st.pass} of ${PASSES}`);
     stR.set(st.relax); stD.set(st.dec, st.dec ? "good" : undefined); stF.set(`${finals()} of 5`, finals() === 5 ? "good" : undefined);
     stP.firstChild.textContent = "pass";
+    renderMem();
+  }
+  /** the Rust run's memory: main's edge array, bellman_ford's frame while it runs, and d and pi as heap blocks of Options */
+  function renderMem() {
+    const e = st.cur, started = e && st.phase !== "ready", done = st.phase === "done";
+    const opt = (x) => (x == null ? "None" : "Some(" + x + ")");
+    const main = [{ n: "edges", t: "[Edge; 10]", v: "10 edges" }, { n: "w", t: "i64", v: "2 (z to s)" }];
+    if (done) main.push({ n: "p.d", t: "Vec<Option<i64>>", v: "5 values", ptr: "d" }, { n: "p.pi", t: "Vec<Option<usize>>", v: "5 parents", ptr: "pi" });
+    const stack = [{ fn: "main", vars: main }];
+    if (started && !done) {
+      const cur = e.k === "relax" || e.k === "check";
+      stack.push({ fn: "bellman_ford(&edges, 5, 0)", top: true, vars: [
+        { n: "d", t: "Vec<Option<i64>>", v: "len 5", ptr: "d" },
+        { n: "pi", t: "Vec<Option<usize>>", v: "len 5", ptr: "pi" },
+        cur && { n: "e", t: "Edge", v: `(${IDX[e.u]}, ${IDX[e.v]}, ${e.w})`, hot: true },
+      ].filter(Boolean) });
+    }
+    const heap = [];
+    if (started) {
+      const dm = {}, pm = {};
+      if (e && (e.k === "relax" || e.k === "check")) { dm[IDX[e.u]] = "on2"; if (e.k === "relax" && e.dec && st.d[e.v] === e.via) { dm[IDX[e.v]] = "on"; pm[IDX[e.v]] = "on"; } }
+      heap.push({ id: "d", label: "d · 5 × Option<i64> (None is ∞)", cells: V.map((v) => (st.d[v] === INF ? "None" : opt(st.d[v]))), marks: dm, cw: 56 });
+      heap.push({ id: "pi", label: "pi · 5 × Option<usize>", cells: V.map((v) => opt(st.pi[v] == null ? null : IDX[st.pi[v]])), marks: pm, cw: 56 });
+    }
+    m.set({
+      note: !started ? "<code>main</code> owns the edge array; nothing else exists yet." : done ? "<code>bellman_ford</code> returned <code>Ok(Paths)</code>: the two vectors moved out to <code>main</code>, nothing was copied." : "<code>d</code> and <code>pi</code> live on the heap. <code>None</code> in <code>d</code> is ∞; <code>None</code> in <code>pi</code> is NIL.",
+      stack, heap,
+    });
   }
   const LINES = (e) => e.k === "init" ? [1, "INITIALIZE-SINGLE-SOURCE:1", "INITIALIZE-SINGLE-SOURCE:2", "INITIALIZE-SINGLE-SOURCE:3", "INITIALIZE-SINGLE-SOURCE:4"]
     : e.k === "relax" ? [2, 3, 4, "RELAX:1"].concat(e.dec ? ["RELAX:2", "RELAX:3"] : []) : e.k === "check" ? [5, 6].concat(e.bad ? [7] : []) : [8];
@@ -2423,10 +2476,10 @@ K.page(22);
     const n = {}, r = {};
     if (e.k === "relax") {
       n[2] = `i = ${e.pass}`; n[3] = `(${e.u}, ${e.v})`; n["RELAX:1"] = `${e.v}.d > ${e.u}.d + ${e.w}`;
-      r[RX.p3] = `e = (${e.u}, ${e.v}, ${e.w})`; r[RX.r1] = e.dec ? "yes" : "no";
-      if (e.dec) { n["RELAX:2"] = `${e.v}.d = ${num(e.via)}`; r[RX.r2] = `d[${e.v}] = ${e.via}`; n["RELAX:3"] = `${e.v}.π = ${e.u}`; r[RX.r3] = `pi[${e.v}] = Some(${e.u})`; }
-    } else if (e.k === "check") { n[5] = `(${e.u}, ${e.v})`; n[6] = [e.bad ? "yes: FALSE" : "no", e.bad ? "bad" : "good"]; r[RX.c5] = `(${e.u}, ${e.v}, ${e.w})`; r[RX.c6] = [e.bad ? "yes: None" : "no", e.bad ? "bad" : "good"]; }
-    else if (e.k === "done") { n[8] = ["TRUE", "good"]; r[RX.c8] = ["Some(d, pi)", "good"]; }
+      r[RX.p3] = `e = (${IDX[e.u]}, ${IDX[e.v]}, ${e.w})`; r[RX.r1] = e.du === INF ? "d[u] is None: return None" : `t = ${e.via}`;
+      if (e.dec) { n["RELAX:2"] = `${e.v}.d = ${num(e.via)}`; r[RX.r2] = `d[${IDX[e.v]}] = Some(${e.via})`; n["RELAX:3"] = `${e.v}.π = ${e.u}`; r[RX.r3] = `pi[${IDX[e.v]}] = Some(${IDX[e.u]})`; }
+    } else if (e.k === "check") { n[5] = `(${e.u}, ${e.v})`; n[6] = [e.bad ? "yes: FALSE" : "no", e.bad ? "bad" : "good"]; r[RX.c5] = `e = (${IDX[e.u]}, ${IDX[e.v]}, ${e.w})`; r[RX.c6] = [e.bad ? "yes: Err" : "no", e.bad ? "bad" : "good"]; }
+    else if (e.k === "done") { n[8] = ["TRUE", "good"]; r[RX.c8] = ["Ok(Paths { d, pi })", "good"]; }
     cv.notes(n, r);
   }
   function caption(e) {
@@ -2450,7 +2503,7 @@ K.page(22);
     const f = quick ? 0.45 : 1;
     st.cur = e; st.k++;
     if (e.k === "init") {
-      st.phase = "pass"; st.pass = 0; V.forEach((v) => { st.d[v] = INF; st.pi[v] = null; }); st.d.s = 0; paintCode(e); render();
+      st.phase = "pass"; st.pass = 0; V.forEach((v) => { st.d[v] = INF; st.pi[v] = null; }); st.d.s = 0; paintCode(e); render(); cap("#s3-cap", caption(e));
     } else if (e.k === "relax") {
       if (e.i === 0) { st.chg = new Set(); st.chip = {}; }
       st.phase = "pass"; st.pass = e.pass; st.relax++; paintCode(e);
@@ -2483,7 +2536,7 @@ K.page(22);
   busy = [button(ctr, "Step", "", step), button(ctr, "Pass", "", pass), button(ctr, "Play", "primary", play)];
   button(ctr, "Reset", "", reset);
   K.$("#s3-seg").appendChild(seg(["Figure 22.4 order", "Lucky order"], 0, (k) => { order = k; reset(); }));
-  CODE_LANG.on(() => { if (st.cur) paintCode(st.cur); });
+  CODE_LANG.on(() => { if (st.cur) paintCode(st.cur); render(); });
   fresh(); reset();
 })();
 
@@ -2912,7 +2965,7 @@ K.page(22);
   const S = session((b) => busyBtns.forEach((x) => (x.disabled = b)));
   const dTxt = (x) => (x === Infinity ? "∞" : String(x));
 
-  /* ---- the exact heap std's BinaryHeap<Reverse<(i64, usize)>> keeps (checked against rustc), so the memory strip is honest ---- */
+  /* ---- the exact heap std's BinaryHeap<Reverse<(u64, usize)>> keeps (checked against rustc), so the memory strip is honest ---- */
   const lt = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
   function siftUp(h, start, pos) { const e = h[pos]; while (pos > start) { const p = (pos - 1) >> 1; if (!lt(e, h[p])) break; h[pos] = h[p]; pos = p; } h[pos] = e; }
   const hpush = (h, x) => { h.push(x); siftUp(h, 0, h.length - 1); };
@@ -2980,6 +3033,29 @@ K.page(22);
     if (e && ["extract", "add", "relax", "dec"].includes(e.k)) ring(e.u, { stroke: "var(--blue)", strokeWidth: "3px" });
     if (e && (e.k === "relax" || e.k === "dec")) ring(e.v, { stroke: "var(--sun)", strokeWidth: "2.5px", strokeDasharray: "4 3" });
   }
+  /** Rust's q, as the program holds it: only pushed (key, vertex) entries (no ∞ vertex is ever in it), one row per
+      entry in the order pop would return them, stale copies included. The entry pop just returned sits on top. */
+  const byKey = (h) => h.slice().sort((a, b) => (lt(a, b) ? -1 : lt(b, a) ? 1 : 0));
+  const eid = (a) => a[0] + "|" + a[1];
+  function drawQRs(sn, e, anim) {
+    txt(gPanel, QX, 84, "q · smallest key on top", { anchor: "start", cls: "sv-label" });
+    for (let i = 0; i < 5; i++) gPanel.appendChild(s("rect", { x: QX, y: qY(i), width: QW, height: QH, rx: 7, class: "ac-cell dim", style: { strokeDasharray: "3 3", opacity: 0.55 } }));
+    if (!sn.qReady) { txt(gPanel, QX + QW / 2, qY(2) + 18, "no q yet", { cls: "sv-label" }); return; }
+    const popped = e && (e.k === "extract" || e.k === "stale") ? [e.k === "extract" ? e.du : e.key, IDX[e.u]] : null;
+    const ord = (popped ? [popped] : []).concat(byKey(sn.heap)).slice(0, 5);
+    const from = anim ? byKey(anim.from.heap).map(eid) : null;
+    const staleE = (a) => sn.inS.includes(V[a[1]]) || a[0] !== sn.d[V[a[1]]];
+    ord.forEach((a, i) => {
+      let y = qY(i);
+      if (anim) { const j = from.indexOf(eid(a)); if (j >= 0) y = lerp(qY(j), qY(i), anim.t); }
+      const top = popped && i === 0, old = top ? e.k === "stale" : staleE(a);
+      const cls = top && !old ? " on" : old ? " dim" : "";
+      gPanel.appendChild(s("rect", { x: QX, y, width: QW, height: QH, rx: 7, class: "ac-cell" + cls }));
+      txt(gPanel, QX + 16, y + 18, V[a[1]], { anchor: "start", cls: "ac-v", size: 14 });
+      txt(gPanel, QX + QW - 12, y + 18, "key " + a[0] + (old ? " · stale" : ""), { anchor: "end", mono: true, size: 12, bold: true });
+    });
+    if (popped) txt(gPanel, QX + QW - 4, qY(0) - 4, e.k === "stale" ? "pop ↓ stale: skip" : "pop ↓", { anchor: "end", cls: "sv-label", size: 10.5 });
+  }
   /** the panel: S as chips, Q as a sorted column. anim = { from: snapshot, t } re-sorts Q between two snapshots */
   function drawPanel(sn, e, anim, hideChip) {
     K.clear(gPanel);
@@ -2990,6 +3066,7 @@ K.page(22);
       gPanel.appendChild(s("rect", { x: QX + i * 31, y: 34, width: 28, height: 28, rx: 7, class: "ac-cell good" }));
       txt(gPanel, QX + i * 31 + 14, 53, v, { cls: "ac-v", size: 14 });
     });
+    if (CODE_LANG.rust) { drawQRs(sn, e, anim); return; }
     txt(gPanel, QX, 90, "Q · smallest d on top", { anchor: "start", cls: "sv-label" });
     for (let i = 0; i < 5; i++) gPanel.appendChild(s("rect", { x: QX, y: qY(i), width: QW, height: QH, rx: 7, class: "ac-cell dim", style: { strokeDasharray: "3 3", opacity: 0.55 } }));
     if (!sn.qReady) { txt(gPanel, QX + QW / 2, qY(2) + 18, "Q = ∅ so far", { cls: "sv-label" }); return; }
@@ -3009,16 +3086,19 @@ K.page(22);
     if (e && e.k === "extract") txt(gPanel, QX + QW - 4, qY(0) - 4, "EXTRACT-MIN ↓", { anchor: "end", cls: "sv-label", size: 10.5 });
   }
   const gLeg = s("g"); svg.insertBefore(gLeg, layer);
-  (function legend() {
+  function legend() {
+    K.clear(gLeg);
+    const rs = CODE_LANG.rust;
     const item = (x, y, kind, label) => {
       if (kind === "ring") gLeg.appendChild(s("circle", { cx: x + 8, cy: y, r: 8, fill: "none", style: { stroke: "var(--blue)", strokeWidth: "3px" } }));
       else if (kind === "dash") gLeg.appendChild(s("circle", { cx: x + 8, cy: y, r: 8, fill: "none", style: { stroke: "var(--sun)", strokeWidth: "2.5px", strokeDasharray: "4 3" } }));
       else gLeg.appendChild(s("g", { class: "gr-node " + kind, transform: `translate(${x + 8},${y})` }, s("circle", { r: 8 })));
       txt(gLeg, x + 24, y + 4, label, { anchor: "start", cls: "sv-label" });
     };
-    item(30, 282, "", "white: d = ∞"); item(150, 282, "on", "gray: in Q, d finite"); item(318, 282, "black", "black: in S, final");
-    item(30, 304, "ring", "blue ring: u from EXTRACT-MIN"); item(272, 304, "dash", "dashed ring: v being relaxed");
-  })();
+    item(30, 282, "", "white: d = ∞"); item(150, 282, "on", rs ? "gray: in q, d finite" : "gray: in Q, d finite"); item(318, 282, "black", "black: in S, final");
+    item(30, 304, "ring", rs ? "blue ring: u from pop" : "blue ring: u from EXTRACT-MIN"); item(272, 304, "dash", "dashed ring: v being relaxed");
+  }
+  legend();
 
   function renderStats(sn) {
     stS.set(sn.inS.length + " of 5", sn.inS.length === 5 ? "good" : undefined); stR.set(sn.nrel); stK.set(sn.ndec);
@@ -3056,23 +3136,27 @@ K.page(22);
     const sn = st.snap, e = st.last;
     const running = sn.d && !(e && e.k === "done");
     const done = e && e.k === "done";
-    const frames = [{ fn: "main", vars: done ? [{ n: "d", t: "Vec<i64>", v: "5 values", ptr: "d" }, { n: "pi", t: "Vec<Option<usize>>", v: "4 parents" }, { n: "stale", t: "u32", v: sn.stale, hot: true }] : [{ n: "adj", t: "Vec<Vec<(usize, i64)>>", v: "5 lists" }] }];
+    const adjVar = { n: "adj", t: "Vec<Vec<(usize, u64)>>", v: "5 lists" };
+    const frames = [{ fn: "main", vars: done ? [adjVar, { n: "d", t: "Vec<u64>", v: "5 values", ptr: "d" }, { n: "pi", t: "Vec<Option<usize>>", v: "4 parents" }, { n: "stale", t: "u32", v: sn.stale, hot: true }] : [adjVar] }];
     if (running) {
       const u = e && ["extract", "add", "relax", "dec", "stale"].includes(e.k) ? IDX[e.u] : "–";
+      // a variable appears once the program has declared it: d at INITIALIZE, in_s next, q and stale with q's first push, u in the loop
+      const k = e ? e.k : "", hasQ = sn.qReady, inLoop = hasQ && k !== "qinit";
       frames.push({ fn: "dijkstra(&adj, s)", top: true, vars: [
-        { n: "d", t: "Vec<i64>", v: "5 values", ptr: "d" },
-        { n: "in_s", t: "Vec<bool>", v: "S = {" + sn.inS.map((x) => IDX[x]).join(",") + "}" },
-        { n: "q", t: "BinaryHeap<Reverse<(i64, usize)>>", v: "len " + sn.heap.length, ptr: "q" },
-        { n: "u", t: "usize", v: u, hot: e && (e.k === "extract" || e.k === "stale") },
-        { n: "stale", t: "u32", v: sn.stale, hot: e && e.k === "stale" },
-      ] });
+        { n: "d", t: "Vec<u64>", v: "5 values", ptr: "d" },
+        { n: "pi", t: "Vec<Option<usize>>", v: Object.keys(sn.pi).length + (Object.keys(sn.pi).length === 1 ? " parent" : " parents") },
+        k !== "init" && { n: "in_s", t: "Vec<bool>", v: "S = {" + sn.inS.map((x) => IDX[x]).join(",") + "}" },
+        hasQ && { n: "q", t: "BinaryHeap<Reverse<(u64, usize)>>", v: "len " + sn.heap.length, ptr: "q" },
+        hasQ && { n: "stale", t: "u32", v: sn.stale, hot: e && e.k === "stale" },
+        inLoop && { n: "u", t: "usize", v: u, hot: e && (e.k === "extract" || e.k === "stale") },
+      ].filter(Boolean) });
     }
     const heap = [];
     if (sn.d) {
       const marks = {};
       V.forEach((v, i) => { if (sn.inS.includes(v)) marks[i] = "good"; });
       if (e && (e.k === "relax" || e.k === "dec")) marks[IDX[e.v]] = "on";
-      heap.push({ id: "d", label: "d · Vec<i64> · 5 × 8 bytes", cells: V.map((v) => (sn.d[v] === Infinity ? "MAX" : sn.d[v])), marks, cw: 40 });
+      heap.push({ id: "d", label: "d · Vec<u64> · 5 × 8 bytes", cells: V.map((v) => (sn.d[v] === Infinity ? "MAX" : sn.d[v])), marks, cw: 40 });
     }
     if (running && sn.qReady) {
       const marks = {};
@@ -3087,6 +3171,7 @@ K.page(22);
         : e.k === "dec" ? "No DECREASE-KEY in std: a second entry for the vertex was pushed. The old entry, with the larger key, is still in the buffer."
         : e.k === "stale" ? "A stale entry came out: its vertex is already in <code>S</code>, so <code>continue</code> drops it. Nothing in the graph changes."
         : e.k === "extract" ? "<code>pop</code> returned the smallest key and moved the last entry up to restore heap order. The buffer is a heap, not a sorted list."
+        : !sn.qReady ? "<code>d</code>'s values live in one block on the heap; the frame holds only its pointer, length and capacity."
         : "<code>d</code> and <code>q</code> live on the heap; the frame holds only their pointers. <code>q</code> holds (key, vertex) pairs, and may hold several for one vertex.",
       stack: frames, heap,
     });
@@ -3099,7 +3184,8 @@ K.page(22);
   const CAP = {
     init: () => `Line 1: INITIALIZE-SINGLE-SOURCE. Every d is ∞ except <b>${src0}.d = 0</b>, and every π is NIL. Nothing is final yet.`,
     s2: () => "Line 2: <b>S = ∅</b>. S will collect the vertices whose shortest-path weight is final.",
-    qinit: () => "Lines 3–5: every vertex goes into the min-priority queue Q, keyed by d. Now Q = V − S, and the source, with key 0, is the smallest.",
+    qinit: () => CODE_LANG.rust ? `Rust: q starts with one entry, (0, ${IDX[src0]}), the source. The book INSERTs every vertex, but a vertex at ∞ would only come out last, so here a vertex joins q when its d first drops.`
+      : "Lines 3–5: every vertex goes into the min-priority queue Q, keyed by d. Now Q = V − S, and the source, with key 0, is the smallest.",
     extract: (e) => `Lines 6–7: Q is not empty, so EXTRACT-MIN returns <b>${e.u}</b>, the vertex outside S with the smallest estimate (d = ${e.du}). The wave reaches it first: every other vertex outside S is at least that far, and no edge has a negative weight.`,
     add: (e) => `Line 8: <b>S = S ∪ {${e.u}}</b>. Its estimate ${e.du} is now final, the greedy choice. Next, every edge leaving ${e.u} is relaxed.`,
     relax: (e) => e.better ? `Lines 9–11: relax (${e.u}, ${e.v}) with weight ${e.w}. ${e.du} + ${e.w} = <b>${e.cand}</b> beats ${e.v}.d = ${dTxt(e.dv)}, so the call decreases ${e.v}.d.`
@@ -3107,7 +3193,7 @@ K.page(22);
       : `Lines 9–11: relax (${e.u}, ${e.v}) with weight ${e.w}. ${e.du} + ${e.w} = ${e.cand} does not beat ${e.v}.d = ${dTxt(e.dv)}. Nothing changes, so no DECREASE-KEY.`,
     dec: (e) => `RELAX lines 2–3 and line 12: <b>${e.v}.d = ${e.nd}</b>, ${e.v}.π = ${e.u}, and DECREASE-KEY moves ${e.v} to its new place in Q.${CODE_LANG.rust ? " Rust has no DECREASE-KEY: it pushes a second entry (" + e.nd + ", " + IDX[e.v] + ") instead." : ""}`,
     stale: (e) => `Rust only: the heap still held the old entry (${e.key}, ${IDX[e.u]}). ${e.u} left Q earlier with a smaller key, so <code>in_s[${IDX[e.u]}]</code> is true and the entry is dropped. Stale pops so far: ${st.snap.stale}.`,
-    done: () => `Q is empty: the while loop ran exactly |V| = 5 times. ${V.map((v) => v + " = " + st.snap.d[v]).join(", ")}. The blue edges are a shortest-paths tree, and each estimate was final the moment its vertex joined S.`,
+    done: () => (CODE_LANG.rust ? `q is empty: the loop popped ${5 + st.snap.stale} entries, 5 fresh and ${st.snap.stale} stale. ` : "Q is empty: the while loop ran exactly |V| = 5 times. ") + `${V.map((v) => v + " = " + st.snap.d[v]).join(", ")}. The blue edges are a shortest-paths tree, and each estimate was final the moment its vertex joined S.`,
   };
   const tagAt = (text, cls) => { const t = draw.tag(String(text), cls); layer.appendChild(t); return t; };
   async function apply(e, w) {
@@ -3157,7 +3243,7 @@ K.page(22);
   busyBtns = [button(ctr, "Step", "", step), button(ctr, "Play", "primary", play)];
   button(ctr, "Reset", "", reset);
   K.$("#s6-seg").appendChild(seg(["Source s", "Source z"], 0, (k) => { src0 = k === 0 ? "s" : "z"; reset(); }));
-  CODE_LANG.on(() => render());
+  CODE_LANG.on(() => { legend(); render(); });
   redraw();
 })();
 
